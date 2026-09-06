@@ -97,6 +97,14 @@ jobs:
       - name: Tap discovery smoke test
         if: runner.os == 'Linux'
         timeout-minutes: 10
+        # Installs run authenticated: on CI there is no $HERMES_HOME/.env and
+        # no gh login, so get_secret() falls through to os.environ and
+        # GitHubAuth picks this up (priority 1). Anonymous installs shared the
+        # runner IP's 60 req/hr quota and died wholesale on #49 ("Could not
+        # fetch ... rate limit exhausted"). Trade-off: the anonymous cold-user
+        # path is no longer exercised here; scanner honesty is (no --force).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           hermes skills tap add iap/hermes-guide
