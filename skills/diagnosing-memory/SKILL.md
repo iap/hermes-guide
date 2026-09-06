@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -72,6 +72,7 @@ Probe in this order — the first two are built-in helpers and answer most cases
 | Memory tool missing from the tool schema | Both stores disabled: `memory.memory_enabled: false` **and** `user_profile_enabled: false` | Re-enable one in `config.yaml`; both off removes the tool entirely |
 | Writes rejected: "…would exceed the limit. Consolidate now…" | Char limits are hard caps (defaults 2200 / 1375 chars) — there is no auto-compaction | Have the agent consolidate/dedupe in the same turn, or raise `memory.memory_char_limit` |
 | Writes silently staged, never saved | `memory.write_approval: true` stages writes for review | Approve via `/memory approve` in-session, or set `write_approval: false` |
+| Hygiene check flags "no entry has a [YYYY-MM-DD] date prefix" | Entries carry no dates, so staleness is uncheckable — the `memories` scope of `hermes guide` reports undated entries as notes | Date new entries `[YYYY-MM-DD] …` where staleness matters; undated entries are a note, not an error |
 | Provider config edits ignored | Active-provider name mismatch, or edits made to the wrong profile's home | `hermes config path` to confirm the active home/profile; one provider at a time — `memory.provider` is a single string |
 | Memory "disappeared" after profile work | `HERMES_HOME` unset while a non-default profile is active → files written to the wrong home | Set `HERMES_HOME` explicitly for profile work; watch for the `[HERMES_HOME fallback]` stderr warning |
 
@@ -87,8 +88,8 @@ Two name traps that are **not** this surface:
 | `provider` | `""` | Active external provider; empty = built-in only; `hermes memory off` sets this |
 | `memory_enabled` | `true` | Agent-notes store (`MEMORY.md`) |
 | `user_profile_enabled` | `true` | User-profile store (`USER.md`) |
-| `memory_char_limit` | `2200` | Hard cap, chars not tokens |
-| `user_char_limit` | `1375` | Hard cap, chars not tokens |
+| `memory_char_limit` | `2200` | Hard cap in characters of the decoded file (`len(text)`) — not bytes, not tokens |
+| `user_char_limit` | `1375` | Hard cap in characters of the decoded file (`len(text)`) — not bytes, not tokens |
 | `nudge_interval` | `10` | Memory-save nudge every N user turns; `0` = off |
 | `write_approval` | `false` | Stage writes for `/memory approve` instead of saving |
 
