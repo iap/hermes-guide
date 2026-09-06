@@ -129,12 +129,22 @@ def main() -> int:
             f"AGENTS.md checks row scopes: stated {stated_scopes}, actual {checks_mod.labels()}"
         )
 
-    # README — plugin capability line must list every check label
+    # README — plugin capability line must list exactly the check labels.
+    # Parse the documented scope list and compare names exactly (substring
+    # matching would accept stale or renamed scopes like `memories-old`).
     m = re.search(r"read-only diagnostics across ([^.]+)\.", readme)
     assert m, "README: plugin diagnostics line not found"
-    for label in checks_mod.labels():
-        if label not in m.group(1):
-            failures.append(f"README plugin line: check scope `{label}` not mentioned")
+    items = []
+    for item in m.group(1).split(","):
+        item = re.sub(r"\s*\(.*$", "", item.strip())   # trailing annotation
+        item = re.sub(r"\s+—.*$", "", item).strip()    # em-dash tail
+        item = re.sub(r"^and\s+", "", item)
+        if item:
+            items.append(item)
+    if sorted(items) != sorted(checks_mod.labels()):
+        failures.append(
+            f"README plugin line scopes: stated {items}, actual {checks_mod.labels()}"
+        )
 
     if failures:
         for f in failures:
