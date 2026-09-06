@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.0.5
+version: 1.0.6
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -36,6 +36,6 @@ Multiple leading `/skill` tokens stack (up to 5) in one message; parsing stops a
 ## 3. Localization workflow
 
 1. Type `/` and search the autocomplete — found? It's a dispatch/args issue (6/7). Not found? → step 2.
-2. Which source should provide it? skill → **`diagnosing-skills`** (pitfall 1/2); bundle → `hermes bundles show <name>` (3); plugin → **`diagnosing-plugins`** (4); expected built-in → check `/help` and your Hermes version (`hermes version`; built-ins gain commands over releases).
+2. Which source should provide it? skill → **`diagnosing-skills`** (pitfall 1/2); bundle → `hermes bundles show <name>` (3); plugin → **`diagnosing-plugins`** (4); expected built-in → check `/help` and your Hermes version (`hermes --version`; built-ins gain commands over releases).
 3. Surface-specific failure (CLI works, gateway doesn't) → pitfall 5.
 4. Apply the fix, `/reload-skills` or restart as appropriate, confirm via autocomplete or invocation.

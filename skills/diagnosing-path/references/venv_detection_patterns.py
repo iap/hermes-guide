@@ -140,7 +140,11 @@ if __name__ == "__main__":
     print(f"In venv: {is_venv_active()}")
     print(f"Active venv: {active_venv_path()}")
     
-    root = Path("/Users/iap/.hermes/hermes-agent")
+    # Resolve the checkout portably: HERMES_HOME wins, else ~/.hermes (the
+    # native-Windows default is %LOCALAPPDATA%\hermes — run `hermes config
+    # path` for ground truth). Never hardcode a username or platform layout.
+    hermes_home = os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")
+    root = Path(hermes_home) / "hermes-agent"
     print(f"\nProject root: {root}")
     print(f"Venv dirs found: {find_venv_dirs(root)}")
     print(f"Resolved venv: {resolve_venv(root)}")
