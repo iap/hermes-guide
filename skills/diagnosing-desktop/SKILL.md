@@ -1,7 +1,7 @@
 ---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, 'npm was not found', 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -63,7 +63,7 @@ Wrong-backend symptoms almost always trace to order 3 vs 4: a `hermes` shim on P
 | Linux build fails on native modules | Missing toolchain | `g++` / `build-essential`; Wayland issues → `desktop.ozone_platform_hint: x11` |
 | GPU artifacts / blank panes | GPU driver incompatibility | `desktop.disable_gpu: true` (or `HERMES_DESKTOP_DISABLE_GPU=1`) |
 | Keyring errors on Linux | Credential store mismatch | `desktop.password_store: gnome-libsecret` / `kwallet6` / `basic` |
-| NixOS build environment breaks | Nix needs explicit env | `HERMES_DESKTOP_HERMES` (backend command override) is the supported hook; the build wraps a NixOS env internally |
+| NixOS build environment breaks | Nix needs explicit env vars | `HERMES_DESKTOP_HERMES` (backend command override) is the supported hook; the build wraps a NixOS env internally |
 | Dashboard won't start | Stale process holding port 9119 | Stale PID detection is automatic; kill the orphan `hermes` dashboard process if it persists |
 
 ## 5. The `desktop.*` config block
