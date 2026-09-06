@@ -30,11 +30,12 @@ SKILL_V2 = SKILL_V1.replace("version: 1.0.0", "version: 1.0.1")
 
 def _git(repo: Path, *args: str) -> None:
     # Inherit the runner environment (PATH must survive on Windows, where git
-    # lives outside /usr/bin) and only pin the commit identity.
+    # lives outside /usr/bin) but cut global config: a developer's
+    # core.hooksPath or identity must not run inside the fixture.
     env = os.environ.copy()
     env.update({"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
                 "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com",
-                "GIT_CONFIG_NOSYSTEM": "1"})
+                "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": str(repo / ".gitconfig-global")})
     subprocess.run(
         ["git", "-C", str(repo), *args],
         check=True, capture_output=True, text=True, env=env,
@@ -44,6 +45,7 @@ def _git(repo: Path, *args: str) -> None:
 def _make_repo(bump_version: bool) -> Path:
     """Repo with one committed SKILL.md (1.0.0) and a modified working tree."""
     repo = Path(tempfile.mkdtemp())
+    (repo / ".gitconfig-global").touch()  # isolate from the developer's git config
     skill = repo / "skills" / "sample"
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text(SKILL_V1, encoding="utf-8")
