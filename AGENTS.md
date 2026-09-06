@@ -27,6 +27,14 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 | `SECURITY.md` | Security policy |
 | `LICENSE` | MIT License |
 
+## Environment responsibilities
+
+Verification and adjustment work is split by environment:
+
+- **Primary (current) environment** — the maintainer's live POSIX install (`~/.hermes`): owned by the agent working in this checkout. Keep the live install synced to master (plugin via `hermes plugins update`, skills via `hermes skills update`), run smoke tests and fact verification against the installed Hermes source (authoritative for this environment), and adjust the project based on what the current environment shows.
+- **Other environments (e.g. native Windows)** — handled by a separate owner. Do not unilaterally reword Windows-facing skill content (e.g. `diagnosing-cli-tui`, the Windows sections of `diagnosing-desktop`) or reshape the Windows CI leg; flag Windows-only problems and route them to that owner instead.
+- Regardless of the split: every change must stay cross-platform-neutral and scanner-safe — CI runs both legs and both must stay green.
+
 ## Guidelines
 
 ### Authoring skills
