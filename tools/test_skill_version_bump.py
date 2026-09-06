@@ -15,6 +15,7 @@ Run: python3 tools/test_skill_version_bump.py
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -28,12 +29,15 @@ SKILL_V2 = SKILL_V1.replace("version: 1.0.0", "version: 1.0.1")
 
 
 def _git(repo: Path, *args: str) -> None:
+    # Inherit the runner environment (PATH must survive on Windows, where git
+    # lives outside /usr/bin) and only pin the commit identity.
+    env = os.environ.copy()
+    env.update({"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
+                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com",
+                "GIT_CONFIG_NOSYSTEM": "1"})
     subprocess.run(
         ["git", "-C", str(repo), *args],
-        check=True, capture_output=True, text=True,
-        env={"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
-             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com",
-             "GIT_CONFIG_NOSYSTEM": "1", "HOME": str(repo), "PATH": "/usr/bin:/bin:/usr/local/bin"},
+        check=True, capture_output=True, text=True, env=env,
     )
 
 
