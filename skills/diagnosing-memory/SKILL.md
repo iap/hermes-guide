@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -45,9 +45,9 @@ Probe in this order — the first two are built-in helpers and answer most cases
      Status:    not available ✗
      Missing:
        ✗ HONCHO_API_KEY  → https://app.honcho.dev
-     Note: systemd/gateway services do not inherit ~/.hermes/.env —
-           set any variables above in the service environment.
    ```
+
+   A trailing `Note:` line (quoted verbatim in the tool's output) explains that systemd/gateway services do not inherit the profile `.env` secrets file — set any listed variables in the service environment itself (see the gateway/systemd row in §3).
 
    Read it line by line: the three built-in lines confirm the stores and the `memory` tool are on; `Provider:` shows what `memory.provider` is set to; `Plugin:` / `Status:` / `Missing:` are the three failure points in order (plugin file → pip deps → env vars). The installed-plugins list at the bottom is the ground truth for provider names — the `hermes memory --help` string is not kept in sync with it.
 
