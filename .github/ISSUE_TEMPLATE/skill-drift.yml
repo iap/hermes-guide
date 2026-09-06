@@ -7,15 +7,19 @@ body:
     attributes:
       label: Which skill or fact file
       options:
+        - hermes-configuration-guide
         - diagnosing-mcp
         - diagnosing-skills
         - diagnosing-commands
         - diagnosing-hooks
         - diagnosing-plugins
         - diagnosing-path
+        - diagnosing-auth
+        - diagnosing-memory
         - diagnosing-cli-tui
-        - hermes-configuration-guide
+        - diagnosing-desktop
         - checks.py / constants.py
+        - Other / multiple skills
     validations:
       required: true
   - type: input
@@ -23,7 +27,7 @@ body:
     attributes:
       label: Hermes version / commit
       description: "`hermes --version`, or the git SHA you verified against"
-      placeholder: "v0.20.4 (13ce0c5)"
+      placeholder: "v2026.8.31"
     validations:
       required: true
   - type: textarea

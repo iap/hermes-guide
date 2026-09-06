@@ -7,8 +7,8 @@ Exposes:
   - `/hermes-doctor`  slash command  (CLI + gateway sessions)
   - `hermes guide <scope>`  CLI subcommand  (terminal; exit 1 on broken or unknown)
 
-Checks: config, mcp, skills, commands, hooks, plugins — six read-only checks
-implemented in `checks.py`.
+Checks: config, mcp, skills, commands, hooks, plugins, memories — seven
+read-only checks implemented in `checks.py`.
 
 Opt-in `proactive: true` runs drift checks on session start/end and logs
 findings (observer-only; nothing is injected or modified).
