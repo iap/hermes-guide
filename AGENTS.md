@@ -27,6 +27,14 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 | `SECURITY.md` | Security policy |
 | `LICENSE` | MIT License |
 
+## Multi-environment maintenance
+
+This repo is maintained in parallel from **different host environments** (native Windows, macOS/POSIX), each with its own checkout and its own installed Hermes. Scope your work to the environment you are running in, and remember it across your sessions:
+
+- **Verify platform-dependent facts only on your own machine.** `$HERMES_HOME` resolution (`%LOCALAPPDATA%\hermes` vs `~/.hermes`), CLI/TUI behavior, installers, paths, shells. Never assert a platform fact you could not verify here — the session running on that platform owns its verification (e.g. the Windows-native agent owns `diagnosing-cli-tui` and the Windows sides of `diagnosing-path`/`diagnosing-desktop`; the POSIX agent owns `~/.hermes` behavior).
+- **Cross-platform changes** (CI, `constants.py`, shared skill text) must say which platform verified them, and leave platform-specific wording the other environment can adjust.
+- **Expect parallel sessions.** Rebase before pushing, and check open PRs before starting overlapping work — duplicate fixes have collided before (see #54/#55).
+
 ## Guidelines
 
 ### Authoring skills
