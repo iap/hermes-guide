@@ -15,4 +15,5 @@ tooling:
       - any-glob-to-any-file: "tools/**"
 
 documentation:
-  - any: ["*.md", "AGENTS.md", "CONTRIBUTING.md", "README.md", "SECURITY.md"]
+  - changed-files:
+      - any-glob-to-any-file: "**/*.md"

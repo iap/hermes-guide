@@ -290,7 +290,10 @@ def main() -> int:
     subprocess.run(
         [
             "gh", "issue", "create", "--repo", repo, "--title", ISSUE_TITLE,
-            "--body", body, "--label", "drift,maintenance",
+            "--body", body, "--label", "drift",
+            # Only labels that exist in the repo settings (verified via
+            # `gh label list`): gh issue create fails outright on an unknown
+            # label, which would turn the drift alert into a red run.
         ],
         check=True,
     )

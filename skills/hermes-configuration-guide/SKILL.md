@@ -1,7 +1,7 @@
 ---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.0.7
+version: 1.0.8
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -54,7 +54,7 @@ Config keys that Hermes **silently stopped reading** are inert: they look meanin
 
 Notes:
 
-- `hermes migrate` covers **retired models only** (currently the xAI migration) — it does not detect arbitrary orphaned keys.
+- `hermes migrate` covers **retired models and deprecated settings** (currently the xAI migration); the sibling `hermes config migrate` applies new config options. Neither detects arbitrary orphaned keys — audit for those by hand.
 - Profile descriptions reach a model in only two contexts: kanban task routing (the decomposer's profile roster) and dispatch guidance. Normal sessions and `hermes guide`/`hermes doctor` never see them.
 - When a diagnosis behaves as if part of `config.yaml` is invisible, audit for orphans before suspecting the model: inert keys produce exactly that symptom.
 

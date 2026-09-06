@@ -31,6 +31,11 @@ def _merge_base(ref: str) -> str | None:
     return out or None
 
 
+def _ref_exists(ref: str) -> bool:
+    out = _git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"]).strip()
+    return bool(out)
+
+
 def _changed_files(ref: str) -> list[str]:
     out = _git(["diff", "--name-only", ref, "--"])
     return [ln.strip() for ln in out.splitlines() if ln.strip()]
@@ -78,10 +83,25 @@ def _frontmatter_here(path: str) -> dict | None:
 
 def main(argv: list[str]) -> int:
     ref = argv[1] if len(argv) > 1 else "origin/master"
+    # Validate the ref BEFORE computing a base: an unresolvable ref makes the
+    # diff below come back empty, which would look like "nothing changed" and
+    # turn the guard green while enforcing nothing. Hard-fail instead.
+    if not _ref_exists(ref):
+        print(
+            f"error: ref {ref!r} does not resolve; cannot run the version-bump check. "
+            "Ensure full history is fetched (actions/checkout with fetch-depth: 0) "
+            "or pass an explicit base ref.",
+            file=sys.stderr,
+        )
+        return 2
     base = _merge_base(ref) if not argv[1:2] else ref
     if not base:
-        print(f"Could not resolve merge base against {ref}; skipping version-bump check.", file=sys.stderr)
-        return 0
+        print(
+            f"error: could not resolve merge base against {ref!r}; "
+            "cannot run the version-bump check.",
+            file=sys.stderr,
+        )
+        return 2
 
     changed = _changed_files(base)
     skill_files = [f for f in changed if f.endswith("SKILL.md")]

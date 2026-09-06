@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -18,10 +18,10 @@ Hermes Agent has a **dual-venv layout**: two directories can exist at the projec
 
 | Directory | Origin | Python | Tool |
 |---|---|---|---|
-| `.venv/` | `uv venv` (uv's default) | 3.12.x | Current canonical |
-| `venv/` | `python -m venv venv` or legacy install | 3.11.x | Legacy fallback |
+| `.venv/` | `uv venv` (uv's default) | 3.12.x | What current tooling creates |
+| `venv/` | `python -m venv venv` or legacy install | 3.11.x | What the installers write (resolver winner) |
 
-Both can coexist. When they do, **`venv` wins**: upstream's own resolver picks it first, "matching what the installers write." A script that scans `.venv` first can therefore resolve a different interpreter than Hermes core does on the same checkout.
+Both can coexist. When they do, **`venv` wins**: upstream's own resolver picks it first, "matching what the installers write." Note the trap: "current tooling" (`uv` → `.venv`) and "resolver winner" (`venv`) are *different* directories — a script that scans `.venv` first can therefore resolve a different interpreter than Hermes core does on the same checkout.
 
 **Why this happened:** Older installs and some documentation used `python -m venv venv`. When uv became the default package manager, `uv venv` created `.venv`. Migration scripts didn't remove the old `venv/`, so both persist.
 

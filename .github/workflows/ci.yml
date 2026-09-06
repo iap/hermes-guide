@@ -16,12 +16,16 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    # Windows runs everything the Ubuntu leg does (mypy, the plugin doctor,
-    # and the tap smoke test stay Linux-gated: POSIX /tmp workaround and
+    # Windows runs the same steps except mypy, the plugin doctor, and the tap
+    # smoke test, which stay Linux-gated (POSIX /tmp workaround and
     # Hermes-on-Windows CI unexplored upstream). Promoted to required after
     # the leg went green on first contact and every run since.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Full history so the version-bump guard can resolve the merge base
+          # against origin/master (a depth-1 checkout makes it silently skip).
+          fetch-depth: 0
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -73,8 +77,14 @@ jobs:
       - name: MCP shape regression test
         run: python tools/test_mcp_shape.py
 
+      - name: Memory hygiene regression test
+        run: python tools/test_memory_hygiene.py
+
       - name: Skill version bump guard
         run: python tools/check_skill_version_bump.py
+
+      - name: Version bump guard regression
+        run: python tools/test_skill_version_bump.py
 
       - name: Skill-library behavioral test
         run: python tools/test_skill_checks.py
