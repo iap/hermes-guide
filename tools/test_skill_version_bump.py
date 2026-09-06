@@ -24,6 +24,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 GUARD = REPO / "tools" / "check_skill_version_bump.py"
 
+# Empty stand-in for the global git config: keeps PATH inherited from the
+# runner (git.exe lives outside /usr/bin on Windows) while isolating the
+# fixture repos from developer global settings such as core.hooksPath —
+# a failing pre-commit hook there would abort the fixture commits.
+_EMPTY_GLOBAL_CONFIG = Path(tempfile.mkdtemp()) / "gitconfig-empty"
+_EMPTY_GLOBAL_CONFIG.touch()
+
 SKILL_V1 = "---\nname: sample\ndescription: sample skill\nversion: 1.0.0\n---\nbody\n"
 SKILL_V2 = SKILL_V1.replace("version: 1.0.0", "version: 1.0.1")
 
@@ -34,7 +41,8 @@ def _git(repo: Path, *args: str) -> None:
     env = os.environ.copy()
     env.update({"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
                 "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com",
-                "GIT_CONFIG_NOSYSTEM": "1"})
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_CONFIG_GLOBAL": str(_EMPTY_GLOBAL_CONFIG)})
     subprocess.run(
         ["git", "-C", str(repo), *args],
         check=True, capture_output=True, text=True, env=env,
