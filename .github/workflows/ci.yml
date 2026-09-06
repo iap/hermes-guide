@@ -14,16 +14,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            experimental: false
-          - os: windows-latest
-            experimental: true
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    # Windows is exploratory: it exercises platform-dependent paths in the
-    # pure-Python checks (path resolution, drive guards) without blocking
-    # merges. Promote to required once the job is stably green.
-    continue-on-error: ${{ matrix.experimental }}
+    # Windows runs everything the Ubuntu leg does (mypy, the plugin doctor,
+    # and the tap smoke test stay Linux-gated: POSIX /tmp workaround and
+    # Hermes-on-Windows CI unexplored upstream). Promoted to required after
+    # the leg went green on first contact and every run since.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
