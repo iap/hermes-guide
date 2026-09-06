@@ -95,6 +95,9 @@ jobs:
       - name: Scope validation regression
         run: python tools/test_scope_validation.py
 
+      - name: Doc skill/check count consistency
+        run: python tools/test_skill_counts.py
+
       - name: Tap discovery smoke test
         if: runner.os == 'Linux'
         timeout-minutes: 10

@@ -14,7 +14,7 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 |---|---|
 | `plugin.yaml` | Plugin manifest (name, version, config schema) |
 | `__init__.py` | Plugin entrypoint — registers `/hermes-doctor` and `hermes guide` (the ten skills ship separately via the skills tap) |
-| `checks.py` | The seven read-only health checks (config/mcp/skills/commands/hooks/plugins/memory) |
+| `checks.py` | The seven read-only health checks (config/mcp/skills/commands/hooks/plugins/memories) |
 | `constants.py` | Single source of truth for names/values that drift across Hermes versions |
 | `skills/*/SKILL.md` | The ten skills (one map + nine diagnostics) |
 | `tools/` | Guard linters (no-mutation, self-claim, version bump, upstream drift) + regression tests, all run by CI |
@@ -91,6 +91,8 @@ Beyond the CI gates, smoke-test the *model-facing* behavior with a one-shot run 
 ```bash
 hermes -z "Use the diagnosing-path skill: which interpreter should a script in the Hermes checkout use?"
 ```
+
+Run it **without** `--skills` preloading when the skill is discoverable from `$HERMES_HOME/skills/` — preloading masks trigger failures, and the description routing on its own is the most common real-world defect. Verify both layers: the deterministic check first (`hermes guide <scope>` for plugin-covered surfaces), then the model-facing run.
 
 ## Contributing
 
