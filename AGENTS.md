@@ -31,8 +31,11 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 
 Verification and adjustment work is split by environment:
 
-- **Primary (current) environment** — the maintainer's live POSIX install (`~/.hermes`): owned by the agent working in this checkout. Keep the live install synced to master (plugin via `hermes plugins update`, skills via `hermes skills update`), run smoke tests and fact verification against the installed Hermes source (authoritative for this environment), and adjust the project based on what the current environment shows.
-- **Other environments (e.g. native Windows)** — handled by a separate owner. Do not unilaterally reword Windows-facing skill content (e.g. `diagnosing-cli-tui`, the Windows sections of `diagnosing-desktop`) or reshape the Windows CI leg; flag Windows-only problems and route them to that owner instead.
+- **Primary (current) environment** — the maintainer's live POSIX install (`~/.hermes`): owned by the agent working in this checkout. Two distinct duties, do not conflate them:
+  - *Steady state*: keep the live install synced to master (plugin via `hermes plugins update`, skills via `hermes skills update`).
+  - *Testing a branch*: the tap serves master, so syncing first would test the wrong copy. To smoke-test a branch's changed skill, deliberately install that branch's files into `$HERMES_HOME/skills/<name>/`, run the probe, then restore the pristine copy (`hermes skills update <name> --force`, or uninstall + reinstall) — a hand-edited hub skill is tracked as "user-modified" and plain updates skip it.
+  - Fact verification always runs against the installed Hermes source — authoritative for this environment.
+- **Other environments (e.g. native Windows)** — handled by a separate owner; this repo has no Windows maintainer in its file history. Do not unilaterally reword Windows-facing skill content (e.g. `diagnosing-cli-tui`, the Windows sections of `diagnosing-desktop`) or reshape the Windows CI leg. Hand off instead: open an issue labeled `windows` with the environment evidence and the source pointer; that label is the routing contract to the Windows owner.
 - Regardless of the split: every change must stay cross-platform-neutral and scanner-safe — CI runs both legs and both must stay green.
 
 ## Guidelines
