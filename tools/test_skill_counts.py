@@ -85,7 +85,7 @@ def main() -> int:
         _parse_wordNum(readme, r"\*\*([A-Za-z]+) troubleshooting skills\*\*", "README headline"),
         actual_skills,
     )
-    table_rows = re.findall(r"^\| `(?:hermes-|diagnosing-)[a-z0-9-]+` \|", readme, re.M)
+    table_rows = re.findall(r"^\| `(?:hermes-|diagnosing-|installing-)[a-z0-9-]+` \|", readme, re.M)
     expect("README skill-table rows", len(table_rows), actual_skills)
     expect(
         "README 'The other N skills'",
