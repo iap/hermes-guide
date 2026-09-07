@@ -136,6 +136,8 @@ jobs:
             # The tap serves master, so on a PR ADDING a skill the fetch misses
             # until merge — tolerate exactly that miss (scanner verdicts and
             # every other failure still fail the step).
+            # Post-merge master pushes re-run this step with the skill on the
+            # tap, so the scanner + discovery checks still enforce it there.
             if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] \
                && ! hermes skills list | grep -q "$s"; then
               echo "::warning::$s is added by this PR — not installable from the tap until merge"

@@ -13,8 +13,9 @@ metadata:
 The four install routes for Hermes Agent on POSIX/WSL2 machines — what each creates
 on disk, how the layout evolves after first run, and the failure modes that bite
 (worked example: NixOS WSL2). For diagnosing a *broken* install afterwards, pair with
-`diagnosing-path` (venv resolution) and `hermes doctor`. `hermes config path` is
-authoritative for both the config file and install-directory questions.
+`diagnosing-path` (venv resolution) and `hermes doctor`. `hermes config path` resolves the active
+config file. For the code location, check what the `hermes` shim execs, or run
+`hermes --version` — it prints the install directory and method.
 
 ## The four routes
 
@@ -71,10 +72,16 @@ path` before trusting it.
    spinner — with no real terminal that write blocks forever. The installer wraps the
    step in `timeout 600`, so it silently times out, retries, and eventually prints
    `✗ npm install failed or timed out; Node.js dependencies were not installed` while
-   still exiting 0. Fix: re-run the npm step from the checkout with `CI=1` in the
-   environment — the postinstall short-circuits on that variable and the install
-   completes (the npm cache makes the retry fast). Always grep the install log for
-   that line before declaring success.
+   still exiting 0. Fix: re-run the npm step with `CI=1` — the
+   postinstall short-circuits on that variable and the install completes (the npm
+   cache makes the retry fast):
+
+   ```bash
+   cd "$(hermes config path | xargs dirname)/hermes-agent"
+   CI=1 npm install --workspace ui-tui --workspace web --include-workspace-root --silent
+   ```
+
+   Always grep the install log for the failure line before declaring success.
 2. **No `g++` on NixOS.** Native module builds fail without a compiler; the installer's
    prebuilt `uv`/Python/Node binaries run fine under `nix-ld`. Enable `programs.nix-ld`
    and, if a build step still needs a compiler, prefer the Nix flake route over
