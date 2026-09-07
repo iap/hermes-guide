@@ -77,7 +77,7 @@ path` before trusting it.
    cache makes the retry fast):
 
    ```bash
-   cd "$(hermes config path | xargs dirname)/hermes-agent"
+   cd "${HERMES_HOME:-$HOME/.hermes}/hermes-agent"
    CI=1 npm install --workspace ui-tui --workspace web --include-workspace-root --silent
    ```
 
