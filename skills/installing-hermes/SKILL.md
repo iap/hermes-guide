@@ -1,7 +1,7 @@
 ---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent on Linux/WSL2 (NixOS included) — the four install routes, what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -21,10 +21,20 @@ config file. For the code location, check what the `hermes` shim execs, or run
 
 | Route | Command | Code lands in | Shims/PATH | Tracks |
 |---|---|---|---|---|
-| Standard (POSIX/WSL2) | `curl -fsSL https://hermes-agent.nousresearch.com/install.sh \| bash` | `$HERMES_HOME/hermes-agent` (checkout + venv) | `~/.local/bin/{hermes,hermes-agent,hermes-acp}` | `main` (installer re-run = update) |
+| Standard (POSIX/WSL2) | two-step installer — download, review, then run (below) | `$HERMES_HOME/hermes-agent` (checkout + venv) | `~/.local/bin/{hermes,hermes-agent,hermes-acp}` | `main` (installer re-run = update) |
 | Desktop app (macOS/Win) | download from hermes-agent.nousresearch.com | `%LOCALAPPDATA%\hermes\hermes-agent` (Win) | app-managed | app releases |
 | Nix flake | `nix run` / `nix profile install`, or the NixOS module | `/nix/store/...-hermes-agent-<ver>` (immutable) | profile-managed | flake pin |
 | PyPI | `uv tool install hermes-agent` / `pip install hermes-agent` | uv/pip tool dir | tool bin dir | PyPI release |
+
+The Standard route as a reviewable two-step — same installer, but you read the script before it executes:
+
+```bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh -o /tmp/hermes-install.sh
+less /tmp/hermes-install.sh        # quick review of what will run
+bash /tmp/hermes-install.sh
+```
+
+Upstream documents the same installer as a single piped one-liner (curl into bash); the two-step is equivalent and safer.
 
 All routes share one data home: `$HERMES_HOME` (POSIX default `~/.hermes`; native
 Windows `%LOCALAPPDATA%\hermes`). The installer treats `$HERMES_HOME` as data —
