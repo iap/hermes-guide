@@ -39,7 +39,7 @@ jobs:
           # editable install — wheel/sdist builds are blocked outside Nix, but
           # editable installs are the documented dev path. $RUNNER_TEMP keeps
           # the clone path valid on both Linux and Windows runners.
-          git clone --depth 1 --branch v2026.8.31 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
+          git clone --depth 1 --branch v2026.9.7 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
           pip install -e "$RUNNER_TEMP/hermes-agent"
 
       - name: Python syntax check
