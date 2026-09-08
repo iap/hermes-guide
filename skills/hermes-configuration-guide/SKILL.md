@@ -1,11 +1,11 @@
 ---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.0.8
+version: 1.0.9
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
-    related_skills: [diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, hermes-agent]
+    related_skills: [installing-hermes, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, hermes-agent]
 ---
 
 # Hermes Configuration Guide

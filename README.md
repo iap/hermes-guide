@@ -5,7 +5,7 @@
 Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent). **It complements — not replaces — Hermes's built-in diagnostics** (`hermes doctor`, `hermes verify`, and the platform helpers): it is an extra layer covering what they don't. It ships two things:
 
 1. **A plugin** — `/hermes-doctor` (in-session) and `hermes guide` (terminal): read-only diagnostics across config, mcp, skills, commands, hooks, plugins, and memories — each name is a valid scope.
-2. **Eleven troubleshooting skills** — teach an agent how to locate and fix each surface, plus venv, auth, memory, and desktop guides.
+2. **Twelve troubleshooting skills** — teach an agent how to locate and fix each surface, plus install, venv, auth, memory, and desktop guides.
 
 ## Install the plugin
 
@@ -61,8 +61,8 @@ hermes skills tap add iap/hermes-guide
 hermes skills install iap/hermes-guide/skills/hermes-configuration-guide
 ```
 
-The other ten skills use the same `iap/hermes-guide/skills/<name>` form:
-`diagnosing-mcp`, `diagnosing-skills`, `diagnosing-commands`, `diagnosing-hooks`, `diagnosing-plugins`, `diagnosing-path`, `diagnosing-cli-tui`, `diagnosing-auth`, `diagnosing-memory`, `diagnosing-desktop`.
+The other eleven skills use the same `iap/hermes-guide/skills/<name>` form:
+`installing-hermes`, `diagnosing-mcp`, `diagnosing-skills`, `diagnosing-commands`, `diagnosing-hooks`, `diagnosing-plugins`, `diagnosing-path`, `diagnosing-cli-tui`, `diagnosing-auth`, `diagnosing-memory`, `diagnosing-desktop`.
 
 > [!NOTE]
 > The identifier must include the `skills/` prefix (it is the repo-relative path to the skill's `SKILL.md`). The shorter `iap/hermes-guide/<name>` form does not resolve.
@@ -73,6 +73,7 @@ Each installed skill is also available as a slash command (e.g. `/hermes-configu
 
 | Skill | Purpose |
 |---|---|
+| `installing-hermes` | Install routes — install.sh/Desktop/Nix/PyPI, what each creates on disk, config bootstrap, update/uninstall, and the gotchas (npm postinstall hang, NixOS specifics) |
 | `hermes-configuration-guide` | The map: resolving `$HERMES_HOME`, where each surface is configured, instruction files, orphaned/legacy settings, and routing to the diagnostic skills |
 | `diagnosing-mcp` | MCP servers that won't connect, expose no tools, fail OAuth, or ignore `mcp_servers:` config |
 | `diagnosing-skills` | Skills not discovered, shadowed, hidden by platform/toolset conditions, or stuck "user-modified" |
