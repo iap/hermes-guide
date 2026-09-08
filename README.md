@@ -67,6 +67,18 @@ The other eleven skills use the same `iap/hermes-guide/skills/<name>` form:
 > [!NOTE]
 > The identifier must include the `skills/` prefix (it is the repo-relative path to the skill's `SKILL.md`). The shorter `iap/hermes-guide/<name>` form does not resolve.
 
+#### Install all skills at once
+
+```bash
+for s in diagnosing-mcp diagnosing-skills diagnosing-commands diagnosing-hooks \
+         diagnosing-plugins diagnosing-path diagnosing-cli-tui diagnosing-auth \
+         diagnosing-memory diagnosing-desktop installing-hermes hermes-configuration-guide; do
+  hermes skills install "iap/hermes-guide/skills/$s"
+done
+```
+
+Each skill still passes its own scan + consent individually (scanner-honest, individually updatable).
+
 Each installed skill is also available as a slash command (e.g. `/hermes-configuration-guide`).
 
 ## What's included
