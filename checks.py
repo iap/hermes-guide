@@ -104,6 +104,25 @@ def frontmatter(path):
     return fm if isinstance(fm, dict) else None
 
 
+def _plugin_skill_names():
+    """Names shipped by this plugin (repo skills/*/SKILL.md frontmatter `name`).
+
+    Falls back to the directory basename when frontmatter is unreadable — the
+    hub installs by directory name, so that is the fallback users see too.
+    """
+    if "plugin_skills" in _cache:
+        return _cache["plugin_skills"]
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills")
+    names = set()
+    if os.path.isdir(root):
+        for dirpath, dirnames, filenames in os.walk(root):
+            if "SKILL.md" in filenames:
+                fm = frontmatter(os.path.join(dirpath, "SKILL.md"))
+                names.add((fm or {}).get("name") or os.path.basename(dirpath))
+    _cache["plugin_skills"] = names
+    return names
+
+
 def _iter_skills():
     """Yield (skill_dir_path, frontmatter_or_None) for every SKILL.md, cached.
 
@@ -316,6 +335,30 @@ def check_skills():
 
     if findings:
         return {"status": "broken", "reason": f"{len(findings)} skill issue(s)", "detail": findings}
+
+    # Guide-skill adoption nudge — informational only, never fails the check:
+    # the plugin repo ships skills/ alongside checks.py; compare their names
+    # against what Hermes discovered under $HERMES_HOME/skills and surface the
+    # missing ones with a one-command installer.
+    guide_names = _plugin_skill_names()
+    if guide_names:
+        installed = set()
+        for dirpath, fm in _iter_skills():
+            installed.add((fm or {}).get("name") or os.path.basename(dirpath.rstrip(os.sep)))
+        missing = sorted(guide_names - installed)
+        if missing:
+            loop = " ".join(missing)
+            cmd = f'for s in {loop}; do hermes skills install "iap/hermes-guide/skills/$s"; done'
+            return {
+                "status": "informational",
+                "reason": (
+                    f"{seen} skill(s) present with valid frontmatter; "
+                    f"guide skills: {len(guide_names) - len(missing)}/{len(guide_names)} installed — "
+                    f"install the rest: {cmd}"
+                ),
+                "detail": skills_root,
+            }
+
     return {"status": "healthy", "reason": f"{seen} skill(s) present with valid frontmatter", "detail": skills_root}
 
 
