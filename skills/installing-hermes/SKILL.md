@@ -29,12 +29,13 @@ config file. For the code location, check what the `hermes` shim execs, or run
 The Standard route as a reviewable two-step — same installer, but you read the script before it executes:
 
 ```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh -o /tmp/hermes-install.sh
-less /tmp/hermes-install.sh        # quick review of what will run
-bash /tmp/hermes-install.sh
+installer=$(mktemp)                # private temp file - no other local user can touch it
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh -o "$installer"
+less "$installer"                  # review what will run - this step gates the next one
+bash "$installer" && rm -f "$installer"
 ```
 
-Upstream documents the same installer as a single piped one-liner (curl into bash); the two-step is equivalent and safer.
+Upstream documents the same installer as a single piped one-liner (curl into bash); the two-step is equivalent, reviewable before execution, and safe on multi-user hosts. `less` is not in the prerequisite list - if it is missing, review with `cat` instead; do not skip the review step.
 
 All routes share one data home: `$HERMES_HOME` (POSIX default `~/.hermes`; native
 Windows `%LOCALAPPDATA%\hermes`). The installer treats `$HERMES_HOME` as data —
