@@ -37,8 +37,8 @@ def _run(cmd, timeout=20):
         return out.returncode, out.stdout or "", out.stderr or ""
     except FileNotFoundError:
         return -127, "", f"{cmd[0]}: command not found on PATH"
-    except Exception:
-        return -1, "", ""
+    except Exception as exc:
+        return -1, "", repr(exc)
 
 
 # Per-run memoization (cleared at the start of every run_all() so each
