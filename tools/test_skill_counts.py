@@ -93,6 +93,21 @@ def main() -> int:
         actual_skills - 1,
     )
 
+    # README install-all loop identifiers must exactly match the shipped
+    # skills/ inventory (a rename/add that skips the loop leaves it stale
+    # while the count assertions above would still pass — #65 review P2).
+    loop_m = re.search(r"for s in ([a-z0-9- ]+); do", readme)
+    assert loop_m, "README: install-all loop not found"
+    loop_ids = sorted(loop_m.group(1).split())
+    dir_ids = sorted(p.parent.name for p in REPO.glob("skills/*/SKILL.md"))
+    expect("README install-all loop identifiers", len(loop_ids), len(dir_ids))
+    if loop_ids != dir_ids:
+        failures.append(
+            "README install-all loop identifiers differ from skills/ inventory: "
+            f"loop-only={sorted(set(loop_ids) - set(dir_ids))} "
+            f"inventory-only={sorted(set(dir_ids) - set(loop_ids))}"
+        )
+
     # AGENTS.md — overview, structure rows
     expect(
         "AGENTS.md 'bundles N SKILL.md files'",

@@ -70,11 +70,7 @@ The other eleven skills use the same `iap/hermes-guide/skills/<name>` form:
 #### Install all skills at once
 
 ```bash
-for s in diagnosing-mcp diagnosing-skills diagnosing-commands diagnosing-hooks \
-         diagnosing-plugins diagnosing-path diagnosing-cli-tui diagnosing-auth \
-         diagnosing-memory diagnosing-desktop installing-hermes hermes-configuration-guide; do
-  hermes skills install "iap/hermes-guide/skills/$s"
-done
+for s in diagnosing-mcp diagnosing-skills diagnosing-commands diagnosing-hooks diagnosing-plugins diagnosing-path diagnosing-cli-tui diagnosing-auth diagnosing-memory diagnosing-desktop installing-hermes hermes-configuration-guide; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
 
 Each skill still passes its own scan + consent individually (scanner-honest, individually updatable).
