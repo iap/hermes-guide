@@ -79,6 +79,8 @@ jobs:
 
       - name: Memory hygiene regression test
         run: python tools/test_memory_hygiene.py
+      - name: Exit contract (guide CLI)
+        run: python tools/test_exit_contract.py
 
       - name: Skill version bump guard
         run: python tools/check_skill_version_bump.py
