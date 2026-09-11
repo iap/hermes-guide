@@ -11,6 +11,7 @@ case here pins one count-bearing phrase against ground truth:
     "The other N skills" tap-install list
   - AGENTS.md: "bundles N SKILL.md files", "The N skills (one map + M
     diagnostics)", "The N read-only health checks" + its scope list
+  - CONTRIBUTING.md: "bundles N SKILL.md files" (same phrase, same ground truth)
 
 Word-numbers are expected (two..twenty); a digit in any of these phrases is
 treated as a mismatch to keep the prose style consistent.
@@ -53,6 +54,7 @@ def _parse_wordNum(text: str, pattern: str, label: str) -> int:
 def main() -> int:
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     agents = (REPO / "AGENTS.md").read_text(encoding="utf-8")
+    contributing = (REPO / "CONTRIBUTING.md").read_text(encoding="utf-8")
 
     actual_skills = len(list(REPO.glob("skills/*/SKILL.md")))
     assert actual_skills >= 2, "sanity: no skills found"
@@ -161,11 +163,19 @@ def main() -> int:
             f"README plugin line scopes: stated {items}, actual {checks_mod.labels()}"
         )
 
+    # CONTRIBUTING.md — overview count (same phrase as AGENTS.md; drifted
+    # unnoticed in #69 because only README/AGENTS.md were guarded).
+    expect(
+        "CONTRIBUTING.md 'bundles N SKILL.md files'",
+        _parse_wordNum(contributing, r"bundles ([A-Za-z]+) SKILL\.md files", "CONTRIBUTING.md overview"),
+        actual_skills,
+    )
+
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
         print(
-            f"{len(failures)} count mismatch(es) — update README.md/AGENTS.md "
+            f"{len(failures)} count mismatch(es) — update README.md/AGENTS.md/CONTRIBUTING.md "
             f"(actual: {actual_skills} skills, {actual_diagnostics} diagnostics, "
             f"{actual_checks} checks: {_word_num(actual_skills)}/"
             f"{_word_num(actual_diagnostics)}/{_word_num(actual_checks)})",
