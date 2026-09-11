@@ -63,7 +63,10 @@ PLUGIN_SUBCATEGORY_DIRS = (
     "web",
     "browser",
     "cron_providers",
-    # NOT "observability" — observability plugins are `standalone` and gated by
-    # plugins.enabled (namespaced keys like `observability/langfuse`), not an
-    # own provider key.
+    # Added in v2026.9.11 — these subcategories use their own selection keys,
+    # not plugins.enabled. Verified against upstream plugins/ directory.
+    "dashboard_auth",
+    "hermes-achievements",
+    "kanban",
+    "observability",
 )
