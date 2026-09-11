@@ -9,12 +9,22 @@ plugin can silently go stale.
 This script diffs the watched schema files between a stored baseline commit
 (`.github/upstream-drift.baseline`) and upstream HEAD, asserts drift-prone facts
 (`DRIFT_FACTS`) and the CI install pin (`.github/workflows/ci.yml`) against
-upstream, and files one GitHub issue on this repo listing the drift. It
+upstream, and files a GitHub issue on this repo listing the drift. It
 deduplicates (skips) if a drift issue is already open, and tells the reviewer to
 bump the baseline afterward. Runs in CI via
 `.github/workflows/upstream-drift.yml` (weekly + manual).
 
 Requires `git` + the `gh` CLI (both preinstalled on GitHub-hosted runners).
+
+## Scope
+
+This script files **upstream drift** — when Hermes core changes a schema file
+or a fact this plugin encodes. The fix lands in this repo (constants.py /
+checks.py / SKILL.md). Plugin-side staleness (a count in README/AGENTS that
+no longer matches the tree, an unbumped skill version) is intentionally
+**out of scope**: CI already runs check_self_claim / check_no_mutation /
+check_skill_version_bump on every push, so those surface as red CI runs, not
+as weekly drift issues.
 """
 
 import json
@@ -34,7 +44,7 @@ WATCH_FILES = os.environ.get(
 ).split()
 BASELINE_FILE = Path(".github/upstream-drift.baseline")
 CI_WORKFLOW = Path(".github/workflows/ci.yml")
-ISSUE_TITLE = "Upstream schema drift detected — review checks.py"
+ISSUE_TITLE_UPSTREAM = "Upstream schema drift detected — review checks.py"
 CLONE_DIR = "/tmp/hermes-agent-upstream"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -109,6 +119,64 @@ def git(repo_dir: str, *args: str) -> tuple[str, str, int]:
     return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
 
 
+def git_log(repo_dir: str, ref_range: str, watched: list[str] | None = None) -> list[dict]:
+    """Return upstream commit records in ``ref_range``, one record per commit.
+
+    When ``watched`` is supplied, pass it as a Git pathspec so the history walk
+    returns only commits that touched a watched file. ``--name-only`` keeps the
+    filenames with each commit and avoids one subprocess per commit.
+
+    Each record is::
+
+        {"sha": str, "date": str, "subject": str, "files": [str]}
+
+    Parsing is line-based and tolerant: filename lines are attached to the
+    current commit, while a line that does not match the commit-header shape
+    is retained as a filename only when a commit is active. Only a transport
+    failure (non-zero exit) raises.
+    """
+    cmd = [
+        "git", "-C", repo_dir, "log",
+        "--format=%H%x1f%ci%x1f%s",
+        "--name-only", "--no-renames", "-r",
+        "--diff-merges=separate",
+        ref_range,
+    ]
+    if watched:
+        cmd.extend(["--", *watched])
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git log failed (rc={proc.returncode}): "
+            f"{proc.stderr.strip() or 'unknown error'}"
+        )
+
+    records: list[dict] = []
+    by_sha: dict[str, dict] = {}
+    current: dict | None = None
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("\x1f")
+        if len(parts) >= 3:
+            sha, date, subject = parts[0].strip(), parts[1].strip(), parts[2].strip()
+            current = by_sha.get(sha)
+            if current is None:
+                current = {
+                    "sha": sha,
+                    "date": date,
+                    "subject": subject,
+                    "files": [],
+                }
+                by_sha[sha] = current
+                records.append(current)
+        elif current is not None:
+            if line not in current["files"]:
+                current["files"].append(line)
+    return records
+
+
 def verify_facts(repo_dir: str, head: str) -> list[str]:
     """Extract each watched fact from upstream HEAD and flag any mismatch."""
     mismatches = []
@@ -133,6 +201,39 @@ def verify_facts(repo_dir: str, head: str) -> list[str]:
                 "(update constants.py and the matching SKILL.md)"
             )
     return mismatches
+
+
+# --- Upstream git history scan ---------------------------------------------
+#
+# A watched file can change without any of the DRIFT_FACTS moving — a refactor
+# that renames a function, adds a parameter, or moves a constant to a new file.
+# The baseline diff above only says "a file changed"; this layer says *what the
+# change was* at commit granularity. Every commit touching a watched path is
+# included in the issue body so a reviewer can inspect the full context rather
+# than relying on commit-subject keywords.
+
+
+def scan_upstream_history(repo_dir: str, base: str, head: str,
+                          watched: list[str]) -> tuple[list[dict], list[str]]:
+    """Walk upstream commits in ``base..head`` that touched *watched* files.
+
+    Returns ``(review_records, errors)``. *errors* is non-empty only when the
+    transport itself failed — a broken walk is a run failure, never a finding,
+    because filing an issue about a scan that did not run would dedup away the
+    next cycle's real alert.
+
+    The Git pathspec limits the walk to watched paths. Commits that touched none
+    of those paths are outside the drift scope and are never reported.
+    """
+    try:
+        records = git_log(repo_dir, f"{base}..{head}", watched)
+    except RuntimeError as exc:
+        return [], [f"upstream history scan failed: {exc}"]
+
+    return records, []
+
+
+# --- CI install pin ---------------------------------------------------------
 
 
 def read_pinned_tag() -> str | None:
@@ -194,11 +295,75 @@ def verify_ci_pin() -> tuple[list[str], str | None]:
     return [], None
 
 
+
+# --- Issue filing -----------------------------------------------------------
+
+
+def _list_open_issues(repo: str, title: str) -> list[dict]:
+    """Return open issues whose title exactly equals *title*.
+
+    Exact-title match only. A substring search ("Upstream schema drift") would
+    let an unrelated issue with that phrase in its body suppress a real alert;
+    a prefix match would let a renamed title silently stop deduping.
+    """
+    proc = subprocess.run(
+        [
+            "gh", "issue", "list", "--repo", repo, "--state", "open",
+            "--search", f'"{title}" in:title', "--json", "number,title",
+        ],
+        capture_output=True, text=True, timeout=30,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"gh issue list failed for {title!r}: "
+            f"{proc.stderr.strip() or 'unknown error'}"
+        )
+    try:
+        issues = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError(
+            f"gh issue list returned invalid JSON for {title!r}: {proc.stdout[:200]!r}"
+        )
+    return [i for i in issues if i.get("title") == title]
+
+
+def _file_issue(repo: str, title: str, body: str, label: str) -> int:
+    """File an issue with *title* if no open issue with that exact title exists.
+
+    Returns 1 if an issue was created, 0 if it was skipped (already open).
+    Raises on transport failure — a broken gh call must fail the run, not
+    silently skip and report success.
+    """
+    existing = _list_open_issues(repo, title)
+    if existing:
+        print(f"Issue already open ({title!r}); skipping duplicate.")
+        return 0
+
+    proc = subprocess.run(
+        [
+            "gh", "issue", "create", "--repo", repo, "--title", title,
+            "--body", body, "--label", label,
+        ],
+        capture_output=True, text=True, timeout=60,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"gh issue create failed for {title!r}: "
+            f"{proc.stderr.strip() or 'unknown error'}"
+        )
+    print(f"Opened issue: {title!r}")
+    return 1
+
+
 def main() -> int:
     base = read_baseline()
     repo_dir = clone_upstream()
     head, _, _ = git(repo_dir, "rev-parse", "HEAD")
 
+    # --- Upstream side: schema drift + fact drift + pin freshness -----------
+    # All three share one dedup key (ISSUE_TITLE_UPSTREAM) because they are all
+    # "Hermes core changed something this plugin encodes" — one open issue is
+    # enough to hold any combination of them.
     log, err, code = git(repo_dir, "log", "--format=%h %ci %s", f"{base}..HEAD", "--", *WATCH_FILES)
     if code != 0:
         if "unknown revision" in err:
@@ -211,93 +376,93 @@ def main() -> int:
     fact_mismatches = verify_facts(repo_dir, head)
     pin_mismatches, pin_error = verify_ci_pin()
 
-    if not log and not fact_mismatches and not pin_mismatches:
-        if pin_error:
-            # Infrastructure failure, not drift: fail the run (visible in
-            # Actions) but never open the canonical-titled issue — a false
-            # issue would dedup away the next run's real alert.
-            print(
-                f"ERROR: install-pin check failed ({pin_error}); no drift findings to report.",
-                file=sys.stderr,
+    # Walk the same range at commit granularity so the issue body can name the
+    # commits that touched the watched files, not just the files themselves.
+    history_records, history_errors = scan_upstream_history(repo_dir, base, head, WATCH_FILES)
+
+    upstream_sections = []
+    if log:
+        upstream_sections.append(
+            "## Schema drift\n\n"
+            f"Watched files changed since baseline `{base[:7]}`:\n\n"
+            f"```\n{log}\n```"
+        )
+    if history_records:
+        lines = []
+        for record in history_records:
+            files = ", ".join(f"`{path}`" for path in record["files"])
+            file_context = f" — files: {files}" if files else ""
+            lines.append(
+                f"- `{record['sha'][:7]}` {record['date'][:10]} "
+                f"{record['subject']}{file_context}"
             )
-            return 1
+        upstream_sections.append(
+            "## Upstream commits touching watched files\n\n"
+            "These commits modified a file this plugin watches. Review each for "
+            "renames, moved constants, or signature changes that would break "
+            "`checks.py` / `constants.py`:\n\n" + "\n".join(lines)
+        )
+    if fact_mismatches:
+        upstream_sections.append(
+            "## Fact drift\n\n" + "\n".join(f"- {m}" for m in fact_mismatches)
+        )
+    if pin_mismatches:
+        upstream_sections.append(
+            "## CI install pin behind upstream\n\n"
+            + "\n".join(f"- {m}" for m in pin_mismatches)
+        )
+    if pin_error:
+        upstream_sections.append(
+            f"Install-pin freshness could not be verified this cycle ({pin_error}) — "
+            "re-run the workflow when the network is healthy."
+        )
+
+    # --- Plugin-side staleness is intentionally handled by push CI ---------
+    # check_self_claim, check_no_mutation, and check_skill_version_bump already
+    # fail the repository before a weekly issue could add value.
+
+    upstream_body = (
+        "\n\n".join(upstream_sections)
+        + "\n\n" if upstream_sections else ""
+    )
+    if upstream_sections:
+        upstream_body += (
+            f"Compare: https://github.com/{UPSTREAM_REPO}/compare/{base[:7]}...{head[:7]}\n\n"
+            "Review the changes and update `checks.py` / `constants.py` / the SKILL.md files "
+            f"as needed. Then bump the baseline: edit `.github/upstream-drift.baseline` to `{head}`."
+        )
+
+    # --- Transport failures: fail the run, never file an issue ---------------
+    # A scan that could not run must not become a finding — filing an issue about
+    # it would dedup away the next cycle's real alert under the same title.
+    transport_errors = list(history_errors)
+    if pin_error:
+        transport_errors.append(
+            f"install-pin check failed ({pin_error}); no drift findings to report"
+        )
+    if transport_errors:
+        for e in transport_errors:
+            print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    # --- No findings: exit clean ---------------------------------------------
+    if not upstream_sections:
         print(
             f"No drift: watched files unchanged, facts verified, install pin current "
             f"(baseline {base[:7]}, HEAD {head[:7]})."
         )
         return 0
 
-    sections = []
-    if log:
-        sections.append(
-            "## Schema drift\n\n"
-            f"Watched files changed since baseline `{base[:7]}`:\n\n"
-            f"```\n{log}\n```"
-        )
-    if fact_mismatches:
-        sections.append(
-            "## Fact drift\n\n" + "\n".join(f"- {m}" for m in fact_mismatches)
-        )
-    if pin_mismatches:
-        sections.append(
-            "## CI install pin behind upstream\n\n" + "\n".join(f"- {m}" for m in pin_mismatches)
-        )
-    if pin_error:
-        sections.append(
-            f"Install-pin freshness could not be verified this cycle ({pin_error}) — "
-            "re-run the workflow when the network is healthy."
-        )
-    sections.append(
-        f"Compare: https://github.com/{UPSTREAM_REPO}/compare/{base[:7]}...{head[:7]}\n\n"
-        "Review the changes and update `checks.py` / `constants.py` / the SKILL.md files "
-        f"as needed. Then bump the baseline: edit `.github/upstream-drift.baseline` to `{head}`."
-    )
-    body = "\n\n".join(sections)
-
     repo = os.environ.get("GITHUB_REPOSITORY", "")
-    if not repo or os.environ.get("DRIFT_DRY_RUN") == "1":
-        print("DRIFT DETECTED (dry-run, no issue opened):")
-        print(body)
+    dry_run = not repo or os.environ.get("DRIFT_DRY_RUN") == "1"
+    if dry_run:
+        print("UPSTREAM DRIFT DETECTED (dry-run, no issue opened):")
+        print(upstream_body)
         return 0
 
-    # Dedup: skip only if the canonical drift issue (exact title) is open. A
-    # broad substring match could otherwise let an unrelated issue suppress a
-    # real drift alert.
-    proc = subprocess.run(
-        [
-            "gh", "issue", "list", "--repo", repo, "--state", "open",
-            "--search", "Upstream schema drift", "--json", "number,title",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        print(
-            f"ERROR: gh issue list failed: {proc.stderr.strip() or 'unknown error'}",
-            file=sys.stderr,
-        )
-        return 1
-    try:
-        issues = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        print("ERROR: gh issue list returned invalid JSON.", file=sys.stderr)
-        return 1
-
-    if any(i.get("title") == ISSUE_TITLE for i in issues):
-        print("Drift issue already open; skipping duplicate.")
-        return 0
-
-    subprocess.run(
-        [
-            "gh", "issue", "create", "--repo", repo, "--title", ISSUE_TITLE,
-            "--body", body, "--label", "drift",
-            # Only labels that exist in the repo settings (verified via
-            # `gh label list`): gh issue create fails outright on an unknown
-            # label, which would turn the drift alert into a red run.
-        ],
-        check=True,
-    )
-    print("Opened drift issue.")
+    # A duplicate issue is a successful no-op; only transport failures fail.
+    if upstream_sections:
+        _file_issue(repo, ISSUE_TITLE_UPSTREAM, upstream_body, "drift")
     return 0
 
 

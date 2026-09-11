@@ -8,6 +8,7 @@ body:
       label: Which skill or fact file
       options:
         - hermes-configuration-guide
+        - installing-hermes
         - diagnosing-mcp
         - diagnosing-skills
         - diagnosing-commands

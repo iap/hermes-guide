@@ -100,6 +100,9 @@ jobs:
       - name: Subcategory-dir constants regression
         run: python tools/test_plugin_skip_source.py
 
+      - name: Upstream drift hygiene regression
+        run: python tools/test_upstream_drift_hygiene.py
+
       - name: Scope validation regression
         run: python tools/test_scope_validation.py
 
