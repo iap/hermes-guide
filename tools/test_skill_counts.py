@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Regression: skill/check counts stated in README.md and AGENTS.md match reality.
+"""Regression: skill/check counts stated in README.md, AGENTS.md, and
+CONTRIBUTING.md match reality.
 
 Manual counts were the repo's most recurring doc defect (AGENTS.md said "six
 skills" when there were eight; README said "eight" when there were nine). Each
