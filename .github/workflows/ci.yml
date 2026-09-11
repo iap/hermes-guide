@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   plugin:
     strategy:
@@ -16,6 +20,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     # Windows runs the same steps except mypy, the plugin doctor, and the tap
     # smoke test, which stay Linux-gated (POSIX /tmp workaround and
     # Hermes-on-Windows CI unexplored upstream). Promoted to required after
@@ -156,7 +161,6 @@ jobs:
             fi
           done
           if [ "$failed" -ne 0 ]; then exit 1; fi
-          echo "OK: tap-install pass done; new-in-PR skills pending merge:${pr_added:- none}"
           echo "OK: tap-install pass done; new-in-PR skills pending merge:${pr_added:- none}"
 
       - name: Security lint (bandit)
