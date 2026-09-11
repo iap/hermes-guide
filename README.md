@@ -5,7 +5,7 @@
 Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent). **It complements — not replaces — Hermes's built-in diagnostics** (`hermes doctor`, `hermes verify`, and the platform helpers): it is an extra layer covering what they don't. It ships two things:
 
 1. **A plugin** — `/hermes-doctor` (in-session) and `hermes guide` (terminal): read-only diagnostics across config, mcp, skills, commands, hooks, plugins, and memories — each name is a valid scope.
-2. **Twelve troubleshooting skills** — teach an agent how to locate and fix each surface, plus install, venv, auth, memory, and desktop guides.
+2. **Thirteen troubleshooting skills** — teach an agent how to locate and fix each surface, plus install, venv, auth, memory, desktop, and model-provider guides.
 
 ## Install the plugin
 
@@ -61,8 +61,8 @@ hermes skills tap add iap/hermes-guide
 hermes skills install iap/hermes-guide/skills/hermes-configuration-guide
 ```
 
-The other eleven skills use the same `iap/hermes-guide/skills/<name>` form:
-`installing-hermes`, `diagnosing-mcp`, `diagnosing-skills`, `diagnosing-commands`, `diagnosing-hooks`, `diagnosing-plugins`, `diagnosing-path`, `diagnosing-cli-tui`, `diagnosing-auth`, `diagnosing-memory`, `diagnosing-desktop`.
+The other twelve skills use the same `iap/hermes-guide/skills/<name>` form:
+`installing-hermes`, `diagnosing-mcp`, `diagnosing-skills`, `diagnosing-commands`, `diagnosing-hooks`, `diagnosing-plugins`, `diagnosing-path`, `diagnosing-cli-tui`, `diagnosing-auth`, `diagnosing-memory`, `diagnosing-desktop`, `diagnosing-providers`.
 
 > [!NOTE]
 > The identifier must include the `skills/` prefix (it is the repo-relative path to the skill's `SKILL.md`). The shorter `iap/hermes-guide/<name>` form does not resolve.
@@ -70,7 +70,7 @@ The other eleven skills use the same `iap/hermes-guide/skills/<name>` form:
 #### Install all skills at once
 
 ```bash
-for s in diagnosing-mcp diagnosing-skills diagnosing-commands diagnosing-hooks diagnosing-plugins diagnosing-path diagnosing-cli-tui diagnosing-auth diagnosing-memory diagnosing-desktop installing-hermes hermes-configuration-guide; do hermes skills install "iap/hermes-guide/skills/$s"; done
+for s in diagnosing-mcp diagnosing-skills diagnosing-commands diagnosing-hooks diagnosing-plugins diagnosing-path diagnosing-cli-tui diagnosing-auth diagnosing-memory diagnosing-desktop diagnosing-providers installing-hermes hermes-configuration-guide; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
 
 Each skill still passes its own scan + consent individually (scanner-honest, individually updatable).
@@ -93,6 +93,7 @@ Each installed skill is also available as a slash command (e.g. `/hermes-configu
 | `diagnosing-auth` | Hub-install auth failures — dead/shadowing `GITHUB_TOKEN` in the profile `.env`, `gh-cli` fallback, 401 vs anonymous probes, rate-limit verdicts |
 | `diagnosing-memory` | Memory problems — built-in `MEMORY.md`/`USER.md` stores, external providers configured but silently unavailable, missing plugins/keys, char-limit and approval gates |
 | `diagnosing-desktop` | Desktop app build/launch failures — npm/Node issues, locked or torn builds, Electron download fallbacks, backend resolution, `desktop.*` config |
+| `diagnosing-providers` | Model provider issues — custom endpoints flooding the picker with hundreds of models, `discover_models` misbehaving, persisted catalogs bloating `config.yaml`, provider/auth failures |
 
 ## Design principle
 
