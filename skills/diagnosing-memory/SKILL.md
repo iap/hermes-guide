@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.1.3
+version: 1.1.4
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -156,31 +156,40 @@ Corruption and FTS drift are separate from growth. Verify both:
 sqlite3 "$HERMES_HOME/state.db" \
   "SELECT COUNT(*) FROM messages m LEFT JOIN messages_fts f ON m.rowid = f.rowid
    WHERE f.rowid IS NULL;"
+# Stale FTS rows whose source messages were deleted — 0 means clean
+sqlite3 "$HERMES_HOME/state.db" \
+  "SELECT COUNT(*) FROM messages_fts f LEFT JOIN messages m ON f.rowid = m.rowid
+   WHERE m.rowid IS NULL;"
 # Orphan messages pointing at deleted sessions — 0 means clean
 sqlite3 "$HERMES_HOME/state.db" \
   "SELECT COUNT(*) FROM messages m LEFT JOIN sessions s ON m.session_id = s.id
    WHERE s.id IS NULL;"
 ```
 
-If either returns non-zero, the database is damaged and should be restored from
-`backups/` before running compaction — compaction assumes a consistent store.
+If any returns non-zero, the database is damaged: back it up first (see below),
+then consider `hermes sessions repair` before anything destructive — pruning and
+optimizing assume a consistent store.
 
 ### The fix
 
+There is no `hermes compact` command. Reclaim space with the real
+session-store commands, in this order:
+
 ```bash
-hermes compact
+hermes backup -q -l pre-prune          # explicit snapshot; verify the zip exists
+hermes sessions prune --help           # delete old sessions (filterable) — read flags first
+hermes sessions archive --help         # soft-hide instead of deleting, if preferred
+hermes sessions optimize               # VACUUM + merge FTS5 segments (no data change)
 ```
 
-This is the built-in compaction trigger. It creates the first
-`compaction_events` row, summarizes old sessions, and drops the raw message rows
-they held. Run it on a session you are not currently in, since it operates on the
-live database.
-
-If `compaction_events` stays 0 after running it, the scheduler may simply not
-have ticked. Check `hermes cron list` for a compaction job; if none is scheduled,
-`hermes compact` runs it manually.
+`optimize-storage` migrates the search index to the compact v23 layout and
+reclaims disk on large DBs; `repair` fixes a malformed schema so hidden
+sessions reappear. Run these on a session you are not currently in, since they
+operate on the live database.
 
 > [!CAUTION]
-> Compaction is lossy by design — it replaces raw message rows with a summary.
-> `state.db` has a backup under `$HERMES_HOME/backups/`. Confirm one exists and is
-> recent before running compaction on a database you have not trimmed before.
+> Pruning is lossy by design — it deletes raw message rows. Compaction creates
+> no backup itself, and nothing guarantees a recent archive already exists
+> (`backups/` holds conditional full archives, `state-snapshots/` holds quick
+> snapshots). Create one explicitly with `hermes backup -q -l pre-prune` and
+> confirm the zip before pruning a database you have not trimmed before.
