@@ -65,8 +65,8 @@ PLUGIN_SUBCATEGORY_DIRS = (
     "cron_providers",
     # Added in v2026.9.11 — these subcategories use their own selection keys,
     # not plugins.enabled. Verified against upstream plugins/ directory.
+    # NOTE: hermes-achievements and kanban are NOT subcategories — they contain
+    # standalone plugins gated by plugins.enabled (verified by T-Rex in #74).
     "dashboard_auth",
-    "hermes-achievements",
-    "kanban",
     "observability",
 )
