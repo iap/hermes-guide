@@ -4,7 +4,7 @@ Thank you for your interest in contributing to hermes-guide!
 
 ## What this project is
 
-hermes-guide is a [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin + skills tap. The plugin (`plugin.yaml` + `__init__.py`/`checks.py`/`constants.py`) ships read-only diagnostics (`/hermes-doctor` and `hermes guide`), and the `skills/` directory bundles twelve SKILL.md files that teach configuration and troubleshooting for MCP, skills, commands, hooks, plugins, hub auth, memory, paths/venvs, the Windows CLI/TUI, and the desktop app.
+hermes-guide is a [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin + skills tap. The plugin (`plugin.yaml` + `__init__.py`/`checks.py`/`constants.py`) ships read-only diagnostics (`/hermes-doctor` and `hermes guide`), and the `skills/` directory bundles thirteen SKILL.md files that teach configuration and troubleshooting for MCP, skills, commands, hooks, plugins, hub auth, memory, paths/venvs, the Windows CLI/TUI, the desktop app, and model providers.
 
 ## Reporting Issues
 
@@ -24,6 +24,7 @@ Short-lived branches, prefixed by type. Branch → merge to `master` → delete;
 | `perf/` | Performance improvements |
 | `test/` | Tests |
 | `chore/` | CI, deps, build tooling |
+| `ci/` | CI workflow changes (may overlap `chore/`; prefer `ci/` when the change is workflow-only) |
 
 Add a new prefix only when you actually need it.
 
@@ -40,6 +41,7 @@ Use Conventional Commits format: `type(scope): summary`
 | `refactor` | Same behavior, different structure |
 | `perf` | Performance |
 | `test` | Tests |
+| `ci` | CI workflow changes |
 | `chore` | CI, deps, build |
 
 Scope is the affected surface (`mcp`, `checks`, `config`, `skills`, `hooks`, `plugins`, `ci`, `deps`).
@@ -53,7 +55,9 @@ Examples:
 
 - `diagnosing-<surface>` for diagnostic skills (e.g. `diagnosing-mcp`, `diagnosing-path`).
 - `hermes-` prefix reserved for the configuration map skill (`hermes-configuration-guide`).
-- Kebab-case, lowercase, ≤20 characters.
+- Kebab-case, lowercase, ≤20 characters. The configuration map skill
+  (`hermes-configuration-guide`, 26 chars) predates this limit and is exempt;
+  every `diagnosing-*` name must fit it.
 
 ## Pull Requests
 
