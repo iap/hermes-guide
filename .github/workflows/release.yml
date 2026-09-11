@@ -37,6 +37,21 @@ jobs:
           fi
           echo "releasing $GITHUB_REF_NAME (matches plugin.yaml)"
 
+      - name: Tagged commit must be on master with passing checks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The ruleset blocks push to master unless required checks pass
+          # ("Greptile Review"). Requiring the tagged commit to be an ancestor
+          # of origin/master therefore guarantees it was merged and validated —
+          # a broken/unmerged commit cannot be tagged and published.
+          git fetch origin master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::tagged commit $GITHUB_SHA is not on origin/master"
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on origin/master (required checks passed at merge)"
+
       - name: Quick gates (no Hermes install needed)
         run: |
           python -m py_compile __init__.py checks.py constants.py
