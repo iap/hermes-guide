@@ -106,6 +106,9 @@ jobs:
       - name: Plugin notes regression
         run: python tools/test_plugins_notes.py
 
+      - name: Portable plugin.json discovery regression
+        run: python tools/test_portable_plugin_manifest.py
+
       - name: Subcategory-dir constants regression
         run: python tools/test_plugin_skip_source.py
 
