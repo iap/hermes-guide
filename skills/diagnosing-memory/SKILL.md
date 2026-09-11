@@ -101,3 +101,86 @@ There is no `/reload-memory`: built-in memory is snapshotted at session start, s
 
 > [!CAUTION]
 > `hermes memory reset` **erases** `$HERMES_HOME/memories/MEMORY.md` and/or `USER.md` irreversibly (`--target all|memory|user`, confirmation prompt, `--yes` skips it). It resets built-in memory only — it does not touch external providers.
+
+## 6. The session database (`state.db`) — size and compaction
+
+Built-in memory and the external provider are the *content* stores. The session
+*log* lives separately in `$HERMES_HOME/state.db` (SQLite), and its growth has
+nothing to do with either store. A 900+ MB `state.db` is not a memory problem
+and trimming `MEMORY.md` will not shrink it.
+
+### What is in it
+
+| Table | Meaning |
+|---|---|
+| `sessions` | one row per conversation (953 in a typical install) |
+| `messages` | every user/assistant/tool row (~250K) |
+| `messages_fts` | full-text index over `messages` (kept in sync) |
+| `session_model_usage` | token accounting per session |
+| `system_prompts` | cached system prompt variants |
+| `compaction_events` | **records of every compaction run** |
+
+### The compaction signal
+
+`compaction_events` is the canary. If it is **0**, compaction has never fired —
+the database has been growing with no trim ever applied. This is the most common
+cause of a bloated `state.db`.
+
+**Diagnose it directly:**
+
+```bash
+sqlite3 "$HERMES_HOME/state.db" "SELECT COUNT(*) FROM compaction_events;"
+```
+
+Correlate with the other tables:
+
+```bash
+sqlite3 "$HERMES_HOME/state.db" \
+  "SELECT 'sessions', COUNT(*) FROM sessions
+   UNION ALL SELECT 'messages', COUNT(*) FROM messages
+   UNION ALL SELECT 'open_sessions', COUNT(*) FROM sessions WHERE ended_at IS NULL
+   UNION ALL SELECT 'sessions_older_than_90d',
+     COUNT(*) FROM sessions WHERE started_at < $(date +%s) - 7776000;"
+```
+
+A healthy profile: `compaction_events > 0`, few open sessions, old sessions
+summarized. A sick one: `compaction_events = 0`, 100+ open sessions, 18+ sessions
+older than 90 days, and a top session carrying 10K+ raw message rows.
+
+### Integrity checks (run before anything else)
+
+Corruption and FTS drift are separate from growth. Verify both:
+
+```bash
+# FTS in sync with messages — 0 means clean
+sqlite3 "$HERMES_HOME/state.db" \
+  "SELECT COUNT(*) FROM messages m LEFT JOIN messages_fts f ON m.rowid = f.rowid
+   WHERE f.rowid IS NULL;"
+# Orphan messages pointing at deleted sessions — 0 means clean
+sqlite3 "$HERMES_HOME/state.db" \
+  "SELECT COUNT(*) FROM messages m LEFT JOIN sessions s ON m.session_id = s.id
+   WHERE s.id IS NULL;"
+```
+
+If either returns non-zero, the database is damaged and should be restored from
+`backups/` before running compaction — compaction assumes a consistent store.
+
+### The fix
+
+```bash
+hermes compact
+```
+
+This is the built-in compaction trigger. It creates the first
+`compaction_events` row, summarizes old sessions, and drops the raw message rows
+they held. Run it on a session you are not currently in, since it operates on the
+live database.
+
+If `compaction_events` stays 0 after running it, the scheduler may simply not
+have ticked. Check `hermes cron list` for a compaction job; if none is scheduled,
+`hermes compact` runs it manually.
+
+> [!CAUTION]
+> Compaction is lossy by design — it replaces raw message rows with a summary.
+> `state.db` has a backup under `$HERMES_HOME/backups/`. Confirm one exists and is
+> recent before running compaction on a database you have not trimmed before.
