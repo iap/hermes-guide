@@ -592,15 +592,14 @@ def _read_plugin_manifest(d):
         try:
             with open(portable, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
-            if isinstance(manifest, dict):
-                name = manifest.get("name")
-                if name is None:
-                    name = os.path.basename(d)
-                return name
         except Exception:
-            pass
-        # Malformed JSON / non-dict root: not a usable plugin manifest.
-        return None
+            # Malformed JSON / unreadable file: not a usable plugin manifest.
+            return None
+        if isinstance(manifest, dict):
+            name = manifest.get("name")
+            if name is None:
+                name = os.path.basename(d)
+            return name
     return None
 
 
