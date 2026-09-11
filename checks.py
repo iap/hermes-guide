@@ -568,24 +568,40 @@ def _bundled_plugins_dir():
 def _read_plugin_manifest(d):
     """Return a directory plugin's manifest ``name``, or None if none exists.
 
-    Accepts ``plugin.yaml`` then ``plugin.yml``, mirroring
-    ``plugins_cmd._read_manifest_info``. Portable Agent Plugins v1 packages
-    (``plugin.json``) install disabled by default and are out of scope here.
+    Accepts ``plugin.yaml`` then ``plugin.yml`` (mirroring
+    ``plugins_cmd._read_manifest_info``), then falls back to portable
+    ``plugin.json`` Agent Plugin packages — Hermes's own ``scan_directory``
+    resolves all three, so a ``plugin.json``-only plugin that is enabled and
+    loaded must not be reported as missing. The portable schema is a flat
+    mapping with a top-level ``name`` (see ``hermes_cli.agent_plugins``).
     """
-    manifest_file = os.path.join(d, "plugin.yaml")
-    if not os.path.isfile(manifest_file):
-        manifest_file = os.path.join(d, "plugin.yml")
-    if not os.path.isfile(manifest_file):
+    for ext in ("plugin.yaml", "plugin.yml"):
+        manifest_file = os.path.join(d, ext)
+        if os.path.isfile(manifest_file):
+            try:
+                with open(manifest_file, "r", encoding="utf-8") as f:
+                    manifest = yaml.safe_load(f) or {}
+                name = manifest.get("name")
+            except Exception:
+                name = None
+            if name is None:
+                name = os.path.basename(d)
+            return name
+    portable = os.path.join(d, "plugin.json")
+    if os.path.isfile(portable):
+        try:
+            with open(portable, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            if isinstance(manifest, dict):
+                name = manifest.get("name")
+                if name is None:
+                    name = os.path.basename(d)
+                return name
+        except Exception:
+            pass
+        # Malformed JSON / non-dict root: not a usable plugin manifest.
         return None
-    try:
-        with open(manifest_file, "r", encoding="utf-8") as f:
-            manifest = yaml.safe_load(f) or {}
-        name = manifest.get("name")
-    except Exception:
-        name = None
-    if name is None:
-        name = os.path.basename(d)
-    return name
+    return None
 
 
 def _collect_plugin_ids(root, prefix, depth, skip_names, seen):
