@@ -65,6 +65,18 @@ def main(argv: list[str]) -> int:
         if checks._read_plugin_manifest(str(d2)) != "no-name":
             failures.append("portable plugin.json without name did not fall back to basename")
 
+        # (2b) portable plugin.json with empty name -> basename fallback
+        d2b = Path(td) / "empty-name"
+        _write(d2b / "plugin.json", json.dumps({"name": "", "version": "1.0.0"}))
+        if checks._read_plugin_manifest(str(d2b)) != "empty-name":
+            failures.append("portable plugin.json with empty name did not fall back to basename")
+
+        # (2c) YAML plugin.yaml with empty name -> basename fallback
+        d2c = Path(td) / "yaml-empty-name"
+        _write(d2c / "plugin.yaml", "name: \"\"\nversion: 1.0.0\n")
+        if checks._read_plugin_manifest(str(d2c)) != "yaml-empty-name":
+            failures.append("plugin.yaml with empty name did not fall back to basename")
+
         # (3) malformed plugin.json -> None (not a plugin)
         d3 = Path(td) / "bad-json"
         _write(d3 / "plugin.json", "{ not json")

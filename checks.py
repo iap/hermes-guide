@@ -584,7 +584,7 @@ def _read_plugin_manifest(d):
                 name = manifest.get("name")
             except Exception:
                 name = None
-            if name is None:
+            if not name:
                 name = os.path.basename(d)
             return name
     portable = os.path.join(d, "plugin.json")
@@ -597,7 +597,7 @@ def _read_plugin_manifest(d):
             return None
         if isinstance(manifest, dict):
             name = manifest.get("name")
-            if name is None:
+            if not name:
                 name = os.path.basename(d)
             return name
     return None
