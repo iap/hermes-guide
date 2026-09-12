@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -55,7 +55,11 @@ A persisted catalog is a copy of the last `/v1/models` response. It is not consu
 Before editing anything, confirm the endpoint actually returns that many models. A persisted catalog is a snapshot; the live endpoint may differ:
 
 ```bash
-PROVIDER_MODELS_COUNT=$(curl -s -H "Authorization: Bearer ${PROVIDER_API_KEY}" "${PROVIDER_BASE_URL}/models" | python -c 'import sys,json; print(len(json.load(sys.stdin)["data"]))')
+# Count models the endpoint actually returns — compare to the persisted catalog
+# to tell a real bloat from a stale snapshot. Never paste a real key here;
+# keep it in an env var and reference it indirectly.
+_AUTH="Bearer ${PROVIDER_API_KEY}"
+PROVIDER_MODELS_COUNT=$(curl -s -H "Authorization: ${_AUTH}" "${PROVIDER_BASE_URL}/models" | python -c 'import sys,json; print(len(json.load(sys.stdin)["data"]))')
 ```
 
 If the live count matches the persisted count, the catalog is current and the bloat is real. If it is much smaller, the persisted catalog is stale — removing it loses nothing.
