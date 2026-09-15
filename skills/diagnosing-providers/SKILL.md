@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.0.1
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -88,8 +88,8 @@ models:
 
 A provider's key comes from two places, checked in order:
 
-1. **Inline `api_key:`** — a literal value or `${VAR}` reference in the entry. Takes precedence.
-2. **`key_env:`** — the name of an environment variable. Resolved at runtime from `$HERMES_HOME/.env` and the process environment.
+1. **Inline `api_key:`** — a literal value or `${VAR}` reference in the entry. Takes precedence over the env form.
+2. **`key_env:`** — the name of an environment variable (the alias `api_key_env:` is accepted too — verified in `hermes_cli/model_switch_providers.py::_entry_credentials`, which reads whichever is set). Resolved at runtime from `$HERMES_HOME/.env` and the process environment.
 
 ```yaml
 providers:
@@ -100,6 +100,8 @@ providers:
 ```
 
 If both are absent, the provider runs unauthenticated.
+
+**Above both of those sits `key_cmd:`** — a command-run token provider. When present it is resolved *first* and returns early (`_entry_credentials`: the `key_cmd` branch returns before `api_key` or `key_env` are consulted), so an inline `api_key:` in the same entry is **ignored**. If a provider keeps using an old credential, check for a `key_cmd:` line before editing anything else.
 
 ### The auto-generated key env var
 
