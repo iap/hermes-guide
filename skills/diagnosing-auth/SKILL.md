@@ -74,4 +74,4 @@ When probing the `.env` token, use Hermes's own loader — `agent.secret_scope.g
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at current main: `tools/skills_hub_github.py` (`_resolve_token`, `_try_pat`, `_try_gh_cli`, `is_authenticated`), `hermes_cli/skills_hub.py` (error strings), `agent/secret_scope.py`; plus the issue tracker (#98725 open). Module paths and error strings changed since the previous revision — the mechanism did not. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/skills_hub_github.py` (`_resolve_token`, `_try_pat`, `_try_gh_cli`, `is_authenticated`), `hermes_cli/skills_hub.py` (error strings), `agent/secret_scope.py`; plus the issue tracker (#98725 open). Module paths and error strings changed since the previous revision — the mechanism did not. Re-verify before reuse.*

@@ -36,7 +36,16 @@ Never guess where Hermes reads its files. The home directory differs by platform
 
 - `SOUL.md` (`$HERMES_HOME/SOUL.md`) — agent persona, always loaded as prompt slot #1. You edit it.
 - `USER.md` / `MEMORY.md` (`$HERMES_HOME/memories/`) — agent-written memory, injected as a **frozen snapshot at session start**; mid-session saves appear only next session. This is the usual cause of "it forgot what I just told it."
-- Project context — exactly **one** per session, first match wins: `.hermes.md` (or its `HERMES.md` alias) → `AGENTS.md` → `CLAUDE.md` → `.cursorrules`. Discovery walks **from the working directory upward, stopping at the git root** (`agent/coding_context.py`, verified); with no git root it looks only in the cwd — so a file planted in a parent like `/tmp` cannot be picked up.
+- Project context — each source is looked up **differently**, and the difference decides where you must put the file (`agent/prompt_builder.py:1588`, verified):
+
+| Source | Where it is read from |
+|---|---|
+| `.hermes.md` / `HERMES.md` | walked from cwd **up to the git root**; cwd only when there is no git root (`agent/coding_context.py::_find_hermes_md` — so a file planted in a parent like `/tmp` cannot be picked up) |
+| `AGENTS.md` (`AGENTS.override.md` wins, `agents.md` accepted) | **merged directory chain, git root → cwd** — every directory's file is injected, deeper wins |
+| `CLAUDE.md` | **cwd only** |
+| `.cursorrules` (+ `.cursor/rules/*.mdc`) | **cwd only**, concatenated |
+
+The practical consequence: `CLAUDE.md`/`.cursorrules` at a repository root are **ignored** when you launch from a subdirectory, while `AGENTS.md` is not. Exactly one source wins per session, first match in the order above.
 
 ## Key $HERMES_HOME inventory
 
@@ -44,7 +53,7 @@ Never guess where Hermes reads its files. The home directory differs by platform
 
 ## Orphaned & legacy settings
 
-Config keys that Hermes **silently stopped reading** are inert: they look meaningful in `config.yaml`, but no code consumes them — and their presence proves nothing. **Temporary:** leave the inert key in place; it does no harm while you confirm. **Permanent:** move to the live replacement below and delete the dead key, so the next reader is not misled by it. Before trusting a key, verify it against the installed source: search for actual readers (e.g. `grep -rn 'get("profile")' <hermes-agent-source>`), and check whether it appears in the shipped `cli-config.yaml.example` (the documented schema). Known cases, last checked against the installed source at commit `8d3745a99b` (present in history; 2026-09-04). **Re-check before quoting a key as orphaned** — the honest test is a reader grep plus the shipped `cli-config.yaml.example`; a key absent from that example and with no reader is inert, but a key that has gained a reader since this list was written is live again:
+Config keys that Hermes **silently stopped reading** are inert: they look meaningful in `config.yaml`, but no code consumes them — and their presence proves nothing. **Temporary:** the suspected key may stay while you confirm it is inert — but do not treat its presence as evidence that Hermes reads it, and do not leave it in place during an active diagnosis (an inert `disabled: true` on an MCP server reads as "server off" while the loader keeps it **on**). **Permanent:** move to the live replacement below and delete the dead key so it misleads neither the current investigation nor the next reader. Before trusting a key, verify it against the installed source: search for actual readers (e.g. `grep -rn 'get("profile")' <hermes-agent-source>`), and check whether it appears in the shipped `cli-config.yaml.example` (the documented schema). Known cases, last checked against the installed source at commit `8d3745a99b` (present in history; 2026-09-04). **Re-check before quoting a key as orphaned** — the honest test is a reader grep plus the shipped `cli-config.yaml.example`; a key absent from that example and with no reader is inert, but a key that has gained a reader since this list was written is live again:
 
 | Setting | Status | Live replacement |
 |---|---|---|
@@ -77,3 +86,7 @@ Every diagnosis should end in a concrete action: a `hermes <subcommand>` command
 ---
 
 *Facts re-verified 2026-09-14 against upstream source at current main: the cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); project-context discovery is `.hermes.md`/`HERMES.md` → `AGENTS.md` → `CLAUDE.md` → `.cursorrules`, cwd-upward with a git-root stop (`agent/coding_context.py`, `agent/prompt_builder.py`); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. Re-verify before reuse.*
+
+---
+
+*Re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: the per-file project-context lookup table comes from `agent/prompt_builder.py:1588` and `agent/coding_context.py::_find_hermes_md`.*
