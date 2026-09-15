@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.1.4
+version: 1.2.0
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -21,6 +21,8 @@ Goal: reduce any "it forgot what I told it" / "my memories are gone" / memory-pr
 |---|---|---|
 | **Built-in** (always available) | `$HERMES_HOME/memories/MEMORY.md` (agent notes) + `USER.md` (user profile) | `memory.memory_enabled`, `memory.user_profile_enabled` in `config.yaml` |
 | **External provider** (opt-in, one at a time) | plugin at `$HERMES_HOME/plugins/memory/<name>/` + pip deps in the active venv + secrets in `$HERMES_HOME/.env` | `memory.provider:` in `config.yaml` (empty string = built-in only) |
+
+The `provider:` comment in `config.yaml` lists the built-in set (`openviking`, `mem0`, `hindsight`, `holographic`, `retaindb`, `byterover`) — that list is **not exhaustive**. Providers shipped as optional skills/plugins (e.g. `honcho`, from `optional-skills/autonomous-ai-agents/honcho`, pip `honcho-ai`) install the same way and show up in the installed-plugins list of `hermes memory status`. Trust that list over any comment.
 
 A provider is *available* only when all four hold: plugin installed, its pip dependencies importable in the active venv, its env vars set, and its `is_available()` check passing. Any one missing → silent fallback to built-in (see the warning above).
 
@@ -55,7 +57,7 @@ Probe in this order — the first two are built-in helpers and answer most cases
 
 3. **Config + files** — read the `memory:` block of `$HERMES_HOME/config.yaml` (or `hermes config show`), and `ls "$HERMES_HOME/memories/"`. On native Windows `$HERMES_HOME` is `%LOCALAPPDATA%\hermes` — confirm with `hermes config path`, never assume.
 
-4. **Session log** — a provider selected but unavailable logs a one-shot warning at agent start ("Memory provider … reports unavailable — external memory is disabled for this session"): `hermes logs --follow` while starting a session.
+4. **Session log** — a provider selected but unavailable logs a one-shot warning at agent start (wording varies by version; look for a line naming the provider and saying external memory is disabled for the session): `hermes logs --follow` while starting a session. The gate that produces it is the external-provider block in `agent/system_prompt.py`.
 
 5. **`hermes guide memories`** (or `/hermes-doctor memories` in-session) — this plugin's read-only hygiene audit of the built-in stores: over-limit files, exact/near-duplicate entries, user-profile facts mis-targeted into `MEMORY.md`, and undated dynamic entries. It reports content-level findings that `hermes memory status` does not look at.
 
@@ -63,14 +65,14 @@ Probe in this order — the first two are built-in helpers and answer most cases
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Agent forgot something said mid-session | Frozen snapshot by design (see §1) | None needed — restart the session / new session picks it up. Verify the write landed in `$HERMES_HOME/memories/MEMORY.md` first |
-| External provider "not available ✗", missing env var listed | Secret absent from `$HERMES_HOME/.env` | Re-run `hermes memory setup <provider>` or add the var to `.env`; keep secrets out of `config.yaml` |
+| Agent forgot something said mid-session | Frozen snapshot by design (see §1) | **Temporary:** start a new session (it picks the write up). **Permanent:** none — this is intended. Verify the write landed in `$HERMES_HOME/memories/MEMORY.md` first |
+| External provider "not available ✗", missing env var listed | Secret absent from `$HERMES_HOME/.env` | **Temporary:** `hermes memory off` so built-in memory carries the session. **Permanent:** add the var to `.env` (and to the service environment for gateway/systemd) via `hermes memory setup <provider>`; keep secrets out of `config.yaml` |
 | Provider works in terminal, not in gateway/systemd | Services do not inherit `$HERMES_HOME/.env` | Set the provider's env vars in the service environment itself |
 | `hermes memory status`: "Plugin: NOT installed ✗" | `memory.provider` names a provider with no plugin under `$HERMES_HOME/plugins/memory/` | Install the provider plugin (hub: `hermes plugins install …`), or `hermes memory off` to go built-in-only |
 | `hermes doctor`: "honcho-ai not installed" / "mem0ai not installed" | venv rebuild/sync stripped provider pip deps | Re-run `hermes memory setup <provider>` (force-reinstalls its deps) or `hermes update` |
 | Hindsight local mode fails to import | local mode needs `hindsight-all`, not `hindsight-client` | `hermes memory setup hindsight` after setting `mode: local` in `hindsight/config.json` |
 | Memory tool missing from the tool schema | Both stores disabled: `memory.memory_enabled: false` **and** `user_profile_enabled: false` | Re-enable one in `config.yaml`; both off removes the tool entirely |
-| Writes rejected: "…would exceed the limit. Consolidate now…" | Char limits are hard caps (defaults 2200 / 1375 chars) — there is no auto-compaction | Have the agent consolidate/dedupe in the same turn, or raise `memory.memory_char_limit` |
+| Writes rejected: "…would exceed the limit. Consolidate now…" | Char limits are hard caps (defaults 2200 / 1375 chars) — there is no auto-compaction | **Temporary:** consolidate/dedupe in the same turn. **Permanent:** raise `memory.memory_char_limit` deliberately, or keep entries dated (`[YYYY-MM-DD] …`) so consolidation stays cheap |
 | Writes silently staged, never saved | `memory.write_approval: true` stages writes for review | Approve via `/memory approve` in-session, or set `write_approval: false` |
 | Hygiene check flags "no entry has a [YYYY-MM-DD] date prefix" | Entries carry no dates, so staleness is uncheckable — the `memories` scope of `hermes guide` reports undated entries as notes | Date new entries `[YYYY-MM-DD] …` where staleness matters; undated entries are a note, not an error |
 | Provider config edits ignored | Active-provider name mismatch, or edits made to the wrong profile's home | `hermes config path` to confirm the active home/profile; one provider at a time — `memory.provider` is a single string |
@@ -193,3 +195,7 @@ operate on the live database.
 > (`backups/` holds conditional full archives, `state-snapshots/` holds quick
 > snapshots). Create one explicitly with `hermes backup -q -l pre-prune` and
 > confirm the zip before pruning a database you have not trimmed before.
+
+---
+
+*Facts re-verified 2026-09-14 against upstream source at current main: `tools/memory_tool_store.py` (limits + rejection text), `hermes_cli/config_defaults.py` (the `memory:` block and its provider comment), `agent/memory_provider.py` (plugin path), `agent/system_prompt.py` (the external-provider gate), `hermes_cli/mem_trim.py` (`context.memory_trim`), `hermes_cli/subcommands/journey.py` (`memory-graph` alias), plus `optional-skills/autonomous-ai-agents/honcho/` for the provider-list note. Re-verify before reuse.*
