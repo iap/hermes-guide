@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -86,10 +86,11 @@ models:
 
 ## Step 4 — API key resolution
 
-A provider's key comes from two places, checked in order:
+A provider's key is resolved in this order, highest first:
 
-1. **Inline `api_key:`** — a literal value or `${VAR}` reference in the entry. Takes precedence over the env form.
-2. **`key_env:`** — the name of an environment variable (the alias `api_key_env:` is accepted too — verified in `hermes_cli/model_switch_providers.py::_entry_credentials`, which reads whichever is set). Resolved at runtime from `$HERMES_HOME/.env` and the process environment.
+1. **`key_cmd:`** — a command-run token provider. When present it is resolved first and **returns early** (`hermes_cli/model_switch_providers.py::_entry_credentials`: the `key_cmd` branch returns before `api_key` or `key_env` are read), so anything below it in the same entry is ignored. If a provider keeps using an old credential, check for `key_cmd:` before editing anything else.
+2. **Inline `api_key:`** — a literal value or `${VAR}` reference in the entry. Outranks the env form.
+3. **`key_env:`** — the name of an environment variable (the alias `api_key_env:` is accepted too — `_entry_credentials` reads whichever is set). Resolved at runtime from `$HERMES_HOME/.env` and the process environment.
 
 ```yaml
 providers:
@@ -99,9 +100,7 @@ providers:
     api_key: ${MY_GATEWAY_API_KEY}    # equivalent inline form
 ```
 
-If both are absent, the provider runs unauthenticated.
-
-**Above both of those sits `key_cmd:`** — a command-run token provider. When present it is resolved *first* and returns early (`_entry_credentials`: the `key_cmd` branch returns before `api_key` or `key_env` are consulted), so an inline `api_key:` in the same entry is **ignored**. If a provider keeps using an old credential, check for a `key_cmd:` line before editing anything else.
+If none of the three are set, the provider runs unauthenticated.
 
 ### The auto-generated key env var
 
