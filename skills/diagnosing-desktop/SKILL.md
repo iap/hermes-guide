@@ -1,7 +1,7 @@
 ---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, 'npm was not found', 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -52,11 +52,11 @@ Wrong-backend symptoms almost always trace to order 3 vs 4: a `hermes` shim on P
 | Symptom | Cause | Fix |
 |---|---|---|
 | "Desktop GUI requires Node.js/npm, but npm was not found on PATH" | Node missing, or the managed Node tree exists but is broken | Repair the install (`hermes update` / installer); verify `node -v` satisfies the engines range in `apps/desktop/package.json` |
-| `Access is denied` / `ERR_ELECTRON_BUILDER_CANNOT_EXECUTE` during build | A running `Hermes.exe` locks `release/win-unpacked/` | **Permanent:** close the running desktop app, then rebuild — the builder terminates only the processes it owns, so a hand-started instance must be closed manually. **Temporary:** build with `--build-only` while the old app is still open, then quit and relaunch |
+| `Access is denied` / `ERR_ELECTRON_BUILDER_CANNOT_EXECUTE` during build | A running `Hermes.exe` locks `release/win-unpacked/` | **Permanent:** close the running desktop app, then rebuild — the builder terminates only the processes it owns, so a hand-started instance must be closed manually. **Temporary:** none — `--build-only` still writes the packaged artifact into `release/`, so it hits the same lock (`hermes_cli/main_desktop.py`: "--build-only: produce the artifact but do NOT launch"). Close the app first; there is no safe build-while-running path |
 | "A previous update left the desktop bundle incomplete" | Interrupted update (file locks) left a torn renderer bundle | Close the running desktop app, then `hermes desktop --force-build`. Automatic detection is a heuristic — it catches index.html naming chunks that aren't there, but other damage (chunks present yet corrupt, exe damage) passes both the tear check and the source stamp, so plain relaunch reproduces the crash; when an interrupted update is suspected, force the rebuild |
 | Build stuck on Electron download (~114 MB from github.com/electron releases) | Blocked/rate-limited network | Built-in auto-heal: cache purge + npmmirror.com retry; pin a mirror with `ELECTRON_MIRROR=<url> hermes desktop --force-build` |
 | `--skip-build` errors "no packaged desktop app was found" | No prior successful build | Run a full `hermes desktop` (or `--build-only`) once; `--skip-build` only launches existing artifacts |
-| Blank window / backend never ready (respawning) | Port-announce timeout (90 s) — Windows Defender scanning fresh `.pyc` | Check `desktop.log` for the resolution kind; raise `HERMES_DESKTOP_PORT_ANNOUNCE_TIMEOUT_MS`; exclude the install root from Defender scans |
+| Backend never announces its port | Defender scanning fresh `.pyc` files; slow disk; the announce timeout may simply be too short for a cold start | Read the timeout from the installed source/config (`HERMES_DESKTOP_PORT_ANNOUNCE_TIMEOUT_MS`), then re-run once warmed; perf exclusions. Do not tune against a remembered number — the historical "90 s" is not in the current source |
 | Desktop runs the wrong hermes backend | Resolution order (§2): PATH shim vs active install | **Temporary:** `HERMES_DESKTOP_IGNORE_EXISTING=1` for one launch. **Permanent:** fix the PATH shim, or pin `HERMES_DESKTOP_HERMES_ROOT` to the intended source root |
 | "HERMES_DESKTOP_REMOTE_URL is set but HERMES_DESKTOP_REMOTE_TOKEN is not" | Remote mode needs both | Set both, or unset both |
 | "desktop self-update only runs against a source install" | Packaged installs don't self-update | Update via the installer; source installs update via `hermes update` |
@@ -91,4 +91,4 @@ After fixing: close any running desktop app, then `hermes desktop` (a source cha
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at current main: `cmd_gui` lives in `hermes_cli/main_desktop.py` (main.py imports/wires it); the desktop env-var set (`HERMES_DESKTOP_HERMES_ROOT`, `_IGNORE_EXISTING`, `_HERMES`, `_PORT_ANNOUNCE_TIMEOUT_MS`, `_REMOTE_URL`, `_REMOTE_TOKEN`, `_DISABLE_GPU`); the stamp file and its three fields; the engines range in `apps/desktop/package.json`; the `desktop.*` keys `ozone_platform_hint`, `disable_gpu`, `password_store`; `ELECTRON_MIRROR`/npmmirror auto-heal; `win-unpacked`; dashboard port 9119; the `gui` alias deprecation; and the two error strings quoted in the pitfalls. **Corrected:** the pipeline's module pointer (`main.py` → `main_desktop.py`). **Flagged as version-dependent:** the port-announce timeout values (previously "90 s default, floor 45 s"). Re-verify before reuse.*
+*Facts re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `cmd_gui` lives in `hermes_cli/main_desktop.py` (main.py imports/wires it); the desktop env-var set (`HERMES_DESKTOP_HERMES_ROOT`, `_IGNORE_EXISTING`, `_HERMES`, `_PORT_ANNOUNCE_TIMEOUT_MS`, `_REMOTE_URL`, `_REMOTE_TOKEN`, `_DISABLE_GPU`); the stamp file and its three fields; the engines range in `apps/desktop/package.json`; the `desktop.*` keys `ozone_platform_hint`, `disable_gpu`, `password_store`; `ELECTRON_MIRROR`/npmmirror auto-heal; `win-unpacked`; dashboard port 9119; the `gui` alias deprecation; and the two error strings quoted in the pitfalls. **Corrected:** the pipeline's module pointer (`main.py` → `main_desktop.py`). **Flagged as version-dependent:** the port-announce timeout values (previously "90 s default, floor 45 s"). Re-verify before reuse.*

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -42,4 +42,4 @@ Multiple leading `/skill` tokens stack in one message — the cap is **`_MAX_STA
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at current main: no standalone command files (no `commands/` tree); bundle path `<HERMES_HOME>/skill-bundles/` and bundle-over-skill precedence (`agent/skill_bundles.py`); the stacking cap `_MAX_STACKED_SKILLS = 5` (`agent/skill_commands.py`); `ctx.register_command(name, handler, description=..., args_hint=...)` (`plugins/context_engine/__init__.py`); all four platform gating keys (`gateway/config_loader.py`); alias pairs `new`←`reset` and `context`←`ctx` (`hermes_cli/commands.py`). No claim required correction in this pass — comments were added so each load-bearing fact is traceable. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: no standalone command files (no `commands/` tree); bundle path `<HERMES_HOME>/skill-bundles/` and bundle-over-skill precedence (`agent/skill_bundles.py`); the stacking cap `_MAX_STACKED_SKILLS = 5` (`agent/skill_commands.py`); `ctx.register_command(name, handler, description=..., args_hint=...)` (`plugins/context_engine/__init__.py`); all four platform gating keys (`gateway/config_loader.py`); alias pairs `new`←`reset` and `context`←`ctx` (`hermes_cli/commands.py`). No claim required correction in this pass — comments were added so each load-bearing fact is traceable. Re-verify before reuse.*

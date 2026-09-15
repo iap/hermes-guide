@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -79,7 +79,7 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at current main — no correction was needed:
+*Facts re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c` — no correction was needed:
 `VALID_HOOKS` (`hermes_cli/plugins.py`); `_HOOK_CALLBACK_TIMEOUT_SECS = 30.0`,
 `_MAX_HOOK_CALLBACK_TIMEOUT_SECS = 600.0`, `_HOOK_TIMEOUT_SUPPRESSION_SECONDS = 60.0`
 (`hermes_cli/plugins_dispatch.py`); `DEFAULT_TIMEOUT_SECONDS = 60`,

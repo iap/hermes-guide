@@ -1,7 +1,7 @@
 ---
 name: diagnosing-skills
 description: Diagnose Hermes skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits.
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, skills, troubleshooting]
@@ -53,4 +53,4 @@ Goal: reduce any skill problem to one concrete fix. Distinguish **discovered** (
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at current main: all eight hub source names (`tools/skills_hub_*.py`), `_CONDITION_KEYS` and `ESSENTIAL_SKILLS` (`agent/skill_utils.py`), external-dir ownership (`agent/prompt_builder.py`), `skills/.hub/lock.json` (`tools/skills_hub.py`), the bundled marker and `skills opt-in --sync` / `skills reset --restore` paths (`hermes_cli/`), `required_environment_variables` (`tools/skills_tool.py`), the skills-scoped `write_approval` and `$HERMES_HOME/pending/skills/`, and `plugin:skill` qualified dispatch (`tools/skills_tool.py`). Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: all eight hub source names (`tools/skills_hub_*.py`), `_CONDITION_KEYS` and `ESSENTIAL_SKILLS` (`agent/skill_utils.py`), external-dir ownership (`agent/prompt_builder.py`), `skills/.hub/lock.json` (`tools/skills_hub.py`), the bundled marker and `skills opt-in --sync` / `skills reset --restore` paths (`hermes_cli/`), `required_environment_variables` (`tools/skills_tool.py`), the skills-scoped `write_approval` and `$HERMES_HOME/pending/skills/`, and `plugin:skill` qualified dispatch (`tools/skills_tool.py`). Re-verify before reuse.*
