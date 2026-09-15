@@ -7,7 +7,12 @@ on:
   # for stacked PRs (one branch based on another), and a retarget to master fires
   # only `edited`, which is not a default trigger type -- so the workflow never ran.
   # A branch filter only ever *excluded* bases, so dropping it is purely additive.
+  # `edited` is explicit: changing a PR's base emits `edited`, which is not a
+  # default activity type, so a retarget after the parent merges would otherwise
+  # run no checks against its new target. Title/body edits also emit `edited`,
+  # which costs one CI run each.
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
