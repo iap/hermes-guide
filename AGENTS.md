@@ -21,7 +21,7 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 | `README.md` | Plugin + tap overview, install instructions, skill table |
 | `AGENTS.md` | This file — agent instructions for working on the repo |
 | `CLAUDE.md` | `@AGENTS.md` import (Claude Code entry point) |
-| `.github/workflows/ci.yml` | CI — py_compile, mypy, `hermes plugins doctor . --ci`, guard linters, regression tests, bandit |
+| `.github/workflows/ci.yml` | CI — py_compile, mypy, `hermes plugins doctor . --ci`, guard linters, regression tests, citation integrity vs the upstream baseline, bandit |
 | `.github/workflows/upstream-drift.yml` | Weekly upstream drift watch (`tools/check_upstream_drift.py`) — opens an issue when Hermes changes watched schema files or drift-prone facts |
 | `CONTRIBUTING.md` | Contribution guidelines |
 | `SECURITY.md` | Security policy |
