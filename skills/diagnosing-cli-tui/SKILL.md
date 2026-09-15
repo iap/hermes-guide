@@ -1,11 +1,11 @@
 ---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.0.7
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
-    related_skills: [hermes-configuration-guide]
+    related_skills: [hermes-configuration-guide, diagnosing-path, installing-hermes]
 ---
 
 # Diagnose Hermes CLI/TUI (Windows)
@@ -14,17 +14,17 @@ Playbook for running and fixing the Hermes Agent CLI/TUI on this machine.
 Use when the TUI misrenders, truncates, shows unreadable indicators, fails
 to launch, or when asked how to theme/skin Hermes on Windows.
 
-## 0. Environment baseline (origin machine: one Windows box, verified 2026-08-24)
+## 0. Environment baseline (origin machine: one Windows box, re-verified 2026-09-14)
 
 > [!CAUTION]
 > This baseline records **one specific Windows machine** — the box this skill was written on. It is **not** a description of your machine. Before applying anything below, confirm the local environment with `hermes config path`, `hermes --version`, and `hermes doctor`; paths, `HERMES_HOME`, shell, and OS differ per machine (on macOS/Linux the **default** home is `~/.hermes` — overridable via `HERMES_HOME` or a named profile; `hermes config path` always prints the active one).
 
-- Hermes Agent v0.20.4, git install: `%LOCALAPPDATA%\hermes\hermes-agent` (venv inside)
+- Hermes Agent **v0.21.1** on the Windows desktop install (v0.20.4 when this skill was first written); git install: `%LOCALAPPDATA%\hermes\hermes-agent` (that install ships a `.venv/`, not `venv/` — see `diagnosing-path` for why that matters)
 - `HERMES_HOME = %LOCALAPPDATA%\hermes` (native Windows; `~/.hermes` is NOT the active home)
 - OS: Windows 10 Home 22H2 (build 19045.7663)
-- Shell: Windows PowerShell 5.1; console host: conhost (classic window) or Windows Terminal 1.24 (installed)
+- Shell: Windows PowerShell 5.1; console host: conhost (classic window) or Windows Terminal 1.24.11911 (present on the reference box; a bare Windows 10 box has **only conhost**)
 - Tool shell backend: PortableGit (MinGit, msys2) bash - resolved via `HERMES_GIT_BASH_PATH` or `%LOCALAPPDATA%\hermes\git\usr\bin\bash.exe` (non-busybox variant)
-- TUI frontend: Node app `hermes-tui` (React 19 + custom Ink fork), launched as a subprocess of the Python CLI; Node >= 20 required
+- TUI frontend: Node app `hermes-tui` (React 19 + custom Ink fork), launched as a subprocess of the Python CLI. Node requirement (upstream docs, 2026-09): installer ships **Node 26**; an existing system Node **22.22+, 24.11+, or 26+** is used as-is. "Node >= 20" is not enough.
 - Ground truth commands: `hermes config path`, `hermes config show`, `hermes --version`, `hermes doctor`
 
 ## 1. Launch and resume
@@ -73,7 +73,13 @@ User env vars: `EDITOR=code --wait`, `HERMES_TUI_THEME=dark`.
 - Consoles with poor glyph coverage: prefer ASCII-ish faces (e.g. `(>_<)`, `(^_^)`, `(o_o)`) and box-drawing `tool_prefix` like `|`
 - Save skin YAML as UTF-8 WITHOUT BOM (a BOM inside a folded YAML scalar silently breaks parsing)
 - Visual editor: `npx -y hermes-mod` (community tool; honors HERMES_HOME)
-- Light-terminal detection: `HERMES_TUI_THEME` (light|dark|6-hex) > `COLORFGBG` > OSC 11 probe (OSC 11 not supported on conhost - set the env var explicitly)
+- Light/dark detection order (upstream `ui-tui/src/theme.ts`, verified 2026-09-14):
+  1. `HERMES_TUI_LIGHT` — `1/true/yes/on` = light, `0/false/no/off` = dark. **Wins over everything.**
+  2. `HERMES_TUI_THEME` — named only: `light` or `dark`.
+  3. `HERMES_TUI_BACKGROUND` — 3- or 6-digit hex (with or without `#`); luminance decides.
+  4. `COLORFGBG` last field (XFCE / rxvt / Terminal.app profiles).
+  5. `TERM_PROGRAM` light-default allow-list (currently `Apple_Terminal`).
+  Anything undecidable stays **dark**. There is **no OSC 11 probe** — the hex env var is named `HERMES_TUI_BACKGROUND` so a future OSC 11 client could feed it, nothing more. Note `hermes_cli/tips.py` advertises `HERMES_TUI_THEME=light|dark|<hex>`, which the TUI code does not implement; trust the code, and set hex via `HERMES_TUI_BACKGROUND`.)
 
 ## 4. Windows-specific troubleshooting
 
@@ -81,21 +87,44 @@ User env vars: `EDITOR=code --wait`, `HERMES_TUI_THEME=dark`.
 2. **Missing glyphs / tofu faces**: conhost has no font fallback. Fixes: Windows Terminal + Cascadia Mono, or `/indicator ascii`.
 3. **Editor silent (`/edit`, Ctrl-X Ctrl-E)**: Hermes defaults `EDITOR=notepad`. Set `EDITOR=code --wait` (Cursor/VS Code shim works). Never point at an editor that returns immediately without `--wait`.
 4. **WinError 193 (%1 is not a valid Win32 application)**: invoking an extensionless shebang script. Always use the `.cmd` shim (`npx.cmd`, not `npx`).
-5. **Process liveness**: never `os.kill(pid, 0)` on Windows (maps to CTRL_C_EVENT, bpo-14484). Use `psutil.pid_exists()` / `gateway.status._pid_exists()`.
+5. **Process liveness**: never `os.kill(pid, 0)` on Windows — upstream's own comment (`hermes_cli/gateway.py`): *"`os.kill(pid, 0)` hard-kills on Windows (TerminateProcess)"*, i.e. the probe kills the process instead of testing it. Use `psutil.pid_exists()` / `gateway.status._pid_exists()`.
 6. **Gateway at login**: `hermes gateway install` uses schtasks (ONLOGON, no admin), spawns via pythonw.exe with DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW.
 7. **Antivirus flags uv.exe**: false positive; whitelist the `%LOCALAPPDATA%\hermes\bin` folder (hash changes each upgrade). Verify authenticity via `gh attestation verify` (see README).
 8. **Installer BOM**: `iex (irm ...)` strips BOM; `[scriptblock]::Create((irm ...))` does not.
 9. **Config schema drift**: `hermes config set` flags `display.mouse_tracking` and `display.details_mode` as unrecognized - they ARE valid TUI keys (documented); values save and are read anyway. Do not delete them.
 
-## 5. Known upstream issues (check before re-reporting)
+## 5. Known upstream issues (check state before re-reporting)
 
-- #25418 / #19216 - terminal resize corrupts TUI layout / infinite render loop
-- #12130 - TUI v2 parity gaps vs classic CLI (~23/48 slash commands, overlays, @ refs)
-- #53301 - TUI pet colors washed out on WSL/Windows (Kitty-graphics fallback)
-- #37637 - /usage silent in CLI/TUI (works on Telegram)
-- #19214 - `terminal.cwd` controls cwd for CLI/TUI/gateway/cron/delegation (one key, easy foot-gun)
-- #14638 / #20782 - Windows Git Bash backend: exit 126, terminal/write_file tool failures
-- #83938 - test_profiles.py fails on Windows with non-UTF-8 codepages
+States verified 2026-09-14. `closed` means fixed upstream — if you still see it, your install or config is behind, not the bug.
+
+| Issue | State | Topic |
+|---|---|---|
+| #25418 | closed | Terminal resize corrupts TUI layout (Ghostty, iTerm2, ...) |
+| #19216 | closed | TUI: resize causes infinite scroll/render loop (flicker, duplicated status bar) |
+| #12130 | open | TUI v2 feature-parity gaps vs the classic CLI (overlays, slash commands, @ refs) |
+| #53301 | open | TUI pet colors washed out on WSL/Windows Terminal — **cause is chalk falling back to 256-color when `COLORTERM` is unset** (not a Kitty-graphics issue; fix the env, e.g. `COLORTERM=truecolor`) |
+| #37637 | closed | `/usage` silent in CLI/TUI (worked via Telegram) |
+| #19214 | closed | `terminal.cwd` is a foot-gun: CLI/TUI should use the launch directory |
+| #14638 | closed | Windows: exit 126 with empty output on every command (Git Bash backend) |
+| #20782 | closed | Windows: `terminal` / `write_file` tools fail (exit 126 / empty file) |
+| #83938 | open | `test_profiles.py` failures on Windows with a non-UTF-8 codepage |
+
+## 5b. Temporary workaround vs permanent fix
+
+Label every remedy. A temporary workaround unblocks **now** and is worth undoing once the
+real fix lands; a permanent fix changes the host or the config and is worth keeping. Some
+permanent fixes are **outside Hermes entirely** — do not report those as Hermes bugs.
+
+| Symptom | Temporary (until a proper fix) | Permanent |
+|---|---|---|
+| Tofu / unreadable busy face on conhost | `/indicator ascii` (or persist `display.tui_status_indicator: ascii`) | Install **Windows Terminal** (winget: `Microsoft.WindowsTerminal`) + Cascadia Mono, set it as the default terminal — a **non-Hermes** fix for a conhost/PowerShell-5.1 limitation; Hermes itself is fine |
+| Garbled tool output from the Git Bash backend | `LANG=C.UTF-8 LC_ALL=C.UTF-8` for that shell | Leave `configure_windows_stdio()` enabled — never set `HERMES_DISABLE_WINDOWS_UTF8`; PS 5.1 pipes: `$OutputEncoding = [Text.UTF8Encoding]::new()` |
+| Editor silent on `/edit` | one-off `EDITOR=code --wait` in that session | Persist `EDITOR` in config/env with the same `--wait` |
+| Washed-out colors (#53301) | none needed | Export a truthful `COLORTERM` (e.g. `truecolor`) so chalk stops downgrading to 256-color |
+| `hermes config set` warns on a TUI key | ignore the notice (the value still saves and is read) | Report upstream if a key the TUI honors stays unrecognized long-term |
+
+When a workaround is temporary, say what "done" looks like: the upstream issue to watch, or
+the version that carries the fix.
 
 ## 6. Cross-platform guardrails
 
@@ -116,3 +145,7 @@ hermes skills list                   # this skill should appear (hub or local, e
 Deep-dive reference: the original investigation with screenshot forensics,
 redundancy analysis, and full source evidence lives at
 `references/hermes-cli-tui-windows-investigation.md` in this skill's directory.
+
+---
+
+*Facts re-verified 2026-09-14 against upstream source (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts), upstream docs (installation.md), the issue tracker (nine citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.11911). Re-verify before reuse.*
