@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source', see #98725) — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.2
+version: 1.2.3
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -19,7 +19,7 @@ Goal: reduce any "… found in any source" / GitHub 401 / rate-limit failure on 
 | Skill *name* lookup fails | `No skill named '<name>' found in any source.` | `hermes_cli/skills_hub.py:219` |
 | Identifier / inspect / tap resolution fails | `Could not find '<identifier>' in any source.` | `hermes_cli/skills_hub.py:463` |
 
-These strings are **what the adapter prints when a lookup finds nothing** — auth is the most common cause, but not the only one. Before touching credentials, rule out the non-auth causes this guide also covers: a correctly-formed identifier for a source that does not host it, a valid token whose repository access is restricted, and scanner rejection inside the source. Classification order: verify the identifier and the source first, then the token. (An auth problem showing these strings does so by degrading every source adapter to "not found" at once — the signature is *all* sources failing, not one.)
+These strings are **what the adapter prints when a lookup finds nothing** — auth is the most common cause, but not the only one. Before touching credentials, rule out the non-auth causes this guide also covers: a correctly-formed identifier for a source that does not host it, a valid token whose repository access is restricted, and scanner rejection inside the source. Keep this skill's triage order (§4): **probe auth first, then the non-auth causes** — a dead high-priority token degrades every source at once, so it is the cheapest thing to rule out (resolve the method → probe the token → 200 and still failing means the cause is non-auth: the identifier's source scope, repository access restrictions, or a scanner verdict). Do not replace credentials blindly; do not skip the probe to chase the identifier either. (An auth problem showing these strings does so by degrading every source adapter to "not found" at once — the signature is *all* sources failing, not one.)
 
 ## 1. How auth resolves (priority order)
 
