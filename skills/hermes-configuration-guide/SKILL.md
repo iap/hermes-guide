@@ -1,7 +1,7 @@
 ---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.2.1
+version: 1.2.2
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -85,8 +85,4 @@ Every diagnosis should end in a concrete action: a `hermes <subcommand>` command
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at current main: the cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); project-context discovery is `.hermes.md`/`HERMES.md` → `AGENTS.md` → `CLAUDE.md` → `.cursorrules`, cwd-upward with a git-root stop (`agent/coding_context.py`, `agent/prompt_builder.py`); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. Re-verify before reuse.*
-
----
-
-*Re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: the per-file project-context lookup table comes from `agent/prompt_builder.py:1588` and `agent/coding_context.py::_find_hermes_md`.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/coding_context.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py:1588`); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. Re-verify before reuse.*
