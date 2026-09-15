@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -104,7 +104,7 @@ If none of the three are set, the provider runs unauthenticated.
 
 ### The auto-generated key env var
 
-When you add a provider through the CLI setup wizard (`hermes model`), Hermes derives the env var name from the endpoint's host:port so two servers on one host keep separate credentials. `hermes_cli/config.py:2574`:
+When you add a provider through the CLI setup wizard (`hermes model`), Hermes derives the env var name from the endpoint's host:port so two servers on one host keep separate credentials. `hermes_cli/config.py:2585`:
 
 ```python
 def custom_endpoint_key_env(identity: str) -> str:
