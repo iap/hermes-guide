@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.0.3
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -32,12 +32,13 @@ hooks:
       fail_closed: true                    # pre_tool_call only; blocks on failure
 ```
 
-Protocol: JSON payload on stdin, optional JSON response on stdout. Exit code **2** blocks the tool call (Claude-Code compatible). Block shapes: `{"decision": "block", "reason": ...}` or `{"action": "block", "message": ...}`; context injection: `{"context": "..."}` for `pre_llm_call`.
+Protocol: JSON payload on stdin, optional JSON response on stdout. Exit code **2** blocks the tool call (`agent/shell_hooks.py`: `BLOCK_EXIT_CODE = 2`, honoured only for blocking events) — Claude-Code compatible. Timeout defaults/caps are `DEFAULT_TIMEOUT_SECONDS = 60` and `MAX_TIMEOUT_SECONDS = 300` in the same module. Block shapes: `{"decision": "block", "reason": ...}` or `{"action": "block", "message": ...}`; context injection: `{"context": "..."}` for `pre_llm_call`.
 
 ### Plugin-hook callback timeouts (how they fail)
 
 Python plugin callbacks (`ctx.register_hook(cb)`) get a default **30s** wall-clock timeout
-(`plugins.hook_callback_timeout` overrides it; hard cap 600s). How a timeout resolves depends
+(`plugins.hook_callback_timeout` overrides it; hard cap **600s**) — `hermes_cli/plugins_dispatch.py`:
+`_HOOK_CALLBACK_TIMEOUT_SECS = 30.0`, `_MAX_HOOK_CALLBACK_TIMEOUT_SECS = 600.0`. How a timeout resolves depends
 on the hook class:
 
 | Hook class | On timeout |
@@ -46,9 +47,9 @@ on the hook class:
 | Bounded hooks | **fail open**: the callback is abandoned, the agent continues |
 | Low-frequency lifecycle hooks | intentionally unbounded |
 
-After a timeout the same callback is suppressed for 60s, so a hung plugin cannot re-fire immediately.
+After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPPRESSION_SECONDS = 60.0`, same module), so a hung plugin cannot re-fire immediately.
 
-**Consent gate**: each unique `(event, command)` pair prompts once, then persists to `$HERMES_HOME/shell-hooks-allowlist.json`. On non-TTY runs (gateway, cron, CI) an unapproved hook **silently stays unregistered** — bypass with `--accept-hooks`, `HERMES_ACCEPT_HOOKS=1`, or `hooks_auto_accept: true`, or hand-edit the allowlist (`approvals` array with exact `event` + `command` strings — a sha256-keyed object is the wrong format).
+**Consent gate**: each unique `(event, command)` pair prompts once, then persists to `$HERMES_HOME/shell-hooks-allowlist.json` (`ALLOWLIST_FILENAME`; schema `{"approvals": [...]}`, verified). On non-TTY runs (gateway, cron, CI) an unapproved hook **silently stays unregistered** — bypass with `--accept-hooks`, `HERMES_ACCEPT_HOOKS=1`, or `hooks_auto_accept: true`, or hand-edit the allowlist (`approvals` array with exact `event` + `command` strings — a sha256-keyed object is the wrong format).
 
 ## 2. How to inspect
 
@@ -60,7 +61,7 @@ After a timeout the same callback is suppressed for 60s, so a hung plugin cannot
 
 ## 3. Pitfalls (symptom → cause → fix)
 
-1. **Hook never fires** — (a) gateway hook used in a CLI session (gateway-only); (b) shell hook not on the consent allowlist after a non-TTY start; (c) event name typo (config parse prints "Did you mean X?" and skips); (d) plugin providing it is disabled. → Match system to surface; `hermes hooks doctor`; `hermes plugins list`.
+1. **Hook never fires** — (a) gateway hook used in a CLI session (gateway-only); (b) shell hook not on the consent allowlist after a non-TTY start; (c) event name typo (config parse prints "Did you mean X?" and skips); (d) plugin providing it is disabled. → **Temporary:** for (b), run once with `--accept-hooks` / `HERMES_ACCEPT_HOOKS=1` (or from an interactive TTY) so the pair gets approved now. **Permanent:** set `hooks_auto_accept: true` for non-TTY surfaces. Then match system to surface; `hermes hooks doctor`; `hermes plugins list`.
 2. **Hook ran once, then edits do nothing** — consent keys on the exact command string; script edits are silently trusted, but if you changed the command in config it's a **new** pair needing fresh consent. → `hermes hooks list`; re-approve.
 3. **Block not blocking** — exit code 2 or block JSON only works on `pre_tool_call`; a plugin-registered `pre_tool_call` may have blocked first (plugins register before shell hooks; first valid block wins); `fail_closed` on other events is ignored with a warning; a *timed-out* plugin `pre_tool_call` callback also blocks (policy hooks fail closed on timeout). → Scope the hook correctly.
 4. **Hook times out** — timeouts over 300s are clamped; a slow script needs to be async. → Lower the work or raise `timeout` within the cap.
@@ -75,3 +76,15 @@ After a timeout the same callback is suppressed for 60s, so a hung plugin cannot
 3. `hermes hooks doctor` / `hermes hooks list` → consent, exec bit, drift (pitfalls 1, 2).
 4. `hermes hooks test <event>` → behavior under a synthetic payload (3, 5).
 5. Apply the fix, restart the session/gateway, re-test.
+
+---
+
+*Facts re-verified 2026-09-14 against upstream source at current main — no correction was needed:
+`VALID_HOOKS` (`hermes_cli/plugins.py`); `_HOOK_CALLBACK_TIMEOUT_SECS = 30.0`,
+`_MAX_HOOK_CALLBACK_TIMEOUT_SECS = 600.0`, `_HOOK_TIMEOUT_SUPPRESSION_SECONDS = 60.0`
+(`hermes_cli/plugins_dispatch.py`); `DEFAULT_TIMEOUT_SECONDS = 60`,
+`MAX_TIMEOUT_SECONDS = 300`, `BLOCK_EXIT_CODE = 2`, `ALLOWLIST_FILENAME` and the
+`{"approvals": [...]}` schema (`agent/shell_hooks.py`); the bypass trio
+`--accept-hooks` / `HERMES_ACCEPT_HOOKS=1` / `hooks_auto_accept` (`hermes_cli/config_defaults.py`,
+`hermes_cli/oneshot.py`); `X-Hermes-Signature-256: sha256=<hex>` over the raw body
+(`agent/outbound_webhooks.py`). Sources are now cited inline so the next reviewer can re-verify fast.*
