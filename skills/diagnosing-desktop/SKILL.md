@@ -1,7 +1,7 @@
 ---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, 'npm was not found', 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source', see #98725) — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.0
+version: 1.2.1
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]

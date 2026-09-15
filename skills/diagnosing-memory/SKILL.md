@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.0
+version: 1.2.1
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]

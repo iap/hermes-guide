@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]

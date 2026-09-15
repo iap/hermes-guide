@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
