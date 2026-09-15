@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -136,7 +136,7 @@ the version that carries the fix.
 ## 7. Verification checklist
 
 ```powershell
-hermes --version; hermes doctor      # Node >= 20, bash, deps
+hermes --version; hermes doctor      # Node 22.22+/24.11+/26+, bash, deps
 hermes config get display            # confirm keys above
 hermes skills list                   # this skill should appear (hub or local, enabled)
 # in TUI: /indicator ascii; /skin slate; /mouse wheel; /usage; /exit
