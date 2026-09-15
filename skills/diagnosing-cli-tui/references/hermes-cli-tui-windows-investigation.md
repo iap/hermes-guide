@@ -157,7 +157,7 @@ Get-Command hermes | Select Source
 
 # 2. confirm TUI basics + apply fixes
 hermes --version
-hermes doctor                    # Node ≥20, git bash, deps
+hermes doctor                    # Node 22.22+/24.11+/26+, git bash, deps
 hermes --tui --dev               # run with visible diagnostics if launch oddness
 # inside the TUI:
 /indicator ascii                 # fix S1 immediately

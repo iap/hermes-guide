@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -19,7 +19,7 @@ Hermes has **no standalone custom-command files** (no `commands/*.md` directory 
 | **Built-in registry** | Ships with Hermes (`/model`, `/skills`, `/reload-mcp`, …) | Case-insensitive; see `/help` |
 | **Skills** | Every installed skill is automatically `/<skill-name>` | The name comes from SKILL.md frontmatter, not the directory |
 | **Skill bundles** | `hermes bundles create <name> --skill a --skill b` → `$HERMES_HOME/skill-bundles/<slug>.yaml` | Loads several skills at once; **a bundle wins a slug collision with a skill** |
-| **Plugin commands** | `ctx.register_command(name, handler, description="", args_hint="")` in a plugin | Only while that plugin is enabled; a later registration for the same name is reported and skipped rather than silently overriding |
+| **Plugin commands** | `ctx.register_command(name, handler, description="", args_hint="")` in a plugin | Only while that plugin is enabled. A name that collides with a **built-in** command is warned and skipped (`resolve_command` check); a collision between two plugins is a **late-registration replace** — the last registrant wins (`hermes_cli/plugins.py::register_command`, `@_serialized_replacement`), which is why a command can silently change behaviour when another plugin loads |
 
 Multiple leading `/skill` tokens stack in one message — the cap is **`_MAX_STACKED_SKILLS = 5`** (`agent/skill_commands.py`, verified 2026-09-14); parsing stops at the first token that isn't an installed skill, so argument paths like `/tmp/scan.pdf` are safe.
 

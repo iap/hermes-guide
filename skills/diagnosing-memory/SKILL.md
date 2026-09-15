@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.1
+version: 1.2.2
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -66,7 +66,7 @@ Probe in this order — the first two are built-in helpers and answer most cases
 | Symptom | Cause | Fix |
 |---|---|---|
 | Agent forgot something said mid-session | Frozen snapshot by design (see §1) | **Temporary:** start a new session (it picks the write up). **Permanent:** none — this is intended. Verify the write landed in `$HERMES_HOME/memories/MEMORY.md` first |
-| External provider "not available ✗", missing env var listed | Secret absent from `$HERMES_HOME/.env` | **Temporary:** `hermes memory off` so built-in memory carries the session. **Permanent:** add the var to `.env` (and to the service environment for gateway/systemd) via `hermes memory setup <provider>`; keep secrets out of `config.yaml` |
+| External provider "not available ✗", missing env var listed | Secret absent from `$HERMES_HOME/.env` | **Temporary:** none needed — built-in memory is already carrying the running session (the fallback happened at session start). **Permanent:** add the var to `.env` (and to the service environment for gateway/systemd) via `hermes memory setup <provider>`; alternatively `hermes memory off` to stop future external-provider attempts — it takes effect for **subsequently started** sessions, not the current one. Keep secrets out of `config.yaml` |
 | Provider works in terminal, not in gateway/systemd | Services do not inherit `$HERMES_HOME/.env` | Set the provider's env vars in the service environment itself |
 | `hermes memory status`: "Plugin: NOT installed ✗" | `memory.provider` names a provider with no plugin under `$HERMES_HOME/plugins/memory/` | Install the provider plugin (hub: `hermes plugins install …`), or `hermes memory off` to go built-in-only |
 | `hermes doctor`: "honcho-ai not installed" / "mem0ai not installed" | venv rebuild/sync stripped provider pip deps | Re-run `hermes memory setup <provider>` (force-reinstalls its deps) or `hermes update` |

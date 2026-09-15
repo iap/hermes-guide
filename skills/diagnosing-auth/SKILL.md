@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source', see #98725) — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.1
+version: 1.2.4
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -19,7 +19,7 @@ Goal: reduce any "… found in any source" / GitHub 401 / rate-limit failure on 
 | Skill *name* lookup fails | `No skill named '<name>' found in any source.` | `hermes_cli/skills_hub.py:219` |
 | Identifier / inspect / tap resolution fails | `Could not find '<identifier>' in any source.` | `hermes_cli/skills_hub.py:463` |
 
-Both are the same class of failure this skill solves: an auth problem degrading every source adapter to "not found".
+These strings are **what the adapter prints when a lookup finds nothing** — auth is the most common cause, but not the only one. Keep this skill's triage order (§4): **probe auth first** — resolve the method, then probe that token (a dead high-priority token degrades every source adapter to "not found" at once, so it is the cheapest thing to rule out; the signature is *all* sources failing, not one). Only when the probe answers 200 and installs still fail does the cause move to non-auth territory: the identifier's source scope, repository access restrictions, or a scanner verdict. Do not replace credentials blindly — and do not skip the probe to chase the identifier either.
 
 ## 1. How auth resolves (priority order)
 
