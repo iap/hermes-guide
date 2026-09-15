@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [master]
+  # No base-branch filter on pull_request. `branches: [master]` silently skipped CI
+  # for stacked PRs (one branch based on another), and a retarget to master fires
+  # only `edited`, which is not a default trigger type -- so the workflow never ran.
+  # A branch filter only ever *excluded* bases, so dropping it is purely additive.
   pull_request:
-    branches: [master]
 
 permissions:
   contents: read
