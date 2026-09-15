@@ -216,6 +216,16 @@ def _rel_path(path, base):
         return path
 
 
+def _version_label(value):
+    """Render a skill version for messages: ``v1.2.3``, or ``unversioned``.
+
+    A bare ``f"v{value}"`` over a missing version produced the string
+    "vunversioned" in the collision message — nonsense the user cannot act on.
+    """
+    text = str(value or "").strip()
+    return f"v{text}" if text else "unversioned"
+
+
 # --- config ---------------------------------------------------------------
 
 def check_config_parses():
@@ -400,12 +410,11 @@ def check_commands():
             if s:
                 skill_slugs.add(s)
                 if s in skill_slug_owners:
-                    first_v = skill_slug_versions.get(s) or "unversioned"
-                    this_v = str(fm.get("version") or "").strip() or "unversioned"
                     collisions.append(
-                        f"skill `{_rel_path(skill_slug_owners[s], home)}` (v{first_v}) and "
-                        f"`{_rel_path(dirpath, home)}` (v{this_v}) both normalize to "
-                        f"`/{s}` (first wins)"
+                        f"skill `{_rel_path(skill_slug_owners[s], home)}` "
+                        f"({_version_label(skill_slug_versions.get(s))}) and "
+                        f"`{_rel_path(dirpath, home)}` ({_version_label(fm.get('version'))}) "
+                        f"both normalize to `/{s}` (first wins)"
                     )
                 else:
                     skill_slug_owners[s] = dirpath
@@ -541,11 +550,26 @@ def check_hooks():
                 "reason": "`hermes hooks doctor` output matched no known summary pattern",
                 "detail": stdout.strip()[:2000],
             }
-    # A malformed allowlist is real breakage regardless of doctor's verdict.
+    # A malformed allowlist is real breakage regardless of the doctor's verdict —
+    # but it must not *replace* the doctor's findings. Returning the allowlist
+    # envelope alone silently dropped them, hiding the very problems the user is
+    # diagnosing. Merge both instead.
     allowlist_result = _check_allowlist_json()
-    if allowlist_result is not None:
-        return allowlist_result
-    return result
+    if allowlist_result is None:
+        return result
+    detail = [allowlist_result.get("detail")]
+    if result.get("status") in ("broken", "unknown"):
+        detail.append(f"`hermes hooks doctor`: {result.get('reason')}")
+        extra = result.get("detail")
+        if isinstance(extra, list):
+            detail.extend(extra)
+        elif extra:
+            detail.append(str(extra))
+    return {
+        "status": "broken",
+        "reason": allowlist_result.get("reason"),
+        "detail": detail,
+    }
 
 
 # --- plugins --------------------------------------------------------------
