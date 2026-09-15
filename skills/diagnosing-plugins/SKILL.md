@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and provider sub-categories.
-version: 1.0.2
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -22,7 +22,7 @@ A Hermes plugin is a **Python package**: a directory with a `plugin.yaml` manife
 | pip | `hermes_agent.plugins` entry points | `plugins.enabled` |
 | Nix | `services.hermes-agent.extraPlugins` | Nix config |
 
-`hermes plugins install owner/repo [--ref <40-char SHA>] [--enable|--no-enable]` installs from Git (pinned commits only); `hermes plugins update` refuses to move a pinned plugin. Sub-category directories have their **own loaders and selection keys** — they do not obey `plugins.enabled`: `platforms/<name>/` (messaging channels, gated per messaging platform in config), `memory/<name>/` (one active, `memory.provider`), `context_engine/<name>/` (`context.engine`), `model-providers/<name>/` (picked via `--provider`/config), `image_gen/<name>/` (`image_gen.provider`).
+`hermes plugins install owner/repo [--ref <40-char SHA>] [--enable|--no-enable]` installs from Git (pinned commits only); `hermes plugins update` refuses to move a pinned plugin. Sub-category directories have their **own loaders and selection keys** — they do not obey `plugins.enabled`. Verified present at current main: `platforms/<name>/` (messaging channels, gated per messaging platform in config), `memory/<name>/` (one active, `memory.provider`), `context_engine/<name>/` (`context.engine`), `model-providers/<name>/` (picked via `--provider`/config), `image_gen/<name>/` (`image_gen.provider`), plus `browser/`, `video_gen/`, `cron_providers/`, `kanban/`, `observability/`, `dashboard_auth/`, `google_meet/`, `spotify/`, `teams_pipeline/`, `web/`. **The set grows — list `plugins/` in the installed source instead of trusting this list.**
 
 ## 2. The enable gate and capabilities
 
@@ -32,7 +32,7 @@ plugins:
   disabled: [noisy-plugin]   # deny-list always wins over enabled
 ```
 
-Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name>`, `hermes plugins disable <name>`. Declared capabilities (`tools.override`, `llm.model_override`, `gateway.platform_actions`, …) require a separate one-time consent recorded under `plugins.entries.<id>.granted_capabilities`; **non-interactive installs/enables grant nothing** — a plugin then runs with capabilities off and must degrade gracefully (`ctx.has_capability()`).
+Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name>`, `hermes plugins disable <name>`. Declared capabilities require a separate one-time consent recorded under `plugins.entries.<id>.granted_capabilities` (legacy `allow_*` keys are still read). Verified capability ids at current main: **`tools.override`** and **`gateway.platform_actions`** — this list is code-defined and grows, so check `plugin_capability_granted()` / `ctx.has_capability()` rather than trusting any doc (an earlier revision of this skill named a `llm.model_override` id that **does not exist**). Two behaviours worth knowing: **bundled plugins are trusted for `tools.override`** (no consent needed), and unknown ids or unreadable consent **fail closed** (False). **Non-interactive installs/enables grant nothing** — the plugin runs with capabilities off and must degrade gracefully (`ctx.has_capability()`).
 
 ## 3. How to inspect
 
@@ -44,7 +44,7 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 
 ## 4. Pitfalls (symptom → cause → fix)
 
-1. **Installed but tools/hooks/commands absent** — not in `plugins.enabled` (install defaults to disabled; `--enable` or the post-install prompt is opt-in). → `hermes plugins enable <name>` and restart. Bundled standalone plugins are opt-in too — only platform/backend sub-plugins auto-load.
+1. **Installed but tools/hooks/commands absent** — not in `plugins.enabled` (install defaults to disabled; `--enable` or the post-install prompt is opt-in). → **Permanent:** add it to `plugins.enabled` (`hermes plugins enable <name>`) and restart. **Temporary:** there is no read-only way to load a disabled plugin — enabling is the fix, so do it deliberately rather than working around it. Bundled standalone plugins are opt-in too — only platform/backend sub-plugins auto-load.
 2. **Plugin works but a privileged feature is off** — capability declared but never granted (non-TTY install, or declined). → `hermes plugins capabilities <name>`; re-consent via interactive `hermes plugins enable <name>`.
 3. **Project plugin ignored** — `.hermes/plugins/` is disabled by default. → Set `HERMES_ENABLE_PROJECT_PLUGINS=true` before starting Hermes, and only for trusted repos.
 4. **Plugin in `list` but nothing loads at all** — `register()` raised (bad code, missing dependency). → Check `hermes logs` for the load error; fix the plugin or its requirements.
@@ -60,3 +60,7 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 3. Enabled but broken → `hermes logs` for a `register()` failure (pitfall 4) or a capability gap (pitfall 2).
 4. Sub-category plugin (memory/context/model-provider/platform) → check its selection key in config, not `plugins.enabled`.
 5. Restart the session/gateway and verify: tools appear in `/tools list`, commands in `/` autocomplete, hooks via `hermes hooks list`.
+
+---
+
+*Facts re-verified 2026-09-14 against upstream source at current main: entry-point group `hermes_agent.plugins` and the project-plugins gate `HERMES_ENABLE_PROJECT_PLUGINS` (`plugins/memory/__init__.py`, `hermes_cli/plugin_dev.py`); the capability set and fail-closed behaviour (`hermes_cli/plugins.py::has_capability`, `plugin_capability_granted`); `plugins.enabled` handling (`hermes_cli/plugins.py`); the sub-category directory list (`plugins/`); selection keys `context.engine` (`hermes_cli/web_server_config.py`) and `image_gen.provider` (`agent/image_gen_*.py`). One claim was corrected (the nonexistent `llm.model_override` id). Re-verify before reuse.*
