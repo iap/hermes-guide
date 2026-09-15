@@ -1,11 +1,11 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.1.2
+version: 1.2.0
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
-    related_skills: [hermes-configuration-guide, diagnosing-cli-tui]
+    related_skills: [hermes-configuration-guide, diagnosing-cli-tui, installing-hermes]
 ---
 
 # Hermes Agent Path Diagnostics
@@ -14,18 +14,24 @@ This guide explains the dual-venv layout in Hermes Agent, how to detect which vi
 
 ## The Situation
 
-Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, with no single resolver in the core codebase.
+Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, and resolution is inconsistent across call sites because not every site uses the resolver.
 
-| Directory | Origin | Python | Tool |
+| Directory | Origin | Python | Who writes it |
 |---|---|---|---|
-| `.venv/` | `uv venv` (uv's default) | 3.12.x | What current tooling creates |
-| `venv/` | `python -m venv venv` or legacy install | 3.11.x | What the installers write (resolver winner) |
+| `venv/` | `python -m venv venv`, and the curl installer | 3.11.x (verified: 3.11.15 on a Linux/WSL install) | The standard installers — the resolver winner |
+| `.venv/` | `uv venv` (uv's default) | Whatever `uv` provisions — verified 3.13.14 (uv 0.11.21) on a Windows desktop-app install | uv / uv-based tooling |
+
+The Python version does **not** identify the layout: upstream supports `requires-python = ">=3.11,<3.14"`, and `uv` resolves its own interpreter (3.13 in current tooling), so a `.venv` can be 3.11–3.13 depending on `uv`'s configuration. Both layouts were observed in the wild in the same week: the installer wrote `venv/` (Python 3.11.15) on a Linux/WSL host while the desktop app shipped `.venv/` (Python 3.13.14) on Windows.
 
 Both can coexist. When they do, **`venv` wins**: upstream's own resolver picks it first, "matching what the installers write." Note the trap: "current tooling" (`uv` → `.venv`) and "resolver winner" (`venv`) are *different* directories — a script that scans `.venv` first can therefore resolve a different interpreter than Hermes core does on the same checkout.
 
 **Why this happened:** Older installs and some documentation used `python -m venv venv`. When uv became the default package manager, `uv venv` created `.venv`. Migration scripts didn't remove the old `venv/`, so both persist.
 
-**Current state upstream:** `hermes_constants.py` ships `project_venv_dir(project_root)` (added 2026-08-19, commit `7a94b1f`), which resolves `venv` **before** `.venv` — its docstring: *"``venv`` wins when both exist, matching what the installers write."* It checks only `is_dir()` (no `pyvenv.cfg` validation), and callers decide whether a missing venv is an error. Before that commit, ~11 code sites in `hermes_cli/` hardcoded `PROJECT_ROOT / "venv"`, so `venv`-first matches both the new resolver and legacy behavior.
+Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, and resolution is inconsistent across call sites because not every site uses the resolver.
+
+**Current state upstream:** a resolver exists — `hermes_constants.py::project_venv_dir(project_root)` (added 2026-08-19, commit `7a94b1f`, verified in upstream history), resolving `venv` **before** `.venv`. Its docstring: *"``venv`` wins when both exist, matching what the installers write."* It checks `is_dir()` only (no `pyvenv.cfg` validation) and callers decide whether a missing venv is an error.
+
+**The failure mode is call sites that bypass that resolver, not the absence of one.** Before `7a94b1f`, exactly **11** sites in `hermes_cli/` hardcoded `PROJECT_ROOT / "venv"` (`update_cmd.py` 7, `gateway.py` 2, `main.py` 2 — counted from the parent commit). Some bypasses persist today; e.g. `gateway.py::_build_service_path_dirs` builds the service-unit PATH from `project_root / "venv" / "bin"` only — no `.venv` candidate — so on a `.venv`-only checkout the project venv is silently omitted from the generated PATH. The canonical open bug of this class is **#79542** (*"`_venv_scripts_dir()` only checks venv, not .venv, causing all Windows update protections to silently skip"*).
 
 ## Detection — Is a venv active?
 
@@ -81,16 +87,30 @@ def find_venv_dirs(project_root: Path) -> list[Path]:
     return [c for c in candidates if c.is_dir() and (c / "pyvenv.cfg").exists()]
 ```
 
-## Canonical Resolution Order
+## Resolving a venv — two different questions
 
-When resolving the venv path (for scripts, subprocess invocation, or path construction):
+These are **not** one resolution order. Keep them separate; conflating them is how scripts and models end up describing behavior upstream does not have.
 
-1. **`VIRTUAL_ENV` env var** — if set, this is the active venv. Trust it.
-2. **`sys.prefix`** — if running inside a venv, this is the venv path.
-3. **`project_venv_dir()`** — preferred: import it from `hermes_constants.py` rather than re-implementing the scan.
-4. **`venv/`** — installer default; `project_venv_dir()` checks this first.
-5. **`.venv/`** — uv default; only if `venv/` doesn't exist.
-6. **None** — No venv found. The system Python is in use.
+### A. Which venv is ACTIVE? (for code running under an interpreter)
+
+1. **`VIRTUAL_ENV`** env var — if set, that is the active venv.
+2. **`sys.prefix`** vs `sys.base_prefix` — if they differ, Python is running inside a venv.
+
+This is detection, not project resolution. Upstream's `project_venv_dir()` does **not** consult either of these.
+
+### B. Which venv DIRECTORY does the project have? (upstream's resolver)
+
+`project_venv_dir(project_root)` — import it; do not re-implement:
+
+1. **`venv/`** — checked first.
+2. **`.venv/`** — only when `venv/` is absent.
+3. **`None`** — no venv directory. Callers decide if that is an error.
+
+`is_dir()` only — no `pyvenv.cfg` validation, no environment-variable lookups.
+
+### C. Script that needs the best available answer
+
+Active venv first (A), then the project's candidate dirs (B). That is what the replica below does — and it is a **superset** of upstream, not a mirror: steps 1–2 are the replica's own additions for script use.
 
 ```python
 import os
@@ -107,7 +127,9 @@ def resolve_venv(project_root: Path | None = None) -> Path | None:
     4. .venv/ (uv default)
     5. None (system Python, no venv)
 
-    Mirrors hermes_constants.py::project_venv_dir: candidates resolve on
+    NOT a mirror of upstream: steps 1-2 (active-env detection) are this
+    replica's own additions for script use - project_venv_dir() consults
+    neither VIRTUAL_ENV nor sys.prefix. Steps 3-4 mirror upstream exactly:
     is_dir() alone, so a stray empty directory wins the same way it does
     upstream. Prefer importing project_venv_dir() when Hermes core is
     importable; use this replica outside the checkout.
@@ -153,7 +175,7 @@ if venv:
     # Windows: C:\path\to\hermes-agent\venv\Scripts\python.exe
 ```
 
-If `venv_bin_dir` is not available (outside Hermes core), replicate the logic:
+Upstream's helpers take a `windows=` keyword (`venv_bin_dir(venv_dir, *, windows=None)`, `venv_python_path(venv_dir, *, windows=None)`) so Windows paths can be exercised on any host — and they return a path **unconditionally**: a missing venv is the caller's decision, not the helper's. If `venv_bin_dir` is not available (outside Hermes core), replicate the logic:
 
 ```python
 from pathlib import Path
@@ -245,6 +267,10 @@ python -c "import sys; print(sys.prefix)"  # Confirms active venv
 
 Upstream's `project_venv_dir()` resolves `venv/` first, so scripts mirroring Hermes core pick `venv/` — which may be the stale one if this checkout is uv-managed. Don't guess: find the live one (e.g. `venv/bin/pip show hermes-agent` vs `.venv/bin/pip show hermes-agent`, or `hermes doctor`), then delete the stale directory to remove the ambiguity.
 
+### A protection or PATH feature silently does nothing
+
+Symptom: an update/protection/preflight step reports success but never ran, or a generated service unit's PATH lacks the venv. Cause: a **venv-only** check on a **`.venv`-only** checkout — the same class as open bug **#79542** (Windows update protections skip entirely) and the `_build_service_path_dirs` bypass above. Confirm the layout first (`ls -d venv .venv`), then treat any venv-name-specific check as suspect and resolve through `project_venv_dir()`.
+
 ### Windows: "python" not found
 
 Windows venvs use `Scripts\python.exe`, not `bin/python`. Use `venv_bin_dir()` or `sys.executable`.
@@ -253,4 +279,9 @@ Windows venvs use `Scripts\python.exe`, not `bin/python`. Use `venv_bin_dir()` o
 
 - `references/venv_detection_patterns.py` — copy-paste-ready detection functions
 - Hermes core `hermes_constants.py` — `project_venv_dir()` (the resolver), `venv_bin_dir()`, `venv_python_path()`
-- Hermes core `tools/skills_guard.py` — where the split causes false positives (issue #92376)
+- Open bug **#79542** — `_venv_scripts_dir()` checks only `venv`, so Windows update protections silently skip on `.venv` installs (the canonical harm of this split)
+- Related history: `venv_bin_dir()`'s docstring records the consolidation effort — the layout was open-coded in seven places using three different Windows predicates, and the fix for #76091 shipped an eighth copy before `hermes_constants.py` became the single source.
+
+---
+
+*Facts verified 2026-09-14 against upstream source at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway.py`, `pyproject.toml`), upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout), and live layouts on two hosts: a Linux/WSL installer install (`venv/`, Python 3.11.15) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21). Re-verify before reuse.*
