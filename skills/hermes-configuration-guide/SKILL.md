@@ -1,7 +1,7 @@
 ---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.2.2
+version: 1.2.3
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -40,7 +40,7 @@ Never guess where Hermes reads its files. The home directory differs by platform
 
 | Source | Where it is read from |
 |---|---|
-| `.hermes.md` / `HERMES.md` | walked from cwd **up to the git root**; cwd only when there is no git root (`agent/coding_context.py::_find_hermes_md` — so a file planted in a parent like `/tmp` cannot be picked up) |
+| `.hermes.md` / `HERMES.md` | walked from cwd **up to the git root**; cwd only when there is no git root (`agent/prompt_builder.py::_find_hermes_md` — so a file planted in a parent like `/tmp` cannot be picked up) |
 | `AGENTS.md` (`AGENTS.override.md` wins, `agents.md` accepted) | **merged directory chain, git root → cwd** — every directory's file is injected, deeper wins |
 | `CLAUDE.md` | **cwd only** |
 | `.cursorrules` (+ `.cursor/rules/*.mdc`) | **cwd only**, concatenated |
@@ -85,4 +85,4 @@ Every diagnosis should end in a concrete action: a `hermes <subcommand>` command
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/coding_context.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py:1588`); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. Re-verify before reuse.*
+*Facts re-verified 2026-09-15 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/prompt_builder.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py:1588`); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. Re-verify before reuse.*
