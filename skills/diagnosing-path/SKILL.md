@@ -14,7 +14,7 @@ This guide explains the dual-venv layout in Hermes Agent, how to detect which vi
 
 ## The Situation
 
-Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, with no single resolver in the core codebase.
+Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, and resolution is inconsistent across call sites because not every site uses the resolver.
 
 | Directory | Origin | Python | Who writes it |
 |---|---|---|---|
@@ -27,7 +27,7 @@ Both can coexist. When they do, **`venv` wins**: upstream's own resolver picks i
 
 **Why this happened:** Older installs and some documentation used `python -m venv venv`. When uv became the default package manager, `uv venv` created `.venv`. Migration scripts didn't remove the old `venv/`, so both persist.
 
-Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, with no single resolver in the core codebase.
+Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, and resolution is inconsistent across call sites because not every site uses the resolver.
 
 **Current state upstream:** a resolver exists — `hermes_constants.py::project_venv_dir(project_root)` (added 2026-08-19, commit `7a94b1f`, verified in upstream history), resolving `venv` **before** `.venv`. Its docstring: *"``venv`` wins when both exist, matching what the installers write."* It checks `is_dir()` only (no `pyvenv.cfg` validation) and callers decide whether a missing venv is an error.
 
