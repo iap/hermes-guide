@@ -143,6 +143,15 @@ jobs:
             https://github.com/NousResearch/hermes-agent.git /tmp/hermes-citation
           python3 tools/check_citation_integrity.py --src /tmp/hermes-citation
 
+      - name: Skill provenance footer guard
+        # Requires a dated upstream-anchored footer per skill. Rolled out in
+        # --warn mode so it is non-breaking while the last skills gain a footer;
+        # drop --warn to make it enforcing once the gap is closed.
+        run: |
+          python tools/check_skill_provenance.py --selftest
+          python tools/check_skill_provenance.py --warn
+          python tools/test_skill_provenance.py
+
       - name: Scope validation regression
         run: python tools/test_scope_validation.py
 
