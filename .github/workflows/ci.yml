@@ -99,6 +99,9 @@ jobs:
       - name: Exit contract (guide CLI)
         run: python tools/test_exit_contract.py
 
+      - name: Check-envelope regression test
+        run: python tools/test_check_envelopes.py
+
       - name: Skill version bump guard
         run: python tools/check_skill_version_bump.py
 
