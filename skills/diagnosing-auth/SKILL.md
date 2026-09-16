@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source', see #98725) — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.4
+version: 1.2.5
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -32,7 +32,7 @@ These strings are **what the adapter prints when a lookup finds nothing** — au
 | 3 | GitHub App JWT + installation token | `github-app` | only when app credentials are configured |
 | 4 | unauthenticated | `anonymous` | GitHub's anonymous limit (60 req/hr per GitHub docs), public repos only |
 
-The load-bearing fact: **a stale token at priority 1 shadows everything below it.** Its 401 is swallowed, and every GitHub-backed source surfaces the same generic `Could not fetch from any source` — on public repos too. (On versions without the exit-code fix, the failed install also exits **0** — do not trust the exit code alone; read the output.)
+The load-bearing fact: **a stale token at priority 1 shadows everything below it.** Its 401 is swallowed, and every GitHub-backed source surfaces the same generic *not-found* message — `No skill named '<name>' found in any source.` or `Could not find '<identifier>' in any source.` (historic phrasing, still in issue #98725's title: `Could not fetch from any source`) — on public repos too. (On versions without the exit-code fix, the failed install also exits **0** — do not trust the exit code alone; read the output.)
 
 Second load-bearing fact: **`GitHubAuth().is_authenticated()` checks presence, not validity.** A dead fine-grained PAT (`github_pat_…`) reports `auth_method='pat'` / `authenticated=True` while every API call returns 401 (verified live: the auth probe passed and `_github_get` returned 401 in the same process). Trust only the §2 API probe, never the `is_authenticated()` flag.
 
