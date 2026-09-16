@@ -139,6 +139,7 @@ jobs:
         run: |
           python tools/check_skill_provenance.py --selftest
           python tools/check_skill_provenance.py --warn
+          python tools/test_skill_provenance.py
 
       - name: Scope validation regression
         run: python tools/test_scope_validation.py
