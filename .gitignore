@@ -38,3 +38,10 @@ venv/
 
 # Local tool state
 .mimosa/
+
+# Local agent / verification scratch (not part of the published plugin + tap)
+.cluster/
+.verify/
+/tmp*.json
+/q.json
+/q[0-9]*.json
