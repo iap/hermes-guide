@@ -43,5 +43,4 @@ venv/
 .cluster/
 .verify/
 /tmp*.json
-/q.json
-/q[0-9]*.json
+/q*.json

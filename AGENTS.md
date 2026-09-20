@@ -16,7 +16,7 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 | `__init__.py` | Plugin entrypoint — registers `/hermes-doctor` and `hermes guide` (the thirteen skills ship separately via the skills tap) |
 | `checks.py` | The seven read-only health checks (config/mcp/skills/commands/hooks/plugins/memories) |
 | `constants.py` | Single source of truth for names/values that drift across Hermes versions |
-| `skills/*/SKILL.md` | Thirteen skills: one config map (`hermes-configuration-guide`), one install guide (`installing-hermes`), eleven `diagnosing-*` |
+| `skills/*/SKILL.md` | Thirteen skills: one config map (`hermes-configuration-guide`), one install guide (`installing-hermes`), twelve `diagnosing-*` |
 | `tools/` | Guard linters (no-mutation, self-claim, version bump, provenance, citation integrity, upstream drift) + regression tests, all run by CI |
 | `README.md` | Plugin + tap overview, install instructions, skill table |
 | `AGENTS.md` | This file — agent instructions for working on the repo |
@@ -76,7 +76,7 @@ This repo has **three audiences**. Do not mix their output shapes, exit codes, o
 |---|---|---|---|
 | Hermes CLI | Upstream `hermes …` | End users / agents diagnosing a live install | Whatever Hermes prints; this repo may *parse* it inside checks but must not rebrand or rewrite Hermes messages as if they were ours |
 | Plugin UX | `__init__.py` + `checks.py` | `/hermes-doctor` and `hermes guide` | Check **envelopes** (`status` / `reason` / `detail`); render with `+/x/~/?`; `hermes guide` exits `0` healthy/informational, `1` broken/unknown, `2` bad scope. Proactive mode logs via the logger — no stdout report |
-| Repo harness | `tools/` | CI and maintainers | Machine-friendly guard/test output (`OK:` / `FAIL` / `error:` on stderr); exit `0` clean, non-zero on failure. Optional `--selftest` / `--warn` stay harness-only flags |
+| Repo harness | `tools/` | CI and maintainers | Machine-friendly guard/test output (`OK:` / `FAIL` / `error:` prefixes; success summaries on stdout, errors/failures on stderr); exit `0` clean, non-zero on failure. Optional `--selftest` / `--warn` stay harness-only flags |
 
 Rules of thumb:
 
@@ -154,7 +154,7 @@ CI enforces a syntax check, mypy, the plugin self-check, the `tools/` guard lint
 
 4. Bump its `version` frontmatter (`tools/check_skill_version_bump.py` enforces this against the merge base).
 5. Confirm YAML frontmatter parses cleanly (three dashes, valid keys, no tab indentation in YAML).
-6. Refresh the provenance footer date/revision; run `python tools/check_skill_provenance.py`.
+6. Refresh the provenance footer date/revision; run `python tools/check_skill_provenance.py --warn` (CI uses `--warn`; enforcing mode exits nonzero for the five pre-existing footer gaps unrelated to your change).
 7. Cross-check every `hermes <subcommand>` reference against the installed Hermes docs or `--help` output.
 8. If you added or changed file/symbol citations and have a Hermes checkout: `python tools/check_citation_integrity.py --src <hermes-checkout>` (revision defaults to `.github/upstream-drift.baseline`). Skip only when no checkout is available — state that skip.
 9. Verify `$HERMES_HOME` path wording for both POSIX and Windows when the skill mentions home paths.
