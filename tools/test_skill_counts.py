@@ -74,7 +74,7 @@ def main() -> int:
     import hermes_guide.checks as checks_mod  # noqa: E402
 
     actual_checks = len(checks_mod.labels())
-    actual_diagnostics = actual_skills - 1  # minus the map skill
+    actual_diagnostics = len(list(REPO.glob("skills/diagnosing-*/SKILL.md")))
 
     failures: list[str] = []
 

@@ -16,7 +16,7 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 | `__init__.py` | Plugin entrypoint — registers `/hermes-doctor` and `hermes guide` (the thirteen skills ship separately via the skills tap) |
 | `checks.py` | The seven read-only health checks (config/mcp/skills/commands/hooks/plugins/memories) |
 | `constants.py` | Single source of truth for names/values that drift across Hermes versions |
-| `skills/*/SKILL.md` | Thirteen skills: one config map (`hermes-configuration-guide`), one install guide (`installing-hermes`), twelve `diagnosing-*` |
+| `skills/*/SKILL.md` | Thirteen skills: one config map (`hermes-configuration-guide`), one install guide (`installing-hermes`), eleven `diagnosing-*` |
 | `tools/` | Guard linters (no-mutation, self-claim, version bump, provenance, citation integrity, upstream drift) + regression tests, all run by CI |
 | `README.md` | Plugin + tap overview, install instructions, skill table |
 | `AGENTS.md` | This file — agent instructions for working on the repo |
