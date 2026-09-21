@@ -108,6 +108,13 @@ jobs:
       - name: Version bump guard regression
         run: python tools/test_skill_version_bump.py
 
+      - name: Version consistency guard
+        # plugin.yaml is the shipped version and release.yml compares only the
+        # tag against it, so __init__.py and SECURITY.md can drift silently.
+        run: |
+          python tools/check_version_consistency.py --selftest
+          python tools/check_version_consistency.py
+
       - name: Skill-library behavioral test
         run: python tools/test_skill_checks.py
 

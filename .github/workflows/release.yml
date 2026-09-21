@@ -1,6 +1,6 @@
 name: release
 
-# Maintainer pushes a tag `v<plugin.yaml version>` (e.g. `v0.3.2`) to cut a
+# Maintainer pushes a tag `v<plugin.yaml version>` (e.g. `v0.4.0`) to cut a
 # release. The job fails closed unless the tag matches plugin.yaml, so a
 # mistyped tag can never publish a mismatched release. Uses pip, not uv:
 # three tiny installs, no lockfile — a new toolchain buys nothing here.
@@ -61,6 +61,7 @@ jobs:
           python tools/check_self_claim.py
           python tools/check_skill_version_bump.py
           python tools/test_skill_counts.py
+          python tools/check_version_consistency.py
 
       - name: Create GitHub release
         env:
