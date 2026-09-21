@@ -12,7 +12,10 @@ previous version:
 
 A stale ``SECURITY.md`` is the one with user impact: it tells someone running
 the current release that their version is unsupported. This guard makes the
-four sites agree in the same commit that changes the version.
+four sites agree in the same commit that changes the version. The supported
+table must name the current version and nothing else: the policy sentence
+promises fixes for the latest release only, so an extra supported row would
+claim support for a release that no longer receives any.
 
 Style and CI wiring mirror tools/check_self_claim.py.
 
@@ -86,10 +89,10 @@ def audit(root: Path) -> tuple[int, list[str]]:
         rows = SECURITY_TABLE_ROW.findall(security_text)
         if not rows:
             missing.append("no supported-version table row in SECURITY.md")
-        elif canonical not in rows:
+        elif rows != [canonical]:
             drift.append(
-                f"SECURITY.md table: {canonical!r} is not listed as supported "
-                f"(rows: {', '.join(rows)})"
+                "SECURITY.md table: supported rows are "
+                f"{', '.join(rows)}, expected only the current version {canonical!r}"
             )
 
     if missing:
@@ -103,16 +106,19 @@ def audit(root: Path) -> tuple[int, list[str]]:
 
 
 def _fixture(root: Path, version: str, *, init: str | None = None,
-             sentence: str | None = None, table: str | None = None) -> None:
+             sentence: str | None = None, table: str | None = None,
+             extra_rows: tuple[str, ...] = ()) -> None:
     (root / "plugin.yaml").write_text(f"name: demo\nversion: {version}\n", encoding="utf-8")
     (root / "__init__.py").write_text(
         f'__version__ = "{init or version}"\n', encoding="utf-8"
     )
+    rows = "".join(
+        f"| {row} | :white_check_mark: |\n" for row in (table or version, *extra_rows)
+    )
     (root / "SECURITY.md").write_text(
         "# Security Policy\n\n"
         f"Only the latest published version (`{sentence or version}`) receives security fixes.\n\n"
-        "| Version | Supported |\n| --- | --- |\n"
-        f"| {table or version} | :white_check_mark: |\n",
+        "| Version | Supported |\n| --- | --- |\n" + rows,
         encoding="utf-8",
     )
 
@@ -144,6 +150,13 @@ def selftest() -> int:
         if code != 1:
             failures.append(f"stale SECURITY.md table row expected 1, got {code}")
 
+        obsolete_row = base / "obsolete_row"
+        obsolete_row.mkdir()
+        _fixture(obsolete_row, "9.9.9", extra_rows=("9.9.8",))
+        code, _ = audit(obsolete_row)
+        if code != 1:
+            failures.append(f"obsolete supported row expected 1, got {code}")
+
         stale_dunder = base / "stale_dunder"
         stale_dunder.mkdir()
         _fixture(stale_dunder, "9.9.9", init="9.9.8")
@@ -161,7 +174,8 @@ def selftest() -> int:
         for failure in failures:
             print(f"FAIL selftest: {failure}", file=sys.stderr)
         return 1
-    print("OK: selftest (clean, drift-sentence, drift-table, drift-version, unusable)")
+    print("OK: selftest (clean, drift-sentence, drift-table, obsolete-row, "
+          "drift-version, unusable)")
     return 0
 
 
