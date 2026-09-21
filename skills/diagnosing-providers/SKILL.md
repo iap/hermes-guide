@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.2
+version: 1.1.3
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -58,18 +58,26 @@ Before editing anything, confirm the endpoint actually returns that many models.
 # Count models the endpoint actually returns — compare to the persisted catalog
 # to tell a real bloat from a stale snapshot. Never paste a real key here;
 # keep it in an env var and reference it indirectly.
-_AUTH="Bearer ${PROVIDER_API_KEY}"
-PROVIDER_MODELS_COUNT=$(curl -s -H "Authorization: ${_AUTH}" "${PROVIDER_BASE_URL}/models" | python -c 'import sys,json; print(len(json.load(sys.stdin)["data"]))')
+# Pure python on purpose: no curl|python pipe (supply-chain shape), and the
+# key is read from the environment in-process — it never appears in argv,
+# so other local users cannot see it via ps.
+python - <<'PY'
+import json, os, urllib.request
+req = urllib.request.Request(
+    os.environ["PROVIDER_BASE_URL"].rstrip("/") + "/models",
+    headers={"Authorization": "Bearer " + os.environ["PROVIDER_API_KEY"]},
+)
+with urllib.request.urlopen(req) as r:
+    print(len(json.load(r)["data"]))
+PY
 ```
 
 If the live count matches the persisted count, the catalog is current and the bloat is real. If it is much smaller, the persisted catalog is stale — removing it loses nothing.
 
 > [!CAUTION]
-> Never paste a real API key into a command line. Keep it in an environment
-> variable and reference it as `${PROVIDER_API_KEY}` — that keeps the value out
-> of shell history and out of the visible process arguments. The `python`
-> pipe does not change that; the exposure is the `-H` argument itself, so the
-> variable form is the fix.
+> Never paste a real API key into a command line — neither as a `-H` argument
+> (visible in `ps` output to other local users) nor inline in the script. Keep it
+> in an environment variable and read it in-process, as above.
 
 ## Step 3 — Allowlist vs metadata
 
