@@ -1,7 +1,7 @@
 ---
 name: diagnosing-bot-mode
 description: Diagnose Hermes Bot Mode issues — bots not appearing, profile conflicts, bot-to-bot messaging failures, model/memory/skill routing per bot, and gateway connectivity.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, bot-mode, troubleshooting]
@@ -20,7 +20,7 @@ model:
   default: claude-sonnet-4.5
   provider: anthropic
 memory:
-  provider: built-in           # built-in | mem0 | honcho
+  provider: ""                  # empty = built-in file-backed memory; set to an external provider name (mem0, honcho, hindsight, ...) to activate its plugin
 ui_meta:
   hermes-bots: {}              # marks this profile as a bot
 ```
@@ -41,7 +41,7 @@ ui_meta:
 1. **Bot not appearing in Desktop Bots tab** — (a) profile config.yaml missing or invalid; (b) `ui_meta.hermes-bots` missing from profile config; (c) gateway not running; (d) Desktop UI bug (collapse button clicked — see issue #101535). → Validate profile config.yaml syntax; add `ui_meta.hermes-bots: {}` to the bot's config.yaml; restart gateway; reinstall Desktop if UI bug suspected.
 2. **Bot responds but uses wrong model** — `model.default` in profile config.yaml is empty or invalid, or the provider is not configured. → Set `model.default` to a valid model string and `model.provider`; verify provider config in the default profile.
 3. **Bot-to-bot messaging fails** — (a) both bots on different machines without peer setup; (b) bot profiles don't exist or aren't running; (c) target bot's gateway not reachable. → Use `hermes peer` for cross-machine bot communication; verify both bots' profiles exist (`hermes profile list`); ensure both gateways are running.
-4. **Bot memory not persisting** — `memory.provider` in profile config.yaml misconfigured or external provider (Honcho/Mem0) not running. → Check `memory.provider` in the bot's config.yaml; verify external provider is installed and reachable.
+4. **Bot memory not persisting** — `memory.provider` in profile config.yaml set to an invalid name, or external provider (Honcho/Mem0) not running. Note: `memory.provider` accepts external plugin names only — empty string means built-in file-backed memory; there is no `built-in` value. → Check `memory.provider` in the bot's config.yaml (empty = built-in; `mem0`/`honcho`/`hindsight` = external); verify external provider is installed and reachable.
 5. **Bot skills not loading** — skill names don't match installed skills, or skills not installed for that profile. → Run `hermes skills list -p <bot-name>`; install missing skills for the profile; verify names match.
 6. **Bot cron jobs not firing** — cron expression invalid, deliver target not configured, or scheduler not running. → Validate cron syntax; check `hermes cron status`; verify deliver target (telegram/discord/etc.) is configured.
 7. **"Profile already exists" error** — duplicate profile name. → Use unique names; check `~/.hermes/profiles/` for conflicts.
