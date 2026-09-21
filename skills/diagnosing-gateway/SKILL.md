@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -36,7 +36,7 @@ Platform config lives under `gateway.platforms.<name>` in `config.yaml`, but **e
 4. **Gateway crashes on start** — (a) invalid config.yaml; (b) port already in use; (c) missing dependencies. → Check `~/.hermes/logs/gateway.log`; verify config.yaml syntax; check for port conflicts (`lsof -i :<port>`).
 5. **Platform shows as disconnected** — (a) token expired or revoked; (b) platform API changed; (c) network/firewall blocking. → Re-authenticate via `hermes gateway setup`; check platform API status; verify network/firewall rules.
 6. **Bot responds twice** — (a) duplicate gateway processes; (b) platform retry on timeout. → Check `launchctl list | grep -i hermes` (macOS); kill duplicate processes; check platform retry settings.
-7. **Voice messages not transcribing on Telegram** — ffmpeg not installed. → Install ffmpeg (`sudo apt install ffmpeg` / `brew install ffmpeg`); restart gateway.
+7. **Voice messages not transcribing on Telegram** — ffmpeg not installed. → Install ffmpeg with your system package manager (e.g. `apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS); restart gateway.
 8. **Gateway not persisting across reboots** — (a) no launchd/systemd service; (b) gateway not set to auto-start. → Create launchd plist (macOS) or systemd service (Linux); enable auto-start.
 
 ## 4. Localization workflow

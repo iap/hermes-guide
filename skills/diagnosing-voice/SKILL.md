@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -58,7 +58,7 @@ tts:
 2. **Ctrl+B does nothing / microphone not detected** — (a) audio device not connected or not default; (b) PulseAudio bridge not active (WSL2); (c) `voice.record_key` changed. → Check `arecord -l` (Linux) or audio settings (macOS); verify default input device; check config.yaml for custom record_key.
 3. **Transcription is inaccurate or misses words** — (a) STT model too small (`base` is fastest but least accurate); (b) background noise; (c) microphone quality. → Switch `stt.local.model` to `small` or `medium`; use a headset or directional mic; reduce background noise.
 4. **TTS not responding** — (a) `tts.provider` not set; (b) provider API key missing; (c) provider service down. → Verify config; check API key; run `/voice tts` to confirm TTS is enabled.
-5. **Voice bubbles showing as files on Telegram** — ffmpeg not installed (required for audio format conversion). → Install ffmpeg (`sudo apt install ffmpeg` / `brew install ffmpeg`); restart gateway.
+5. **Voice bubbles showing as files on Telegram** — ffmpeg not installed (required for audio format conversion). → Install ffmpeg with your system package manager (e.g. `apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS); restart gateway.
 6. **Response latency too high** — (a) STT model too large; (b) TTS provider slow; (c) network latency. → Start with local STT + Edge TTS (no-key baseline); switch one stage at a time; check network.
 7. **STT returns garbage text** — (a) wrong language hint; (b) model too small; (c) audio quality poor. → Set `stt.local.language` to ISO-639-1 code; upgrade model; improve audio input.
 8. **Voice mode crashes on start** — (a) missing Python dependencies (`pip install hermes-agent[voice]`); (b) audio device busy. → Install voice extras; check for other apps using the microphone.
