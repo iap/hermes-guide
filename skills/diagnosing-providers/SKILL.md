@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.3
+version: 1.1.4
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -52,32 +52,12 @@ A persisted catalog is a copy of the last `/v1/models` response. It is not consu
 
 ## Step 2.5 — Distinguish config bloat from endpoint reality
 
-Before editing anything, confirm the endpoint actually returns that many models. A persisted catalog is a snapshot; the live endpoint may differ:
-
-```bash
-# Count models the endpoint actually returns — compare to the persisted catalog
-# to tell a real bloat from a stale snapshot. Never paste a real key here;
-# keep it in an env var and reference it indirectly.
-# Pure python on purpose: no curl|python pipe (supply-chain shape), and the
-# key is read from the environment in-process — it never appears in argv,
-# so other local users cannot see it via ps.
-python - <<'PY'
-import json, os, urllib.request
-req = urllib.request.Request(
-    os.environ["PROVIDER_BASE_URL"].rstrip("/") + "/models",
-    headers={"Authorization": "Bearer " + os.environ["PROVIDER_API_KEY"]},
-)
-with urllib.request.urlopen(req) as r:
-    print(len(json.load(r)["data"]))
-PY
-```
+Before editing anything, confirm the endpoint actually returns that many models. A persisted catalog is a snapshot; the live endpoint may differ. Probe the endpoint's `/models` route with your API key in the `Authorization: Bearer …` header (same request any OpenAI-compatible client sends) and count the entries in the `data` array — print only the count, never the key or the full response.
 
 If the live count matches the persisted count, the catalog is current and the bloat is real. If it is much smaller, the persisted catalog is stale — removing it loses nothing.
 
 > [!CAUTION]
-> Never paste a real API key into a command line — neither as a `-H` argument
-> (visible in `ps` output to other local users) nor inline in the script. Keep it
-> in an environment variable and read it in-process, as above.
+> Never paste a real API key into a command line — neither as a `-H` argument (visible in `ps` output to other local users) nor inline in a script. Keep it in an environment variable and read it in-process inside whatever HTTP client you use.
 
 ## Step 3 — Allowlist vs metadata
 
