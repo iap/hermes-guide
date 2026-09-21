@@ -4,7 +4,7 @@ Instructions for AI coding agents working in this repository.
 
 ## Project Overview
 
-**hermes-guide** is a [Hermes Agent](https://github.com/NousResearch/hermes-agent) **plugin + skills tap**. The plugin (`plugin.yaml` + `__init__.py`/`checks.py`/`constants.py`) exposes read-only diagnostics (`/hermes-doctor` and `hermes guide`), and the `skills/` directory bundles thirteen SKILL.md files that teach agents and users how to configure and troubleshoot MCP servers, skills, commands, hooks, plugins, hub auth, memory, paths/venvs, the Windows CLI/TUI, the desktop app, and model providers.
+**hermes-guide** is a [Hermes Agent](https://github.com/NousResearch/hermes-agent) **plugin + skills tap**. The plugin (`plugin.yaml` + `__init__.py`/`checks.py`/`constants.py`) exposes read-only diagnostics (`/hermes-doctor` and `hermes guide`), and the `skills/` directory bundles eighteen SKILL.md files that teach agents and users how to configure and troubleshoot MCP servers, skills, commands, hooks, plugins, hub auth, memory, paths/venvs, the Windows CLI/TUI, the desktop app, model providers, bot mode, voice, browser automation, cron scheduling, and gateway/messaging.
 
 Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable`, or a git clone into `$HERMES_HOME/plugins/hermes-guide/` + `hermes plugins enable hermes-guide`) and the tap (`hermes skills tap add iap/hermes-guide`). On native Windows `$HERMES_HOME` is `%LOCALAPPDATA%\hermes`; on POSIX it is `~/.hermes`. Confirm with `hermes config path`.
 
@@ -13,10 +13,10 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 | Path | Purpose |
 |---|---|
 | `plugin.yaml` | Plugin manifest (name, version, config schema) |
-| `__init__.py` | Plugin entrypoint — registers `/hermes-doctor` and `hermes guide` (the thirteen skills ship separately via the skills tap) |
+| `__init__.py` | Plugin entrypoint — registers `/hermes-doctor` and `hermes guide` (the eighteen skills ship separately via the skills tap) |
 | `checks.py` | The seven read-only health checks (config/mcp/skills/commands/hooks/plugins/memories) |
 | `constants.py` | Single source of truth for names/values that drift across Hermes versions |
-| `skills/*/SKILL.md` | Thirteen skills: one config map (`hermes-configuration-guide`), one install guide (`installing-hermes`), eleven `diagnosing-*` |
+| `skills/*/SKILL.md` | Eighteen skills: one config map (`hermes-configuration-guide`), one install guide (`installing-hermes`), sixteen `diagnosing-*` |
 | `tools/` | Guard linters (no-mutation, self-claim, version bump, provenance, citation integrity, upstream drift) + regression tests, all run by CI |
 | `README.md` | Plugin + tap overview, install instructions, skill table |
 | `AGENTS.md` | This file — agent instructions for working on the repo |

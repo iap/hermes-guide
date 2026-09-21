@@ -4,7 +4,7 @@ Thank you for your interest in contributing to hermes-guide!
 
 ## What this project is
 
-hermes-guide is a [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin + skills tap. The plugin (`plugin.yaml` + `__init__.py`/`checks.py`/`constants.py`) ships read-only diagnostics (`/hermes-doctor` and `hermes guide`), and the `skills/` directory bundles thirteen SKILL.md files that teach configuration and troubleshooting for MCP, skills, commands, hooks, plugins, hub auth, memory, paths/venvs, the Windows CLI/TUI, the desktop app, and model providers.
+hermes-guide is a [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin + skills tap. The plugin (`plugin.yaml` + `__init__.py`/`checks.py`/`constants.py`) ships read-only diagnostics (`/hermes-doctor` and `hermes guide`), and the `skills/` directory bundles eighteen SKILL.md files that teach configuration and troubleshooting for MCP, skills, commands, hooks, plugins, hub auth, memory, paths/venvs, the Windows CLI/TUI, the desktop app, model providers, bot mode, voice, browser automation, cron scheduling, and gateway/messaging.
 
 ## Reporting Issues
 
