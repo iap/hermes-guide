@@ -74,7 +74,7 @@ def main() -> int:
     import hermes_guide.checks as checks_mod  # noqa: E402
 
     actual_checks = len(checks_mod.labels())
-    actual_diagnostics = actual_skills - 1  # minus the map skill
+    actual_diagnostics = len(list(REPO.glob("skills/diagnosing-*/SKILL.md")))
 
     failures: list[str] = []
 
@@ -124,12 +124,12 @@ def main() -> int:
     )
     expect(
         "AGENTS.md skills row total",
-        _parse_wordNum(agents, r"The ([A-Za-z]+) skills \(one map \+", "AGENTS.md skills row"),
+        _parse_wordNum(agents, r"([A-Za-z]+) skills: one config map", "AGENTS.md skills row"),
         actual_skills,
     )
     expect(
         "AGENTS.md skills row diagnostics",
-        _parse_wordNum(agents, r"one map \+ ([A-Za-z]+) diagnostics\)", "AGENTS.md skills row"),
+        _parse_wordNum(agents, r"([A-Za-z]+) `diagnosing", "AGENTS.md skills row"),
         actual_diagnostics,
     )
 
