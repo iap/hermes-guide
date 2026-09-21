@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -14,40 +14,25 @@ Goal: reduce any messaging problem to one concrete fix — a gateway restart, a 
 
 ## 1. Configuration shape
 
-```yaml
-# ~/.hermes/config.yaml
-gateway:
-  platforms:
-    telegram:
-      enabled: true
-      token: "${TELEGRAM_BOT_TOKEN}"
-      allowlist: ["123456789"]      # user IDs allowed to interact
-    discord:
-      enabled: true
-      token: "${DISCORD_BOT_TOKEN}"
-      allowlist: []
-    slack:
-      enabled: false
-      token: "${SLACK_BOT_TOKEN}"
-```
+Platform config lives under `gateway.platforms.<name>` in `config.yaml`, but **each platform has its own schema** — there is no universal `token`/`allowlist`/`enabled` shape. Telegram uses polling/webhook with `token`; Discord uses `bot_token` and intents; Matrix uses `homeserver` + `access_token`; WhatsApp uses QR pairing. Always run `hermes gateway setup` for the target platform to see the actual fields.
 
-Platform modes: `allowlist` (only listed user IDs), `dm_pairing` (first DM claims access), `open` (anyone can interact — not recommended for production).
+> [!WARNING]
+> Do not copy-paste a `gateway.platforms.<name>` block from one platform to another. Applying a Telegram-shaped block to Discord (or vice versa) silently ignores credentials and the platform will not connect.
 
 ## 2. How to inspect
 
 - `hermes gateway status` — gateway process status, platform connections
 - `hermes gateway status --deep --full` — detailed diagnostics (macOS: use full PATH)
 - `hermes gateway start` / `hermes gateway restart` — manage gateway lifecycle
-- `hermes gateway setup` — interactive platform setup wizard
+- `hermes gateway setup` — interactive platform setup wizard (shows actual fields per platform)
 - `hermes logs --follow` — watch gateway logs in real-time
 - `~/.hermes/logs/gateway.log` — gateway log file
-- `cat ~/.hermes/logs/gateway.log | tail -50` — recent gateway errors
 
 ## 3. Pitfalls (symptom → cause → fix)
 
 1. **Bot not responding to messages** — (a) gateway not running; (b) bot not authorized; (c) user not in allowlist; (d) token expired. → Run `hermes gateway status`; start gateway (`hermes gateway start`); check allowlist in config.yaml; verify token with `hermes gateway setup`.
 2. **Messages not delivering** — (a) invalid bot token; (b) platform API down; (c) network issue. → Verify token with `hermes gateway setup`; check platform status page; test network connectivity.
-3. **Allowlist confusion — who can talk to the bot?** — (a) user ID not in allowlist; (b) wrong mode configured; (c) DM pairing claimed by another user. → Check `gateway.platforms.<name>.allowlist` in config.yaml; verify mode (allowlist/dm_pairing/open); for DM pairing, first user to message claims access.
+3. **Allowlist confusion — who can talk to the bot?** — (a) user not on platform-specific allowlist; (b) wrong access mode (pairing vs allowlist); (c) first DM already claimed by another user. → Run `hermes gateway setup <platform>` to see the actual access-mode options for that platform; check `gateway.platforms.<name>` in config.yaml for the platform-specific allowlist field.
 4. **Gateway crashes on start** — (a) invalid config.yaml; (b) port already in use; (c) missing dependencies. → Check `~/.hermes/logs/gateway.log`; verify config.yaml syntax; check for port conflicts (`lsof -i :<port>`).
 5. **Platform shows as disconnected** — (a) token expired or revoked; (b) platform API changed; (c) network/firewall blocking. → Re-authenticate via `hermes gateway setup`; check platform API status; verify network/firewall rules.
 6. **Bot responds twice** — (a) duplicate gateway processes; (b) platform retry on timeout. → Check `launchctl list | grep -i hermes` (macOS); kill duplicate processes; check platform retry settings.

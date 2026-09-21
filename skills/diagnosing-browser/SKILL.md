@@ -1,7 +1,7 @@
 ---
 name: diagnosing-browser
 description: Diagnose Hermes browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating, and browser tool errors.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, browser, cdp, playwright, troubleshooting]
@@ -30,10 +30,13 @@ browser:
 
 - `/browser status` — show current browser connection state
 - `/browser connect` — auto-launch/connect to a local Chromium-family browser
-- `/browser connect ws://host:port` — connect to a specific CDP endpoint
+- `/browser connect ws://host:port` — connect to a specific CDP endpoint (loopback only — unencrypted)
 - `/browser disconnect` — detach and return to cloud/local mode
 - `hermes logs --follow` — watch for browser-related errors
 - `google-chrome --version` / `brave-browser --version` — check browser version
+
+> [!WARNING]
+> CDP is a privileged browser-control interface. `ws://` is unencrypted — reserve it for loopback (`127.0.0.1`). For remote CDP, use `wss://` (TLS) or an authenticated tunnel (e.g. SSH). Exposing CDP over cleartext on an untrusted network lets attackers observe or inject browser-control traffic.
 
 ## 3. Pitfalls (symptom → cause → fix)
 

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -43,19 +43,21 @@ tts:
 
 ## 2. How to inspect
 
-- `hermes voice status` — show current voice mode state and provider config
-- `hermes voice on` / `hermes voice off` — toggle voice mode
-- `hermes voice tts` — test TTS with current provider
-- `hermes voice stt` — test STT with current provider
+> [!NOTE]
+> Voice controls are **in-session slash commands**, not `hermes voice` CLI subcommands. There is no `hermes voice status`, `hermes voice tts`, or `hermes voice stt`. The only valid subcommands are: `/voice`, `/voice on`, `/voice off`, `/voice tts`, `/voice status`.
+
+- `/voice status` — show current voice mode state and provider config
+- `/voice on` / `/voice off` — toggle voice mode
+- `/voice tts` — toggle spoken output (not a provider test — controls whether TTS is spoken)
 - `hermes logs --follow` — watch for voice-related errors
 - `arecord -l` (Linux) / `system_profiler SPAudioDataType` (macOS) — list audio devices
 
 ## 3. Pitfalls (symptom → cause → fix)
 
-1. **No audio output / agent responds in text only** — `tts.provider` not set or invalid; provider API key missing. → Set `tts.provider` in config.yaml; verify API key in `$HERMES_HOME/.env`; run `hermes voice tts` to test.
+1. **No audio output / agent responds in text only** — `tts.provider` not set or invalid; provider API key missing. → Set `tts.provider` in config.yaml; verify API key in `$HERMES_HOME/.env`.
 2. **Ctrl+B does nothing / microphone not detected** — (a) audio device not connected or not default; (b) PulseAudio bridge not active (WSL2); (c) `voice.record_key` changed. → Check `arecord -l` (Linux) or audio settings (macOS); verify default input device; check config.yaml for custom record_key.
 3. **Transcription is inaccurate or misses words** — (a) STT model too small (`base` is fastest but least accurate); (b) background noise; (c) microphone quality. → Switch `stt.local.model` to `small` or `medium`; use a headset or directional mic; reduce background noise.
-4. **TTS not responding** — (a) `tts.provider` not set; (b) provider API key missing; (c) provider service down. → Verify config; check API key; try `hermes voice tts` to isolate.
+4. **TTS not responding** — (a) `tts.provider` not set; (b) provider API key missing; (c) provider service down. → Verify config; check API key; run `/voice tts` to confirm TTS is enabled.
 5. **Voice bubbles showing as files on Telegram** — ffmpeg not installed (required for audio format conversion). → Install ffmpeg (`sudo apt install ffmpeg` / `brew install ffmpeg`); restart gateway.
 6. **Response latency too high** — (a) STT model too large; (b) TTS provider slow; (c) network latency. → Start with local STT + Edge TTS (no-key baseline); switch one stage at a time; check network.
 7. **STT returns garbage text** — (a) wrong language hint; (b) model too small; (c) audio quality poor. → Set `stt.local.language` to ISO-639-1 code; upgrade model; improve audio input.
@@ -63,13 +65,12 @@ tts:
 
 ## 4. Localization workflow
 
-1. `hermes voice status` — check current provider and mode state.
-2. `hermes voice tts` — test TTS in isolation.
-3. `hermes voice stt` — test STT in isolation.
-4. Check config.yaml `stt:` and `tts:` blocks — verify provider, model, API key.
-5. Check `$HERMES_HOME/.env` — verify provider API keys.
-6. Match the failure: no output → pitfall 1; no input → pitfall 2; bad quality → pitfall 3.
-7. Apply the fix, restart gateway, and test with `hermes voice tts` / `hermes voice stt`.
+1. `/voice status` — check current provider and mode state.
+2. `/voice tts` — confirm TTS output is enabled.
+3. Check config.yaml `stt:` and `tts:` blocks — verify provider, model, API key.
+4. Check `$HERMES_HOME/.env` — verify provider API keys.
+5. Match the failure: no output → pitfall 1; no input → pitfall 2; bad quality → pitfall 3.
+6. Apply the fix, restart gateway, and test with `/voice status`.
 
 ## 5. Cross-references
 

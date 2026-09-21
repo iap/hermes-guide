@@ -1,7 +1,7 @@
 ---
 name: diagnosing-bot-mode
 description: Diagnose Hermes Bot Mode issues — bots not appearing, profile conflicts, bot-to-bot messaging failures, model/memory/skill routing per bot, and gateway connectivity.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, bot-mode, troubleshooting]
@@ -10,54 +10,51 @@ metadata:
 
 # Diagnosing Bot Mode
 
-Goal: reduce any Bot Mode problem to one concrete fix — a profile.yaml field, a gateway restart, or a config.yaml setting. Bot Mode creates named bots with their own model, memory, skills, routines, and chats.
+Goal: reduce any Bot Mode problem to one concrete fix — a profile config.yaml field, a gateway restart, or an enable toggle. Bot Mode creates named bots (profiles) with their own model, memory, skills, and gateway routing.
 
 ## 1. Configuration shape
 
 ```yaml
-# ~/.hermes/profiles/<bot-name>/profile.yaml
-name: research-bot
-model: claude-sonnet-4.5
+# ~/.hermes/profiles/<bot-name>/config.yaml  (operational settings)
+model:
+  default: claude-sonnet-4.5
+  provider: anthropic
 memory:
-  provider: mem0
-skills:
-  - diagnosing-mcp
-  - diagnosing-hooks
-routines:
-  - cron: "0 9 * * 1-5"
-    prompt: "Summarize yesterday's commits"
-    deliver: telegram
+  provider: built-in           # built-in | mem0 | honcho
+ui_meta:
+  hermes-bots: {}              # marks this profile as a bot
 ```
 
-Key fields: `name` (unique identifier), `model` (provider/model string), `memory.provider` (built-in or external), `skills` (list of skill names), `routines` (scheduled tasks with cron/prompt/deliver).
+> [!IMPORTANT]
+> `profile.yaml` (`~/.hermes/profiles/<bot-name>/profile.yaml`) is **metadata only** — description and display name. Operational settings (model, memory, skills) belong in the profile's `config.yaml`. Editing `profile.yaml` for model/memory changes has no effect.
 
 ## 2. How to inspect
 
-- `hermes bots list` — show all configured bots and their status
+- `hermes profile list` — list all profiles (bots are profiles marked with `ui_meta.hermes-bots`)
 - `hermes gateway status` — verify the gateway is running (bots require it)
-- `hermes config path` — locate config.yaml for global bot settings
-- `~/.hermes/profiles/<bot-name>/profile.yaml` — per-bot configuration
+- `hermes config path` — locate the active config.yaml
+- `~/.hermes/profiles/<bot-name>/config.yaml` — per-bot operational config
 - `hermes logs --follow` — watch bot activity in real-time
 
 ## 3. Pitfalls (symptom → cause → fix)
 
-1. **Bot not appearing in Desktop Bots tab** — (a) profile.yaml missing or invalid YAML; (b) bot not enabled in config.yaml `bots.enabled`; (c) gateway not running; (d) Desktop UI bug (collapse button clicked — see issue #101535). → Validate profile.yaml syntax; check `bots.enabled` in config.yaml; restart gateway; reinstall Desktop if UI bug suspected.
-2. **Bot responds but uses wrong model** — `model` field in profile.yaml is empty or invalid, or the provider is not configured. → Set `model` to a valid `provider/model` string; verify provider config.
-3. **Bot-to-bot messaging fails** — (a) both bots not in same chat; (b) `ui_meta.hermes-bots: {}` missing from profile.yaml (marks the install as a bot); (c) bot names collide across profiles. → Add `ui_meta.hermes-bots: {}` to profile.yaml; ensure unique bot names; use `@bot-name` mentions.
-4. **Bot memory not persisting** — `memory.provider` misconfigured or external provider (Honcho/Mem0) not running. → Check provider config; verify external provider is installed and reachable.
-5. **Bot skills not loading** — skill names in profile.yaml don't match installed skills, or skills not installed via tap. → Run `hermes skills list`; install missing skills; verify names match.
-6. **Bot routines not firing** — cron expression invalid, deliver target not configured, or scheduler not running. → Validate cron syntax; check `hermes cron status`; verify deliver target (telegram/discord/etc.) is configured.
-7. **"Profile already exists" error** — duplicate profile name across different sources. → Use unique names; check `~/.hermes/profiles/` for conflicts.
+1. **Bot not appearing in Desktop Bots tab** — (a) profile config.yaml missing or invalid; (b) `ui_meta.hermes-bots` missing from profile config; (c) gateway not running; (d) Desktop UI bug (collapse button clicked — see issue #101535). → Validate profile config.yaml syntax; add `ui_meta.hermes-bots: {}` to the bot's config.yaml; restart gateway; reinstall Desktop if UI bug suspected.
+2. **Bot responds but uses wrong model** — `model.default` in profile config.yaml is empty or invalid, or the provider is not configured. → Set `model.default` to a valid model string and `model.provider`; verify provider config in the default profile.
+3. **Bot-to-bot messaging fails** — (a) both bots on different machines without peer setup; (b) bot profiles don't exist or aren't running; (c) target bot's gateway not reachable. → Use `hermes peer` for cross-machine bot communication; verify both bots' profiles exist (`hermes profile list`); ensure both gateways are running.
+4. **Bot memory not persisting** — `memory.provider` in profile config.yaml misconfigured or external provider (Honcho/Mem0) not running. → Check `memory.provider` in the bot's config.yaml; verify external provider is installed and reachable.
+5. **Bot skills not loading** — skill names don't match installed skills, or skills not installed for that profile. → Run `hermes skills list -p <bot-name>`; install missing skills for the profile; verify names match.
+6. **Bot cron jobs not firing** — cron expression invalid, deliver target not configured, or scheduler not running. → Validate cron syntax; check `hermes cron status`; verify deliver target (telegram/discord/etc.) is configured.
+7. **"Profile already exists" error** — duplicate profile name. → Use unique names; check `~/.hermes/profiles/` for conflicts.
 8. **Bot spawns duplicate backends** — known issue in v0.21.0-v0.21.1 (fixed in v0.21.2). → Upgrade Hermes to v0.21.2+.
 
 ## 4. Localization workflow
 
 1. `hermes gateway status` — confirm gateway is running (bots require it).
-2. `hermes bots list` — verify the bot appears and is enabled.
-3. Check `~/.hermes/profiles/<bot-name>/profile.yaml` — validate YAML, check model/memory/skills fields.
+2. `hermes profile list` — verify the bot profile exists and is running.
+3. Check `~/.hermes/profiles/<bot-name>/config.yaml` — validate YAML, check `model`, `memory`, `ui_meta.hermes-bots`.
 4. `hermes logs --follow` — watch for bot activity and errors.
 5. Match the failure: not appearing → pitfall 1; wrong model → pitfall 2; messaging fails → pitfall 3.
-6. Apply the fix, restart gateway (`hermes gateway restart`), and verify in Desktop or via `hermes bots list`.
+6. Apply the fix, restart gateway (`hermes gateway restart`), and verify via `hermes profile list`.
 
 ## 5. Cross-references
 
