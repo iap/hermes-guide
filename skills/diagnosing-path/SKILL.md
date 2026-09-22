@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.2.1
+version: 1.2.2
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -31,7 +31,7 @@ Hermes Agent has a **dual-venv layout**: two directories can exist at the projec
 
 **Current state upstream:** a resolver exists — `hermes_constants.py::project_venv_dir(project_root)` (added 2026-08-19, commit `7a94b1f`, verified in upstream history), resolving `venv` **before** `.venv`. Its docstring: *"``venv`` wins when both exist, matching what the installers write."* It checks `is_dir()` only (no `pyvenv.cfg` validation) and callers decide whether a missing venv is an error.
 
-**The failure mode is call sites that bypass that resolver, not the absence of one.** Before `7a94b1f`, exactly **11** sites in `hermes_cli/` hardcoded `PROJECT_ROOT / "venv"` (`update_cmd.py` 7, `gateway.py` 2, `main.py` 2 — counted from the parent commit). Some bypasses persist today; e.g. `hermes_cli/gateway.py::_build_service_path_dirs` builds the service-unit PATH from `project_root / "venv" / "bin"` only — no `.venv` candidate — so on a `.venv`-only checkout the project venv is silently omitted from the generated PATH. The canonical open bug of this class is **#79542** (*"`_venv_scripts_dir()` only checks venv, not .venv, causing all Windows update protections to silently skip"*).
+**The failure mode is call sites that bypass that resolver, not the absence of one.** Before `7a94b1f`, exactly **11** sites in `hermes_cli/` hardcoded `PROJECT_ROOT / "venv"` (`update_cmd.py` 7, `gateway.py` 2, `main.py` 2 — counted from the parent commit). Some bypasses persist today; e.g. `hermes_cli/gateway_service_unit.py::_build_service_path_dirs` builds the service-unit PATH from `project_root / "venv" / "bin"` only — no `.venv` candidate — so on a `.venv`-only checkout the project venv is silently omitted from the generated PATH. The canonical open bug of this class is **#79542** (*"`_venv_scripts_dir()` only checks venv, not .venv, causing all Windows update protections to silently skip"*).
 
 ## Detection — Is a venv active?
 
@@ -284,4 +284,4 @@ Windows venvs use `Scripts\python.exe`, not `bin/python`. Use `venv_bin_dir()` o
 
 ---
 
-*Facts verified 2026-09-14 against upstream source at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway.py`, `pyproject.toml`), upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout), and live layouts on two hosts: a Linux/WSL installer install (`venv/`, Python 3.11.15) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21). Re-verify before reuse.*
+*Facts verified 2026-09-14 against upstream source at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway_service_unit.py`, `pyproject.toml`); the gateway-bypass citation moved to `gateway_service_unit.py` at `2f6170bf` (2026-09-22, drift #103); upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout), and live layouts on two hosts: a Linux/WSL installer install (`venv/`, Python 3.11.15) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21). Re-verify before reuse.*
