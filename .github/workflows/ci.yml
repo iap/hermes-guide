@@ -151,12 +151,11 @@ jobs:
           python3 tools/check_citation_integrity.py --src /tmp/hermes-citation
 
       - name: Skill provenance footer guard
-        # Requires a dated upstream-anchored footer per skill. Rolled out in
-        # --warn mode so it is non-breaking while the last skills gain a footer;
-        # drop --warn to make it enforcing once the gap is closed.
+        # Requires a dated upstream-anchored footer per skill. Enforcing since
+        # 2026-09-21 (all 18 skills carry a compliant footer).
         run: |
           python tools/check_skill_provenance.py --selftest
-          python tools/check_skill_provenance.py --warn
+          python tools/check_skill_provenance.py
           python tools/test_skill_provenance.py
 
       - name: Scope validation regression

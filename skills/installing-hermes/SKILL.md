@@ -1,7 +1,7 @@
 ---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent on Linux/WSL2 (NixOS included) — the four install routes, what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -54,7 +54,7 @@ a re-install or upgrade does not touch `config.yaml`, memories, sessions, or plu
 ```
 
 Prerequisites: `git`, `curl`, `xz` on the PATH — the installer auto-provisions
-everything else (uv, Python 3.11, Node.js v22, ripgrep, ffmpeg). Native Windows uses
+everything else (uv, Python 3.11, Node.js 26, ripgrep, ffmpeg). Native Windows uses
 `install.ps1` instead; the Desktop installer bundles the CLI and is the recommended
 route on macOS/Windows.
 
@@ -128,3 +128,7 @@ from fighting:
   memories, and credentials.
 - **Rollback:** back up `$HERMES_HOME` before upgrades; the code directory is
   disposable, the data directory is not.
+
+---
+
+*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `scripts/install.sh` (the four-route layout, `$HERMES_HOME` as data — re-install/upgrade preserves `config.yaml`/memories/sessions; `HERMES_HOME` default resolution; the piped one-liner the two-step mirrors; `xz` prerequisite — .tar.xz extraction requires it, #11197; `PYTHON_VERSION="3.11"`; `NODE_VERSION="26"` — corrected this pass: the skill previously said Node.js v22, the installer pins 26 with 22.22+/24.11+/26+ supported; managed uv into `$HERMES_HOME/bin`; git auto-provision attempt) and `scripts/install.ps1` (the native-Windows route). Re-verify before reuse.*

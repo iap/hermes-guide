@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -148,4 +148,4 @@ redundancy analysis, and full source evidence lives at
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts), upstream docs (installation.md), the issue tracker (nine citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.11911). Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667` (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts), upstream docs (installation.md), the issue tracker (nine citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.11911); re-checked 2026-09-21 that every file/symbol citation still resolves at that revision. Re-verify before reuse.*

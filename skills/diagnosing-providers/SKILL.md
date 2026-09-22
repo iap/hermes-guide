@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.4
+version: 1.1.5
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -130,3 +130,7 @@ Older configs use a top-level `custom_providers:` list with `base_url` instead o
 > debugging session happened to touch.
 
 Every diagnosis ends in a concrete action: a `providers:` field edit or a `hermes model` command, then `hermes gateway restart` to apply.
+
+---
+
+*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/model_switch_providers.py::_entry_credentials` (key_cmd resolved first and returned early; `key_env` read for the identity tuple but not used as the credential when key_cmd wins; inline `api_key` next) and `::_discover_flag` (`discover_models` defaults True; `"false"`/`"no"`/`"0"` strings coerce to False); `hermes_cli/model_switch.py::_models_config_is_allowlist` (a `discovered` catalog is never a pin; dict shape is per-model metadata, list shape is an allowlist); `hermes_cli/config.py:2585` (`custom_endpoint_key_env` — `HERMES_CUSTOM_<SLUG>_API_KEY` derivation). The Step 2.5 probe was rewritten 2026-09-21 (prose form) after the skills scanner rated the scripted curl|python and urllib forms as supply-chain/exfiltration shapes. Re-verify before reuse.*
