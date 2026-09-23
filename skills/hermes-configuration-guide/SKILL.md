@@ -1,7 +1,7 @@
 ---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.2.3
+version: 1.2.4
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -36,7 +36,7 @@ Never guess where Hermes reads its files. The home directory differs by platform
 
 - `SOUL.md` (`$HERMES_HOME/SOUL.md`) — agent persona, always loaded as prompt slot #1. You edit it.
 - `USER.md` / `MEMORY.md` (`$HERMES_HOME/memories/`) — agent-written memory, injected as a **frozen snapshot at session start**; mid-session saves appear only next session. This is the usual cause of "it forgot what I just told it."
-- Project context — each source is looked up **differently**, and the difference decides where you must put the file (`agent/prompt_builder.py:1588`, verified):
+- Project context — each source is looked up **differently**, and the difference decides where you must put the file (`agent/prompt_builder.py::discover_context_files`, verified):
 
 | Source | Where it is read from |
 |---|---|
@@ -85,4 +85,4 @@ Every diagnosis should end in a concrete action: a `hermes <subcommand>` command
 
 ---
 
-*Facts re-verified 2026-09-15 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/prompt_builder.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py:1588`); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. Re-verify before reuse.*
+*Facts re-verified 2026-09-15 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/prompt_builder.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py::discover_context_files`, `_hermes_md_candidates`/`_find_hermes_md`); the former bare line citation for project-context discovery was re-pointed to those symbols at `2f6170bf` (2026-09-22, drift #103); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. Re-verify before reuse.*
