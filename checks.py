@@ -779,7 +779,12 @@ def check_memory_hygiene():
 
         entries = [e.strip() for e in text.split(f"\n{constants.MEMORY_ENTRY_DELIMITER}\n") if e.strip()]
         limit = _memory_limit(data, store)
-        size = len(text)
+        # Match the runtime's own measurement: Hermes counts the delimiter-joined
+        # entries (memory_tool_store.py: `len(ENTRY_DELIMITER.join(entries))`),
+        # not the raw file bytes. Using `len(text)` counted trailing separators /
+        # stray whitespace and could report "over limit" for a store the runtime
+        # would still accept.
+        size = len(f"\n{constants.MEMORY_ENTRY_DELIMITER}\n".join(entries))
 
         if size > limit:
             broken.append(
