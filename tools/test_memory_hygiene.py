@@ -12,6 +12,10 @@ missed; each case below pins one of them plus the core paths:
       authentication uses OAuth") must NOT be flagged as mis-targeted
   F4  this file — the check had no committed regression coverage at all
 
+Also pins the limit measurement: raw-byte size (len(text)) over-counts trailing
+whitespace vs the runtime's delimiter-joined size, so a padded-but-small store
+must not be reported over-limit.
+
 Also covers: over-limit via a *configured* limit, near-duplicate detection,
 mis-target detection for genuine profile facts, and the one-store-missing case.
 
@@ -69,6 +73,19 @@ def case_over_limit(td: Path) -> None:
     _store(home, "USER.md", ["ok entry"])
     r = _run(checks)
     assert r["status"] == "broken" and any("over limit" in d for d in r["detail"]), r
+
+
+def case_trailing_whitespace_not_over_limit(td: Path) -> None:
+    """Raw bytes exceed the limit but the delimiter-joined entries do not ->
+    NOT over-limit. Regression for checks.py measuring `len(text)`: trailing
+    whitespace/newlines could report a store the runtime still accepts
+    (runtime counts `len(ENTRY_DELIMITER.join(entries))`)."""
+    home, checks = _make_env(td, "memory:\n  memory_char_limit: 60\n")
+    (home / "memories" / "MEMORY.md").write_text("Short entry." + "\n" * 80, encoding="utf-8")
+    r = _run(checks)
+    detail = r["detail"] or []
+    assert not any("over limit" in d for d in detail), r
+    assert not any("approaching limit" in d for d in detail), r
 
 
 def case_near_dupe(td: Path) -> None:
@@ -139,6 +156,7 @@ def main() -> int:
     cases = [
         case_fresh_install,
         case_over_limit,
+        case_trailing_whitespace_not_over_limit,
         case_near_dupe,
         case_mixed_dates,
         case_all_dated_clean,
