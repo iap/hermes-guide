@@ -172,6 +172,28 @@ def main() -> int:
         actual_skills,
     )
 
+    # The configuration map is the project's entry point: every shipped
+    # diagnosing-* skill must be reachable from its `## Routing` list. A new
+    # skill the map never mentions is unreachable — and the counts above would
+    # still pass (the v0.5.0 five-skill batch landed in exactly that state).
+    guide_path = REPO / "skills" / "hermes-configuration-guide" / "SKILL.md"
+    guide = guide_path.read_text(encoding="utf-8")
+    # Bound to the Routing SECTION: stop at the next top-level heading or the
+    # `---` footer. Searching to EOF would let a later prose mention of a skill
+    # name satisfy the guard even after its route bullet was removed.
+    routing = ""
+    if "## Routing" in guide:
+        tail = guide.split("## Routing", 1)[1]
+        routing = re.split(r"\n(?:## |---)", tail, 1)[0]
+    unrouted = sorted(
+        p.parent.name for p in REPO.glob("skills/diagnosing-*/SKILL.md")
+        if f"`{p.parent.name}`" not in routing
+    )
+    if unrouted:
+        failures.append("configuration map routing omits: " + ", ".join(unrouted))
+    if not routing:
+        failures.append("configuration map has no `## Routing` section")
+
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
