@@ -13,8 +13,7 @@ CONFIG_MCP_SERVERS = "mcp_servers"
 # guard forbids it as a literal in checks.py, so it lives here.
 CONFIG_MEMORY_SECTION = "memory"
 
-# Foreign keys that indicate a Claude-Code-style paste (silently NOT read by Hermes)
-# Top-level foreign key from a Claude-Code-style paste that Hermes silently ignores.
+# Top-level foreign key indicating a Claude-Code-style paste (silently NOT read by Hermes).
 # (Dropped the dead `"mcp.servers"` entry: `key in data` only matches top-level
 # keys, so a dotted name never matched the nested `mcp.servers` it was meant for.)
 FOREIGN_MCP_KEYS = ("mcpServers",)
