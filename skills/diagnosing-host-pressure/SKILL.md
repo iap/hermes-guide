@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: Host resource exhaustion masquerading as Hermes faults.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Diagnosing Host Pressure

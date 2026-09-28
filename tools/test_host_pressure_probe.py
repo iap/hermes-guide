@@ -172,6 +172,16 @@ def _selftest_core_threshold() -> None:
         _check(f"load {load} on {cores} cores -> over={want}", got == want, f"got {got}")
 
 
+def _on_darwin() -> bool:
+    """The macOS fixtures stub sysctl/top/vm_stat, which do not exist on Linux.
+
+    The probe's own Linux branch is real and is covered by the /proc cases, so
+    skipping the macOS fixtures off-Darwin loses no coverage of the script —
+    it only stops asserting against tools that are not present.
+    """
+    return sys.platform == "darwin"
+
+
 def main() -> int:
     if not PROBE.is_file():
         print(f"error: missing probe {PROBE}", file=sys.stderr)
@@ -182,48 +192,54 @@ def main() -> int:
     print("core-scaled load threshold:")
     _selftest_core_threshold()
 
-    # --- the real script, stubbed host ------------------------------------
-    # 16 cores, load 20, 75% idle: below the 4x threshold. The old build
-    # compared against a hardcoded 4 and reported pressure here.
-    f = _fixture(os_name="Darwin", cores="16", load="20",
-                 top_line="CPU usage: 20.00% user, 5.00% sys, 75.00% idle",
-                 states=["S"] * 20, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
-    _check("16 cores + load 20 is NOT pressure", f["rc"] == 0, f"rc={f['rc']}")
-    shutil.rmtree(f["td"], ignore_errors=True)
+    # The macOS fixtures below stub sysctl/top/vm_stat. On a Linux CI leg those
+    # tools are absent or different, so skip them there; the Linux branch is
+    # covered by the /proc cases that follow.
+    if _on_darwin():
+        # --- the real script, stubbed host ------------------------------------
+        # 16 cores, load 20, 75% idle: below the 4x threshold. The old build
+        # compared against a hardcoded 4 and reported pressure here.
+        f = _fixture(os_name="Darwin", cores="16", load="20",
+                     top_line="CPU usage: 20.00% user, 5.00% sys, 75.00% idle",
+                     states=["S"] * 20, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+        _check("16 cores + load 20 is NOT pressure", f["rc"] == 0, f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
 
-    # Genuinely loaded: load 20 on 4 cores, with idle CPU -> I/O bound.
-    f = _fixture(os_name="Darwin", cores="4", load="20",
-                 top_line="CPU usage: 20.00% user, 70.00% sys, 10.00% idle",
-                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
-    _check("4 cores + load 20 IS pressure", f["rc"] == 1, f"rc={f['rc']}")
-    shutil.rmtree(f["td"], ignore_errors=True)
+        # Genuinely loaded: load 20 on 4 cores, with idle CPU -> I/O bound.
+        f = _fixture(os_name="Darwin", cores="4", load="20",
+                     top_line="CPU usage: 20.00% user, 70.00% sys, 10.00% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+        _check("4 cores + load 20 IS pressure", f["rc"] == 1, f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
 
-    # Idle CPU above 50 with a HIGH load on a 4-core box -> still pressure, and
-    # the reported idle figure must be the real one, not a truncated 55.
-    f = _fixture(os_name="Darwin", cores="4", load="20",
-                 top_line="CPU usage: 5.16% user, 89.10% sys, 5.74% idle",
-                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
-    _check("idle figure not truncated in output", "5.74% idle" in f["out"], f["out"][:160])
-    _check("load 20 on 4 cores with no swap is still pressure", f["rc"] == 1, f"rc={f['rc']}")
-    shutil.rmtree(f["td"], ignore_errors=True)
+        # Idle CPU above 50 with a HIGH load on a 4-core box -> still pressure, and
+        # the reported idle figure must be the real one, not a truncated 55.
+        f = _fixture(os_name="Darwin", cores="4", load="20",
+                     top_line="CPU usage: 5.16% user, 89.10% sys, 5.74% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+        _check("idle figure not truncated in output", "5.74% idle" in f["out"], f["out"][:160])
+        _check("load 20 on 4 cores with no swap is still pressure", f["rc"] == 1, f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
 
-    # The same 5.74% idle but a LOW load: clean. This is the case the old
-    # truncated parser inverted — it read 74, saw idle>50, and blamed I/O.
-    f = _fixture(os_name="Darwin", cores="4", load="1",
-                 top_line="CPU usage: 5.16% user, 89.10% sys, 5.74% idle",
-                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
-    _check("low load + 5.74% idle is clean", f["rc"] == 0, f"rc={f['rc']}")
-    _check("does not claim I/O bottleneck here", "bottleneck is I/O" not in f["out"], f["out"][:200])
-    shutil.rmtree(f["td"], ignore_errors=True)
+        # The same 5.74% idle but a LOW load: clean. This is the case the old
+        # truncated parser inverted — it read 74, saw idle>50, and blamed I/O.
+        f = _fixture(os_name="Darwin", cores="4", load="1",
+                     top_line="CPU usage: 5.16% user, 89.10% sys, 5.74% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+        _check("low load + 5.74% idle is clean", f["rc"] == 0, f"rc={f['rc']}")
+        _check("does not claim I/O bottleneck here", "bottleneck is I/O" not in f["out"], f["out"][:200])
+        shutil.rmtree(f["td"], ignore_errors=True)
 
-    # High load WITH high idle -> the I/O-bound callout must survive.
-    f = _fixture(os_name="Darwin", cores="4", load="20",
-                 top_line="CPU usage: 5.16% user, 20.00% sys, 74.84% idle",
-                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
-    _check("high load + high idle is called I/O bound",
-           "bottleneck is I/O" in f["out"], f["out"][:300])
-    _check("74.84% idle parsed whole, not 84", "74.84" in f["out"], f["out"][:200])
-    shutil.rmtree(f["td"], ignore_errors=True)
+        # High load WITH high idle -> the I/O-bound callout must survive.
+        f = _fixture(os_name="Darwin", cores="4", load="20",
+                     top_line="CPU usage: 5.16% user, 20.00% sys, 74.84% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+        _check("high load + high idle is called I/O bound",
+               "bottleneck is I/O" in f["out"], f["out"][:300])
+        _check("74.84% idle parsed whole, not 84", "74.84" in f["out"], f["out"][:200])
+        shutil.rmtree(f["td"], ignore_errors=True)
+    else:
+        print("  skip  macOS fixture cases (not a Darwin host)")
 
     # Linux: sysctl is present (procps ships it) but has no vm.loadavg key. The
     # old build branched on `command -v sysctl`, took the macOS path, lost the
