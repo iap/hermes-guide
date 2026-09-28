@@ -62,7 +62,7 @@ hermes skills install iap/hermes-guide/skills/hermes-configuration-guide
 ```
 
 The other eighteen skills use the same `iap/hermes-guide/skills/<name>` form:
-`installing-hermes`, `diagnosing-mcp`, `diagnosing-skills`, `diagnosing-commands`, `diagnosing-hooks`, `diagnosing-plugins`, `diagnosing-path`, `diagnosing-cli-tui`, `diagnosing-auth`, `diagnosing-memory`, `diagnosing-desktop`, `diagnosing-providers`, `diagnosing-bot-mode`, `diagnosing-voice`, `diagnosing-browser`, `diagnosing-cron`, `diagnosing-gateway`.
+`installing-hermes`, `diagnosing-mcp`, `diagnosing-skills`, `diagnosing-commands`, `diagnosing-hooks`, `diagnosing-plugins`, `diagnosing-path`, `diagnosing-cli-tui`, `diagnosing-auth`, `diagnosing-memory`, `diagnosing-desktop`, `diagnosing-providers`, `diagnosing-bot-mode`, `diagnosing-voice`, `diagnosing-browser`, `diagnosing-cron`, `diagnosing-gateway`, `diagnosing-host-pressure`.
 
 > [!NOTE]
 > The identifier must include the `skills/` prefix (it is the repo-relative path to the skill's `SKILL.md`). The shorter `iap/hermes-guide/<name>` form does not resolve.

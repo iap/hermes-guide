@@ -88,6 +88,8 @@ jobs:
           python tools/check_no_mutation.py --selftest
           python tools/check_no_mutation.py
 
+      - name: Host-pressure probe behavioral test
+        run: python3 tools/test_host_pressure_probe.py
       - name: Read-only runtime smoke test
         run: python tools/test_readonly_runtime.py
 

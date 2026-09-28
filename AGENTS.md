@@ -18,7 +18,7 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 | `constants.py` | Single source of truth for names/values that drift across Hermes versions |
 | `skills/*/SKILL.md` | Nineteen skills: one config map (`hermes-configuration-guide`), one install guide (`installing-hermes`), seventeen `diagnosing-*` |
 | `tools/` | Guard linters (no-mutation, self-claim, version bump, provenance, citation integrity, upstream drift, gate runner) + regression tests, all run by CI |
-| `.pre-commit-config.yaml` | Local hook running `tools/check_gates.py` (hermetic tier) — same checks CI runs, refused at commit time. Requires `pre-commit`; not vendored |
+| `.pre-commit-config.yaml` | Local hook running `tools/check_gates.py` (hermetic tier) — same checks CI runs, refused at commit time. Requires `pre-commit`; not vendored. Reads the working tree, so an *untracked* `skills/<name>/` will fail the count/provenance gates on any commit — `git add` or `git stash` it first |
 | `README.md` | Plugin + tap overview, install instructions, skill table |
 | `AGENTS.md` | This file — agent instructions for working on the repo |
 | `CLAUDE.md` | `@AGENTS.md` import (Claude Code entry point) |
@@ -152,6 +152,9 @@ CI enforces a syntax check, mypy, the plugin self-check, the `tools/` guard lint
 2. Run `python -m py_compile __init__.py checks.py constants.py`.
 3. Run `hermes plugins doctor . --ci` from the repo root.
 4. Run `python tools/check_no_mutation.py --selftest && python tools/check_no_mutation.py && python tools/check_self_claim.py`, then every `python tools/test_*.py`.
+
+> [!NOTE]
+> Every guard in `tools/` reads *text*, so a script that parses host output wrongly still passes all of them. Executable scripts shipped in a skill (e.g. `skills/*/scripts/`) need behavioral coverage in `tools/test_*.py` that runs them against stubbed inputs — a green guard suite is not evidence the script is correct.
 
 **When a `SKILL.md` changes (also):**
 
