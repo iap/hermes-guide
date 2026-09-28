@@ -126,17 +126,22 @@ fi
 
 # --- 3. Memory / swap pressure ---------------------------------------------
 hr; echo "[3] memory + swap"
+# Branch on the OS, not on "does vm_stat exist". A Linux host with procps
+# installed has a vm_stat shim on some PATHs, and taking the macOS branch
+# there silently skips /proc/meminfo — losing the only Linux swap signal.
 swap_used_mb=""
-if command -v vm_stat >/dev/null 2>&1; then
-  vm_stat | grep -iE 'pageins|pageouts|swapins|swapouts|free' | sed 's/^/  /'
-  echo "  (swapins/swapouts CUMULATIVE since boot — huge values = the box has been thrashing)"
+if [ "$os_name" = "Darwin" ]; then
+  if command -v vm_stat >/dev/null 2>&1; then
+    vm_stat | grep -iE 'pageins|pageouts|swapins|swapouts|free' | sed 's/^/  /'
+    echo "  (swapins/swapouts CUMULATIVE since boot — huge values = the box has been thrashing)"
+  fi
   swap_line=$(sysctl vm.swapusage 2>/dev/null)
   [ -n "$swap_line" ] && echo "  $swap_line"
   swap_used_mb=$(printf '%s' "$swap_line" | sed -n 's/.*used = \([0-9.]*\)[MG].*/\1/p')
 elif [ -r /proc/meminfo ]; then
   grep -iE 'MemTotal|MemAvailable|SwapTotal|SwapFree' /proc/meminfo | sed 's/^/  /'
   # Linux reports swap in kB; convert so the same threshold applies on both.
-  swap_used_mb=$(awk '/^SwapTotal:/{t=$2} /^SwapFree:/{f=$2} END{printf "%.0f", (t-f)/1024}' /proc/meminfo 2>/dev/null)
+  swap_used_mb=$(awk '/^SwapTotal:/{t=$2} /^SwapFree:/{f=$2} END{if(t>0) printf "%.0f", (t-f)/1024}' /proc/meminfo 2>/dev/null)
   [ -n "$swap_used_mb" ] && echo "  swap used: ${swap_used_mb}MB"
 fi
 # An unreadable swap figure is a missing signal, not an all-clear.

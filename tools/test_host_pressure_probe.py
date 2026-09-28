@@ -82,9 +82,9 @@ def _fixture(
     _stub(bindir, "nproc", f'echo "{cores}"')
     _stub(bindir, "getconf", f'echo "{cores}"')
     _stub(bindir, "top", f'echo "{top_line}"' if top_line else "exit 1")
-    if not swapusage:
-        _stub(bindir, "vm_stat", "echo 'Pages free: 100000.'")  # no swapusage on this host
-    else:
+    # Only macOS fixtures stub vm_stat. Stubbing it on a Linux fixture made the
+    # probe take its Darwin branch, so the real /proc/meminfo was never read.
+    if os_name == "Darwin":
         _stub(bindir, "vm_stat", "echo 'Pages free: 100000.'")
 
     st = states if states is not None else ["S", "S", "R", "S"]
@@ -268,6 +268,8 @@ def main() -> int:
                re.search(r"swap used:\s*\d+", f["out"]) is not None
                or "SwapTotal" in f["out"],
                f["out"][:300])
+        _check("Linux does not take the macOS vm_stat branch",
+               "CUMULATIVE since boot" not in f["out"], f["out"][:300])
         shutil.rmtree(f["td"], ignore_errors=True)
     else:
         print("  skip  Linux /proc cases (no /proc on this host)")
@@ -277,6 +279,9 @@ def main() -> int:
            'case "$os_name" in' in probe_src and "/proc/loadavg" in probe_src)
     _check("no presence-gated load branch remains",
            'if command -v sysctl >/dev/null 2>&1; then\n  load=' not in probe_src)
+    _check("swap is branched on OS, not on `command -v vm_stat`",
+           'if [ "$os_name" = "Darwin" ]; then' in probe_src
+           and 'if command -v vm_stat >/dev/null 2>&1; then\n  vm_stat' not in probe_src)
 
     # A lone D-state process on an otherwise idle host must NOT redirect the
     # diagnosis; three in a cluster must.
