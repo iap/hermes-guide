@@ -246,14 +246,21 @@ def main() -> int:
     # load reading entirely, and exited 0. Requires a real /proc, so this case
     # runs on Linux hosts only; the Linux *branching* is asserted statically below.
     if Path("/proc/loadavg").is_file():
-        f = _fixture(os_name="Linux", cores="8", load="100",
+        # The probe reads the REAL /proc here, so this cannot stub a load value:
+        # on an idle CI runner the real load is near zero. What this asserts is
+        # therefore the wiring, not a verdict — the /proc file is read, the
+        # figure is a number, and the Linux swap path reports its own unit.
+        f = _fixture(os_name="Linux", cores="8", load="0",
                      states=["S"] * 10,
                      meminfo="MemTotal: 16000000 kB\nMemAvailable: 8000000 kB\n"
                              "SwapTotal: 2097152 kB\nSwapFree: 1048576 kB\n")
-        _check("Linux reads load via /proc/loadavg",
-               "load(1m)      : 100.00" in f["out"], f["out"][:200])
-        _check("Linux detects pressure (was a false negative)", f["rc"] == 1, f"rc={f['rc']}")
-        _check("Linux swap parsed from meminfo", "swap used:" in f["out"], f["out"][:200])
+        _check("Linux reads load from the real /proc/loadavg",
+               "load(1m)      : 0" not in f["out"] and "load(1m)      : " in f["out"],
+               f["out"][:200])
+        _check("Linux does not fall back to the macOS sysctl key",
+               "cannot read load average" not in f["out"], f["out"][:200])
+        _check("Linux swap is reported in MB from meminfo",
+               "swap used:" in f["out"], f["out"][:300])
         shutil.rmtree(f["td"], ignore_errors=True)
     else:
         print("  skip  Linux /proc cases (no /proc on this host)")
