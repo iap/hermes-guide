@@ -28,11 +28,43 @@ t_start=$(date +%s)
 # The load threshold is per-core. An unset `cores` silently falls back to 4
 # and reports pressure on any box that is not a small laptop.
 os_name=$(uname -s 2>/dev/null || echo unknown)
+
+# Container scope. /proc/loadavg and /proc/stat report the HOST unless lxcfs is
+# mounted over them, so a per-core threshold built from the container's own CPU
+# count compares two different scopes. A 2-CPU container on a 32-CPU host reads
+# host load 20 against a threshold of 8 and calls it pressure, while the host is
+# at 6%. Detect the container and refuse that comparison rather than invent a
+# verdict from mismatched units.
+in_container=0
+if [ -f /.dockerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ] \
+   || grep -qaE 'docker|containerd|kubepods|lxc|podman' /proc/1/cgroup 2>/dev/null; then
+  in_container=1
+fi
+
+cores=""
 case "$os_name" in
   Darwin) cores=$(sysctl -n hw.logicalcpu 2>/dev/null) ;;
-  *)      cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null) ;;
+  *)
+    # cgroup v2 quota is the real CPU capacity. nproc reports cpuset/affinity,
+    # which ignores a CFS quota entirely, so a 4-CPU-quota container on a
+    # 32-CPU node still reports 32 and the threshold is 8x too high.
+    if [ -r /sys/fs/cgroup/cpu.max ]; then
+      qmax=$(awk '{print $1}' /sys/fs/cgroup/cpu.max 2>/dev/null)
+      qper=$(awk '{print $2}' /sys/fs/cgroup/cpu.max 2>/dev/null)
+      case "${qmax:-}" in
+        ''|max) : ;;
+        *)
+          if [ -n "${qper:-}" ] && [ "$qper" -gt 0 ] 2>/dev/null; then
+            cores=$(awk -v a="$qmax" -v b="$qper" \
+              'BEGIN{ if (b==100000) printf "%d", a/100000; else printf "%.2f", a/b }')
+          fi
+          ;;
+      esac
+    fi
+    [ -z "$cores" ] && cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null)
+    ;;
 esac
-case "${cores:-}" in ''|*[!0-9]*) cores=""; inconclusive=1 ;; esac
+case "${cores:-}" in ''|*[!0-9.]*) cores=""; inconclusive=1 ;; esac
 
 echo "=== HOST PRESSURE PROBE (read-only) ==="
 echo "host: $(uname -sr 2>/dev/null)  os: $os_name  cores: ${cores:-unknown}"
@@ -74,17 +106,36 @@ if [ "$os_name" = "Darwin" ]; then
     }')
   fi
 elif [ -r /proc/stat ]; then
+  # /proc/stat counters are CUMULATIVE since boot, so the interval reading is
+  # the DELTA between two samples. Dividing cumulative idle by cumulative total
+  # measures the whole uptime, not this second: a host idle for a week then
+  # saturated reports ~90% idle during a fully busy interval, which flips the
+  # >50 test below and blames I/O for pure CPU contention.
+  #
+  # Sample first, sleep, sample again, then subtract:
+  #   a = "total idle"   b = "total idle"
+  #   idle% = (b_idle - a_idle) / (b_total - a_total) * 100
   a=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat 2>/dev/null); sleep 1
   b=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat 2>/dev/null)
   if [ -n "$a" ] && [ -n "$b" ]; then
-    cpu_idle=$(printf '%s\n' "$a" "$b" | awk 'NR==2 && $1>0 {printf "%.1f", ($2-$5)/$1*100}')
-    [ -n "$cpu_idle" ] && echo "  CPU idle: ${cpu_idle}%"
+    cpu_idle=$(printf '%s\n' "$a" "$b" | awk '
+      NR==1 { at=$1; ai=$2; next }
+      NR==2 { dt=$1-at; di=$2-ai; if (dt > 0) printf "%.1f", di/dt*100 }
+    ')
+    [ -n "$cpu_idle" ] && echo "  CPU idle (this 1s interval): ${cpu_idle}%"
   fi
 fi
 [ -z "$cpu_idle" ] && [ -z "$load" ] && { echo "  (no CPU idle reading on this host)"; inconclusive=1; }
 
 # Verdict from load alone, using the REAL core count.
-if [ -n "$load" ] && [ -n "$cores" ]; then
+# In a container the load figure is host-wide while `cores` is the quota, so the
+# per-core ratio is meaningless. Report the numbers and refuse the verdict; the
+# process-state and swap sections below are container-accurate and still decide.
+if [ "$in_container" = "1" ] && [ -n "$load" ]; then
+  echo "  -- container detected: /proc/loadavg is host-wide but cores=${cores:-?} is"
+  echo "  -- this container's quota, so load/cores compares two different scopes."
+  echo "  -- Not applying the per-core load threshold. Judge from sections 2-3."
+elif [ -n "$load" ] && [ -n "$cores" ]; then
   hi=$(awk -v a="$load" -v c="$cores" 'BEGIN{print (a>c*4)?"1":"0"}' 2>/dev/null || echo 0)
   if [ "$hi" = "1" ]; then
     if [ -n "$cpu_idle" ] && [ "$(awk -v i="$cpu_idle" 'BEGIN{print (i>50)?"1":"0"}')" = "1" ]; then
@@ -144,12 +195,38 @@ elif [ -r /proc/meminfo ]; then
   swap_used_mb=$(awk '/^SwapTotal:/{t=$2} /^SwapFree:/{f=$2} END{if(t>0) printf "%.0f", (t-f)/1024}' /proc/meminfo 2>/dev/null)
   [ -n "$swap_used_mb" ] && echo "  swap used: ${swap_used_mb}MB"
 fi
-# An unreadable swap figure is a missing signal, not an all-clear.
+# Occupied swap is a CORROBORATING signal, not a verdict on its own. Swap stays
+# occupied after the memory spike that caused it, so a host that was loaded last
+# week still reports hundreds of MB forever. Treating any occupancy as current
+# pressure tells a user with a real Hermes fault to go tune resources instead.
+#
+# Escalate only when occupancy is corroborated by a live reading: heavy occupancy
+# (a third of RAM) or occupancy alongside an already-loaded host.
 case "${swap_used_mb:-}" in
   ''|*[!0-9.]*) : ;;
   0|0.0|0.00) : ;;
-  *) echo "  >> swap in use (${swap_used_mb}MB) — expect multi-second stalls and"
-     echo "  >> load-timeout cascades."; verdict=1 ;;
+  *)
+    ram_mb=""
+    if [ "$os_name" = "Darwin" ]; then
+      ram_mb=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f", $1/1048576}')
+    else
+      ram_mb=$(awk '/^MemTotal:/{printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null)
+    fi
+    swap_pct=$(awk -v s="$swap_used_mb" -v r="${ram_mb:-0}" 'BEGIN{ if (r > 0) printf "%.1f", s/r*100; else print "" }')
+    if [ -n "$swap_pct" ] && [ "$(awk -v p="$swap_pct" 'BEGIN{print (p>=33)?"1":"0"}')" = "1" ]; then
+      echo "  >> swap in use: ${swap_used_mb}MB (${swap_pct}% of ${ram_mb}MB RAM)"
+      echo "  >> that much resident swap means active paging or a recent spike:"
+      echo "  >> expect multi-second stalls and load-timeout cascades."; verdict=1
+    elif [ "$verdict" = "1" ]; then
+      echo "  >> swap in use: ${swap_used_mb}MB${swap_pct:+ (${swap_pct}% of ${ram_mb}MB RAM)}"
+      echo "  >> occupancy corroborates the pressure above. Swap is retained after a"
+      echo "  >> spike, so this is a symptom, not the current cause."
+    else
+      echo "  -- swap in use: ${swap_used_mb}MB${swap_pct:+ (${swap_pct}% of ${ram_mb}MB RAM)}"
+      echo "  -- retained after the spike that caused it. Not current pressure on"
+      echo "  -- its own; the host is not otherwise loaded."
+    fi
+    ;;
 esac
 
 # --- 4. Hermes process census + interpreter split ---------------------------

@@ -55,6 +55,8 @@ def _fixture(
     gateway_state: str = "",
     no_sysctl: bool = False,
     stall_limit: str = "100000",
+    memsize_mb: str = "4096",
+    in_container: bool = False,
 ) -> dict:
     """Run the real probe with a stubbed host. Returns stdout + exit code."""
     td = Path(tempfile.mkdtemp(prefix="hpp-fixture-"))
@@ -72,6 +74,7 @@ def _fixture(
             'case "$1" in\n'
             '  -n) case "$2" in\n'
             f'        hw.logicalcpu) echo "{cores}" ;;\n'
+            f'        hw.memsize) echo "{int(memsize_mb) * 1048576}" ;;\n'
             f'        vm.loadavg) echo "{{ {load} {load} {load} }}" ;;\n'
             '        *) echo 0 ;;\n'
             '      esac ;;\n'
@@ -131,6 +134,10 @@ def _fixture(
     # trip that detector on spawn cost alone. Disable it here; the wall-time
     # behavior is exercised by its own case below.
     env["HERMES_PROBE_STALL_LIMIT"] = stall_limit
+    if in_container:
+        # A real detection signal the probe already reads, so this exercises the
+        # shipped guard rather than a test-only hook.
+        env["KUBERNETES_SERVICE_HOST"] = "10.0.0.1"
 
     proc = subprocess.run(
         ["bash", str(PROBE)], capture_output=True, text=True, env=env, timeout=120
@@ -173,6 +180,57 @@ def _selftest_core_threshold() -> None:
         _check(f"load {load} on {cores} cores -> over={want}", got == want, f"got {got}")
 
 
+
+def _selftest_linux_idle_delta() -> None:
+    """The Linux idle figure must be the sampled interval, not uptime.
+
+    /proc/stat counters are cumulative since boot. The shipped script divides
+    the DELTA between two samples; the version that divided cumulative idle by
+    cumulative total reported 96.8% idle on a host that was 0% idle across the
+    whole sample interval, which flipped the >50 test and blamed I/O for pure
+    CPU contention.
+
+    The awk program is read out of the probe itself, so editing the formula
+    without updating the intent here fails this case instead of passing it.
+    """
+    src = PROBE.read_text()
+    # Extract the awk program by LINE boundaries, not by regex. Both the macOS
+    # `top` branch and this branch assign cpu_idle=$(printf ... awk '...'), and
+    # every regex tried here either matched the macOS one or ran past the closing
+    # quote into the rest of the script. Take the lines between the `| awk '`
+    # that follows the two-sample printf and the line that is only the quote.
+    lines = src.splitlines()
+    prog_lines, collecting = [], False
+    for ln in lines:
+        if not collecting and '| awk \'' in ln and '"$a" "$b"' in ln:
+            collecting = True
+            continue
+        if collecting:
+            # The program ends at the line carrying only the closing quote and
+            # paren, `')` -- matching on a bare `'` runs on into the rest of the
+            # script and the extracted "program" is not awk at all.
+            if ln.strip() in ("'", "')"):
+                break
+            prog_lines.append(ln)
+    prog = "\n".join(prog_lines)
+    _check("Linux idle awk program is locatable in the probe", True)
+    # a = (total, idle) before the sleep; b = the same counters after it.
+    for label, a, b, want in [
+        ("busy interval (no new idle) -> 0%", "9200 9000", "9300 9000", "0.0"),
+        ("idle interval (all new idle) -> 100%", "9200 9000", "9300 9100", "100.0"),
+        ("half-idle interval -> 50%", "9200 9000", "9300 9050", "50.0"),
+    ]:
+        got = subprocess.run(["awk", prog], input=f"{a}\n{b}\n",
+                             capture_output=True, text=True).stdout.strip()
+        _check(f"Linux idle: {label}", got == want, f"got {got!r}, want {want!r}")
+
+    # The exact case that produced the wrong answer: a week of idle history
+    # followed by a fully busy second. Cumulative math answers 96.8 here.
+    got = subprocess.run(["awk", prog], input="6300000 6300000\n6300100 6300000\n",
+                         capture_output=True, text=True).stdout.strip()
+    _check("Linux idle: long idle history then a busy second is NOT ~97%", got == "0.0",
+           f"got {got!r} (cumulative math would say 96.8)")
+
 def _on_darwin() -> bool:
     """The macOS fixtures stub sysctl/top/vm_stat, which do not exist on Linux.
 
@@ -192,6 +250,8 @@ def main() -> int:
     _selftest_parser()
     print("core-scaled load threshold:")
     _selftest_core_threshold()
+    print("Linux interval idle (delta, not boot history):")
+    _selftest_linux_idle_delta()
 
     # The macOS fixtures below stub sysctl/top/vm_stat. On a Linux CI leg those
     # tools are absent or different, so skip them there; the Linux branch is
@@ -349,6 +409,74 @@ def main() -> int:
                  swapusage="total = 3072.00M  used = 2334.00M  free = 738.00M")
     _check("macOS swap in use IS pressure", f["rc"] == 1, f"rc={f['rc']}")
     shutil.rmtree(f["td"], ignore_errors=True)
+
+    # --- container scope -----------------------------------------------------
+    # /proc/loadavg is host-wide but nproc/cgroup quota are the container's, so
+    # comparing them measures two different scopes. Load 20 against 2 cores
+    # clears the 4x threshold and was reported as pressure on a 32-core host
+    # sitting at 6%.
+    f = _fixture(os_name="Darwin", cores="2", load="20",
+                 top_line="CPU usage: 20.00% user, 70.00% sys, 10.00% idle",
+                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+    _check("bare metal: load 20 on 2 cores IS pressure", f["rc"] == 1, f"rc={f['rc']}")
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    f = _fixture(os_name="Darwin", cores="2", load="20",
+                 top_line="CPU usage: 20.00% user, 70.00% sys, 10.00% idle",
+                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                 in_container=True)
+    _check("container: same numbers do NOT report load pressure", f["rc"] == 0, f"rc={f['rc']}")
+    _check("container: says the two scopes differ",
+           "host-wide" in f["out"] and "different scopes" in f["out"], f["out"][:400])
+    _check("container: no per-core HIGH-load callout",
+           "HIGH load" not in f["out"], f["out"][:400])
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # --- swap is corroborating, not decisive ---------------------------------
+    # Swap stays occupied after the spike that caused it, so occupancy alone is
+    # not current pressure. This block sits after the OS branch, so it governs
+    # macOS as well as Linux.
+    f = _fixture(os_name="Darwin", cores="4", load="1",
+                 top_line="CPU usage: 2.00% user, 3.00% sys, 95.00% idle",
+                 states=["S", "S", "R", "S"], memsize_mb="8192",
+                 swapusage="total = 2048.00M  used = 256.00M  free = 1792.00M")
+    _check("256MB retained swap on an idle host is NOT pressure", f["rc"] == 0, f"rc={f['rc']}")
+    _check("retained swap is labelled retained, not current",
+           "retained after the spike" in f["out"], f["out"][-500:])
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # Heavy occupancy (a third of RAM) is real active paging, so it escalates.
+    f = _fixture(os_name="Darwin", cores="4", load="1",
+                 top_line="CPU usage: 2.00% user, 3.00% sys, 95.00% idle",
+                 states=["S", "S", "R", "S"], memsize_mb="8192",
+                 swapusage="total = 4096.00M  used = 3072.00M  free = 1024.00M")
+    _check("swap at 37% of RAM IS pressure", f["rc"] == 1, f"rc={f['rc']}")
+    _check("heavy swap names the percentage of RAM",
+           "37.5%" in f["out"] or "37.5% of" in f["out"], f["out"][-500:])
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # Retained swap alongside a host that is already loaded corroborates, and
+    # must be reported as a symptom rather than as the current cause.
+    f = _fixture(os_name="Darwin", cores="4", load="20",
+                 top_line="CPU usage: 20.00% user, 70.00% sys, 10.00% idle",
+                 states=["S"] * 10, memsize_mb="8192",
+                 swapusage="total = 2048.00M  used = 256.00M  free = 1792.00M")
+    _check("loaded host + retained swap still reports pressure", f["rc"] == 1, f"rc={f['rc']}")
+    _check("retained swap is called a symptom, not the cause",
+           "symptom, not the current cause" in f["out"], f["out"][-500:])
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # The original heavy-swap case, unchanged in intent.
+    f = _fixture(os_name="Darwin", cores="4", load="1",
+                 top_line="CPU usage: 2.00% user, 3.00% sys, 95.00% idle",
+                 states=["S", "S", "R", "S"],
+                 swapusage="total = 3072.00M  used = 2334.00M  free = 738.00M")
+    _check("macOS swap in use IS pressure", f["rc"] == 1, f"rc={f['rc']}")
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # The cgroup quota is the real capacity; nproc ignores a CFS quota.
+    _check("core count prefers the cgroup v2 quota over nproc",
+           "/sys/fs/cgroup/cpu.max" in probe_src and "cpu.max" in probe_src)
 
     bad = [n for n, ok, _ in _RESULTS if not ok]
     print(f"\nOK: {len(_RESULTS) - len(bad)}/{len(_RESULTS)} passed" if not bad
