@@ -17,6 +17,8 @@ Two install paths: the plugin (`hermes plugins install iap/hermes-guide --enable
 | `checks.py` | The seven read-only health checks (config/mcp/skills/commands/hooks/plugins/memories) |
 | `constants.py` | Single source of truth for names/values that drift across Hermes versions |
 | `skills/*/SKILL.md` | Nineteen skills: one config map (`hermes-configuration-guide`), one install guide (`installing-hermes`), seventeen `diagnosing-*` |
+| `tools/` | Guard linters (no-mutation, self-claim, version bump, provenance, citation integrity, upstream drift, gate runner) + regression tests, all run by CI |
+| `.pre-commit-config.yaml` | Local hook running `tools/check_gates.py` (hermetic tier) — same checks CI runs, refused at commit time. Requires `pre-commit`; not vendored |
 | `README.md` | Plugin + tap overview, install instructions, skill table |
 | `AGENTS.md` | This file — agent instructions for working on the repo |
 | `CLAUDE.md` | `@AGENTS.md` import (Claude Code entry point) |
@@ -64,6 +66,7 @@ Rules of thumb:
 | New or changed health surface | `checks.py` + `_CHECKS`, then matching skill text if users need a fix path |
 | How-to / troubleshooting | `skills/<name>/SKILL.md` + bump `version` + refresh provenance footer |
 | Repo CI / guard / regression | `tools/check_*.py` or `tools/test_*.py` (+ wire the step in `.github/workflows/` when it must gate PRs) |
+| Change which gates run, or locally | `tools/check_gates.py` (hermetic tier) + `.pre-commit-config.yaml`; CI stays the authority |
 
 Keep the layout stable: plugin Python at repo root (`plugin.yaml`, `__init__.py`, `checks.py`, `constants.py`), skills under `skills/<name>/SKILL.md`, harness scripts only under `tools/`. Do not add ad-hoc scripts at the root or under `skills/` that CI or agents are expected to run.
 
@@ -145,19 +148,20 @@ CI enforces a syntax check, mypy, the plugin self-check, the `tools/` guard lint
 
 **Always (plugin or shared code):**
 
-1. Run `python -m py_compile __init__.py checks.py constants.py`.
-2. Run `hermes plugins doctor . --ci` from the repo root.
-3. Run `python tools/check_no_mutation.py --selftest && python tools/check_no_mutation.py && python tools/check_self_claim.py`, then every `python tools/test_*.py`.
+1. Run `python tools/check_gates.py` — runs the hermetic gate tier (counts, routing, provenance, self-claim, version consistency, no-mutation) in one call. `python tools/check_gates.py --list` shows what it covers and what it leaves to CI.
+2. Run `python -m py_compile __init__.py checks.py constants.py`.
+3. Run `hermes plugins doctor . --ci` from the repo root.
+4. Run `python tools/check_no_mutation.py --selftest && python tools/check_no_mutation.py && python tools/check_self_claim.py`, then every `python tools/test_*.py`.
 
 **When a `SKILL.md` changes (also):**
 
-4. Bump its `version` frontmatter (`tools/check_skill_version_bump.py` enforces this against the merge base).
-5. Confirm YAML frontmatter parses cleanly (three dashes, valid keys, no tab indentation in YAML).
-6. Refresh the provenance footer date/revision; run `python tools/check_skill_provenance.py --warn` (CI uses `--warn`; enforcing mode exits nonzero for the five pre-existing footer gaps unrelated to your change).
-7. Cross-check every `hermes <subcommand>` reference against the installed Hermes docs or `--help` output.
-8. If you added or changed file/symbol citations and have a Hermes checkout: `python tools/check_citation_integrity.py --src <hermes-checkout>` (revision defaults to `.github/upstream-drift.baseline`). Skip only when no checkout is available — state that skip.
-9. Verify `$HERMES_HOME` path wording for both POSIX and Windows when the skill mentions home paths.
-10. State what was checked, what passed, and what was skipped.
+5. Bump its `version` frontmatter (`tools/check_skill_version_bump.py` enforces this against the merge base).
+6. Confirm YAML frontmatter parses cleanly (three dashes, valid keys, no tab indentation in YAML).
+7. Refresh the provenance footer date/revision; run `python tools/check_skill_provenance.py --warn` (CI uses `--warn`; enforcing mode exits nonzero for the five pre-existing footer gaps unrelated to your change).
+8. Cross-check every `hermes <subcommand>` reference against the installed Hermes docs or `--help` output.
+9. If you added or changed file/symbol citations and have a Hermes checkout: `python tools/check_citation_integrity.py --src <hermes-checkout>` (revision defaults to `.github/upstream-drift.baseline`). Skip only when no checkout is available — state that skip.
+10. Verify `$HERMES_HOME` path wording for both POSIX and Windows when the skill mentions home paths.
+11. State what was checked, what passed, and what was skipped.
 
 Beyond the CI gates, smoke-test the *model-facing* behavior with a one-shot run — this verifies discovery AND that the skill's instructions are actually followed:
 

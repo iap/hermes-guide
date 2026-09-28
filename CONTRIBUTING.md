@@ -65,7 +65,9 @@ Examples:
 2. Create a feature branch (`git checkout -b fix/diagnosing-mcp-oauth`).
 3. Edit or add SKILL.md files under `skills/<name>/`, and/or the plugin files (`plugin.yaml`, `__init__.py`, `checks.py`, `constants.py`).
 4. Verify frontmatter parses (valid YAML between `---` fences, `name`, `description`, `version`).
-5. Run `python -m py_compile __init__.py checks.py constants.py`, `hermes plugins doctor . --ci`, and the guard linters + regression tests in `tools/` (see the checklist in [AGENTS.md](AGENTS.md)).
+5. Run `python tools/check_gates.py` — the hermetic gate tier in one call (counts, routing table, provenance footer, self-claim, version consistency, read-only) — plus `python -m py_compile __init__.py checks.py constants.py`, `hermes plugins doctor . --ci`, and the guard linters + regression tests in `tools/` (see the checklist in [AGENTS.md](AGENTS.md)).
+
+   Optional: `pre-commit install` wires the same tier to commit time via `.pre-commit-config.yaml`, so a broken count or footer is refused before you push rather than in CI. `python tools/check_gates.py --list` shows what the fast tier covers and what stays in CI.
 6. Cross-check every `hermes <subcommand>` reference against the installed Hermes docs or `--help` output.
 7. Commit with a descriptive message and open a pull request.
 
