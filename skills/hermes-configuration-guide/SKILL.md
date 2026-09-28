@@ -1,7 +1,7 @@
 ---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.2.5
+version: 1.3.0
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -84,6 +84,7 @@ Notes:
 - Browser automation not connecting, Chrome/CDP version problems, or a missing Playwright → **`diagnosing-browser`**
 - A scheduled job not firing, running at the wrong time, or failing to deliver → **`diagnosing-cron`**
 - Messaging-platform connectivity, allowlists, or a platform not receiving replies → **`diagnosing-gateway`**
+- Several surfaces failing at once, or adapters discarded after a load timeout — suspect host resource pressure before per-surface config → **`diagnosing-host-pressure`**
 - Voice mode not transcribing or replying, or voice-message handling problems → **`diagnosing-voice`**
 
 Every diagnosis should end in a concrete action: a `hermes <subcommand>` command or a specific file + field edit, then a restart or `/reload-*` to apply.
