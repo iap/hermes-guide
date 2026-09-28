@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: Host resource exhaustion masquerading as Hermes faults.
-version: 1.1.0
+version: 1.2.0
 ---
 
 # Diagnosing Host Pressure
@@ -43,9 +43,20 @@ the wrong target. Compare the two figures before acting:
 |---|---|---|
 | load high, idle CPU high | `top -l 1 -n 0 \| grep "CPU usage"` | I/O bound, not CPU bound |
 | procs in `D`/`U` state | `ps -Ao stat,pid,etime,comm \| awk '$1~/^[DU]/'` | storage stall; `U` = uninterruptible |
-| swap in use | `sysctl vm.swapusage` | multi-second stalls are expected |
+| swap in use | `sysctl vm.swapusage` | multi-second stalls **if** it is active: escalate at ~33% of RAM, or on any occupancy when the host is already loaded. Swap is retained after the spike that caused it, so occupancy alone is not current pressure |
 | swapin/swapout huge | `vm_stat \| grep -i swap` | cumulative since boot = long thrashing history |
 | runnable procs high | `ps -Ao stat \| grep -c '^R'` | process-count pressure |
+
+> [!IMPORTANT]
+> **In a container, load and core count are different scopes.** `/proc/loadavg`
+> reports the **host** (unless lxcfs is mounted over it) while the core count is
+> the **container's** — a cgroup v2 quota, or `nproc` when there is none. Dividing
+> one by the other compares two different machines: a 2-CPU container on a 32-core
+> host reads host load 20 against a threshold of 8 and looks saturated while the
+> host is at 6%. The probe detects a container and declines to apply the per-core
+> load threshold for exactly this reason, leaving the process-state and swap
+> sections, which are container-accurate. If you are diagnosing inside a container
+> and load looks enormous, check the host before changing anything on this side.
 
 ## 2. Run the probe
 
@@ -174,4 +185,4 @@ adapter-discard lines, watchdog overrides, the near-miss where absent
 platforms turned out never to have been configured) mapped against each rule
 above.
 
-*Facts verified 2026-09-28 against the upstream Hermes install this environment runs (local checkout at commit `962d453d`, macOS 12.7.6 darwin x86_64, 4 cores): host-pressure measurements, the plugin load-budget and late-register discard log lines, and the `gateway_state.json` fields, all read from that live install; the `scripts/host_pressure_probe.sh` exit contract was exercised against live host state. No file/symbol citations are made, so there is nothing to resolve against the upstream-drift baseline. Not verified on Linux or native Windows — the probe's `/proc` branch is untested and those platforms' pressure signals are owned by their own sessions. Re-verify before reuse.*
+*Facts verified 2026-09-28 against the upstream Hermes install this environment runs (local checkout at commit `962d453d`, macOS 12.7.6 darwin x86_64, 4 cores): host-pressure measurements, the plugin load-budget and late-register discard log lines, and the `gateway_state.json` fields, all read from that live install; the `scripts/host_pressure_probe.sh` exit contract was exercised against live host state. No file/symbol citations are made, so there is nothing to resolve against the upstream-drift baseline. The `/proc` branch runs on the Linux CI legs; its interval-idle delta and cgroup core-count logic are covered directly by `tools/test_host_pressure_probe.py`. Not verified on native Windows — the probe does not run there and that platform's pressure signals are owned by its own session. Re-verify before reuse.*

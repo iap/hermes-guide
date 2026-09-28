@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and provider sub-categories.
-version: 1.2.0
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -47,7 +47,7 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 1. **Installed but tools/hooks/commands absent** — not in `plugins.enabled` (install defaults to disabled; `--enable` or the post-install prompt is opt-in). → **Permanent:** add it to `plugins.enabled` (`hermes plugins enable <name>`) and restart. **Temporary:** there is no read-only way to load a disabled plugin — enabling is the fix, so do it deliberately rather than working around it. Bundled standalone plugins are opt-in too — only platform/backend sub-plugins auto-load.
 2. **Plugin works but a privileged feature is off** — capability declared but never granted (non-TTY install, or declined). → `hermes plugins capabilities <name>`; re-consent via interactive `hermes plugins enable <name>`.
 3. **Project plugin ignored** — `.hermes/plugins/` is disabled by default. → Set `HERMES_ENABLE_PROJECT_PLUGINS=true` before starting Hermes, and only for trusted repos.
-4. **Plugin in `list` but nothing loads at all** — `register()` raised (bad code, missing dependency). → Check `hermes logs` for the load error; fix the plugin or its requirements. If the log instead says `load timed out after Ns` (optionally followed by `called register_*() after its load timed out; ignored`), the plugin code is fine and the **host** ran out of time — see `diagnosing-host-pressure` before changing the plugin.
+4. **Plugin in `list` but nothing loads at all** — `register()` raised (bad code, missing dependency). → Check `hermes logs` for the load error; fix the plugin or its requirements. If the log instead says `load timed out after Ns` (optionally followed by `called register_*() after its load timed out; ignored`), the loader's own budget expired before `import()` + `register()` returned. That budget covers the **plugin's** work as much as the host's, so the message alone does not tell you which one was too slow — a slow import or a blocking `register()` reaches the same deadline on a healthy host. Check the load-timeout figure in that plugin's `__init__.py` against what its own import and `register()` actually do, and run `diagnosing-host-pressure` to rule the host in or out. Only treat it as host pressure once the probe says so.
 5. **Edits to a bundled plugin don't apply** — a same-name user plugin at `$HERMES_HOME/plugins/<name>/` overrides the bundled copy. → Edit the user copy (the one that actually wins) or remove it.
 6. **`hermes plugins update` refuses** — the install is pinned to an exact commit SHA. → Choose a new commit explicitly: `hermes plugins install <source> --force --ref <new-sha>`.
 7. **Plugin edits after install lost on update** — updates autostash and re-apply local edits, but conflicts can drop them. → Keep plugin customizations in your own fork/repo and install from that.
