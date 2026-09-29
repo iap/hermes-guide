@@ -10,6 +10,7 @@ case here pins one count-bearing phrase against ground truth:
   - number of check labels in checks._CHECKS (the actual checks)
   - README: "N troubleshooting skills" phrase, skill-table row count,
     "The other N skills" tap-install list
+  - skill-drift issue template: one dropdown option per shipped skill
   - AGENTS.md: "bundles N SKILL.md files", "The N skills (one map + M
     diagnostics)", "The N read-only health checks" + its scope list
   - CONTRIBUTING.md: "bundles N SKILL.md files" (same phrase, same ground truth)
@@ -111,6 +112,15 @@ def main() -> int:
             f"inventory-only={sorted(set(dir_ids) - set(loop_ids))}"
         )
 
+    # The skill-drift issue template offers one option per skill. A skill added
+    # without a matching option sends its drift reports to "Other" — stale on
+    # arrival (seven newer skills were missing when this guard was added).
+    template = (REPO / ".github" / "ISSUE_TEMPLATE" / "skill-drift.yml").read_text(encoding="utf-8")
+    template_opts = set(re.findall(r"^\s+- ([a-z0-9-]+)$", template, re.M))
+    template_missing = sorted(pid for pid in dir_ids if pid not in template_opts)
+    if template_missing:
+        failures.append("skill-drift template omits: " + ", ".join(template_missing))
+
     # AGENTS.md — overview, structure rows
     expect(
         "AGENTS.md 'bundles N SKILL.md files'",
@@ -184,7 +194,7 @@ def main() -> int:
     routing = ""
     if "## Routing" in guide:
         tail = guide.split("## Routing", 1)[1]
-        routing = re.split(r"\n(?:## |---)", tail, 1)[0]
+        routing = re.split(r"\n(?:## |---)", tail, maxsplit=1)[0]
     unrouted = sorted(
         p.parent.name for p in REPO.glob("skills/diagnosing-*/SKILL.md")
         if f"`{p.parent.name}`" not in routing

@@ -19,6 +19,13 @@ body:
         - diagnosing-memory
         - diagnosing-cli-tui
         - diagnosing-desktop
+        - diagnosing-providers
+        - diagnosing-bot-mode
+        - diagnosing-voice
+        - diagnosing-browser
+        - diagnosing-cron
+        - diagnosing-gateway
+        - diagnosing-host-pressure
         - checks.py / constants.py
         - Other / multiple skills
     validations:
