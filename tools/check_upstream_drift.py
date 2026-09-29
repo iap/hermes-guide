@@ -47,6 +47,15 @@ CI_WORKFLOW = Path(".github/workflows/ci.yml")
 ISSUE_TITLE_UPSTREAM = "Upstream schema drift detected — review checks.py"
 CLONE_DIR = "/tmp/hermes-agent-upstream"
 
+# GitHub refuses issue bodies over 65,536 characters ("Body is too long").
+# The schema-drift log and the per-commit history list both grow with every
+# upstream merge, so cap each section (newest entries are kept) and keep a
+# hard ceiling on the assembled body as a safety net. Dry runs with
+# DRIFT_NO_CAP=1 skip all three caps for local review (see _uncapped).
+MAX_BODY_CHARS = 60_000
+SCHEMA_LOG_LIMIT_CHARS = 18_000
+HISTORY_LIST_LIMIT_CHARS = 40_000
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -299,6 +308,52 @@ def verify_ci_pin() -> tuple[list[str], str | None]:
 # --- Issue filing -----------------------------------------------------------
 
 
+def _uncapped() -> bool:
+    """True only for local dry runs: DRIFT_NO_CAP=1 requires DRIFT_DRY_RUN=1.
+
+    Uncapping the filing path would hand a >65,536-char body to
+    ``gh issue create``, which rejects it and leaves the drift unfiled,
+    so the uncapped report is dry-run-only — exactly what the omission
+    notes instruct.
+    """
+    return (os.environ.get("DRIFT_NO_CAP") == "1"
+            and os.environ.get("DRIFT_DRY_RUN") == "1")
+
+
+def _cap_chars(entries: list[str], limit: int, note: str) -> str:
+    """Join *entries*, keeping the newest leading ones under *limit* characters.
+
+    Entries arrive in git-log order (newest first), so the cap drops the oldest
+    records. *note* is rendered once at the end with the omitted count in
+    ``{omitted}``. Local dry runs (DRIFT_NO_CAP=1) skip the cap entirely.
+    """
+    if _uncapped():
+        return "\n".join(entries)
+    kept: list[str] = []
+    used = 0
+    for index, entry in enumerate(entries):
+        if used + len(entry) + 1 > limit:
+            kept.append(note.format(omitted=len(entries) - index))
+            break
+        kept.append(entry)
+        used += len(entry) + 1
+    return "\n".join(kept)
+
+
+def _fit_body(sections_text: str, footer: str) -> str:
+    """Trim *sections_text* so the assembled body, plus *footer*, fits.
+
+    The footer (compare link + baseline instructions) is the part a triager
+    needs most — reserve its space so the size guard can never drop it — and
+    end the trimmed sections with a note pointing at the uncapped local run.
+    """
+    note = ("\n\n[Body truncated to fit GitHub's issue-body limit; run the drift "
+            "tool locally with DRIFT_DRY_RUN=1 DRIFT_NO_CAP=1 for the full report.]")
+    budget = MAX_BODY_CHARS - len(footer) - len(note) - 4  # blank-line separators
+    trimmed = sections_text[:budget].rsplit("\n", 1)[0]
+    return trimmed + note + "\n\n" + footer
+
+
 def _list_open_issues(repo: str, title: str) -> list[dict]:
     """Return open issues whose title exactly equals *title*.
 
@@ -382,10 +437,14 @@ def main() -> int:
 
     upstream_sections = []
     if log:
+        capped_log = _cap_chars(
+            log.splitlines(), SCHEMA_LOG_LIMIT_CHARS,
+            "... {omitted} older commits omitted (see the compare link below)."
+        )
         upstream_sections.append(
             "## Schema drift\n\n"
             f"Watched files changed since baseline `{base[:7]}`:\n\n"
-            f"```\n{log}\n```"
+            f"```\n{capped_log}\n```"
         )
     if history_records:
         lines = []
@@ -400,7 +459,12 @@ def main() -> int:
             "## Upstream commits touching watched files\n\n"
             "These commits modified a file this plugin watches. Review each for "
             "renames, moved constants, or signature changes that would break "
-            "`checks.py` / `constants.py`:\n\n" + "\n".join(lines)
+            "`checks.py` / `constants.py`:\n\n"
+            + _cap_chars(
+                lines, HISTORY_LIST_LIMIT_CHARS,
+                "- ... and {omitted} older commits omitted (run the drift tool "
+                "with DRIFT_DRY_RUN=1 DRIFT_NO_CAP=1 locally for the full list)."
+            )
         )
     if fact_mismatches:
         upstream_sections.append(
@@ -421,16 +485,21 @@ def main() -> int:
     # check_self_claim, check_no_mutation, and check_skill_version_bump already
     # fail the repository before a weekly issue could add value.
 
-    upstream_body = (
-        "\n\n".join(upstream_sections)
-        + "\n\n" if upstream_sections else ""
-    )
     if upstream_sections:
-        upstream_body += (
+        sections_text = "\n\n".join(upstream_sections)
+        footer = (
             f"Compare: https://github.com/{UPSTREAM_REPO}/compare/{base[:7]}...{head[:7]}\n\n"
             "Review the changes and update `checks.py` / `constants.py` / the SKILL.md files "
             f"as needed. Then bump the baseline: edit `.github/upstream-drift.baseline` to `{head}`."
         )
+        # Size guard: GitHub rejects bodies over 65,536 characters. Trim the
+        # sections at a line boundary but always keep the footer; DRIFT_NO_CAP=1
+        # (local runs) skips the guard entirely.
+        upstream_body = sections_text + "\n\n" + footer
+        if not _uncapped() and len(upstream_body) > MAX_BODY_CHARS:
+            upstream_body = _fit_body(sections_text, footer)
+    else:
+        upstream_body = ""
 
     # --- Transport failures: fail the run, never file an issue ---------------
     # A scan that could not run must not become a finding — filing an issue about
