@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.2
+version: 1.1.3
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -24,7 +24,7 @@ to launch, or when asked how to theme/skin Hermes on Windows.
 - OS: Windows 10 Home 22H2 (build 19045.7663)
 - Shell: Windows PowerShell 5.1; console host: conhost (classic window) or Windows Terminal 1.24.11911 (present on the reference box; a bare Windows 10 box has **only conhost**)
 - Tool shell backend: PortableGit (MinGit, msys2) bash - resolved via `HERMES_GIT_BASH_PATH` or `%LOCALAPPDATA%\hermes\git\usr\bin\bash.exe` (non-busybox variant)
-- TUI frontend: Node app `hermes-tui` (React 19 + custom Ink fork), launched as a subprocess of the Python CLI. Node requirement (upstream docs, 2026-09): installer ships **Node 26**; an existing system Node **22.22+, 24.11+, or 26+** is used as-is. "Node >= 20" is not enough.
+- TUI frontend: Node app `hermes-tui` (React 19 + custom Ink fork), launched as a subprocess of the Python CLI. Node resolution (2026-09): **through PM** — `hermes_cli/main_tui_launch.py:148` prefers an explicit `HERMES_NODE` binary, else PM's locked Node (**26.7.0** in `pm/lock.json`); a system Node on PATH is deliberately **not** used to run Hermes's JS (`hermes_cli/source_build.py:16`, asserted by the path-shape e2e tests). If no Node can be resolved, `hermes --tui` exits with a pointer to `hermes --cli`.
 - Ground truth commands: `hermes config path`, `hermes config show`, `hermes --version`, `hermes doctor`
 
 ## 1. Launch and resume
@@ -131,12 +131,12 @@ the version that carries the fix.
 - Prefer config/env fixes (work identically on POSIX); keep path logic runtime-resolved via `HERMES_HOME`
 - Never hardcode `C:\...` paths in skills/plugins - use `%LOCALAPPDATA%\hermes` on Windows, `~/.hermes` elsewhere
 - Shell commands issued by the agent keep POSIX syntax (the Windows backend is Git Bash); mind MSYS2 path translation and `core.autocrlf`
-- Skins degrade to `default`; unknown indicator styles fall back; TUI falls back to classic CLI when Node/TTY is missing - preserve these fallbacks
+- Skins degrade to `default`; unknown indicator styles fall back; when Node can't be resolved the TUI exits with a `hermes --cli` pointer (no silent fallback) - preserve these behaviors
 
 ## 7. Verification checklist
 
 ```powershell
-hermes --version; hermes doctor      # Node 22.22+/24.11+/26+, bash, deps
+hermes --version; hermes doctor      # PM-managed Node, bash, deps
 hermes config get display            # confirm keys above
 hermes skills list                   # this skill should appear (hub or local, enabled)
 # in TUI: /indicator ascii; /skin slate; /mouse wheel; /usage; /exit
@@ -148,4 +148,4 @@ redundancy analysis, and full source evidence lives at
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667` (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts), upstream docs (installation.md), the issue tracker (nine citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.11911); re-checked 2026-09-21 that every file/symbol citation still resolves at that revision. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667` (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts), upstream docs (installation.md), the issue tracker (nine citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.11911); re-checked 2026-09-21 that every file/symbol citation still resolves at that revision; Node resolution re-checked 2026-09-29 at `5000e2993` (TUI node resolves through PM; `pm/lock.json` pins Node 26.7.0). Re-verify before reuse.*
