@@ -24,7 +24,7 @@ to launch, or when asked how to theme/skin Hermes on Windows.
 - OS: Windows 10 Home 22H2 (build 19045.7663)
 - Shell: Windows PowerShell 5.1; console host: conhost (classic window) or Windows Terminal 1.24.11911 (present on the reference box; a bare Windows 10 box has **only conhost**)
 - Tool shell backend: PortableGit (MinGit, msys2) bash - resolved via `HERMES_GIT_BASH_PATH` or `%LOCALAPPDATA%\hermes\git\usr\bin\bash.exe` (non-busybox variant)
-- TUI frontend: Node app `hermes-tui` (React 19 + custom Ink fork), launched as a subprocess of the Python CLI. Node resolution (2026-09): **through PM** — `hermes_cli/main_tui_launch.py:148` prefers an explicit `HERMES_NODE` binary, else PM's locked Node (**26.7.0** in `pm/lock.json`); a system Node on PATH is deliberately **not** used to run Hermes's JS (`hermes_cli/source_build.py:16`, asserted by the path-shape e2e tests). If no Node can be resolved, `hermes --tui` exits with a pointer to `hermes --cli`.
+- TUI frontend: Node app `hermes-tui` (React 19 + custom Ink fork), launched as a subprocess of the Python CLI. Node resolution (2026-09): **through PM** — `hermes_cli/main_tui_launch.py::_tui_node_bin` prefers an explicit `HERMES_NODE` binary, else PM's locked Node (**26.7.0** in `pm/lock.json`); a system Node on PATH is deliberately **not** used to run Hermes's JS (`hermes_cli/source_build.py:16`, asserted by the path-shape e2e tests). If no Node can be resolved, `hermes --tui` exits with a pointer to `hermes --cli`.
 - Ground truth commands: `hermes config path`, `hermes config show`, `hermes --version`, `hermes doctor`
 
 ## 1. Launch and resume
