@@ -173,7 +173,7 @@ from hermes_constants import venv_bin_dir, project_venv_dir
 venv = project_venv_dir(Path("/path/to/hermes-agent"))
 if venv:
     python_path = venv_bin_dir(venv) / "python"
-    # POSIX: /path/to/hermes-agent/venv/bin/python    (installer layout)
+    # POSIX: /path/to/hermes-agent/venv/bin/python    (pre-pm installer layout)
     #         /path/to/hermes-agent/.venv/bin/python  (uv layout, when venv/ absent)
     # Windows: C:\path\to\hermes-agent\venv\Scripts\python.exe
 ```
@@ -262,9 +262,11 @@ python_exe = Path.cwd() / ".venv" / "bin" / "python"  # May not be the running v
 The wrong venv is active. Check:
 
 ```bash
-which python        # Should point inside .venv/ or venv/
+which python        # PM-era installs: PM-store Python (no in-tree venv); older checkouts: .venv/ or venv/
 python -c "import sys; print(sys.prefix)"  # Confirms active venv
 ```
+
+On a PM-era install (2026-09 onward) there is no in-tree `venv/` to point into — a PM-managed interpreter is the expected result; the dual-layout checks in this skill apply to checkouts that still carry venvs.
 
 ### Both `.venv/` and `venv/` exist
 
