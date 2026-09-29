@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: Host resource exhaustion masquerading as Hermes faults.
-version: 1.2.1
+version: 1.2.2
 ---
 
 # Diagnosing Host Pressure
@@ -54,10 +54,11 @@ the wrong target. Compare the two figures before acting:
 > one by the other compares two different machines: a 2-CPU container on a 32-core
 > host reads host load 20 against a threshold of 8 and looks saturated while the
 > host is at 6%. The probe detects a container and declines to apply the per-core
-> load threshold for exactly this reason and judges the container from its own
-> signals instead: cgroup CPU throttling plus the runnable backlog, and the process-state
-> section. Host-wide swap is reported, never escalated. If you are diagnosing inside a container
-> and load looks enormous, check the host before changing anything on this side.
+> load threshold for exactly this reason and judges the container from its own CPU
+> signals instead: cgroup CPU pressure (PSI) or fresh quota throttling, plus the
+> process-state section. Host-wide swap is reported, never escalated. If you are
+> diagnosing inside a container and load looks enormous, check the host before
+> changing anything on this side.
 
 ## 2. Run the probe
 

@@ -121,6 +121,16 @@ elif [ -r /proc/stat ]; then
   # Sample first, sleep, sample again, then subtract:
   #   a = "total idle"   b = "total idle"
   #   idle% = (b_idle - a_idle) / (b_total - a_total) * 100
+  # Sample cgroup throttling now; the container CPU check in section [2]
+  # evaluates the delta over the same ~1s window this branch's sleep gives.
+  # throttled_usec is CUMULATIVE, so only growth inside the window means
+  # current contention - a bare nonzero value can be days old.
+  qt0=""
+  if [ "$in_container" = "1" ] && [ "${quota_cores:-0}" = "1" ]; then
+    for qst in /sys/fs/cgroup/cpu.stat /sys/fs/cgroup/cpu/cpu.stat; do
+      [ -r "$qst" ] && { qt0=$(awk '/^throttled_usec /{v=$2} END{print v}' "$qst" 2>/dev/null); break; }
+    done
+  fi
   a=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat 2>/dev/null); sleep 1
   b=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat 2>/dev/null)
   if [ -n "$a" ] && [ -n "$b" ]; then
@@ -176,18 +186,32 @@ if ps -Ao stat >/dev/null 2>&1; then
   fi
   # Container CPU-quota contention. The load guard above declined the per-core
   # ratio (host-wide load vs the container quota), so decide from the
-  # container's own signals instead: cgroup throttling plus a runnable backlog
-  # beyond the quota. Without this, pure CPU-quota exhaustion reached no verdict.
+  # container's OWN CPU signals. The runnable count is deliberately not used:
+  # in a shared-PID namespace it counts host processes too. Two signals, both
+  # current by construction:
+  #   1. PSI cpu.pressure: "some avg10" is the share of the last ~10s in which
+  #      at least one task in THIS cgroup waited for CPU.
+  #   2. throttled_usec growth across the ~1s window sampled above: the
+  #      cumulative counters only mean contention when they are growing.
   if [ "$in_container" = "1" ] && [ "${quota_cores:-0}" = "1" ]; then
-    cstat=""
-    [ -r /sys/fs/cgroup/cpu.stat ] && cstat=/sys/fs/cgroup/cpu.stat
-    [ -z "$cstat" ] && [ -r /sys/fs/cgroup/cpu/cpu.stat ] && cstat=/sys/fs/cgroup/cpu/cpu.stat
-    if [ -n "$cstat" ]; then
-      nthr=$(awk '/^nr_throttled /{print $2}' "$cstat" 2>/dev/null)
-      if [ -n "${nthr:-}" ] && [ "$nthr" -gt 0 ] 2>/dev/null \
-         && [ "${r:-0}" -ge $(( ${cores} * 2 )) ]; then
-        echo "  >> container CPU quota: throttling (nr_throttled=$nthr) with r=$r runnable"
-        echo "  >> on a ${cores}-CPU quota. The load figure above is host-wide and was not used."
+    qpsi=""
+    for qpr in /sys/fs/cgroup/cpu.pressure /sys/fs/cgroup/cpu/cpu.pressure; do
+      [ -r "$qpr" ] && { qpsi=$(awk '/^some /{for (i=2;i<=NF;i++) if ($i ~ /^avg10=/) {sub("avg10=","",$i); print $i}}' "$qpr" 2>/dev/null); break; }
+    done
+    if [ -n "${qpsi:-}" ] && [ "$(awk -v v="$qpsi" 'BEGIN{print (v>=20)?"1":"0"}')" = "1" ]; then
+      echo "  >> container CPU pressure: some avg10=${qpsi}% of the last ~10s spent"
+      echo "  >> waiting for CPU inside a ${cores}-CPU quota slice. Container-scoped: the"
+      echo "  >> host-wide load figure above was not used."
+      verdict=1
+    elif [ -n "${qt0:-}" ]; then
+      qt1=""
+      for qst in /sys/fs/cgroup/cpu.stat /sys/fs/cgroup/cpu/cpu.stat; do
+        [ -r "$qst" ] && { qt1=$(awk '/^throttled_usec /{v=$2} END{print v}' "$qst" 2>/dev/null); break; }
+      done
+      if [ -n "${qt1:-}" ] && [ "$(awk -v a="$qt0" -v b="$qt1" 'BEGIN{print (b>a && (b-a)>=100000)?"1":"0"}')" = "1" ]; then
+        echo "  >> container CPU quota: tasks were held back ~$(( (qt1 - qt0) / 1000 ))ms of"
+        echo "  >> the last ~1s on a ${cores}-CPU quota slice. The load figure above is"
+        echo "  >> host-wide and was not used."
         verdict=1
       fi
     fi

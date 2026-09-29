@@ -518,8 +518,8 @@ def main() -> int:
            "/sys/fs/cgroup/cpu.max" in probe_src and "cpu.max" in probe_src)
 
     # Container CPU-quota coverage, and the safety rails around cores/swap.
-    _check("container CPU check reads cpu.stat throttling",
-           "nr_throttled" in probe_src and "quota_cores" in probe_src)
+    _check("container CPU check reads PSI + throttling growth",
+           "cpu.pressure" in probe_src and "throttled_usec" in probe_src and "quota_cores" in probe_src)
     _check("swap escalation is gated on the container flag",
            '"$in_container" != "1"' in probe_src)
     _check("cores validation rejects decimals",
