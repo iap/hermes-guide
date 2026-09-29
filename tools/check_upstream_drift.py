@@ -50,10 +50,12 @@ CLONE_DIR = "/tmp/hermes-agent-upstream"
 # GitHub refuses issue bodies over 65,536 characters ("Body is too long").
 # The schema-drift log and the per-commit history list both grow with every
 # upstream merge, so cap each section (newest entries are kept) and keep a
-# hard ceiling on the assembled body as a safety net.
+# hard ceiling on the assembled body as a safety net. DRIFT_NO_CAP=1
+# (local runs) disables all three caps so the full report can be reviewed.
 MAX_BODY_CHARS = 60_000
 SCHEMA_LOG_LIMIT_CHARS = 18_000
 HISTORY_LIST_LIMIT_CHARS = 40_000
+NO_CAP = os.environ.get("DRIFT_NO_CAP") == "1"  # local runs: uncapped report
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -312,8 +314,10 @@ def _cap_chars(entries: list[str], limit: int, note: str) -> str:
 
     Entries arrive in git-log order (newest first), so the cap drops the oldest
     records. *note* is rendered once at the end with the omitted count in
-    ``{omitted}``.
+    ``{omitted}``. DRIFT_NO_CAP=1 (local runs) skips the cap entirely.
     """
+    if NO_CAP:
+        return "\n".join(entries)
     kept: list[str] = []
     used = 0
     for index, entry in enumerate(entries):
@@ -323,6 +327,20 @@ def _cap_chars(entries: list[str], limit: int, note: str) -> str:
         kept.append(entry)
         used += len(entry) + 1
     return "\n".join(kept)
+
+
+def _fit_body(sections_text: str, footer: str) -> str:
+    """Trim *sections_text* so the assembled body, plus *footer*, fits.
+
+    The footer (compare link + baseline instructions) is the part a triager
+    needs most — reserve its space so the size guard can never drop it — and
+    end the trimmed sections with a note pointing at the uncapped local run.
+    """
+    note = ("\n\n[Body truncated to fit GitHub's issue-body limit; run the drift "
+            "tool locally with DRIFT_DRY_RUN=1 DRIFT_NO_CAP=1 for the full report.]")
+    budget = MAX_BODY_CHARS - len(footer) - len(note) - 4  # blank-line separators
+    trimmed = sections_text[:budget].rsplit("\n", 1)[0]
+    return trimmed + note + "\n\n" + footer
 
 
 def _list_open_issues(repo: str, title: str) -> list[dict]:
@@ -434,7 +452,7 @@ def main() -> int:
             + _cap_chars(
                 lines, HISTORY_LIST_LIMIT_CHARS,
                 "- ... and {omitted} older commits omitted (run the drift tool "
-                "with DRIFT_DRY_RUN=1 locally for the full list)."
+                "with DRIFT_DRY_RUN=1 DRIFT_NO_CAP=1 locally for the full list)."
             )
         )
     if fact_mismatches:
@@ -456,26 +474,21 @@ def main() -> int:
     # check_self_claim, check_no_mutation, and check_skill_version_bump already
     # fail the repository before a weekly issue could add value.
 
-    upstream_body = (
-        "\n\n".join(upstream_sections)
-        + "\n\n" if upstream_sections else ""
-    )
     if upstream_sections:
-        upstream_body += (
+        sections_text = "\n\n".join(upstream_sections)
+        footer = (
             f"Compare: https://github.com/{UPSTREAM_REPO}/compare/{base[:7]}...{head[:7]}\n\n"
             "Review the changes and update `checks.py` / `constants.py` / the SKILL.md files "
             f"as needed. Then bump the baseline: edit `.github/upstream-drift.baseline` to `{head}`."
         )
-
-    # Safety net: no section mix may exceed the filing budget (GitHub rejects
-    # bodies over 65,536 characters); trim at a line boundary if it ever does.
-    if len(upstream_body) > MAX_BODY_CHARS:
-        truncated = upstream_body[: MAX_BODY_CHARS - 200].rsplit("\n", 1)[0]
-        upstream_body = (
-            truncated
-            + "\n\n[Body truncated to fit GitHub's issue-body limit; run the "
-            "drift tool with DRIFT_DRY_RUN=1 locally for the full report.]"
-        )
+        # Size guard: GitHub rejects bodies over 65,536 characters. Trim the
+        # sections at a line boundary but always keep the footer; DRIFT_NO_CAP=1
+        # (local runs) skips the guard entirely.
+        upstream_body = sections_text + "\n\n" + footer
+        if not NO_CAP and len(upstream_body) > MAX_BODY_CHARS:
+            upstream_body = _fit_body(sections_text, footer)
+    else:
+        upstream_body = ""
 
     # --- Transport failures: fail the run, never file an issue ---------------
     # A scan that could not run must not become a finding — filing an issue about
