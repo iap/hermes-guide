@@ -45,12 +45,15 @@ a re-install or upgrade does not touch `config.yaml`, memories, sessions, or plu
 
 ```
 ~/.hermes/
-├── hermes-agent/          # git checkout of the source (tracks main) + venv/
-│   └── venv/bin/python    # the interpreter the shims exec
+├── hermes-agent/          # git checkout of the source (tracks main); PM removes a
+│                          # legacy in-tree venv/ once a generation is committed
+├── tools/                 # PM's tool store: python-*/node-*/uv-* slots + facts.json
 ├── config.yaml            # default template on first run (see config bootstrap)
 ├── plugins/  skills/  hooks/  cron/  memories/  sessions/  logs/
 └── gateway_state.json     # appears once a gateway has run
-~/.local/bin/{hermes,hermes-agent,hermes-acp}   # shims → the venv interpreter
+~/.local/bin/{hermes,hermes-agent,hermes-acp}   # shims → the durable launcher in
+                                                # hermes-agent/.hermes/bin, bound to
+                                                # the PM-store Python
 ```
 
 Prerequisites: `git`, `curl`, `xz` on the PATH — the installer stages a pinned `uv`
@@ -81,21 +84,13 @@ path` before trusting it.
 
 ## NixOS / WSL2 gotchas (worked example)
 
-1. **npm step can hang on a non-interactive shell.** The `ui-tui`/`web` workspace
-   install pulls in a dependency whose postinstall opens `/dev/tty` to run a cosmetic
-   spinner — with no real terminal that write blocks forever. The installer wraps the
-   step in `timeout 600`, so it silently times out, retries, and eventually prints
-   `✗ npm install failed or timed out; Node.js dependencies were not installed` while
-   still exiting 0. Fix: re-run the npm step with `CI=1` — the
-   postinstall short-circuits on that variable and the install completes (the npm
-   cache makes the retry fast):
-
-   ```bash
-   cd "${HERMES_HOME:-$HOME/.hermes}/hermes-agent"
-   CI=1 npm install --workspace ui-tui --workspace web --include-workspace-root --silent
-   ```
-
-   Always grep the install log for the failure line before declaring success.
+1. **Node builds run with `CI=1` by design now.** The pre-pm installer's npm
+   workspace step — whose postinstall could open `/dev/tty` and hang a
+   non-interactive shell — is gone: PM owns node builds and
+   `hermes_cli/source_build.py::source_build_env` sets `CI=1` itself. The old
+   `timeout 600` / `CI=1 npm install --workspace …` workaround and the
+   "npm install failed or timed out" error string no longer exist at `5000e2993` —
+   if a build still hangs, capture the log and report upstream.
 2. **No `g++` on NixOS.** Native module builds fail without a compiler; the prebuilt
    `uv`/Python/Node binaries staged from `pm/lock.json` run fine under `nix-ld`. Enable
    `programs.nix-ld` and, if a build step still needs a compiler, prefer the Nix flake
@@ -117,15 +112,15 @@ from fighting:
   before assuming `hermes` maps to the install you mean.
 - The Nix bundle's launcher scrubs `PYTHONPATH`/`PYTHONHOME` — do not copy its env
   handling into the standard install's context (and vice versa).
-- Keep the venv layout rules from `diagnosing-path` in mind: `venv/` (installer) and
-  `.venv/` (uv) can coexist, `venv/` wins.
+- Keep the venv layout rules from `diagnosing-path` in mind: on checkouts that carry
+  both, `venv/` (pre-pm installer) and `.venv/` (uv) can coexist and `venv/` wins.
 - Data is shared through `$HERMES_HOME` regardless of route — a plugin or skill
   installed under one binary is visible to the other.
 
 ## Update, uninstall, rollback
 
 - **Update (standard route):** re-run the installer — it reuses the existing checkout
-  (preserving `.git`) and refreshes the venv; data stays untouched.
+  (preserving `.git`) and re-syncs PM's dependency environment; data stays untouched.
 - **Uninstall:** remove `$HERMES_HOME/hermes-agent` and the `~/.local/bin` shims;
   `$HERMES_HOME` data is separate — delete it only if you mean to lose sessions,
   memories, and credentials.
@@ -134,4 +129,4 @@ from fighting:
 
 ---
 
-*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `scripts/install.sh` (the four-route layout, `$HERMES_HOME` as data — re-install/upgrade preserves `config.yaml`/memories/sessions; `HERMES_HOME` default resolution; the piped one-liner the two-step mirrors; `xz` prerequisite — .tar.xz extraction requires it, #11197; `PYTHON_VERSION="3.11"`; `NODE_VERSION="26"` — corrected this pass: the skill previously said Node.js v22, the installer pins 26 with 22.22+/24.11+/26+ supported; managed uv into `$HERMES_HOME/bin`; git auto-provision attempt) and `scripts/install.ps1` (the native-Windows route); both describe the pre-pm installer. Re-checked 2026-09-29 at `5000e2993`: `PYTHON_VERSION`/`NODE_VERSION` no longer exist in `install.sh`; it stages pinned `uv` into the store slot (`${HERMES_RUNTIME_DIR:-$HERMES_HOME/tools}/uv-<version>-<target>/`, sha256-verified), bootstraps a tool-only Python, then `pm.cli install` owns the exact runtime pin — Python **3.14.7**, Node **26.7.0**, ripgrep **15.2.0**, ffmpeg **9.0.1**. Re-verify before reuse.*
+*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `scripts/install.sh` (the four-route layout, `$HERMES_HOME` as data — re-install/upgrade preserves `config.yaml`/memories/sessions; `HERMES_HOME` default resolution; the piped one-liner the two-step mirrors; `xz` prerequisite — .tar.xz extraction requires it, #11197; `PYTHON_VERSION="3.11"`; `NODE_VERSION="26"` — corrected this pass: the skill previously said Node.js v22, the installer pins 26 with 22.22+/24.11+/26+ supported; managed uv into `$HERMES_HOME/bin`; git auto-provision attempt) and `scripts/install.ps1` (the native-Windows route); both describe the pre-pm installer. Re-checked 2026-09-29 at `5000e2993`: `PYTHON_VERSION`/`NODE_VERSION` no longer exist in `install.sh`; it stages pinned `uv` into the store slot (`${HERMES_RUNTIME_DIR:-$HERMES_HOME/tools}/uv-<version>-<target>/`, sha256-verified), bootstraps a tool-only Python, then `pm.cli install` owns the exact runtime pin — Python **3.14.7**, Node **26.7.0**, ripgrep **15.2.0**, ffmpeg **9.0.1**; PM-era layout (no in-tree venv — a legacy one is removed once a generation is committed; shims bind the store Python) and the pre-pm npm workspace step retired (`source_build_env` sets `CI=1`). Re-verify before reuse.*
