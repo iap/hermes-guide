@@ -3,8 +3,9 @@
 ## Environment
 <!-- Platform facts must say which environment verified them: this repo is
 maintained from macOS/POSIX and native Windows checkouts in parallel, and a
-claim verified on one is not verified on the other. Write the OS name only
-(no version numbers) so the line stays reusable across devices. -->
+claim verified on one is not verified on the other. Keep the line reusable
+(OS name only); when a platform-specific claim depends on a release or
+WSL version, state it with that claim. -->
 - OS / shell: [e.g. macOS + zsh (POSIX) / Linux + bash / Windows native + PowerShell / WSL]
 - Hermes version: [`hermes --version` output]
 - Install route: [install.sh / Desktop app / Nix / PyPI / git checkout]
