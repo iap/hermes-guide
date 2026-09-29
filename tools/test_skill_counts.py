@@ -10,6 +10,7 @@ case here pins one count-bearing phrase against ground truth:
   - number of check labels in checks._CHECKS (the actual checks)
   - README: "N troubleshooting skills" phrase, skill-table row count,
     "The other N skills" tap-install list
+  - skill-drift issue template: one dropdown option per shipped skill
   - AGENTS.md: "bundles N SKILL.md files", "The N skills (one map + M
     diagnostics)", "The N read-only health checks" + its scope list
   - CONTRIBUTING.md: "bundles N SKILL.md files" (same phrase, same ground truth)
@@ -111,6 +112,19 @@ def main() -> int:
             f"inventory-only={sorted(set(dir_ids) - set(loop_ids))}"
         )
 
+    # The skill-drift issue template offers one option per skill — and only
+    # shipped skills. A skill added without an option sends its drift reports
+    # to "Other" (seven were missing when this guard landed); a rename or
+    # removal that keeps its old option leaves reporters a dead choice.
+    template = (REPO / ".github" / "ISSUE_TEMPLATE" / "skill-drift.yml").read_text(encoding="utf-8")
+    template_opts = set(re.findall(r"^\s+- ([a-z0-9-]+)$", template, re.M))
+    template_missing = sorted(pid for pid in dir_ids if pid not in template_opts)
+    if template_missing:
+        failures.append("skill-drift template omits: " + ", ".join(template_missing))
+    template_stale = sorted(opt for opt in template_opts if opt not in set(dir_ids))
+    if template_stale:
+        failures.append("skill-drift template lists no-longer-shipped skill(s): " + ", ".join(template_stale))
+
     # AGENTS.md — overview, structure rows
     expect(
         "AGENTS.md 'bundles N SKILL.md files'",
@@ -184,7 +198,7 @@ def main() -> int:
     routing = ""
     if "## Routing" in guide:
         tail = guide.split("## Routing", 1)[1]
-        routing = re.split(r"\n(?:## |---)", tail, 1)[0]
+        routing = re.split(r"\n(?:## |---)", tail, maxsplit=1)[0]
     unrouted = sorted(
         p.parent.name for p in REPO.glob("skills/diagnosing-*/SKILL.md")
         if f"`{p.parent.name}`" not in routing

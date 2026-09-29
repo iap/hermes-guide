@@ -3,8 +3,10 @@
 ## Environment
 <!-- Platform facts must say which environment verified them: this repo is
 maintained from macOS/POSIX and native Windows checkouts in parallel, and a
-claim verified on one is not verified on the other. -->
-- OS / shell: [e.g. macOS 15 + zsh (POSIX) / Ubuntu 24.04 + bash / Windows 11 native + PowerShell / WSL2]
+claim verified on one is not verified on the other. Keep the line reusable
+(OS name only); when a platform-specific claim depends on a release or
+WSL version, state it with that claim. -->
+- OS / shell: [e.g. macOS + zsh (POSIX) / Linux + bash / Windows native + PowerShell / WSL]
 - Hermes version: [`hermes --version` output]
 - Install route: [install.sh / Desktop app / Nix / PyPI / git checkout]
 - Profile: [default / named profile]
