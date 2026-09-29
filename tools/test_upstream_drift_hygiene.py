@@ -84,7 +84,8 @@ def case_upstream_drift_filed(mod):
          mock.patch.object(mod, "verify_ci_pin", fake_verify_ci_pin), \
          mock.patch.object(mod, "_file_issue", fake_file_issue), \
          mock.patch.object(mod, "_list_open_issues", fake_list_open_issues), \
-         mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "iap/hermes-guide"}):
+         mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "iap/hermes-guide",
+                                        "DRIFT_DRY_RUN": "", "DRIFT_NO_CAP": ""}):
         rc = mod.main()
 
     assert rc == 0, f"main returned {rc}, expected 0"
@@ -248,11 +249,11 @@ def case_fit_body_keeps_footer(mod):
 def case_uncapped_requires_dry_run(mod):
     """DRIFT_NO_CAP=1 alone must not uncap anything (filing stays bounded)."""
     with mock.patch.dict("os.environ", {}, clear=True):
+        assert mod._uncapped() is False, "no flags: capped"
         os.environ["DRIFT_NO_CAP"] = "1"
         assert mod._uncapped() is False, "uncapped without dry-run"
         os.environ["DRIFT_DRY_RUN"] = "1"
         assert mod._uncapped() is True, "both flags should enable uncapped"
-    assert mod._uncapped() is False, "flags removed after the block"
     print("OK: uncapped mode requires DRIFT_DRY_RUN=1 (filing path stays bounded)")
 
 
