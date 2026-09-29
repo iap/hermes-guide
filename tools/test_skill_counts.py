@@ -112,14 +112,18 @@ def main() -> int:
             f"inventory-only={sorted(set(dir_ids) - set(loop_ids))}"
         )
 
-    # The skill-drift issue template offers one option per skill. A skill added
-    # without a matching option sends its drift reports to "Other" — stale on
-    # arrival (seven newer skills were missing when this guard was added).
+    # The skill-drift issue template offers one option per skill — and only
+    # shipped skills. A skill added without an option sends its drift reports
+    # to "Other" (seven were missing when this guard landed); a rename or
+    # removal that keeps its old option leaves reporters a dead choice.
     template = (REPO / ".github" / "ISSUE_TEMPLATE" / "skill-drift.yml").read_text(encoding="utf-8")
     template_opts = set(re.findall(r"^\s+- ([a-z0-9-]+)$", template, re.M))
     template_missing = sorted(pid for pid in dir_ids if pid not in template_opts)
     if template_missing:
         failures.append("skill-drift template omits: " + ", ".join(template_missing))
+    template_stale = sorted(opt for opt in template_opts if opt not in set(dir_ids))
+    if template_stale:
+        failures.append("skill-drift template lists no-longer-shipped skill(s): " + ", ".join(template_stale))
 
     # AGENTS.md — overview, structure rows
     expect(
