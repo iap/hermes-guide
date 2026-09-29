@@ -21,7 +21,7 @@ config file. For the code location, check what the `hermes` shim execs, or run
 
 | Route | Command | Code lands in | Shims/PATH | Tracks |
 |---|---|---|---|---|
-| Standard (POSIX/WSL2) | two-step installer — download, review, then run (below) | `$HERMES_HOME/hermes-agent` (checkout + venv) | `~/.local/bin/{hermes,hermes-agent,hermes-acp}` | `main` (installer re-run = update) |
+| Standard (POSIX/WSL2) | two-step installer — download, review, then run (below) | `$HERMES_HOME/hermes-agent` (checkout; older installs carry an in-tree `venv/`, PM-era installs use `$HERMES_HOME/tools`) | `~/.local/bin/{hermes,hermes-agent,hermes-acp}` | `main` (installer re-run = update) |
 | Desktop app (macOS/Win) | download from hermes-agent.nousresearch.com | `%LOCALAPPDATA%\hermes\hermes-agent` (Win) | app-managed | app releases |
 | Nix flake | `nix run` / `nix profile install`, or the NixOS module | `/nix/store/...-hermes-agent-<ver>` (immutable) | profile-managed | flake pin |
 | PyPI | `uv tool install hermes-agent` / `pip install hermes-agent` | uv/pip tool dir | tool bin dir | PyPI release |
@@ -48,6 +48,7 @@ a re-install or upgrade does not touch `config.yaml`, memories, sessions, or plu
 ├── hermes-agent/          # git checkout of the source (tracks main); PM removes a
 │                          # legacy in-tree venv/ once a generation is committed
 ├── tools/                 # PM's tool store: python-*/node-*/uv-* slots + facts.json
+├── installs/              # PM's dependency environments (one per checkout)
 ├── config.yaml            # default template on first run (see config bootstrap)
 ├── plugins/  skills/  hooks/  cron/  memories/  sessions/  logs/
 └── gateway_state.json     # appears once a gateway has run
@@ -121,9 +122,14 @@ from fighting:
 
 - **Update (standard route):** re-run the installer — it reuses the existing checkout
   (preserving `.git`) and re-syncs PM's dependency environment; data stays untouched.
-- **Uninstall:** remove `$HERMES_HOME/hermes-agent` and the `~/.local/bin` shims;
-  `$HERMES_HOME` data is separate — delete it only if you mean to lose sessions,
-  memories, and credentials.
+- **Uninstall:** `hermes uninstall` (modes: default keeps config/data; `--full` removes
+  everything including `$HERMES_HOME`; `--data` erases only user data — the one mode
+  that works on Nix / bundled-app / Docker installs; `--dry-run` previews). Code-side
+  removal covers the checkout, the `~/.local/bin` shims, PATH entries, and installer
+  tooling. PM's runtime is tooling, not data: `$HERMES_HOME/tools` (tool store) and
+  `$HERMES_HOME/installs` (dependency environments) — remove those two directories
+  manually to reclaim the runtime while keeping sessions/credentials; `--full` takes
+  them with the home.
 - **Rollback:** back up `$HERMES_HOME` before upgrades; the code directory is
   disposable, the data directory is not.
 
