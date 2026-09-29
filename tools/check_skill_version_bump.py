@@ -3,8 +3,11 @@
 
 Compares the current tree against `origin/master` (or the merge base of the
 current branch). For every SKILL.md whose content changed, the `version` field
-in its frontmatter must also have changed — otherwise the change is a silent
-drift that won't trigger a reinstall for users who already have the skill.
+The comparison is ordered, not merely unequal: a version that went DOWN also
+fails. A downgrade is as silent as no bump — users who installed the skill
+never see the change — and it slipped through review once (1.1.2 -> 1.1.0,
+PR #114) because only equality was tested. Ordering is enforced only when
+both sides parse as plain `X.Y.Z`; anything else keeps the change-only rule.
 
 Usage:
     python tools/check_skill_version_bump.py            # compare vs origin/master
@@ -34,6 +37,14 @@ def _merge_base(ref: str) -> str | None:
 def _ref_exists(ref: str) -> bool:
     out = _git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"]).strip()
     return bool(out)
+
+
+def _semver(value: object) -> tuple[int, int, int] | None:
+    """Parse `X.Y.Z` into an ordered tuple; None when not plain semver."""
+    if not isinstance(value, str):
+        return None
+    m = re.match(r"^\s*(\d+)\.(\d+)\.(\d+)\s*$", value)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
 
 
 def _changed_files(ref: str) -> list[str]:
@@ -109,7 +120,7 @@ def main(argv: list[str]) -> int:
         print("No SKILL.md files changed; version-bump check skipped.")
         return 0
 
-    failures = []
+    failures: list[tuple[str, str]] = []
     for path in skill_files:
         before = _frontmatter_at(path, base)
         after = _frontmatter_here(path)
@@ -119,13 +130,17 @@ def main(argv: list[str]) -> int:
         before_ver = before.get("version")
         after_ver = after.get("version")
         if before_ver == after_ver:
-            failures.append((path, before_ver))
+            failures.append((path, f"version still {before_ver!r}"))
+            continue
+        before_sem, after_sem = _semver(before_ver), _semver(after_ver)
+        if before_sem and after_sem and after_sem < before_sem:
+            failures.append((path, f"version went DOWN {before_ver!r} -> {after_ver!r}"))
 
     if failures:
-        print("SKILL.md changed but `version` was not bumped:", file=sys.stderr)
-        for path, ver in failures:
-            print(f"  {path} (version still {ver!r})", file=sys.stderr)
-        print("Bump the `version` field in each changed SKILL.md.", file=sys.stderr)
+        print("SKILL.md changed but its `version` was not properly bumped:", file=sys.stderr)
+        for path, reason in failures:
+            print(f"  {path} ({reason})", file=sys.stderr)
+        print("Bump each changed SKILL.md to a version higher than the previous one.", file=sys.stderr)
         return 1
 
     print(f"OK: {len(skill_files)} SKILL.md change(s) all have a version bump.")
