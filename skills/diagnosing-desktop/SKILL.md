@@ -1,7 +1,7 @@
 ---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, 'npm was not found', 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.2
+version: 1.1.3
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -17,7 +17,7 @@ Goal: reduce any `hermes desktop` failure — build error, launch failure, wrong
 
 ## 1. How desktop launches
 
-`hermes desktop` runs a build-then-launch pipeline — the implementation lives in **`hermes_cli/main_desktop.py`** (`cmd_gui`, line ~1501); `hermes_cli/main.py` only imports it and wires the parser (`build_gui_parser`). Read `main_desktop.py` when you need the real order of operations:
+`hermes desktop` runs a build-then-launch pipeline — the implementation lives in **`hermes_cli/main_desktop.py`** (`cmd_gui`, line ~1588); `hermes_cli/main.py` only imports it and wires the parser (`build_gui_parser`). Read `main_desktop.py` when you need the real order of operations:
 
 1. Guard: `apps/desktop/package.json` must exist in the Hermes source tree (source installs only).
 2. Resolve npm via the Hermes-managed Node tree first (a broken managed tree is an error, not a fallback).
@@ -91,4 +91,4 @@ After fixing: close any running desktop app, then `hermes desktop` (a source cha
 
 ---
 
-*Facts re-verified 2026-09-15 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `cmd_gui` lives in `hermes_cli/main_desktop.py` (main.py imports/wires it); the desktop env-var set (`HERMES_DESKTOP_HERMES_ROOT`, `_IGNORE_EXISTING`, `_HERMES`, `_PORT_ANNOUNCE_TIMEOUT_MS`, `_REMOTE_URL`, `_REMOTE_TOKEN`, `_DISABLE_GPU`); the stamp file and its three fields; the engines range in `apps/desktop/package.json`; the `desktop.*` keys `ozone_platform_hint`, `disable_gpu`, `password_store`; `ELECTRON_MIRROR`/npmmirror auto-heal; `win-unpacked`; dashboard port 9119; the `gui` alias deprecation; and the two error strings quoted in the pitfalls. **Corrected:** the pipeline's module pointer (`main.py` → `main_desktop.py`). **Re-corrected 2026-09-15:** the port-announce values (`90_000` default, `45_000` floor, `apps/desktop/electron/backend-ready.ts`) *are* present at this baseline — the previous pass wrongly recorded them as absent and removed them. Re-verify at the baseline before reuse.*
+*Facts re-verified 2026-09-15 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `cmd_gui` lives in `hermes_cli/main_desktop.py` (main.py imports/wires it); the desktop env-var set (`HERMES_DESKTOP_HERMES_ROOT`, `_IGNORE_EXISTING`, `_HERMES`, `_PORT_ANNOUNCE_TIMEOUT_MS`, `_REMOTE_URL`, `_REMOTE_TOKEN`, `_DISABLE_GPU`); the stamp file and its three fields; the engines range in `apps/desktop/package.json`; the `desktop.*` keys `ozone_platform_hint`, `disable_gpu`, `password_store`; `ELECTRON_MIRROR`/npmmirror auto-heal; `win-unpacked`; dashboard port 9119; the `gui` alias deprecation; and the two error strings quoted in the pitfalls. **Corrected:** the pipeline's module pointer (`main.py` → `main_desktop.py`). **Re-corrected 2026-09-15:** the port-announce values (`90_000` default, `45_000` floor, `apps/desktop/electron/backend-ready.ts`) *are* present at this baseline — the previous pass wrongly recorded them as absent and removed them. **Re-pointed 2026-09-29 (drift #123):** `cmd_gui` moved to line ~1588 at `5000e2993`. Re-verify at the baseline before reuse.*
