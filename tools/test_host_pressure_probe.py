@@ -231,6 +231,31 @@ def _selftest_linux_idle_delta() -> None:
     _check("Linux idle: long idle history then a busy second is NOT ~97%", got == "0.0",
            f"got {got!r} (cumulative math would say 96.8)")
 
+def _selftest_quota_cores() -> None:
+    """Quota cores must be an integer >= 1, never a decimal or zero.
+
+    The version that emitted `%.2f` produced `1.50`, which later throws in the
+    blocked-process check (`$(( 1.50 * 2 ))` is a bash syntax error), and `%d`
+    truncation produced `0` for a half-core quota, where `r >= cores*2` collapses
+    to `r >= 0` and a single D-state process becomes a false storage verdict.
+    The awk program is read out of the probe itself, so editing the formula
+    without updating this intent fails here instead of passing.
+    """
+    src = PROBE.read_text()
+    prog = ""
+    for ln in src.splitlines():
+        if "c=a/b" in ln and "BEGIN" in ln:
+            prog = ln[ln.index("'BEGIN") + 1:ln.rindex("'")]
+            break
+    _check("quota awk program is locatable in the probe", bool(prog),
+           "no line joining 'c=a/b' with 'BEGIN'")
+    for a, b, want in [("150000", "100000", "2"), ("50000", "100000", "1"),
+                       ("7500", "5000", "2"), ("300000", "100000", "3")]:
+        got = subprocess.run(["awk", "-v", f"a={a}", "-v", f"b={b}", prog],
+                             capture_output=True, text=True).stdout.strip()
+        _check(f"quota {a}/{b} -> {want} cpu(s), integer", got == want, f"got {got!r}")
+
+
 def _on_darwin() -> bool:
     """The macOS fixtures stub sysctl/top/vm_stat, which do not exist on Linux.
 
@@ -252,6 +277,8 @@ def main() -> int:
     _selftest_core_threshold()
     print("Linux interval idle (delta, not boot history):")
     _selftest_linux_idle_delta()
+    print("cgroup quota cores (integer >= 1):")
+    _selftest_quota_cores()
 
     # The macOS fixtures below stub sysctl/top/vm_stat. On a Linux CI leg those
     # tools are absent or different, so skip them there; the Linux branch is
@@ -432,6 +459,18 @@ def main() -> int:
            "HIGH load" not in f["out"], f["out"][:400])
     shutil.rmtree(f["td"], ignore_errors=True)
 
+    # Container: the swap figure is the HOST's /proc/meminfo; heavy occupancy
+    # must be reported, not escalated, when the container's own readings are
+    # clean. Non-container behavior is pinned by the case below.
+    f = _fixture(os_name="Darwin", cores="4", load="1",
+                 top_line="CPU usage: 2.00% user, 3.00% sys, 95.00% idle",
+                 states=["S", "S", "R", "S"], memsize_mb="8192",
+                 swapusage="total = 4096.00M  used = 3072.00M  free = 1024.00M",
+                 in_container=True)
+    _check("container: host-wide swap is NOT escalated", f["rc"] == 0, f"rc={f['rc']}")
+    _check("container: swap note says host-wide", "host-wide" in f["out"], f["out"][-400:])
+    shutil.rmtree(f["td"], ignore_errors=True)
+
     # --- swap is corroborating, not decisive ---------------------------------
     # Swap stays occupied after the spike that caused it, so occupancy alone is
     # not current pressure. This block sits after the OS branch, so it governs
@@ -477,6 +516,14 @@ def main() -> int:
     # The cgroup quota is the real capacity; nproc ignores a CFS quota.
     _check("core count prefers the cgroup v2 quota over nproc",
            "/sys/fs/cgroup/cpu.max" in probe_src and "cpu.max" in probe_src)
+
+    # Container CPU-quota coverage, and the safety rails around cores/swap.
+    _check("container CPU check reads cpu.stat throttling",
+           "nr_throttled" in probe_src and "quota_cores" in probe_src)
+    _check("swap escalation is gated on the container flag",
+           '"$in_container" != "1"' in probe_src)
+    _check("cores validation rejects decimals",
+           "*[!0-9]*) cores" in probe_src)
 
     bad = [n for n, ok, _ in _RESULTS if not ok]
     print(f"\nOK: {len(_RESULTS) - len(bad)}/{len(_RESULTS)} passed" if not bad

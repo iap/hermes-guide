@@ -48,6 +48,11 @@ case "$os_name" in
     # cgroup v2 quota is the real CPU capacity. nproc reports cpuset/affinity,
     # which ignores a CFS quota entirely, so a 4-CPU-quota container on a
     # 32-CPU node still reports 32 and the threshold is 8x too high.
+    #
+    # The quota is emitted as an INTEGER >= 1 and flagged: a decimal would make
+    # the arithmetic below throw (`$(( 1.50 * 2 ))` is a bash syntax error), and
+    # a fractional quota that rounds to 0 turns `r >= cores*2` into `r >= 0`, so
+    # a single D-state process would become a false storage verdict.
     if [ -r /sys/fs/cgroup/cpu.max ]; then
       qmax=$(awk '{print $1}' /sys/fs/cgroup/cpu.max 2>/dev/null)
       qper=$(awk '{print $2}' /sys/fs/cgroup/cpu.max 2>/dev/null)
@@ -56,7 +61,8 @@ case "$os_name" in
         *)
           if [ -n "${qper:-}" ] && [ "$qper" -gt 0 ] 2>/dev/null; then
             cores=$(awk -v a="$qmax" -v b="$qper" \
-              'BEGIN{ if (b==100000) printf "%d", a/100000; else printf "%.2f", a/b }')
+              'BEGIN{ c=a/b; if (c<1) c=1; printf "%d", (c==int(c)) ? c : int(c)+1 }')
+            quota_cores=1
           fi
           ;;
       esac
@@ -64,7 +70,7 @@ case "$os_name" in
     [ -z "$cores" ] && cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null)
     ;;
 esac
-case "${cores:-}" in ''|*[!0-9.]*) cores=""; inconclusive=1 ;; esac
+case "${cores:-}" in ''|*[!0-9]*) cores=""; inconclusive=1 ;; esac
 
 echo "=== HOST PRESSURE PROBE (read-only) ==="
 echo "host: $(uname -sr 2>/dev/null)  os: $os_name  cores: ${cores:-unknown}"
@@ -168,6 +174,24 @@ if ps -Ao stat >/dev/null 2>&1; then
     echo "  -- $d io-blocked proc(s), runnable=$r: incidental on a host that is not"
     echo "  -- otherwise loaded. Not a pressure verdict on its own."
   fi
+  # Container CPU-quota contention. The load guard above declined the per-core
+  # ratio (host-wide load vs the container quota), so decide from the
+  # container's own signals instead: cgroup throttling plus a runnable backlog
+  # beyond the quota. Without this, pure CPU-quota exhaustion reached no verdict.
+  if [ "$in_container" = "1" ] && [ "${quota_cores:-0}" = "1" ]; then
+    cstat=""
+    [ -r /sys/fs/cgroup/cpu.stat ] && cstat=/sys/fs/cgroup/cpu.stat
+    [ -z "$cstat" ] && [ -r /sys/fs/cgroup/cpu/cpu.stat ] && cstat=/sys/fs/cgroup/cpu/cpu.stat
+    if [ -n "$cstat" ]; then
+      nthr=$(awk '/^nr_throttled /{print $2}' "$cstat" 2>/dev/null)
+      if [ -n "${nthr:-}" ] && [ "$nthr" -gt 0 ] 2>/dev/null \
+         && [ "${r:-0}" -ge $(( ${cores} * 2 )) ]; then
+        echo "  >> container CPU quota: throttling (nr_throttled=$nthr) with r=$r runnable"
+        echo "  >> on a ${cores}-CPU quota. The load figure above is host-wide and was not used."
+        verdict=1
+      fi
+    fi
+  fi
   echo "  -- any process stuck in U (uninterruptible) is a storage stall:"
   ps -Ao stat,pid,etime,comm 2>/dev/null | awk '$1 ~ /^[DU]/' | head -10 | sed 's/^/    /'
   z=$(ps -Ao stat 2>/dev/null | grep -c '^Z' || true)
@@ -201,7 +225,9 @@ fi
 # pressure tells a user with a real Hermes fault to go tune resources instead.
 #
 # Escalate only when occupancy is corroborated by a live reading: heavy occupancy
-# (a third of RAM) or occupancy alongside an already-loaded host.
+# (a third of RAM) or occupancy alongside an already-loaded host. In a container
+# the figure is the host's unless the runtime isolates /proc, so heavy occupancy
+# there is reported, never escalated — the container itself may be healthy.
 case "${swap_used_mb:-}" in
   ''|*[!0-9.]*) : ;;
   0|0.0|0.00) : ;;
@@ -213,10 +239,16 @@ case "${swap_used_mb:-}" in
       ram_mb=$(awk '/^MemTotal:/{printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null)
     fi
     swap_pct=$(awk -v s="$swap_used_mb" -v r="${ram_mb:-0}" 'BEGIN{ if (r > 0) printf "%.1f", s/r*100; else print "" }')
-    if [ -n "$swap_pct" ] && [ "$(awk -v p="$swap_pct" 'BEGIN{print (p>=33)?"1":"0"}')" = "1" ]; then
+    if [ -n "$swap_pct" ] && [ "$(awk -v p="$swap_pct" 'BEGIN{print (p>=33)?"1":"0"}')" = "1" ] \
+       && [ "$in_container" != "1" ]; then
       echo "  >> swap in use: ${swap_used_mb}MB (${swap_pct}% of ${ram_mb}MB RAM)"
       echo "  >> that much resident swap means active paging or a recent spike:"
       echo "  >> expect multi-second stalls and load-timeout cascades."; verdict=1
+    elif [ "$in_container" = "1" ] && [ "${verdict:-0}" != "1" ] && [ -n "$swap_pct" ] \
+         && [ "$(awk -v p="$swap_pct" 'BEGIN{print (p>=33)?"1":"0"}')" = "1" ]; then
+      echo "  -- swap in use: ${swap_used_mb}MB (${swap_pct}% of ${ram_mb}MB RAM, host-wide reading)"
+      echo "  -- this container sees the host's /proc/meminfo, so container-level paging"
+      echo "  -- is not established; reported, not escalated."
     elif [ "$verdict" = "1" ]; then
       echo "  >> swap in use: ${swap_used_mb}MB${swap_pct:+ (${swap_pct}% of ${ram_mb}MB RAM)}"
       echo "  >> occupancy corroborates the pressure above. Swap is retained after a"
