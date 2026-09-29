@@ -126,9 +126,10 @@ from fighting:
   everything including `$HERMES_HOME`; `--data` erases only user data — the one mode
   that works on Nix / bundled-app / Docker installs; `--dry-run` previews). Code-side
   removal covers the checkout, the `~/.local/bin` shims, PATH entries, and installer
-  tooling. PM's runtime is tooling, not data: `$HERMES_HOME/tools` (tool store) and
-  `$HERMES_HOME/installs` (dependency environments) — remove those two directories
-  manually to reclaim the runtime while keeping sessions/credentials; `--full` takes
+  tooling. PM's runtime (`$HERMES_HOME/tools` — the shared tool store;
+  `$HERMES_HOME/installs` — one dependency environment per checkout) is tooling, not
+  data: remove those two directories manually only when no other checkout shares this
+  home — deleting the store breaks every install that references it. `--full` takes
   them with the home.
 - **Rollback:** back up `$HERMES_HOME` before upgrades; the code directory is
   disposable, the data directory is not.
