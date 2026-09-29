@@ -256,6 +256,69 @@ def _selftest_quota_cores() -> None:
         _check(f"quota {a}/{b} -> {want} cpu(s), integer", got == want, f"got {got!r}")
 
 
+def _selftest_container_signals() -> None:
+    """Container CPU decisions must come from CURRENT, container-scoped data.
+
+    Both review findings live here: cumulative counters must never verdict on
+    their own (stale throttling reads as current), and the decision must not
+    lean on host-wide process counts. The two data paths are PSI cpu.pressure
+    "some avg10" (rolling window) and throttled_usec growth across the probe's
+    sampling window. The awk programs are read out of the probe itself and
+    both outcomes are asserted for each: the PSI parser, the PSI threshold
+    (avg10 >= 20), and the growth test (strictly increasing by >= 100ms
+    between the samples). The live container fixtures are Darwin-stubbed and
+    the probe reads a cgroup quota only in its non-Darwin branch, so their
+    exit codes cannot be flipped by the CI runner's own cgroup state -- the
+    decisions are pinned here instead.
+    """
+    src = PROBE.read_text()
+    psi_prog = ""
+    for ln in src.splitlines():
+        if "/^avg10=/" in ln and "awk '" in ln and "' \"$qpr\"" in ln:
+            chunk = ln.split("awk '", 1)[1]
+            psi_prog = chunk[:chunk.rindex("' \"$qpr\"")]
+            break
+    _check("PSI parser is locatable in the probe", bool(psi_prog),
+           "no line joining /^avg10=/ with the cpu.pressure read")
+    if psi_prog:
+        td = Path(tempfile.mkdtemp(prefix="hpp-psi-"))
+        loud = td / "cpu.pressure"
+        loud.write_text("some avg10=95.00 avg60=80.00 avg300=70.00 total=123\n"
+                        "full avg10=40.00 avg60=30.00 avg300=20.00 total=456\n")
+        got = subprocess.run(["awk", psi_prog, str(loud)],
+                             capture_output=True, text=True).stdout.strip()
+        _check("PSI parser takes 'some avg10', not 'full'", got == "95.00", f"got {got!r}")
+        quiet = td / "cpu.pressure.quiet"
+        quiet.write_text("some avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"
+                         "full avg10=50.00 avg60=40.00 avg300=30.00 total=1\n")
+        got = subprocess.run(["awk", psi_prog, str(quiet)],
+                             capture_output=True, text=True).stdout.strip()
+        _check("PSI parser reads a quiet window as 0.00", got == "0.00", f"got {got!r}")
+        shutil.rmtree(td, ignore_errors=True)
+
+    psi_thr = ""
+    delta_thr = ""
+    for ln in src.splitlines():
+        if "v>=20" in ln and "BEGIN" in ln:
+            psi_thr = ln[ln.index("'BEGIN") + 1:ln.rindex("'")]
+        if "(b-a)>=100000" in ln and "BEGIN" in ln:
+            delta_thr = ln[ln.index("'BEGIN") + 1:ln.rindex("'")]
+    _check("PSI threshold program is locatable", bool(psi_thr))
+    if psi_thr:
+        for v, want in [("95.0", "1"), ("40", "1"), ("20", "1"), ("19.99", "0"), ("0.00", "0")]:
+            got = subprocess.run(["awk", "-v", f"v={v}", psi_thr],
+                                 capture_output=True, text=True).stdout.strip()
+            _check(f"PSI {v} -> {want} (both outcomes)", got == want, f"got {got!r}")
+    _check("growth threshold program is locatable", bool(delta_thr))
+    if delta_thr:
+        for a, b, want in [("45000000", "45250000", "1"), ("0", "100000", "1"),
+                           ("0", "99999", "0"), ("45000000", "45045000", "0"),
+                           ("45000000", "45000000", "0"), ("45000000", "44999000", "0")]:
+            got = subprocess.run(["awk", "-v", f"a={a}", "-v", f"b={b}", delta_thr],
+                                 capture_output=True, text=True).stdout.strip()
+            _check(f"growth {a}->{b} -> {want} (both outcomes)", got == want, f"got {got!r}")
+
+
 def _on_darwin() -> bool:
     """The macOS fixtures stub sysctl/top/vm_stat, which do not exist on Linux.
 
@@ -279,6 +342,8 @@ def main() -> int:
     _selftest_linux_idle_delta()
     print("cgroup quota cores (integer >= 1):")
     _selftest_quota_cores()
+    print("container CPU signals (PSI + throttling growth):")
+    _selftest_container_signals()
 
     # The macOS fixtures below stub sysctl/top/vm_stat. On a Linux CI leg those
     # tools are absent or different, so skip them there; the Linux branch is
@@ -442,6 +507,10 @@ def main() -> int:
     # comparing them measures two different scopes. Load 20 against 2 cores
     # clears the 4x threshold and was reported as pressure on a 32-core host
     # sitting at 6%.
+    # These fixtures stub uname to Darwin, and the probe reads a cgroup quota
+    # only in its non-Darwin branch, so the container CPU-pressure block cannot
+    # activate here regardless of the CI runner's own cgroup state; its
+    # decisions are pinned by _selftest_container_signals above.
     f = _fixture(os_name="Darwin", cores="2", load="20",
                  top_line="CPU usage: 20.00% user, 70.00% sys, 10.00% idle",
                  states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
