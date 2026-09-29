@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.5.0
+version: 1.5.1
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -26,8 +26,6 @@ The Python version does **not** identify the layout: upstream supports `requires
 Both can coexist. When they do, **`venv` wins**: upstream's own resolver picks it first, "matching what the installers write." Note the trap: "current tooling" (`uv` → `.venv`) and "resolver winner" (`venv`) are *different* directories — a script that scans `.venv` first can therefore resolve a different interpreter than Hermes core does on the same checkout.
 
 **Why this happened:** Older installs and some documentation used `python -m venv venv`. When uv became the default package manager, `uv venv` created `.venv`. Migration scripts didn't remove the old `venv/`, so both persist.
-
-Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, and resolution is inconsistent across call sites because not every site uses the resolver.
 
 **Current state upstream:** a resolver exists — `hermes_constants.py::project_venv_dir(project_root)` (added 2026-08-19, commit `7a94b1f`, verified in upstream history). For a checkout with an in-tree venv it resolves `venv` **before** `.venv`; the docstring still reads *"``venv`` wins when both exist, matching what the installers write."* and the candidate scan checks `is_dir()` only (no `pyvenv.cfg` validation). It also covers **out-of-tree installs** (`$HERMES_HOME/venvs/<name>`, the layout the shipped Windows launchers assume): with no in-tree directory it falls back to the **running interpreter's venv** — only when this module was loaded from that checkout, the prefix is a venv whose python exists, and the venv's own `hermes-agent` distribution records the checkout as its install source (`direct_url.json`; added 2026-09-25, commit `f9f235e` — *never adopt another install's venv for a checkout*). A foreign root still resolves to `None`.
 
