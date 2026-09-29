@@ -259,14 +259,14 @@ python_exe = Path.cwd() / ".venv" / "bin" / "python"  # May not be the running v
 
 ### "No module installed" but the package exists
 
-The wrong venv is active. Check:
+The wrong interpreter is answering. On checkouts that carry venvs, check:
 
 ```bash
-which python        # PM-era installs: PM-store Python (no in-tree venv); older checkouts: .venv/ or venv/
+which python        # Should point inside .venv/ or venv/ (checkout layouts)
 python -c "import sys; print(sys.prefix)"  # Confirms active venv
 ```
 
-On a PM-era install (2026-09 onward) there is no in-tree `venv/` to point into — a PM-managed interpreter is the expected result; the dual-layout checks in this skill apply to checkouts that still carry venvs.
+On a PM-era install (2026-09 onward) there is no in-tree `venv/` and no `python` shim — `which python` just reports your shell's Python, which Hermes does not use. Check the interpreter the launcher runs instead: the shims exec the durable launcher bound to the PM-store Python, and `hermes --version` prints the install directory and method. The dual-layout checks in this skill apply to checkouts that still carry venvs.
 
 ### Both `.venv/` and `venv/` exist
 
