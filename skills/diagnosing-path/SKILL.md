@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.3.0
+version: 1.3.1
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -18,10 +18,10 @@ Hermes Agent has a **dual-venv layout**: two directories can exist at the projec
 
 | Directory | Origin | Python | Who writes it |
 |---|---|---|---|
-| `venv/` | `python -m venv venv`, and the curl installer | 3.11.x (verified: 3.11.15 on a Linux/WSL install) | The standard installers — the resolver winner |
+| `venv/` | `python -m venv venv`; the pre-pm curl installer | 3.11.x on pre-pm installs (observed: 3.11.15 on a Linux/WSL install); PM-era installs keep the dependency environment outside the checkout (locked Python 3.14.7) | The pre-pm installers — the resolver winner when an in-tree venv exists |
 | `.venv/` | `uv venv` (uv's default) | Whatever `uv` provisions — verified 3.13.14 (uv 0.11.21) on a Windows desktop-app install | uv / uv-based tooling |
 
-The Python version does **not** identify the layout: upstream supports `requires-python = ">=3.11,<3.15"` (the ceiling was raised from `<3.14` during the 2026-09 bundled-runtime work), and `uv` resolves its own interpreter, so a `.venv` can span 3.11–3.14 depending on `uv`'s configuration. Both layouts were observed in the wild in the same week: the installer wrote `venv/` (Python 3.11.15) on a Linux/WSL host while the desktop app shipped `.venv/` (Python 3.13.14) on Windows.
+The Python version does **not** identify the layout: upstream supports `requires-python = ">=3.11,<3.15"` (the ceiling was raised from `<3.14` during the 2026-09 bundled-runtime work), and `uv` resolves its own interpreter, so a `.venv` can span 3.11–3.14 depending on `uv`'s configuration. Both layouts were observed in the wild in the same week (mid-2026, before the pm rework): the installer wrote `venv/` (Python 3.11.15) on a Linux/WSL host while the desktop app shipped `.venv/` (Python 3.13.14) on Windows. PM-era installs don't keep an in-tree venv at all: the dependency environment lives outside the checkout (locked Python 3.14.7) and PM removes a legacy in-tree venv once a generation is committed — the in-tree rules below matter for dev checkouts and pre-pm installs.
 
 Both can coexist. When they do, **`venv` wins**: upstream's own resolver picks it first, "matching what the installers write." Note the trap: "current tooling" (`uv` → `.venv`) and "resolver winner" (`venv`) are *different* directories — a script that scans `.venv` first can therefore resolve a different interpreter than Hermes core does on the same checkout.
 
@@ -123,7 +123,7 @@ def resolve_venv(project_root: Path | None = None) -> Path | None:
 
     Resolution order:
     1. VIRTUAL_ENV environment variable (if set and valid)
-    2. sys.prefix (if running inside a venv inside the project)
+    2. sys.prefix (if running inside a venv)
     3. venv/ (installer default — project_venv_dir() resolves this first)
     4. .venv/ (uv default)
     5. None (system Python, no venv)
@@ -287,4 +287,4 @@ Windows venvs use `Scripts\python.exe`, not `bin/python`. Use `venv_bin_dir()` o
 
 ---
 
-*Facts verified 2026-09-29 against upstream source at `5000e2993` (`hermes_constants.py` — `project_venv_dir()` in-tree order plus the out-of-tree running-venv fallback gated by `direct_url.json`, commit `f9f235e`; `venv_bin_dir()` delegating to `pm/environments.py`; `pyproject.toml` `requires-python` now `>=3.11,<3.15`); earlier verification 2026-09-14 at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway_service_unit.py`, `pyproject.toml`); the gateway-bypass citation moved to `gateway_service_unit.py` at `2f6170bf` (2026-09-22, drift #103) and again to `hermes_cli/gateway.py` at `5000e299` (2026-09-29, drift #123 — the service-PATH bypass retired); upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout); live layouts on two hosts: a Linux/WSL installer install (`venv/`, Python 3.11.15) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21). Re-verify before reuse.*
+*Facts verified 2026-09-29 against upstream source at `5000e2993` (`hermes_constants.py` — `project_venv_dir()` in-tree order plus the out-of-tree running-venv fallback gated by `direct_url.json`, commit `f9f235e`; `venv_bin_dir()` delegating to `pm/environments.py`; `pyproject.toml` `requires-python` now `>=3.11,<3.15`); earlier verification 2026-09-14 at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway_service_unit.py`, `pyproject.toml`); the gateway-bypass citation moved to `gateway_service_unit.py` at `2f6170bf` (2026-09-22, drift #103) and again to `hermes_cli/gateway.py` at `5000e299` (2026-09-29, drift #123 — the service-PATH bypass retired); upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout); live layouts on two hosts (mid-2026 observations): a Linux/WSL installer install (`venv/`, Python 3.11.15, pre-pm) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21); re-checked 2026-09-29 for PR #124: PM-era installs keep the dependency environment outside the checkout (locked Python 3.14.7) and remove a legacy in-tree venv once a generation is committed. Re-verify before reuse.*
