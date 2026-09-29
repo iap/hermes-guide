@@ -159,7 +159,7 @@ jobs:
 
       - name: Skill provenance footer guard
         # Requires a dated upstream-anchored footer per skill. Enforcing since
-        # 2026-09-21 (all 18 skills carry a compliant footer).
+        # 2026-09-21 (every skill carries a compliant footer).
         run: |
           python tools/check_skill_provenance.py --selftest
           python tools/check_skill_provenance.py
