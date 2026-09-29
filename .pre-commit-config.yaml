@@ -1,0 +1,31 @@
+# Pre-commit hooks for hermes-guide.
+#
+# Local convenience only — CI (.github/workflows/ci.yml) is the authority and
+# runs every gate plus the slow tier these hooks deliberately skip. Nothing here
+# adds a check CI lacks; it only moves the fast ones earlier, to the moment the
+# mistake is written.
+#
+# Install once per clone:  pre-commit install
+# Then:                   pre-commit run --all-files
+#
+# Requires `pre-commit` on PATH. Not vendored, not a Python dependency of the
+# plugin — the plugin ships with a single PyYAML dependency on purpose, and
+# this must not change that.
+
+default_language_version:
+  python: python3
+
+# Fast gate. Refuses the commit when the counts, routing table, provenance
+# footer, self-claim deny-list, plugin version, or read-only guarantee break.
+# Runs the neighbor scripts via tools/check_gates.py; no checking logic is
+# duplicated here.
+repos:
+  - repo: local
+    hooks:
+      - id: hermes-guide-gates
+        name: hermes-guide gates (counts, provenance, self-claim, read-only)
+        entry: python tools/check_gates.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit-msg, pre-commit, pre-push]

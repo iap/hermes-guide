@@ -88,6 +88,13 @@ jobs:
           python tools/check_no_mutation.py --selftest
           python tools/check_no_mutation.py
 
+      - name: Host-pressure probe behavioral test
+        # Linux legs only: the probe is a bash script reading /proc, and the
+        # fixtures stub macOS tools (sysctl/top/vm_stat) that do not exist here.
+        # Windows has no bash at all. Test itself skips non-applicable cases.
+        if: runner.os == 'Linux'
+        run: python3 tools/test_host_pressure_probe.py
+
       - name: Read-only runtime smoke test
         run: python tools/test_readonly_runtime.py
 
