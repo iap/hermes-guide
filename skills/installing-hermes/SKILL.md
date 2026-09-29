@@ -1,7 +1,7 @@
 ---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent on Linux/WSL2 (NixOS included) — the four install routes, what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -53,8 +53,11 @@ a re-install or upgrade does not touch `config.yaml`, memories, sessions, or plu
 ~/.local/bin/{hermes,hermes-agent,hermes-acp}   # shims → the venv interpreter
 ```
 
-Prerequisites: `git`, `curl`, `xz` on the PATH — the installer auto-provisions
-everything else (uv, Python 3.11, Node.js 26, ripgrep, ffmpeg). Native Windows uses
+Prerequisites: `git`, `curl`, `xz` on the PATH — the installer stages a pinned `uv`
+(from `pm/lock.json`, sha256-verified), bootstraps a tool-only Python, then hands the
+checkout to **pm**, which installs the locked runtime (Python **3.14.7**, Node.js
+**26.7.0**, ripgrep, ffmpeg; browsers and the computer-use driver are opt-out at
+install, re-enabled with `hermes pm install <name>`). Native Windows uses
 `install.ps1` instead; the Desktop installer bundles the CLI and is the recommended
 route on macOS/Windows.
 
@@ -93,10 +96,10 @@ path` before trusting it.
    ```
 
    Always grep the install log for the failure line before declaring success.
-2. **No `g++` on NixOS.** Native module builds fail without a compiler; the installer's
-   prebuilt `uv`/Python/Node binaries run fine under `nix-ld`. Enable `programs.nix-ld`
-   and, if a build step still needs a compiler, prefer the Nix flake route over
-   installing a toolchain ad hoc.
+2. **No `g++` on NixOS.** Native module builds fail without a compiler; the prebuilt
+   `uv`/Python/Node binaries staged from `pm/lock.json` run fine under `nix-ld`. Enable
+   `programs.nix-ld` and, if a build step still needs a compiler, prefer the Nix flake
+   route over installing a toolchain ad hoc.
 3. **The Nix route is best-effort upstream** — the docs recommend the standard paths
    (or Docker) for supported setups and offer a dedicated flake with default and
    smaller package outputs. A Nix-built bundle is an excellent *fallback* binary
@@ -131,4 +134,4 @@ from fighting:
 
 ---
 
-*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `scripts/install.sh` (the four-route layout, `$HERMES_HOME` as data — re-install/upgrade preserves `config.yaml`/memories/sessions; `HERMES_HOME` default resolution; the piped one-liner the two-step mirrors; `xz` prerequisite — .tar.xz extraction requires it, #11197; `PYTHON_VERSION="3.11"`; `NODE_VERSION="26"` — corrected this pass: the skill previously said Node.js v22, the installer pins 26 with 22.22+/24.11+/26+ supported; managed uv into `$HERMES_HOME/bin`; git auto-provision attempt) and `scripts/install.ps1` (the native-Windows route). Re-verify before reuse.*
+*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `scripts/install.sh` (the four-route layout, `$HERMES_HOME` as data — re-install/upgrade preserves `config.yaml`/memories/sessions; `HERMES_HOME` default resolution; the piped one-liner the two-step mirrors; `xz` prerequisite — .tar.xz extraction requires it, #11197; `PYTHON_VERSION="3.11"`; `NODE_VERSION="26"` — corrected this pass: the skill previously said Node.js v22, the installer pins 26 with 22.22+/24.11+/26+ supported; managed uv into `$HERMES_HOME/bin`; git auto-provision attempt) and `scripts/install.ps1` (the native-Windows route); both describe the pre-pm installer. Re-checked 2026-09-29 at `5000e2993`: `PYTHON_VERSION`/`NODE_VERSION` no longer exist in `install.sh`; it stages pinned `uv` into the store slot (`${HERMES_RUNTIME_DIR:-$HERMES_HOME/tools}/uv-<version>-<target>/`, sha256-verified), bootstraps a tool-only Python, then `pm.cli install` owns the exact runtime pin — Python **3.14.7**, Node **26.7.0**, ripgrep **15.2.0**, ffmpeg **9.0.1**. Re-verify before reuse.*
