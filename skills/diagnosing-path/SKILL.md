@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.2.2
+version: 1.3.0
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -29,9 +29,9 @@ Both can coexist. When they do, **`venv` wins**: upstream's own resolver picks i
 
 Hermes Agent has a **dual-venv layout**: two directories can exist at the project root, both valid, and resolution is inconsistent across call sites because not every site uses the resolver.
 
-**Current state upstream:** a resolver exists — `hermes_constants.py::project_venv_dir(project_root)` (added 2026-08-19, commit `7a94b1f`, verified in upstream history), resolving `venv` **before** `.venv`. Its docstring: *"``venv`` wins when both exist, matching what the installers write."* It checks `is_dir()` only (no `pyvenv.cfg` validation) and callers decide whether a missing venv is an error.
+**Current state upstream:** a resolver exists — `hermes_constants.py::project_venv_dir(project_root)` (added 2026-08-19, commit `7a94b1f`, verified in upstream history). For a checkout with an in-tree venv it resolves `venv` **before** `.venv`; the docstring still reads *"``venv`` wins when both exist, matching what the installers write."* and the candidate scan checks `is_dir()` only (no `pyvenv.cfg` validation). It also covers **out-of-tree installs** (`$HERMES_HOME/venvs/<name>`, the layout the shipped Windows launchers assume): with no in-tree directory it falls back to the **running interpreter's venv** — only when this module was loaded from that checkout, the prefix is a venv whose python exists, and the venv's own `hermes-agent` distribution records the checkout as its install source (`direct_url.json`; added 2026-09-25, commit `f9f235e` — *never adopt another install's venv for a checkout*). A foreign root still resolves to `None`.
 
-**The failure mode is call sites that bypass that resolver, not the absence of one.** Before `7a94b1f`, exactly **11** sites in `hermes_cli/` hardcoded `PROJECT_ROOT / "venv"` (`update_cmd.py` 7, `gateway.py` 2, `main.py` 2 — counted from the parent commit). Some bypasses persist today; e.g. `hermes_cli/gateway_service_unit.py::_build_service_path_dirs` builds the service-unit PATH from `project_root / "venv" / "bin"` only — no `.venv` candidate — so on a `.venv`-only checkout the project venv is silently omitted from the generated PATH. The canonical open bug of this class is **#79542** (*"`_venv_scripts_dir()` only checks venv, not .venv, causing all Windows update protections to silently skip"*).
+**The failure mode is call sites that bypass that resolver, not the absence of one.** Before `7a94b1f`, exactly **11** sites in `hermes_cli/` hardcoded `PROJECT_ROOT / "venv"` (`update_cmd.py` 7, `gateway.py` 2, `main.py` 2 — counted from the parent commit). Two canonical bypasses have since been retired upstream: `hermes_cli/main_install_repair.py::_venv_scripts_dir()` now resolves through `project_venv_dir()` + `venv_bin_dir()` and finds both layouts, and the service-unit PATH builder — now `hermes_cli/gateway.py::_build_service_path_dirs` — no longer persists venv paths at all ("Python and dependency executable paths are selected at boot, not persisted"). The canonical tracker for this class is **#79542** (*"`_venv_scripts_dir()` only checks venv, not .venv, causing all Windows update protections to silently skip"*, triaged as a duplicate of **#43250**) — still open as of 2026-09-29, though the `_venv_scripts_dir()` side is fixed in main (both layouts).
 
 ## Detection — Is a venv active?
 
@@ -96,7 +96,7 @@ These are **not** one resolution order. Keep them separate; conflating them is h
 1. **`VIRTUAL_ENV`** env var — if set, that is the active venv.
 2. **`sys.prefix`** vs `sys.base_prefix` — if they differ, Python is running inside a venv.
 
-This is detection, not project resolution. Upstream's `project_venv_dir()` does **not** consult either of these.
+This is detection, not project resolution. Upstream's `project_venv_dir()` never reads `VIRTUAL_ENV`; it consults `sys.prefix` only in its out-of-tree fallback (B.3) — for an ordinary in-tree checkout the two questions stay independent.
 
 ### B. Which venv DIRECTORY does the project have? (upstream's resolver)
 
@@ -104,9 +104,10 @@ This is detection, not project resolution. Upstream's `project_venv_dir()` does 
 
 1. **`venv/`** — checked first.
 2. **`.venv/`** — only when `venv/` is absent.
-3. **`None`** — no venv directory. Callers decide if that is an error.
+3. **The running interpreter's venv** — out-of-tree installs only (`$HERMES_HOME/venvs/<name>`): the module must have been loaded from that checkout, the prefix must be a venv with a usable python, and the venv's `hermes-agent` distribution must record the checkout as its install source (`direct_url.json`) — this stops a dev checkout's update from rewriting another install's venv (upstream commit `f9f235e`).
+4. **`None`** — no venv found anywhere. Callers decide if that is an error.
 
-`is_dir()` only — no `pyvenv.cfg` validation, no environment-variable lookups.
+The in-tree candidate scan is `is_dir()` only — no `pyvenv.cfg` validation, no `VIRTUAL_ENV` lookups; the out-of-tree fallback is the provenance-checked branch above.
 
 ### C. Script that needs the best available answer
 
@@ -128,11 +129,13 @@ def resolve_venv(project_root: Path | None = None) -> Path | None:
     5. None (system Python, no venv)
 
     NOT a mirror of upstream: steps 1-2 (active-env detection) are this
-    replica's own additions for script use - project_venv_dir() consults
-    neither VIRTUAL_ENV nor sys.prefix. Steps 3-4 mirror upstream exactly:
-    is_dir() alone, so a stray empty directory wins the same way it does
-    upstream. Prefer importing project_venv_dir() when Hermes core is
-    importable; use this replica outside the checkout.
+    replica's own additions for script use - project_venv_dir() never
+    reads VIRTUAL_ENV, and it consults sys.prefix only for its out-of-tree
+    fallback (gated by a direct_url.json ownership check). Steps 3-4
+    mirror upstream's candidate scan exactly: is_dir() alone, so a stray
+    empty directory wins the same way it does upstream. Prefer importing
+    project_venv_dir() when Hermes core is importable; use this replica
+    outside the checkout.
     """
     # 1. Explicit override
     env_venv = os.environ.get("VIRTUAL_ENV")
@@ -269,7 +272,7 @@ Upstream's `project_venv_dir()` resolves `venv/` first, so scripts mirroring Her
 
 ### A protection or PATH feature silently does nothing
 
-Symptom: an update/protection/preflight step reports success but never ran, or a generated service unit's PATH lacks the venv. Cause: a **venv-only** check on a **`.venv`-only** checkout — the same class as open bug **#79542** (Windows update protections skip entirely) and the `_build_service_path_dirs` bypass above. Confirm the layout first (`ls -d venv .venv`), then treat any venv-name-specific check as suspect and resolve through `project_venv_dir()`.
+Symptom: an update/protection/preflight step reports success but never ran. Cause: a **venv-only** check on a **`.venv`-only** checkout — the class tracked by **#79542**; its canonical instances (`_venv_scripts_dir`, the service-PATH builder) were fixed or retired upstream during 2026-09. Confirm the layout first (`ls -d venv .venv`), then treat any venv-name-specific check as suspect and resolve through `project_venv_dir()`.
 
 ### Windows: "python" not found
 
@@ -278,10 +281,10 @@ Windows venvs use `Scripts\python.exe`, not `bin/python`. Use `venv_bin_dir()` o
 ## See Also
 
 - `references/venv_detection_patterns.py` — copy-paste-ready detection functions
-- Hermes core `hermes_constants.py` — `project_venv_dir()` (the resolver), `venv_bin_dir()`, `venv_python_path()`
-- Open bug **#79542** — `_venv_scripts_dir()` checks only `venv`, so Windows update protections silently skip on `.venv` installs (the canonical harm of this split)
-- Related history: `venv_bin_dir()`'s docstring records the consolidation effort — the layout was open-coded in seven places using three different Windows predicates, and the fix for #76091 shipped an eighth copy before `hermes_constants.py` became the single source.
+- Hermes core `hermes_constants.py` — `project_venv_dir()` (the resolver), `venv_bin_dir()` (a thin delegate; the implementation lives in `pm/environments.py`), `venv_python_path()`
+- Bug **#79542** — `_venv_scripts_dir()` checked only `venv`, so Windows update protections silently skipped on `.venv` installs (the canonical harm of this split; triaged as a duplicate of **#43250**). The resolver-based fix landed in main (2026-09, both layouts); the issue was still open as of 2026-09-29
+- Related history: the venv-bin-dir consolidation — the layout open-coded in seven places using three different Windows predicates, the #76091 fix shipping an eighth copy first — is preserved in upstream's commit history; at head `venv_bin_dir()` delegates to `pm/environments.py`, which owns the implementation.
 
 ---
 
-*Facts verified 2026-09-14 against upstream source at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway_service_unit.py`, `pyproject.toml`); the gateway-bypass citation moved to `gateway_service_unit.py` at `2f6170bf` (2026-09-22, drift #103); upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout), and live layouts on two hosts: a Linux/WSL installer install (`venv/`, Python 3.11.15) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21). Re-verify before reuse.*
+*Facts verified 2026-09-29 against upstream source at `5000e2993` (`hermes_constants.py` — `project_venv_dir()` in-tree order plus the out-of-tree running-venv fallback gated by `direct_url.json`, commit `f9f235e`; `venv_bin_dir()` delegating to `pm/environments.py`); earlier verification 2026-09-14 at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway_service_unit.py`, `pyproject.toml`); the gateway-bypass citation moved to `gateway_service_unit.py` at `2f6170bf` (2026-09-22, drift #103) and again to `hermes_cli/gateway.py` at `5000e299` (2026-09-29, drift #123 — the service-PATH bypass retired); upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout); live layouts on two hosts: a Linux/WSL installer install (`venv/`, Python 3.11.15) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21). Re-verify before reuse.*

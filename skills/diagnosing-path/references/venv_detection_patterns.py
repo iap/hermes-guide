@@ -32,10 +32,10 @@ def find_venv_dirs(project_root: Path) -> list[Path]:
     """Return existing venv directories in resolution order.
 
     Checks `venv` (installer default) first, then `.venv` (uv default) —
-    mirroring hermes_constants.py::project_venv_dir, which resolves
-    `venv` before `.venv` ("venv wins when both exist"). The pyvenv.cfg
-    filter here is deliberately stricter than the upstream resolver: this
-    function lists only *valid* venvs.
+    mirroring hermes_constants.py::project_venv_dir, whose in-tree scan
+    resolves `venv` before `.venv` ("venv wins when both exist"). The
+    pyvenv.cfg filter here is deliberately stricter than the upstream
+    resolver: this function lists only *valid* venvs.
     """
     candidates = [project_root / "venv", project_root / ".venv"]
     return [c for c in candidates if c.is_dir() and (c / "pyvenv.cfg").exists()]
@@ -46,7 +46,7 @@ def resolve_venv(project_root: Optional[Path] = None) -> Optional[Path]:
 
     Resolution order:
     1. VIRTUAL_ENV environment variable (if set and valid)
-    2. sys.prefix (if running inside a venv inside the project)
+    2. sys.prefix (if running inside a venv)
     3. venv/ (installer default — project_venv_dir() resolves this first)
     4. .venv/ (uv default)
     5. None (system Python, no venv)
@@ -54,10 +54,12 @@ def resolve_venv(project_root: Optional[Path] = None) -> Optional[Path]:
     Prefer importing project_venv_dir() from hermes_constants when Hermes
     core is importable; this replica is for use outside the checkout.
     Steps 1-2 add pyvenv.cfg validation (this replica's own robustness
-    check); steps 3-4 mirror project_venv_dir() exactly — is_dir() alone,
-    no manifest check — so this function and Hermes can never disagree on
-    a dual-layout checkout (an empty stray directory wins the same way it
-    does upstream).
+    check); steps 3-4 mirror upstream's candidate scan exactly — is_dir()
+    alone, no manifest check — so on a dual-layout checkout this function
+    and Hermes agree (an empty stray directory wins the same way it does
+    upstream). Upstream's out-of-tree fallback — the running interpreter's
+    venv, gated by a direct_url.json ownership check — is approximated
+    here by step 2, without the ownership proof.
     """
     # 1. Explicit override
     env_venv = os.environ.get("VIRTUAL_ENV")
