@@ -53,13 +53,16 @@ def resolve_venv(project_root: Optional[Path] = None) -> Optional[Path]:
 
     Prefer importing project_venv_dir() from hermes_constants when Hermes
     core is importable; this replica is for use outside the checkout.
-    Steps 1-2 add pyvenv.cfg validation (this replica's own robustness
-    check); steps 3-4 mirror upstream's candidate scan exactly — is_dir()
-    alone, no manifest check — so on a dual-layout checkout this function
-    and Hermes agree (an empty stray directory wins the same way it does
-    upstream). Upstream's out-of-tree fallback — the running interpreter's
-    venv, gated by a direct_url.json ownership check — is approximated
-    here by step 2, without the ownership proof.
+    Steps 1-2 are active-venv detection, not ownership: when a script runs
+    inside *another* install's venv they return that venv even though Hermes
+    would not adopt it — the upstream out-of-tree fallback requires the
+    venv's direct_url.json to record *this* checkout, a proof this replica
+    cannot make. For "which venv does Hermes use for this checkout", prefer
+    project_venv_dir() — or read steps 3-4 first. Those two steps mirror
+    upstream's candidate scan exactly (is_dir() alone, no manifest check),
+    so on a dual-layout checkout they agree with Hermes (an empty stray
+    directory wins the same way it does upstream); steps 1-2 remain a
+    best-effort approximation of upstream's running-venv fallback.
     """
     # 1. Explicit override
     env_venv = os.environ.get("VIRTUAL_ENV")
