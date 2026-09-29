@@ -16,6 +16,7 @@ Run: python3 tools/test_upstream_drift_hygiene.py
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -210,7 +211,8 @@ def case_pin_failure_fails_closed(mod):
 def case_cap_keeps_newest_drops_oldest(mod):
     """_cap_chars keeps the newest entries and an exact omitted count."""
     entries = [f"- `{i:07d}` 2026-09-01 subject {i}" for i in range(200)]
-    out = mod._cap_chars(entries, 500, "- ... and {omitted} older commits omitted.")
+    with mock.patch.object(mod, "_uncapped", return_value=False):
+        out = mod._cap_chars(entries, 500, "- ... and {omitted} older commits omitted.")
     kept = [ln for ln in out.splitlines() if ln.startswith("- `")]
     assert kept, "nothing kept"
     assert kept[0] == entries[0], "newest entry must be kept first"
@@ -222,7 +224,7 @@ def case_cap_keeps_newest_drops_oldest(mod):
 def case_uncapped_returns_everything(mod):
     """DRIFT_NO_CAP=1 returns the full list (what the omission notes promise)."""
     entries = [f"- `{i:07d}` 2026-09-01 subject {i}" for i in range(200)]
-    with mock.patch.object(mod, "NO_CAP", True):
+    with mock.patch.object(mod, "_uncapped", return_value=True):
         out = mod._cap_chars(entries, 500, "- ... and {omitted} older commits omitted.")
     assert out == "\n".join(entries)
     assert "omitted" not in out
@@ -243,6 +245,17 @@ def case_fit_body_keeps_footer(mod):
     print("OK: size guard keeps the footer and points at the uncapped run")
 
 
+def case_uncapped_requires_dry_run(mod):
+    """DRIFT_NO_CAP=1 alone must not uncap anything (filing stays bounded)."""
+    with mock.patch.dict("os.environ", {}, clear=True):
+        os.environ["DRIFT_NO_CAP"] = "1"
+        assert mod._uncapped() is False, "uncapped without dry-run"
+        os.environ["DRIFT_DRY_RUN"] = "1"
+        assert mod._uncapped() is True, "both flags should enable uncapped"
+    assert mod._uncapped() is False, "flags removed after the block"
+    print("OK: uncapped mode requires DRIFT_DRY_RUN=1 (filing path stays bounded)")
+
+
 def main() -> int:
     mod = _load_module()
     failures: list[str] = []
@@ -256,6 +269,7 @@ def main() -> int:
         case_cap_keeps_newest_drops_oldest,
         case_uncapped_returns_everything,
         case_fit_body_keeps_footer,
+        case_uncapped_requires_dry_run,
     ):
         try:
             case(mod)
@@ -265,7 +279,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 9 upstream-drift hygiene case(s) passed")
+    print("\nOK: 10 upstream-drift hygiene case(s) passed")
     return 0
 
 

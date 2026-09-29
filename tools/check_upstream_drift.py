@@ -50,12 +50,11 @@ CLONE_DIR = "/tmp/hermes-agent-upstream"
 # GitHub refuses issue bodies over 65,536 characters ("Body is too long").
 # The schema-drift log and the per-commit history list both grow with every
 # upstream merge, so cap each section (newest entries are kept) and keep a
-# hard ceiling on the assembled body as a safety net. DRIFT_NO_CAP=1
-# (local runs) disables all three caps so the full report can be reviewed.
+# hard ceiling on the assembled body as a safety net. Dry runs with
+# DRIFT_NO_CAP=1 skip all three caps for local review (see _uncapped).
 MAX_BODY_CHARS = 60_000
 SCHEMA_LOG_LIMIT_CHARS = 18_000
 HISTORY_LIST_LIMIT_CHARS = 40_000
-NO_CAP = os.environ.get("DRIFT_NO_CAP") == "1"  # local runs: uncapped report
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -309,14 +308,26 @@ def verify_ci_pin() -> tuple[list[str], str | None]:
 # --- Issue filing -----------------------------------------------------------
 
 
+def _uncapped() -> bool:
+    """True only for local dry runs: DRIFT_NO_CAP=1 requires DRIFT_DRY_RUN=1.
+
+    Uncapping the filing path would hand a >65,536-char body to
+    ``gh issue create``, which rejects it and leaves the drift unfiled,
+    so the uncapped report is dry-run-only — exactly what the omission
+    notes instruct.
+    """
+    return (os.environ.get("DRIFT_NO_CAP") == "1"
+            and os.environ.get("DRIFT_DRY_RUN") == "1")
+
+
 def _cap_chars(entries: list[str], limit: int, note: str) -> str:
     """Join *entries*, keeping the newest leading ones under *limit* characters.
 
     Entries arrive in git-log order (newest first), so the cap drops the oldest
     records. *note* is rendered once at the end with the omitted count in
-    ``{omitted}``. DRIFT_NO_CAP=1 (local runs) skips the cap entirely.
+    ``{omitted}``. Local dry runs (DRIFT_NO_CAP=1) skip the cap entirely.
     """
-    if NO_CAP:
+    if _uncapped():
         return "\n".join(entries)
     kept: list[str] = []
     used = 0
@@ -485,7 +496,7 @@ def main() -> int:
         # sections at a line boundary but always keep the footer; DRIFT_NO_CAP=1
         # (local runs) skips the guard entirely.
         upstream_body = sections_text + "\n\n" + footer
-        if not NO_CAP and len(upstream_body) > MAX_BODY_CHARS:
+        if not _uncapped() and len(upstream_body) > MAX_BODY_CHARS:
             upstream_body = _fit_body(sections_text, footer)
     else:
         upstream_body = ""
