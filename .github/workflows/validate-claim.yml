@@ -166,9 +166,16 @@ jobs:
               path = os.environ.get("PR_BODY_FILE") or ""
               try:
                   with open(path, encoding="utf-8", errors="replace") as fh:
-                      return fh.read()
+                      raw = fh.read()
               except OSError:
                   return ""
+              # Drop HTML comments before judging. They are invisible to a human
+              # reviewer, so text inside them is not a claim the author made --
+              # and this repo's own PR template carries guidance comments
+              # containing "gates passed" and "all passed". Scanning them raw
+              # made every unfilled template look like a pass claim, which would
+              # block a contributor who filled in nothing at all.
+              return re.sub(r"<!--.*?-->", "", raw, flags=re.S)
 
           body = read_body()
           actual_exit = int(os.environ.get("ACTUAL_EXIT") or "1")
