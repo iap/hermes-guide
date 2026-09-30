@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.3.1
+version: 1.3.2
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -219,7 +219,7 @@ python = project_root / "venv" / "bin" / "python"  # Breaks on Windows, breaks o
 ### For documentation
 
 - **Do:** Reference `hermes config path` as the ground-truth command.
-- **Do:** Resolve via `project_venv_dir()` from `hermes_constants.py` (it picks `venv/` before `.venv/`).
+- **Do:** On a checkout that carries an in-tree venv, resolve via `project_venv_dir()` from `hermes_constants.py` (it picks `venv/` before `.venv/`). That resolver only looks in the project root and `sys.prefix`, so on a PM-era install it returns `None` — use `pm.environments.committed_venv()` (venv directory) or `project_python()` (interpreter executable) there instead.
 - **Do:** Mention both layouts — `venv/` (installers) and `.venv/` (uv).
 - **Don't:** Hardcode either name alone, or document an activation path without noting the other layout.
 
