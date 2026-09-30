@@ -20,11 +20,52 @@ import importlib
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 
 import yaml
 
 from . import constants
+
+HERMES_EXE = "hermes.exe" if sys.platform == "win32" else "hermes"
+
+# `_run` reports a missing binary as -127, not 127, and a candidate that exists
+# but cannot be launched as -126. These mean "this candidate is unusable", not
+# "Hermes said no", so they alone justify trying the next one. -1 stays out: it is
+# the generic unexpected failure, where we cannot tell a launch problem from a
+# real one, so it is reported rather than silently retried elsewhere.
+_NOT_EXECUTABLE = (-127, -126, 126, 127)
+
+# Errno values that mean "this path cannot be launched here", mirroring
+# _NOT_EXECUTABLE on the exception path. Anything outside this set is host or
+# process state (out of memory, fd exhaustion, interrupted, timed out), not a
+# verdict on the candidate, so it must NOT trigger a fallback to another install.
+#
+# ENOEXEC   wrong binary format, e.g. a console script whose shebang cannot resolve
+# ELOOP     symlink cycle
+# ENAMETOOLONG / ETXTBSY / E2BIG   path or argument too long, text file busy
+# EACCES / EPERM   present but not executable
+# EISDIR    the candidate is a directory
+# ENOTDIR   a component of the candidate path is a regular file (stale layout)
+# EFAULT    bad address; EINVAL   invalid argument, e.g. exec of a directory
+# ENODEV    the backing device disappeared
+import errno as _errno
+
+_CANDIDATE_UNUSABLE_ERRNOS = frozenset({
+    _errno.ENOEXEC,
+    _errno.ELOOP,
+    _errno.ENAMETOOLONG,
+    _errno.ETXTBSY,
+    _errno.E2BIG,
+    _errno.EACCES,
+    _errno.EPERM,
+    _errno.EISDIR,
+    _errno.ENOTDIR,
+    _errno.EFAULT,
+    _errno.EINVAL,
+    _errno.ENODEV,
+})
 
 
 def _run(cmd, timeout=20):
@@ -37,8 +78,57 @@ def _run(cmd, timeout=20):
         return out.returncode, out.stdout or "", out.stderr or ""
     except FileNotFoundError:
         return -127, "", f"{cmd[0]}: command not found on PATH"
+    except PermissionError as exc:
+        # The file exists but cannot be executed (EACCES/EPERM). That makes this
+        # candidate unusable, not the install broken, so it must be reported as
+        # such or the next candidate is never tried.
+        return -126, "", f"{cmd[0]}: permission denied ({exc.errno})"
+    except OSError as exc:
+        # Only errnos that mean THIS FILE cannot be launched qualify. Host-level
+        # pressure (ENOMEM, EMFILE, ENFILE, EAGAIN, ENOBUFS, EINTR) says nothing
+        # about the candidate: treating those as "unusable" would fall through to
+        # another install and report ITS config and hooks state as ours, which is
+        # exactly the misreport this resolver exists to prevent.
+        if exc.errno in _CANDIDATE_UNUSABLE_ERRNOS:
+            return -126, "", f"{cmd[0]}: cannot execute ({exc.errno}): {exc.strerror}"
+        return -1, "", repr(exc)
     except Exception as exc:
         return -1, "", repr(exc)
+
+
+def _hermes_candidates():
+    """Candidate `hermes` executables, most authoritative first.
+
+    The install executing this check is the one whose answers are true, so its
+    own entry point (beside `sys.executable`) outranks whatever `PATH` happens
+    to resolve. A second install earlier on `PATH` must not answer for us.
+    """
+    bindir = os.path.dirname(os.path.abspath(sys.executable))
+    on_path = shutil.which(HERMES_EXE)
+    return list(dict.fromkeys(
+        path for path in (os.path.join(bindir, HERMES_EXE) if bindir else None,
+                          os.path.abspath(on_path) if on_path else None)
+        if path
+    ))
+
+
+def _run_hermes(args, timeout=20):
+    """Run `hermes <args>` against the most authoritative executable that works.
+
+    Falls through candidates only on `_NOT_EXECUTABLE` (missing, or present but
+    not launchable); any other non-zero return is Hermes' own answer and is
+    reported as-is, so a real failure is never retried against a different
+    install until it looks green.
+    """
+    candidates = _hermes_candidates()
+    if not candidates:
+        return -127, "", f"{HERMES_EXE}: not found beside this interpreter or on PATH"
+    rc, stdout, stderr = -127, "", ""
+    for exe in candidates:
+        rc, stdout, stderr = _run([exe, *args], timeout=timeout)
+        if rc not in _NOT_EXECUTABLE:
+            return rc, stdout, stderr
+    return rc, stdout, stderr
 
 
 # Per-run memoization (cleared at the start of every run_all() so each
@@ -50,7 +140,7 @@ _cache: dict = {}
 
 def _hermes_config_path():
     if "config_path" not in _cache:
-        rc, stdout, _ = _run(["hermes", "config", "path"], timeout=15)
+        rc, stdout, _ = _run_hermes(["config", "path"], timeout=15)
         lines = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
         # Use stdout only (never stderr) — the path is printed to stdout.
         _cache["config_path"] = lines[-1] if rc == 0 and lines else None
@@ -522,7 +612,7 @@ def check_hooks():
     # `hermes hooks doctor` exits 0 even with problems, so we parse its output
     # (rc is not a reliable signal — it is 0 in all cases). Count the ✗/⚠ markers
     # emitted per hook rather than matching the summary line's exact wording.
-    rc, stdout, _ = _run(["hermes", "hooks", "doctor"], timeout=30)
+    rc, stdout, _ = _run_hermes(["hooks", "doctor"], timeout=30)
     if rc != 0 or not stdout.strip():
         return {
             "status": "unknown",

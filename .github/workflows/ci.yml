@@ -109,6 +109,14 @@ jobs:
       - name: Check-envelope regression test
         run: python tools/test_check_envelopes.py
 
+      - name: CLI resolution regression test
+        # Fabricates POSIX console scripts to stand in for hermes entry points,
+        # which needs a POSIX shell and real permission bits — same reason the
+        # probe above is Linux-gated. The hermes.exe branch of the resolver is
+        # left to the Windows-owned surface.
+        if: runner.os == 'Linux'
+        run: python tools/test_checks_cli_resolution.py
+
       - name: Skill version bump guard
         run: python tools/check_skill_version_bump.py
 
