@@ -111,12 +111,45 @@ jobs:
           # whether an actual failure should fail the job; a failure with no
           # matching claim is the contributor's business, not this check's.
 
+      # The `pull_request` payload is EMPTY for pull requests from forks, so
+      # `github.event.pull_request.body` is empty there and the judge below sees
+      # no claim at all -- which would let a fork PR write "All tests passed" in
+      # its description, fail the gates, and still come back `skip`. The read-only
+      # token a fork PR receives can still READ the pull request, so fall back to
+      # the API and read the body there. The body is passed through `env`, never
+      # interpolated into the script, so a crafted description cannot inject shell.
+      - name: Resolve the PR description
+        id: prbody
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+          EVENT_BODY: ${{ github.event.pull_request.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          body="$EVENT_BODY"
+          source="event"
+          if [ -z "$body" ]; then
+            # Fork PRs land here. If the number survived the empty payload and the
+            # API is reachable, this closes the bypass; if either fails we stay on
+            # the empty body, which degrades to the existing fail-open behaviour
+            # rather than inventing a verdict.
+            body=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .body 2>/dev/null || printf '')
+            source="api"
+          fi
+          {
+            echo 'body<<PRBODY_EOF'
+            printf '%s' "$body"
+            echo
+            echo 'PRBODY_EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "description source: $source (${#body} chars)"
+
       - name: Compare the actual result against the PR claim
         id: judge
         env:
           ACTUAL_EXIT: ${{ steps.actual.outputs.exit }}
           ACTUAL_SUMMARY: ${{ steps.actual.outputs.summary }}
-          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BODY: ${{ steps.prbody.outputs.body }}
         run: |
           set +e
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
