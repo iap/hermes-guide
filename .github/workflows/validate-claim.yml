@@ -13,9 +13,10 @@ name: validate-claim
 # SCOPE AND LIMITS (deliberate, and narrower than it looks)
 # - It verifies the claim's DIRECTION, not its completeness. "You said tests
 #   passed, tests failed" is caught. "You said nothing" is not an error.
-# - It only re-runs the hermetic tier (no network, no `hermes` install), so it is
-#   fast and cannot be rate-limited. It does NOT re-run the tap smoke test or
-#   citation clone. CI remains the real gate; this is an honesty check.
+# - It only re-runs the hermetic tier (one small pip install, no `hermes`
+#   install), so it is fast and cannot be rate-limited. It does NOT re-run the
+#   tap smoke test or citation clone. CI remains the real gate; this is an
+#   honesty check.
 # - It deliberately does NOT use pull_request_target, because it checks out the
 #   untrusted PR head and runs that code. pull_request_target would grant a
 #   write token and secrets to exactly the code we are trying to distrust. See
@@ -32,8 +33,6 @@ on:
 
 permissions:
   contents: read
-  # Needed only to post/update the sticky comment. No write to code, no secrets.
-  pull-requests: write
 
 concurrency:
   group: validate-claim-${{ github.event.pull_request.number || github.ref }}
@@ -44,8 +43,23 @@ jobs:
     # Linux-only: the hermetic tier is POSIX-oriented and the repo's own CI
     # already runs these legs on ubuntu. One runner is enough; this is a
     # re-check of fast tests, not a second full matrix.
+    #
+    # PERMISSIONS: deliberately `contents: read` ONLY. This job checks out the
+    # untrusted PR head and EXECUTES it (`tools/check_gates.py` is PR-authored
+    # code), so anything writable here is writable by the PR author. The
+    # `pull-requests: write` token lives only in the `report` job below, which
+    # never checks out or runs PR code. That separation is the whole reason
+    # this workflow does not need pull_request_target.
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      # Handed to `report`, which has the write token. Only plain strings cross
+      # this boundary -- never the PR body, which is attacker-controlled.
+      verdict: ${{ steps.judge.outputs.verdict }}
+      reason: ${{ steps.judge.outputs.reason }}
+      summary: ${{ steps.actual.outputs.summary }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,9 +72,18 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      # The hermetic tier: no network, no `hermes` binary, no upstream clone.
-      # These are exactly the checks a contributor is expected to have run, so
-      # they are the ones whose claim we can actually re-verify cheaply.
+      # The hermetic tier needs PyYAML and nothing else. `test_skill_counts.py`
+      # imports checks.py, which imports yaml; the other four gates are stdlib
+      # only. Unlike reusable-ci.yml this job deliberately does not install
+      # Hermes to pick the dependency up transitively, and a bare
+      # setup-python interpreter has no PyYAML -- so without this the tier
+      # dies on ModuleNotFoundError and reports 4/5 for the wrong reason.
+      - name: Install gate dependency
+        run: pip install pyyaml
+
+      # The hermetic tier: no `hermes` binary, no upstream clone, no rate-limited
+      # API. These are exactly the checks a contributor is expected to have run,
+      # so they are the ones whose claim we can actually re-verify cheaply.
       # Run ONCE: the exit code is captured, not allowed to abort the step, so the
       # comparison step can report a real failure instead of the job dying early
       # with no verdict.
@@ -101,20 +124,63 @@ jobs:
               print("reason=empty PR body - nothing claimed to verify")
               sys.exit(0)
 
-          claims_pass = bool(re.search(
+          # Phrasings actually used in real PR bodies, including the one on
+          # PR #121 ("all 18 skills carry a compliant footer"), so an
+          # over-precise regex cannot be used to dodge the check.
+          PASS = re.compile(
               r"all\s+(?:the\s+)?(?:tests?|checks?)\s+(?:have\s+)?passed"
               r"|tests?\s+passed"
               r"|all\s+passed"
               r"|gates?\s+(?:are\s+)?(?:green|passed|ok)"
-              # Phrasings actually used in real PR bodies, including the one on
-              # PR #121 ("all 18 skills carry a compliant footer"), so an
-              # over-precise regex cannot be used to dodge the check.
               r"|all\s+\d+\s+\w+(?:s)?\s+carry"
               r"|(?:had|has)\s+no\s+(?:errors?|failures?|violations?)"
               r"|clean\s+(?:compile|compilation|build|syntax)",
-              body, re.I))
+              re.I)
 
-          if not claims_pass:
+          # Sentence-level vetoes are too blunt if every failure word counts: a genuine
+          # pass claim followed by an unrelated caveat ("All tests passed, but CI
+          # has not run yet") was read as no claim at all, which lets anyone dodge
+          # the check by appending a clause. So split the signal by what each word
+          # actually asserts.
+          #
+          # NEGATOR  - states a stance about the claim. It only negates when it
+          #            PRECEDES the pass phrase, so "not all tests passed" is
+          #            rejected while a trailing caveat is not mistaken for one.
+          # OUTCOME  - states a result, so it vetoes wherever it appears,
+          #            including "15 of 16 tests passed, 1 failed".
+          #
+          # Concessive markers (but/yet/however) are deliberately in neither set:
+          # they only mattered when an outcome word followed, and OUTCOME already
+          # catches that. "except" is an OUTCOME because "all tests passed except
+          # one" is itself a partial result.
+          #
+          # A bare "no" is in neither set: it is the negator in "had no errors",
+          # which is itself a genuine pass claim. Only the no-form that negates a
+          # pass is spelled out.
+          NEGATOR = re.compile(
+              r"\b(?:not|never|cannot|unable)\b|n['’]t\b", re.I)
+          OUTCOME = re.compile(
+              r"\b(?:failed|failing|failure|fails|except|partial|remain(?:s|ed)?)\b"
+              r"|\bno\s+(?:tests?|checks?|gates?)\s+passed\b",
+              re.I)
+
+          def claims_pass(text):
+              # Blank lines and sentence/clause terminators delimit a claim.
+              # Commas are deliberately NOT a boundary: "15 of 16 tests passed,
+              # 1 failed" is one claim, and splitting on the comma would let the
+              # failing half hide behind a passing half.
+              for sentence in re.split(r"(?:\r?\n)+|(?<=[.;!?])\s+", text):
+                  found = PASS.search(sentence)
+                  if not found:
+                      continue
+                  if NEGATOR.search(sentence[:found.start()]):
+                      continue
+                  if OUTCOME.search(sentence):
+                      continue
+                  return True
+              return False
+
+          if not claims_pass(body):
               print("verdict=skip")
               print("reason=PR body makes no machine-checkable pass claim")
           elif actual_exit == 0:
@@ -141,9 +207,32 @@ jobs:
           echo "::error::to state the real outcome. See CONTRIBUTING.md."
           exit 1
 
-      # Sticky comment: update in place so a re-push does not spam the thread.
+  # Sticky comment: update in place so a re-push does not spam the thread.
+  #
+  # This is the ONLY job holding `pull-requests: write`, and it deliberately
+  # has NO checkout step: nothing from the PR is ever written to disk or
+  # executed here. It renders a fixed comment from three plain-string outputs.
+  # `always()` keeps the comment posting even when `verify` failed -- which is
+  # precisely the contradicted case, where the author most needs to be told.
+  report:
+    needs: verify
+    # `verdict != ''` is load-bearing, and `needs.verify.result` is deliberately
+    # NOT used here. If `verify` dies before the judge step, `outputs.verdict`
+    # is empty, which satisfies `!= 'skip'` and would post an `unknown` verdict
+    # for a run that never evaluated anything. Gating on `result == 'success'`
+    # would fix that, but the "Fail on a contradicted claim" step ends in
+    # `exit 1` by design -- so that gate would also suppress the comment for
+    # every genuinely contradicted PR, which is exactly the case that needs it.
+    # Test whether the judge actually ran, not whether the job passed.
+    if: always() && github.event_name == 'pull_request' && needs.verify.outputs.verdict != '' && needs.verify.outputs.verdict != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Issue-comment write is the only capability used; nothing here reads or
+      # checks out the repo, so `contents` is deliberately absent.
+      pull-requests: write
+    steps:
       - name: Report the verdict on the PR
-        if: always() && github.event_name == 'pull_request' && steps.judge.outputs.verdict != 'skip'
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
         with:
           script: |
@@ -179,6 +268,6 @@ jobs:
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
         env:
-          VERDICT: ${{ steps.judge.outputs.verdict }}
-          REASON: ${{ steps.judge.outputs.reason }}
-          ACTUAL_SUMMARY: ${{ steps.actual.outputs.summary }}
+          VERDICT: ${{ needs.verify.outputs.verdict }}
+          REASON: ${{ needs.verify.outputs.reason }}
+          ACTUAL_SUMMARY: ${{ needs.verify.outputs.summary }}
