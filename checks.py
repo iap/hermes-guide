@@ -37,6 +37,23 @@ HERMES_EXE = "hermes.exe" if sys.platform == "win32" else "hermes"
 # real one, so it is reported rather than silently retried elsewhere.
 _NOT_EXECUTABLE = (-127, -126, 126, 127)
 
+# Errno values that mean "this file cannot be launched here", mirroring
+# _NOT_EXECUTABLE on the exception path: ENOEXEC (wrong binary format, e.g. a
+# console script whose shebang cannot resolve), ELOOP (symlink cycle), ENAMETOOLONG,
+# ETXTBSY (text file busy), E2BIG, and EACCES/EPERM via PermissionError. Anything
+# outside this set is host or process state, not a verdict on the candidate.
+import errno as _errno
+
+_CANDIDATE_UNUSABLE_ERRNOS = frozenset({
+    _errno.ENOEXEC,
+    _errno.ELOOP,
+    _errno.ENAMETOOLONG,
+    _errno.ETXTBSY,
+    _errno.E2BIG,
+    _errno.EACCES,
+    _errno.EPERM,
+})
+
 
 def _run(cmd, timeout=20):
     """Run a subprocess; return (returncode, stdout, stderr) as separate strings."""
@@ -49,14 +66,19 @@ def _run(cmd, timeout=20):
     except FileNotFoundError:
         return -127, "", f"{cmd[0]}: command not found on PATH"
     except PermissionError as exc:
-        # The file exists but cannot be executed (EACCES). That makes this
+        # The file exists but cannot be executed (EACCES/EPERM). That makes this
         # candidate unusable, not the install broken, so it must be reported as
         # such or the next candidate is never tried.
         return -126, "", f"{cmd[0]}: permission denied ({exc.errno})"
     except OSError as exc:
-        # ELOOP, ENAMETOOLONG, ETXTBSY and friends are likewise launch failures,
-        # not Hermes' own answer. -126 is shell convention for "cannot execute".
-        return -126, "", f"{cmd[0]}: cannot execute ({exc.errno}): {exc.strerror}"
+        # Only errnos that mean THIS FILE cannot be launched qualify. Host-level
+        # pressure (ENOMEM, EMFILE, ENFILE, EAGAIN, ENOBUFS, EINTR) says nothing
+        # about the candidate: treating those as "unusable" would fall through to
+        # another install and report ITS config and hooks state as ours, which is
+        # exactly the misreport this resolver exists to prevent.
+        if exc.errno in _CANDIDATE_UNUSABLE_ERRNOS:
+            return -126, "", f"{cmd[0]}: cannot execute ({exc.errno}): {exc.strerror}"
+        return -1, "", repr(exc)
     except Exception as exc:
         return -1, "", repr(exc)
 
