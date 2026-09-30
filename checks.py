@@ -30,9 +30,12 @@ from . import constants
 
 HERMES_EXE = "hermes.exe" if sys.platform == "win32" else "hermes"
 
-# `_run` reports a missing binary as -127, not 127. These mean "this candidate is
-# unusable", not "Hermes said no", so they alone justify trying the next one.
-_NOT_EXECUTABLE = (-127, 126, 127)
+# `_run` reports a missing binary as -127, not 127, and a candidate that exists
+# but cannot be launched as -126. These mean "this candidate is unusable", not
+# "Hermes said no", so they alone justify trying the next one. -1 stays out: it is
+# the generic unexpected failure, where we cannot tell a launch problem from a
+# real one, so it is reported rather than silently retried elsewhere.
+_NOT_EXECUTABLE = (-127, -126, 126, 127)
 
 
 def _run(cmd, timeout=20):
@@ -45,6 +48,15 @@ def _run(cmd, timeout=20):
         return out.returncode, out.stdout or "", out.stderr or ""
     except FileNotFoundError:
         return -127, "", f"{cmd[0]}: command not found on PATH"
+    except PermissionError as exc:
+        # The file exists but cannot be executed (EACCES). That makes this
+        # candidate unusable, not the install broken, so it must be reported as
+        # such or the next candidate is never tried.
+        return -126, "", f"{cmd[0]}: permission denied ({exc.errno})"
+    except OSError as exc:
+        # ELOOP, ENAMETOOLONG, ETXTBSY and friends are likewise launch failures,
+        # not Hermes' own answer. -126 is shell convention for "cannot execute".
+        return -126, "", f"{cmd[0]}: cannot execute ({exc.errno}): {exc.strerror}"
     except Exception as exc:
         return -1, "", repr(exc)
 
@@ -68,9 +80,10 @@ def _hermes_candidates():
 def _run_hermes(args, timeout=20):
     """Run `hermes <args>` against the most authoritative executable that works.
 
-    Falls through candidates only on `_NOT_EXECUTABLE`; any other non-zero return
-    is Hermes' own answer and is reported as-is, so a real failure is never
-    retried against a different install until it looks green.
+    Falls through candidates only on `_NOT_EXECUTABLE` (missing, or present but
+    not launchable); any other non-zero return is Hermes' own answer and is
+    reported as-is, so a real failure is never retried against a different
+    install until it looks green.
     """
     candidates = _hermes_candidates()
     if not candidates:
