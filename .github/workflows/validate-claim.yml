@@ -25,6 +25,16 @@ name: validate-claim
 #   pull_request workflows on a fork, this may land at `action_required` and
 #   need a maintainer to approve it. That is the correct trade: read-only
 #   execution, no secrets, no write token.
+# - FORKS GET NO COMMENT, BY DESIGN. Two GitHub behaviours combine here. The
+#   `pull_request` payload is EMPTY for fork PRs, so the description has to be
+#   fetched through the API (the verify job does this). And `GITHUB_TOKEN` is
+#   downgraded to read-only for fork PRs regardless of the declared
+#   `pull-requests: write`, so the report job's comment step cannot succeed.
+#   A fork PR therefore gets its verdict re-run but never sees it posted. The
+#   alternative -- a `pull_request_target` job that comments -- would hand a
+#   write token to a workflow on a repository where outside contributors can
+#   open pull requests, which is a far worse trade than a missing comment on a
+#   check whose real output is in the Actions log either way.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
