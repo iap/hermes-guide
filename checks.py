@@ -37,11 +37,19 @@ HERMES_EXE = "hermes.exe" if sys.platform == "win32" else "hermes"
 # real one, so it is reported rather than silently retried elsewhere.
 _NOT_EXECUTABLE = (-127, -126, 126, 127)
 
-# Errno values that mean "this file cannot be launched here", mirroring
-# _NOT_EXECUTABLE on the exception path: ENOEXEC (wrong binary format, e.g. a
-# console script whose shebang cannot resolve), ELOOP (symlink cycle), ENAMETOOLONG,
-# ETXTBSY (text file busy), E2BIG, and EACCES/EPERM via PermissionError. Anything
-# outside this set is host or process state, not a verdict on the candidate.
+# Errno values that mean "this path cannot be launched here", mirroring
+# _NOT_EXECUTABLE on the exception path. Anything outside this set is host or
+# process state (out of memory, fd exhaustion, interrupted, timed out), not a
+# verdict on the candidate, so it must NOT trigger a fallback to another install.
+#
+# ENOEXEC   wrong binary format, e.g. a console script whose shebang cannot resolve
+# ELOOP     symlink cycle
+# ENAMETOOLONG / ETXTBSY / E2BIG   path or argument too long, text file busy
+# EACCES / EPERM   present but not executable
+# EISDIR    the candidate is a directory
+# ENOTDIR   a component of the candidate path is a regular file (stale layout)
+# EFAULT    bad address; EINVAL   invalid argument, e.g. exec of a directory
+# ENODEV    the backing device disappeared
 import errno as _errno
 
 _CANDIDATE_UNUSABLE_ERRNOS = frozenset({
@@ -52,6 +60,11 @@ _CANDIDATE_UNUSABLE_ERRNOS = frozenset({
     _errno.E2BIG,
     _errno.EACCES,
     _errno.EPERM,
+    _errno.EISDIR,
+    _errno.ENOTDIR,
+    _errno.EFAULT,
+    _errno.EINVAL,
+    _errno.ENODEV,
 })
 
 

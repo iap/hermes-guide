@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -57,6 +58,9 @@ def cleanup() -> None:
         shutil.rmtree(td, ignore_errors=True)
     _TEMP_DIRS.clear()
 
+
+BAD = "/bad/hermes"
+GOOD = "/good/hermes"
 
 checks = _load_checks()
 HERMES_EXE = checks.HERMES_EXE  # noqa: F821 — resolved from the plugin under test
@@ -189,6 +193,64 @@ def test_non_executable_candidate_falls_through():
               f"rc={rc} out={out.strip()!r}")
 
 
+def test_path_shape_errnos_fall_through():
+    """ENOTDIR/EISDIR/EINVAL must fall through; host pressure must not.
+
+    A candidate can be unusable because of its SHAPE rather than its
+    permissions: a path component that is a regular file (ENOTDIR), the
+    candidate itself being a directory (EISDIR), an invalid argument (EINVAL).
+    A shell reports 126 for "cannot execute" in all of these, so the resolver
+    must consult the next candidate.
+
+    These errnos cannot be produced reliably from a test - a symlink to a
+    regular file still yields EACCES, not ENOTDIR - so the OS boundary is
+    stubbed and the real `_run` / `_run_hermes` decide the outcome. What is
+    under test is the resolver's partition, against real errno values.
+    """
+    import errno as _errno
+
+    def _run_with_oserror(code, label):
+        """Resolve two candidates where the first raises OSError(code)."""
+        def _raise(cmd, *_a, **_k):
+            raise OSError(code, label)
+
+        real_run = checks._run
+
+        def _fake_run(cmd, timeout=20):
+            if cmd[0] == GOOD:
+                return 0, "PATH-FALLBACK\n", ""
+            return real_run(cmd, timeout=timeout)
+
+        with mock.patch.object(checks.subprocess, "run", _raise), \
+                mock.patch.object(checks, "_hermes_candidates",
+                                  lambda: [BAD, GOOD]), \
+                mock.patch.object(checks, "_run", _fake_run):
+            return checks._run_hermes(["config", "path"])
+
+    for label, code in (("EISDIR", _errno.EISDIR),
+                        ("ENOTDIR", _errno.ENOTDIR),
+                        ("EINVAL", _errno.EINVAL),
+                        ("EFAULT", _errno.EFAULT),
+                        ("ENODEV", _errno.ENODEV),
+                        ("EACCES", _errno.EACCES),
+                        ("EPERM", _errno.EPERM)):
+        rc, out, _ = _run_with_oserror(code, label)
+        check(f"{label} candidate falls through to next",
+              rc == 0 and "PATH-FALLBACK" in out, f"rc={rc} out={out.strip()!r}")
+
+    # Host pressure is not a verdict on the candidate: falling back there would
+    # report another install's config and hooks state as ours.
+    for label, code in (("ENOMEM", _errno.ENOMEM),
+                        ("EMFILE", _errno.EMFILE),
+                        ("ENFILE", _errno.ENFILE),
+                        ("EAGAIN", _errno.EAGAIN),
+                        ("ENOBUFS", _errno.ENOBUFS),
+                        ("EINTR", _errno.EINTR)):
+        rc, out, _ = _run_with_oserror(code, label)
+        check(f"{label} does not fall through (host state)",
+              rc == -1 and "PATH-FALLBACK" not in out, f"rc={rc} out={out.strip()!r}")
+
+
 def test_broken_shim_reproduces_126():
     """The real failure mode is exit 126 — assert it, so the test above is honest."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -274,6 +336,7 @@ def main():
     test_sibling_outranks_path()
     test_falls_through_broken_shim()
     test_non_executable_candidate_falls_through()
+    test_path_shape_errnos_fall_through()
     test_broken_shim_reproduces_126()
     test_real_failure_is_not_retried()
     test_path_only_still_resolves()
