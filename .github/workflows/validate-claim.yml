@@ -13,9 +13,10 @@ name: validate-claim
 # SCOPE AND LIMITS (deliberate, and narrower than it looks)
 # - It verifies the claim's DIRECTION, not its completeness. "You said tests
 #   passed, tests failed" is caught. "You said nothing" is not an error.
-# - It only re-runs the hermetic tier (no network, no `hermes` install), so it is
-#   fast and cannot be rate-limited. It does NOT re-run the tap smoke test or
-#   citation clone. CI remains the real gate; this is an honesty check.
+# - It only re-runs the hermetic tier (one small pip install, no `hermes`
+#   install), so it is fast and cannot be rate-limited. It does NOT re-run the
+#   tap smoke test or citation clone. CI remains the real gate; this is an
+#   honesty check.
 # - It deliberately does NOT use pull_request_target, because it checks out the
 #   untrusted PR head and runs that code. pull_request_target would grant a
 #   write token and secrets to exactly the code we are trying to distrust. See
@@ -71,9 +72,18 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      # The hermetic tier: no network, no `hermes` binary, no upstream clone.
-      # These are exactly the checks a contributor is expected to have run, so
-      # they are the ones whose claim we can actually re-verify cheaply.
+      # The hermetic tier needs PyYAML and nothing else. `test_skill_counts.py`
+      # imports checks.py, which imports yaml; the other four gates are stdlib
+      # only. Unlike reusable-ci.yml this job deliberately does not install
+      # Hermes to pick the dependency up transitively, and a bare
+      # setup-python interpreter has no PyYAML -- so without this the tier
+      # dies on ModuleNotFoundError and reports 4/5 for the wrong reason.
+      - name: Install gate dependency
+        run: pip install pyyaml
+
+      # The hermetic tier: no `hermes` binary, no upstream clone, no rate-limited
+      # API. These are exactly the checks a contributor is expected to have run,
+      # so they are the ones whose claim we can actually re-verify cheaply.
       # Run ONCE: the exit code is captured, not allowed to abort the step, so the
       # comparison step can report a real failure instead of the job dying early
       # with no verdict.
