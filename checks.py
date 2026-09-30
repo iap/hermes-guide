@@ -20,11 +20,19 @@ import importlib
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 
 import yaml
 
 from . import constants
+
+HERMES_EXE = "hermes.exe" if sys.platform == "win32" else "hermes"
+
+# `_run` reports a missing binary as -127, not 127. These mean "this candidate is
+# unusable", not "Hermes said no", so they alone justify trying the next one.
+_NOT_EXECUTABLE = (-127, 126, 127)
 
 
 def _run(cmd, timeout=20):
@@ -41,6 +49,40 @@ def _run(cmd, timeout=20):
         return -1, "", repr(exc)
 
 
+def _hermes_candidates():
+    """Candidate `hermes` executables, most authoritative first.
+
+    The install executing this check is the one whose answers are true, so its
+    own entry point (beside `sys.executable`) outranks whatever `PATH` happens
+    to resolve. A second install earlier on `PATH` must not answer for us.
+    """
+    bindir = os.path.dirname(os.path.abspath(sys.executable))
+    on_path = shutil.which(HERMES_EXE)
+    return list(dict.fromkeys(
+        path for path in (os.path.join(bindir, HERMES_EXE) if bindir else None,
+                          os.path.abspath(on_path) if on_path else None)
+        if path
+    ))
+
+
+def _run_hermes(args, timeout=20):
+    """Run `hermes <args>` against the most authoritative executable that works.
+
+    Falls through candidates only on `_NOT_EXECUTABLE`; any other non-zero return
+    is Hermes' own answer and is reported as-is, so a real failure is never
+    retried against a different install until it looks green.
+    """
+    candidates = _hermes_candidates()
+    if not candidates:
+        return -127, "", f"{HERMES_EXE}: not found beside this interpreter or on PATH"
+    rc, stdout, stderr = -127, "", ""
+    for exe in candidates:
+        rc, stdout, stderr = _run([exe, *args], timeout=timeout)
+        if rc not in _NOT_EXECUTABLE:
+            return rc, stdout, stderr
+    return rc, stdout, stderr
+
+
 # Per-run memoization (cleared at the start of every run_all() so each
 # invocation re-resolves fresh, but within one run the expensive resolutions —
 # the `hermes config path` subprocess, the config.yaml read, and the skills
@@ -50,7 +92,7 @@ _cache: dict = {}
 
 def _hermes_config_path():
     if "config_path" not in _cache:
-        rc, stdout, _ = _run(["hermes", "config", "path"], timeout=15)
+        rc, stdout, _ = _run_hermes(["config", "path"], timeout=15)
         lines = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
         # Use stdout only (never stderr) — the path is printed to stdout.
         _cache["config_path"] = lines[-1] if rc == 0 and lines else None
@@ -522,7 +564,7 @@ def check_hooks():
     # `hermes hooks doctor` exits 0 even with problems, so we parse its output
     # (rc is not a reliable signal — it is 0 in all cases). Count the ✗/⚠ markers
     # emitted per hook rather than matching the summary line's exact wording.
-    rc, stdout, _ = _run(["hermes", "hooks", "doctor"], timeout=30)
+    rc, stdout, _ = _run_hermes(["hooks", "doctor"], timeout=30)
     if rc != 0 or not stdout.strip():
         return {
             "status": "unknown",
