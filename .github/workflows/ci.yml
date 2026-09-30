@@ -49,6 +49,11 @@ jobs:
       # network legs are not useful there. Every PR and every merge_group run
       # gets the full gate.
       run-full-gate: ${{ github.event_name != 'push' }}
-    # A called workflow cannot escalate permissions beyond the caller's, so the
-    # caller's `contents: read` is the ceiling. Nothing here needs more.
-    secrets: inherit
+      # A called workflow cannot escalate permissions beyond the caller's, so the
+      # caller's `contents: read` is the ceiling. Nothing here needs more.
+      #
+      # `secrets: inherit` is deliberately NOT used. The called workflow reads no
+      # secret: the tap step's `GH_TOKEN: ${{ github.token }}` is supplied by the
+      # runner and is unaffected. Inheriting would hand every repository and
+      # organization secret to a workflow whose source a same-repository PR can
+      # change, so dropping the line costs nothing and removes that path.

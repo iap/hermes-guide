@@ -66,6 +66,13 @@ jobs:
           # The version-bump guard resolves a merge base against the base ref,
           # so a depth-1 checkout would make it silently skip.
           fetch-depth: 0
+          # Pin the verdict to the PR's own code. Without `ref` the checkout
+          # resolves `github.sha`, which on a `pull_request` event is the merge
+          # commit -- so a base that drifted after the PR opened could produce a
+          # verdict about code the author never touched. `merge_group` has no
+          # `pull_request` object and genuinely wants the merge ref, so the
+          # expression falls back to `github.sha` for it.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
