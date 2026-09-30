@@ -140,7 +140,7 @@ Rules of thumb:
 > **Don't guess hook event names**. The valid set lives in `hermes_cli/plugins.py:VALID_HOOKS` and grows across releases — verify against the installed source rather than a hardcoded count.
 
 > [!NOTE]
-> **Don't hardcode venv paths**. Hermes has a dual-venv layout: `venv/` (created by installers) and `.venv/` (uv's default) can coexist. Upstream's `project_venv_dir()` in `hermes_constants.py` resolves `venv` first — when both exist, `venv` wins. Resolve via `project_venv_dir()` / `venv_bin_dir()` from `hermes_constants.py`, or mirror that order; never assume either name. See the `diagnosing-path` skill for detection patterns, canonical resolution order, and cross-platform best practices.
+> **Don't hardcode venv paths**. Older checkouts carry a dual-venv layout: `venv/` (pre-PM installers) and `.venv/` (uv's default) can coexist, and upstream's `project_venv_dir()` in `hermes_constants.py` resolves `venv` first — when both exist, `venv` wins. **PM-era installs (2026-09 onward) have no in-tree venv at all**: PM keeps the dependency environment under `$HERMES_HOME/installs/<key>/environments/` and the shared runtime store in `$HERMES_HOME/tools`, and it deletes a legacy in-tree venv once a generation is committed. Resolve via `project_venv_dir()` / `venv_bin_dir()` from `hermes_constants.py`, or mirror that order; never assume either name. See the `diagnosing-path` skill for detection patterns, canonical resolution order, and cross-platform best practices.
 
 ### Testing and validation
 

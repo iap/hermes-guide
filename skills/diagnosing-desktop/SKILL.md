@@ -32,7 +32,7 @@ The Electron main process resolves the hermes backend in order (`apps/desktop/el
 
 1. `HERMES_DESKTOP_HERMES_ROOT` (explicit override; must be a Hermes source root)
 2. Dev source checkout (unpackaged runs)
-3. The **active install root**: `%LOCALAPPDATA%\hermes\hermes-agent` (Windows) / `~/.hermes/hermes-agent` — spawns `python -m hermes_cli.main`
+3. The **active install root**: `%LOCALAPPDATA%\hermes\hermes-agent` (Windows) / `~/.hermes/hermes-agent` — the install's shims run a durable launcher bound to the PM-store Python (`python -m hermes_cli.main` is the legacy pre-PM shape)
 4. A `hermes` binary on `PATH` (skipped when `HERMES_DESKTOP_IGNORE_EXISTING=1`; `HERMES_DESKTOP_HERMES` overrides the command — NixOS uses this)
 5. pip-installed `hermes_cli` via system Python
 6. `bootstrap-needed` sentinel → the app drives the first-run installer

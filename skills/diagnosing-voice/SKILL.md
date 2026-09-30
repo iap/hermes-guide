@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -61,7 +61,7 @@ tts:
 5. **Voice bubbles showing as files on Telegram** — ffmpeg not installed (required for audio format conversion). → Install ffmpeg with your system package manager (e.g. `apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS); restart gateway.
 6. **Response latency too high** — (a) STT model too large; (b) TTS provider slow; (c) network latency. → Start with local STT + Edge TTS (no-key baseline); switch one stage at a time; check network.
 7. **STT returns garbage text** — (a) wrong language hint; (b) model too small; (c) audio quality poor. → Set `stt.local.language` to ISO-639-1 code; upgrade model; improve audio input.
-8. **Voice mode crashes on start** — (a) missing Python dependencies (`pip install hermes-agent[voice]`); (b) audio device busy. → Install voice extras; check for other apps using the microphone.
+8. **Voice mode crashes on start** — (a) missing Python dependencies — on a PM-era install the environment is managed, so re-run the installer or `hermes update` rather than pip-installing into it (PyPI is stale and no longer a supported route); on an older checkout `pip install hermes-agent[voice]` still applies; (b) audio device busy. → Install voice extras; check for other apps using the microphone.
 
 ## 4. Localization workflow
 
