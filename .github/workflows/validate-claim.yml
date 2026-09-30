@@ -146,10 +146,16 @@ jobs:
           # Note the deliberate absence of a bare "no" token: it is the negator
           # in "had no errors", which is itself a genuine pass claim. Removing
           # it keeps that phrase detectable while "not"/"failed" still reject.
+          #
+          # The one `no` form that DOES negate a pass is "no tests/checks/gates
+          # passed", which reads as a pass claim because it contains the
+          # "tests passed" substring. Spell that out instead of reinstating the
+          # bare token, so "mypy had no errors" stays detectable.
           FAILURE = re.compile(
               r"\b(?:not|never|cannot|unable|failed|failing|failure|fails"
               r"|except|however|but|yet|partial|remain(?:s|ed)?)\b"
-              r"|n['’]t\b",
+              r"|n['’]t\b"
+              r"|\bno\s+(?:tests?|checks?|gates?)\s+passed\b",
               re.I)
 
           def claims_pass(text):
@@ -198,7 +204,15 @@ jobs:
   # precisely the contradicted case, where the author most needs to be told.
   report:
     needs: verify
-    if: always() && github.event_name == 'pull_request' && needs.verify.outputs.verdict != 'skip'
+    # `verdict != ''` is load-bearing, and `needs.verify.result` is deliberately
+    # NOT used here. If `verify` dies before the judge step, `outputs.verdict`
+    # is empty, which satisfies `!= 'skip'` and would post an `unknown` verdict
+    # for a run that never evaluated anything. Gating on `result == 'success'`
+    # would fix that, but the "Fail on a contradicted claim" step ends in
+    # `exit 1` by design -- so that gate would also suppress the comment for
+    # every genuinely contradicted PR, which is exactly the case that needs it.
+    # Test whether the judge actually ran, not whether the job passed.
+    if: always() && github.event_name == 'pull_request' && needs.verify.outputs.verdict != '' && needs.verify.outputs.verdict != 'skip'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
