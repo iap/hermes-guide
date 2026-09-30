@@ -21,9 +21,17 @@ REPO = Path(__file__).resolve().parent.parent
 failures = []
 
 
+_TEMP_DIRS: list[Path] = []
+
+
 def _load_checks():
-    """Import the plugin package under a shim (hyphenated dir can't import)."""
+    """Import the plugin package under a shim (hyphenated dir can't import).
+
+    The copy has to outlive this call, so the directory is tracked and removed by
+    cleanup() at the end of main() rather than by a context manager here.
+    """
     td = Path(tempfile.mkdtemp())
+    _TEMP_DIRS.append(td)
     pkg = td / "hermes_guide"
     pkg.mkdir()
     for name in ("__init__.py", "checks.py", "constants.py"):
@@ -32,6 +40,22 @@ def _load_checks():
     import hermes_guide.checks as checks_mod  # noqa: E402
 
     return checks_mod
+
+
+def cleanup() -> None:
+    """Drop the shim directory and its sys.path entry.
+
+    Without this, every run leaves a copied package behind in TMPDIR and leaves
+    the shim importable, which changes resolution for anything imported later in
+    the same process.
+    """
+    for td in _TEMP_DIRS:
+        try:
+            sys.path.remove(str(td))
+        except ValueError:
+            pass
+        shutil.rmtree(td, ignore_errors=True)
+    _TEMP_DIRS.clear()
 
 
 checks = _load_checks()
@@ -181,7 +205,11 @@ def test_no_candidate_reports_clearly():
         os.makedirs(elsewhere)
         exe = _fake_interpreter(elsewhere)
 
+        # `checks.shutil` IS the stdlib shutil module, so patching `which` on it
+        # affects every other caller in this process. Restore it, not just the
+        # locals, or later tests get None from every shutil.which().
         original_exe, original_path = sys.executable, os.environ["PATH"]
+        original_which = shutil.which
         try:
             sys.executable = exe
             os.environ["PATH"] = elsewhere
@@ -189,6 +217,7 @@ def test_no_candidate_reports_clearly():
             rc, out, err = checks._run_hermes(["config", "path"])
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
+            checks.shutil.which = original_which
 
         check("no candidate is a clear error",
               rc == -127 and HERMES_EXE in err, f"rc={rc} err={err!r}")
@@ -201,6 +230,8 @@ def main():
     test_real_failure_is_not_retried()
     test_path_only_still_resolves()
     test_no_candidate_reports_clearly()
+
+    cleanup()
 
     print()
     if failures:
