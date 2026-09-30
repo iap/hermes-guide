@@ -81,14 +81,14 @@ Each installed skill is also available as a slash command (e.g. `/hermes-configu
 
 | Skill | Purpose |
 |---|---|
-| `installing-hermes` | Install routes — install.sh/Desktop/Nix/PyPI, what each creates on disk, config bootstrap, update/uninstall, and the gotchas (npm postinstall hang, NixOS specifics) |
+| `installing-hermes` | Install routes — install.sh/Desktop/Nix, what each creates on disk, config bootstrap, update/uninstall, and the gotchas (PM-era runtime layout, NixOS specifics) |
 | `hermes-configuration-guide` | The map: resolving `$HERMES_HOME`, where each surface is configured, instruction files, orphaned/legacy settings, and routing to the diagnostic skills |
 | `diagnosing-mcp` | MCP servers that won't connect, expose no tools, fail OAuth, or ignore `mcp_servers:` config |
 | `diagnosing-skills` | Skills not discovered, shadowed, hidden by platform/toolset conditions, or stuck "user-modified" |
 | `diagnosing-commands` | Missing or overridden slash commands — skills-as-commands, bundles, plugin commands, per-platform permissions |
 | `diagnosing-hooks` | Hooks that don't fire — the four hook systems, shell-hook consent, `hermes hooks doctor` |
 | `diagnosing-plugins` | Plugins that don't load — the `plugins.enabled` gate, capability consent, discovery locations |
-| `diagnosing-path` | Path issues — the dual-venv layout (.venv/venv), detection, canonical resolution order, cross-platform best practices |
+| `diagnosing-path` | Path issues — the dual-venv layout (.venv/venv) on older checkouts, the PM-era no-in-tree-venv case, detection, canonical resolution order, cross-platform best practices |
 | `diagnosing-cli-tui` | CLI/TUI issues on native Windows — rendering artifacts, themes, busy indicators, mouse modes, encoding, launch/resume |
 | `diagnosing-auth` | Hub-install auth failures — dead/shadowing `GITHUB_TOKEN` in the profile `.env`, `gh-cli` fallback, 401 vs anonymous probes, rate-limit verdicts |
 | `diagnosing-memory` | Memory problems — built-in `MEMORY.md`/`USER.md` stores, external providers configured but silently unavailable, missing plugins/keys, char-limit and approval gates |

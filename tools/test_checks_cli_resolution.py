@@ -1,0 +1,356 @@
+"""Behavioral coverage for `hermes` executable resolution in checks.py.
+
+The gates in `tools/` read text, so a resolution bug can ship with every gate
+green. These tests build real stub executables and assert which one actually
+answered — the failure mode where `PATH` names an install whose console script
+cannot exec itself.
+
+Run: python tools/test_checks_cli_resolution.py
+"""
+
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+from unittest import mock
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+
+failures = []
+
+
+_TEMP_DIRS: list[Path] = []
+
+
+def _load_checks():
+    """Import the plugin package under a shim (hyphenated dir can't import).
+
+    The copy has to outlive this call, so the directory is tracked and removed by
+    cleanup() at the end of main() rather than by a context manager here.
+    """
+    td = Path(tempfile.mkdtemp())
+    _TEMP_DIRS.append(td)
+    pkg = td / "hermes_guide"
+    pkg.mkdir()
+    for name in ("__init__.py", "checks.py", "constants.py"):
+        shutil.copy(REPO / name, pkg / name)
+    sys.path.insert(0, str(td))
+    import hermes_guide.checks as checks_mod  # noqa: E402
+
+    return checks_mod
+
+
+def cleanup() -> None:
+    """Drop the shim directory and its sys.path entry.
+
+    Without this, every run leaves a copied package behind in TMPDIR and leaves
+    the shim importable, which changes resolution for anything imported later in
+    the same process.
+    """
+    for td in _TEMP_DIRS:
+        try:
+            sys.path.remove(str(td))
+        except ValueError:
+            pass
+        shutil.rmtree(td, ignore_errors=True)
+    _TEMP_DIRS.clear()
+
+
+BAD = "/bad/hermes"
+GOOD = "/good/hermes"
+
+checks = _load_checks()
+HERMES_EXE = checks.HERMES_EXE  # noqa: F821 — resolved from the plugin under test
+
+
+def check(name, condition, detail=""):
+    if condition:
+        print(f"PASS  {name}")
+    else:
+        print(f"FAIL  {name}{f'  [{detail}]' if detail else ''}")
+        failures.append(name)
+
+
+def _stub(directory, name, body):
+    """Write an executable stub script and return its path."""
+    path = os.path.join(directory, name)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(body)
+    os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    return path
+
+
+def _bad_shim(directory, name):
+    """A console script whose interpreter line cannot resolve, like a GNU
+    `realpath -- "$0"` shim on a host that has no GNU realpath.
+
+    Host-dependent by nature: where GNU realpath *is* present the shim resolves
+    and runs. Use `_unusable` for behaviour; keep this for the premise check.
+    """
+    return _stub(
+        directory,
+        name,
+        "#!/bin/sh\n"
+        "'''exec' \"$(dirname -- \"$(realpath -- \"$0\")\")\"/'python3' \"$0\" \"$@\"\n"
+        "' '''\n",
+    )
+
+
+def _unusable(directory, name, code=126):
+    """A candidate that cannot answer, identically on every host.
+
+    Behavioural tests need the resolver to reject a candidate, not the host to
+    lack `realpath`. Both codes a POSIX shell uses for "I could not launch this"
+    are exercised.
+    """
+    return _stub(directory, name,
+                 f"#!/bin/sh\necho 'cannot exec' >&2\nexit {code}\n")
+
+
+def _working(directory, name, marker):
+    return _stub(directory, name, f"#!/bin/sh\necho {marker}\nexit 0\n")
+
+
+def _fake_interpreter(directory):
+    """A stand-in for sys.executable living in `directory`."""
+    return _working(directory, "python3", "PY-OK")
+
+
+def test_sibling_outranks_path():
+    """The install running the check answers, not one earlier on PATH."""
+    with tempfile.TemporaryDirectory() as tmp:
+        sibling, other = os.path.join(tmp, "sibling"), os.path.join(tmp, "other")
+        os.makedirs(sibling), os.makedirs(other)
+        exe = _fake_interpreter(sibling)
+        _working(sibling, HERMES_EXE, "SIBLING")
+        _working(other, HERMES_EXE, "FROMPATH")
+
+        original_exe, original_path = sys.executable, os.environ["PATH"]
+        try:
+            sys.executable = exe
+            os.environ["PATH"] = other + os.pathsep + original_path
+            rc, out, _ = checks._run_hermes(["config", "path"])
+        finally:
+            sys.executable, os.environ["PATH"] = original_exe, original_path
+
+        check("sibling executable outranks PATH", rc == 0 and "SIBLING" in out,
+              f"rc={rc} out={out.strip()!r}")
+
+
+def test_falls_through_broken_shim():
+    """An unusable entry point falls through to the next candidate.
+
+    Both codes a shell uses for "could not launch this" are covered, so the
+    resolver is exercised rather than whatever the host lacks.
+    """
+    for code in (126, 127):
+        with tempfile.TemporaryDirectory() as tmp:
+            sibling, other = os.path.join(tmp, "sibling"), os.path.join(tmp, "other")
+            os.makedirs(sibling), os.makedirs(other)
+            exe = _fake_interpreter(sibling)
+            _unusable(sibling, HERMES_EXE, code)
+            _working(other, HERMES_EXE, "FALLBACK")
+
+            original_exe, original_path = sys.executable, os.environ["PATH"]
+            try:
+                sys.executable = exe
+                os.environ["PATH"] = other + os.pathsep + original_path
+                rc, out, _ = checks._run_hermes(["config", "path"])
+            finally:
+                sys.executable, os.environ["PATH"] = original_exe, original_path
+
+            check(f"unusable candidate (rc={code}) falls through to next",
+                  rc == 0 and "FALLBACK" in out, f"rc={rc} out={out.strip()!r}")
+
+
+def test_non_executable_candidate_falls_through():
+    """A candidate that exists but cannot be launched is unusable, not an answer.
+
+    This is the EACCES branch of the errno whitelist: without it a permissions
+    problem reports unknown instead of consulting the next install.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        sibling, other = os.path.join(tmp, "sibling"), os.path.join(tmp, "other")
+        os.makedirs(sibling), os.makedirs(other)
+        exe = _fake_interpreter(sibling)
+        blocked = _working(sibling, HERMES_EXE, "SHOULD-NOT-RUN")
+        os.chmod(blocked, 0o644)  # readable, not executable
+        _working(other, HERMES_EXE, "PERM-FALLBACK")
+
+        original_exe, original_path = sys.executable, os.environ["PATH"]
+        try:
+            sys.executable = exe
+            os.environ["PATH"] = other + os.pathsep + original_path
+            rc, out, _ = checks._run_hermes(["config", "path"])
+        finally:
+            sys.executable, os.environ["PATH"] = original_exe, original_path
+
+        check("non-executable candidate falls through",
+              rc == 0 and "PERM-FALLBACK" in out and "SHOULD-NOT-RUN" not in out,
+              f"rc={rc} out={out.strip()!r}")
+
+
+def test_path_shape_errnos_fall_through():
+    """ENOTDIR/EISDIR/EINVAL must fall through; host pressure must not.
+
+    A candidate can be unusable because of its SHAPE rather than its
+    permissions: a path component that is a regular file (ENOTDIR), the
+    candidate itself being a directory (EISDIR), an invalid argument (EINVAL).
+    A shell reports 126 for "cannot execute" in all of these, so the resolver
+    must consult the next candidate.
+
+    These errnos cannot be produced reliably from a test - a symlink to a
+    regular file still yields EACCES, not ENOTDIR - so the OS boundary is
+    stubbed and the real `_run` / `_run_hermes` decide the outcome. What is
+    under test is the resolver's partition, against real errno values.
+    """
+    import errno as _errno
+
+    def _run_with_oserror(code, label):
+        """Resolve two candidates where the first raises OSError(code)."""
+        def _raise(cmd, *_a, **_k):
+            raise OSError(code, label)
+
+        real_run = checks._run
+
+        def _fake_run(cmd, timeout=20):
+            if cmd[0] == GOOD:
+                return 0, "PATH-FALLBACK\n", ""
+            return real_run(cmd, timeout=timeout)
+
+        with mock.patch.object(checks.subprocess, "run", _raise), \
+                mock.patch.object(checks, "_hermes_candidates",
+                                  lambda: [BAD, GOOD]), \
+                mock.patch.object(checks, "_run", _fake_run):
+            return checks._run_hermes(["config", "path"])
+
+    for label, code in (("EISDIR", _errno.EISDIR),
+                        ("ENOTDIR", _errno.ENOTDIR),
+                        ("EINVAL", _errno.EINVAL),
+                        ("EFAULT", _errno.EFAULT),
+                        ("ENODEV", _errno.ENODEV),
+                        ("EACCES", _errno.EACCES),
+                        ("EPERM", _errno.EPERM)):
+        rc, out, _ = _run_with_oserror(code, label)
+        check(f"{label} candidate falls through to next",
+              rc == 0 and "PATH-FALLBACK" in out, f"rc={rc} out={out.strip()!r}")
+
+    # Host pressure is not a verdict on the candidate: falling back there would
+    # report another install's config and hooks state as ours.
+    for label, code in (("ENOMEM", _errno.ENOMEM),
+                        ("EMFILE", _errno.EMFILE),
+                        ("ENFILE", _errno.ENFILE),
+                        ("EAGAIN", _errno.EAGAIN),
+                        ("ENOBUFS", _errno.ENOBUFS),
+                        ("EINTR", _errno.EINTR)):
+        rc, out, _ = _run_with_oserror(code, label)
+        check(f"{label} does not fall through (host state)",
+              rc == -1 and "PATH-FALLBACK" not in out, f"rc={rc} out={out.strip()!r}")
+
+
+def test_broken_shim_reproduces_126():
+    """The real failure mode is exit 126 — assert it, so the test above is honest."""
+    with tempfile.TemporaryDirectory() as tmp:
+        broken = _bad_shim(tmp, HERMES_EXE)
+        proc = subprocess.run([broken], capture_output=True, text=True, timeout=30)
+        if sys.platform == "darwin" and os.environ.get("PATH", "").find("realpath") < 0:
+            check("broken shim exits 126", proc.returncode == 126, f"rc={proc.returncode}")
+        else:
+            print(f"SKIP  broken shim exits 126 (host provides realpath; rc={proc.returncode})")
+
+
+def test_real_failure_is_not_retried():
+    """A non-zero return from a working executable is Hermes' answer, not a
+    reason to try the next install until something looks green."""
+    with tempfile.TemporaryDirectory() as tmp:
+        sibling, other = os.path.join(tmp, "sibling"), os.path.join(tmp, "other")
+        os.makedirs(sibling), os.makedirs(other)
+        exe = _fake_interpreter(sibling)
+        _stub(sibling, HERMES_EXE, "#!/bin/sh\necho 'REAL-FAILURE'\nexit 3\n")
+        _working(other, HERMES_EXE, "OTHER-INSTALL")
+
+        original_exe, original_path = sys.executable, os.environ["PATH"]
+        try:
+            sys.executable = exe
+            os.environ["PATH"] = other + os.pathsep + original_path
+            rc, out, _ = checks._run_hermes(["config", "path"])
+        finally:
+            sys.executable, os.environ["PATH"] = original_exe, original_path
+
+        check("real failure is reported, not retried",
+              rc == 3 and "REAL-FAILURE" in out and "OTHER-INSTALL" not in out,
+              f"rc={rc} out={out.strip()!r}")
+
+
+def test_path_only_still_resolves():
+    """A host with no sibling entry point still works via PATH."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lonely = os.path.join(tmp, "lonely")
+        elsewhere = os.path.join(tmp, "elsewhere")
+        os.makedirs(lonely)
+        os.makedirs(elsewhere)
+        exe = _fake_interpreter(elsewhere)
+        _working(lonely, HERMES_EXE, "PATHONLY")
+
+        original_exe, original_path = sys.executable, os.environ["PATH"]
+        try:
+            sys.executable = exe
+            os.environ["PATH"] = lonely + os.pathsep + original_path
+            rc, out, _ = checks._run_hermes(["config", "path"])
+        finally:
+            sys.executable, os.environ["PATH"] = original_exe, original_path
+
+        check("PATH-only resolution still works", rc == 0 and "PATHONLY" in out,
+              f"rc={rc} out={out.strip()!r}")
+
+
+def test_no_candidate_reports_clearly():
+    """No executable anywhere is a stated error, not a silent empty answer."""
+    with tempfile.TemporaryDirectory() as tmp:
+        elsewhere = os.path.join(tmp, "elsewhere")
+        os.makedirs(elsewhere)
+        exe = _fake_interpreter(elsewhere)
+
+        # `checks.shutil` IS the stdlib shutil module, so patching `which` on it
+        # affects every other caller in this process. Restore it, not just the
+        # locals, or later tests get None from every shutil.which().
+        original_exe, original_path = sys.executable, os.environ["PATH"]
+        original_which = shutil.which
+        try:
+            sys.executable = exe
+            os.environ["PATH"] = elsewhere
+            checks.shutil.which = lambda *_a, **_k: None
+            rc, out, err = checks._run_hermes(["config", "path"])
+        finally:
+            sys.executable, os.environ["PATH"] = original_exe, original_path
+            checks.shutil.which = original_which
+
+        check("no candidate is a clear error",
+              rc == -127 and HERMES_EXE in err, f"rc={rc} err={err!r}")
+
+
+def main():
+    test_sibling_outranks_path()
+    test_falls_through_broken_shim()
+    test_non_executable_candidate_falls_through()
+    test_path_shape_errnos_fall_through()
+    test_broken_shim_reproduces_126()
+    test_real_failure_is_not_retried()
+    test_path_only_still_resolves()
+    test_no_candidate_reports_clearly()
+
+    cleanup()
+
+    print()
+    if failures:
+        print(f"FAILED {len(failures)}: {', '.join(failures)}")
+        return 1
+    print("OK: hermes executable resolution behaves as specified")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

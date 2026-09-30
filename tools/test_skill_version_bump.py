@@ -5,7 +5,10 @@ The guard's failure modes are easy to silently break in both directions:
 
   - An unresolvable ref used to SKIP the check (exit 0) — the guard then
     enforced nothing while CI stayed green. Now it must exit 2.
-  - A changed SKILL.md without a bump must exit 1; with a bump, exit 0.
+  - A version that went DOWN must exit 1 — equality-only comparison let a
+    real downgrade (1.1.2 -> 1.1.0, PR #114) pass review.
+  - A multi-digit upgrade (1.9.0 -> 1.10.0) must exit 0 — ordering is
+    numeric per component, not string comparison.
 
 Builds a throwaway git repo per case and runs the guard as a subprocess,
 asserting exit codes — no network, no GitHub, no state outside the fixture.
@@ -26,6 +29,9 @@ GUARD = REPO / "tools" / "check_skill_version_bump.py"
 
 SKILL_V1 = "---\nname: sample\ndescription: sample skill\nversion: 1.0.0\n---\nbody\n"
 SKILL_V2 = SKILL_V1.replace("version: 1.0.0", "version: 1.0.1")
+SKILL_DOWN = SKILL_V1.replace("version: 1.0.0", "version: 0.9.0")
+SKILL_19 = SKILL_V1.replace("version: 1.0.0", "version: 1.9.0")
+SKILL_110 = SKILL_V1.replace("version: 1.0.0", "version: 1.10.0")
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -42,23 +48,25 @@ def _git(repo: Path, *args: str) -> None:
     )
 
 
-def _make_repo(bump_version: bool) -> Path:
-    """Repo with one committed SKILL.md (1.0.0) and a modified working tree."""
+def _make_repo_at(committed: str, working: str) -> Path:
+    """Repo with one committed SKILL.md and a modified working tree."""
     repo = Path(tempfile.mkdtemp())
     (repo / ".gitconfig-global").touch()  # isolate from the developer's git config
     skill = repo / "skills" / "sample"
     skill.mkdir(parents=True)
-    (skill / "SKILL.md").write_text(SKILL_V1, encoding="utf-8")
+    (skill / "SKILL.md").write_text(committed, encoding="utf-8")
     _git(repo, "init", "-q")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "init")
-    if bump_version:
-        (skill / "SKILL.md").write_text(SKILL_V2, encoding="utf-8")
-    else:
-        (skill / "SKILL.md").write_text(
-            SKILL_V1.replace("body", "changed body"), encoding="utf-8"
-        )
+    (skill / "SKILL.md").write_text(working, encoding="utf-8")
     return repo
+
+
+def _make_repo(bump_version: bool) -> Path:
+    """Repo with one committed SKILL.md (1.0.0) and a modified working tree."""
+    if bump_version:
+        return _make_repo_at(SKILL_V1, SKILL_V2)
+    return _make_repo_at(SKILL_V1, SKILL_V1.replace("body", "changed body"))
 
 
 def _run_guard(repo: Path, *args: str) -> int:
@@ -100,8 +108,28 @@ def case_unbumped_fails() -> None:
     assert rc == 1, f"unbumped change: expected exit 1, got {rc}"
 
 
+def case_downgrade_fails() -> None:
+    """A changed SKILL.md whose version DECREASED -> exit 1 (was: exit 0).
+
+    A downgrade is as silent as no bump: users who already installed the
+    skill never reinstall. Only equality was compared, so a real downgrade
+    (diagnosing-plugins 1.1.2 -> 1.1.0 on PR #114) passed review.
+    """
+    repo = _make_repo_at(SKILL_V2, SKILL_DOWN + "extra\n")
+    rc = _run_guard(repo, "HEAD")
+    assert rc == 1, f"downgrade: expected exit 1, got {rc}"
+
+
+def case_multidigit_upgrade_ok() -> None:
+    """1.9.0 -> 1.10.0 is an increase (component order) -> exit 0."""
+    repo = _make_repo_at(SKILL_19, SKILL_110 + "extra\n")
+    rc = _run_guard(repo, "HEAD")
+    assert rc == 0, f"multi-digit upgrade: expected exit 0, got {rc}"
+
+
 def main() -> int:
-    cases = [case_bogus_ref, case_default_ref_missing, case_bumped_ok, case_unbumped_fails]
+    cases = [case_bogus_ref, case_default_ref_missing, case_bumped_ok, case_unbumped_fails,
+             case_downgrade_fails, case_multidigit_upgrade_ok]
     failed = 0
     for case in cases:
         try:

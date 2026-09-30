@@ -4,7 +4,9 @@
 The weekly drift watch was hardened to (a) scan upstream git history at
 commit granularity, (b) use exact-title dedup so a substring-matching issue
 cannot suppress a real alert, (c) fail the run on transport failures, and
-(d) block filing when the CI-pin freshness check cannot run. Each case below
+(d) block filing when the CI-pin freshness check cannot run, and (e) cap
+the report sections without losing the footer, and (f) retry transient
+ls-remote failures — exit codes and transport exceptions — in the pin check. Each case below
 pins one of those behaviors.
 
 No network, no `gh` CLI, no upstream clone: git/gh are monkeypatched.
@@ -15,6 +17,7 @@ Run: python3 tools/test_upstream_drift_hygiene.py
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -82,7 +85,8 @@ def case_upstream_drift_filed(mod):
          mock.patch.object(mod, "verify_ci_pin", fake_verify_ci_pin), \
          mock.patch.object(mod, "_file_issue", fake_file_issue), \
          mock.patch.object(mod, "_list_open_issues", fake_list_open_issues), \
-         mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "iap/hermes-guide"}):
+         mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "iap/hermes-guide",
+                                        "DRIFT_DRY_RUN": "", "DRIFT_NO_CAP": ""}):
         rc = mod.main()
 
     assert rc == 0, f"main returned {rc}, expected 0"
@@ -206,6 +210,128 @@ def case_pin_failure_fails_closed(mod):
     print("OK: pin-check failure blocks issue filing")
 
 
+def case_cap_keeps_newest_drops_oldest(mod):
+    """_cap_chars keeps the newest entries and an exact omitted count."""
+    entries = [f"- `{i:07d}` 2026-09-01 subject {i}" for i in range(200)]
+    with mock.patch.object(mod, "_uncapped", return_value=False):
+        out = mod._cap_chars(entries, 500, "- ... and {omitted} older commits omitted.")
+    kept = [ln for ln in out.splitlines() if ln.startswith("- `")]
+    assert kept, "nothing kept"
+    assert kept[0] == entries[0], "newest entry must be kept first"
+    assert kept == entries[:len(kept)], "kept entries must be the newest, in order"
+    assert f"and {len(entries) - len(kept)} older commits omitted" in out, out[-160:]
+    print("OK: cap keeps newest entries with an exact omitted count")
+
+
+def case_uncapped_returns_everything(mod):
+    """DRIFT_NO_CAP=1 returns the full list (what the omission notes promise)."""
+    entries = [f"- `{i:07d}` 2026-09-01 subject {i}" for i in range(200)]
+    with mock.patch.object(mod, "_uncapped", return_value=True):
+        out = mod._cap_chars(entries, 500, "- ... and {omitted} older commits omitted.")
+    assert out == "\n".join(entries)
+    assert "omitted" not in out
+    print("OK: uncapped mode returns the full list")
+
+
+def case_fit_body_keeps_footer(mod):
+    """The size guard trims sections at line boundaries but never the footer."""
+    sections = "\n".join(f"- `{i:07d}` 2026-09-01 a very long subject line to reach the limit" for i in range(4000))
+    footer = "Compare: https://example.test/compare/aaaa...bbbb\n\nReview the changes."
+    out = mod._fit_body(sections, footer)
+    assert len(out) <= mod.MAX_BODY_CHARS, f"body {len(out)} > {mod.MAX_BODY_CHARS}"
+    assert out.endswith(footer), "footer must survive the guard"
+    assert "truncated to fit GitHub's issue-body limit" in out
+    assert "DRIFT_NO_CAP=1" in out
+    cut = out[: out.index("\n\n[Body truncated")]
+    assert cut.endswith("limit"), f"cut mid-line: {cut[-60:]!r}"
+    print("OK: size guard keeps the footer and points at the uncapped run")
+
+
+def case_uncapped_requires_dry_run(mod):
+    """DRIFT_NO_CAP=1 alone must not uncap anything (filing stays bounded)."""
+    with mock.patch.dict("os.environ", {}, clear=True):
+        assert mod._uncapped() is False, "no flags: capped"
+        os.environ["DRIFT_NO_CAP"] = "1"
+        assert mod._uncapped() is False, "uncapped without dry-run"
+        os.environ["DRIFT_DRY_RUN"] = "1"
+        assert mod._uncapped() is True, "both flags should enable uncapped"
+    print("OK: uncapped mode requires DRIFT_DRY_RUN=1 (filing path stays bounded)")
+
+
+def case_ls_remote_retries_transient_failures(mod):
+    """A flaky ls-remote is retried; persistent failure still fails closed."""
+    class _Proc:
+        def __init__(self, returncode, stdout=""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = ""
+
+    calls = []
+
+    def flaky(cmd, **kwargs):
+        calls.append(cmd)
+        if len(calls) < 3:
+            return _Proc(128)
+        return _Proc(0, "abc123\trefs/tags/v2026.9.24\n")
+
+    proc = mod._run_ls_remote(runner=flaky, delays=(0.0, 0.0, 0.0))
+    assert proc is not None, "third attempt should succeed"
+    assert len(calls) == 3, f"expected 3 attempts, got {len(calls)}"
+
+    calls.clear()
+
+    def always_failing(cmd, **kwargs):
+        calls.append(cmd)
+        return _Proc(128)
+
+    assert mod._run_ls_remote(runner=always_failing, delays=(0.0, 0.0, 0.0)) is None
+    assert len(calls) == 3, f"must stop after the last attempt, got {len(calls)}"
+
+    with mock.patch.object(
+        mod, "_run_ls_remote",
+        return_value=_Proc(0, "abc\trefs/tags/v2026.9.21^{}\nxyz\trefs/tags/v2026.9.24\n"),
+    ):
+        assert mod.latest_upstream_tag() == "v2026.9.24", "max tag must win; ^{} peeled ref skipped"
+    with mock.patch.object(mod, "_run_ls_remote", return_value=None):
+        assert mod.latest_upstream_tag() is None, "persistent failure -> None (fail closed)"
+    print("OK: ls-remote retries transient failures, still fails closed")
+
+
+def case_ls_remote_retries_transport_exceptions(mod):
+    """Timeout/OSError transport failures retry the same way exit codes do.
+
+    Greptile P2 on PR #124: the retry also handles TimeoutExpired/OSError,
+    so a regression there must fail this suite, not just the weekly run.
+    """
+    class _Proc:
+        def __init__(self, returncode, stdout=""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = ""
+
+    calls = []
+
+    def timeout_then_success(cmd, **kwargs):
+        calls.append(cmd)
+        if len(calls) < 2:
+            raise subprocess.TimeoutExpired(cmd, 60)
+        return _Proc(0, "abc123\trefs/tags/v2026.9.24\n")
+
+    proc = mod._run_ls_remote(runner=timeout_then_success, delays=(0.0, 0.0, 0.0))
+    assert proc is not None, "a timeout on the first attempt must be retried"
+    assert len(calls) == 2, f"expected 2 attempts, got {len(calls)}"
+
+    calls.clear()
+
+    def os_error_forever(cmd, **kwargs):
+        calls.append(cmd)
+        raise OSError("network unreachable")
+
+    assert mod._run_ls_remote(runner=os_error_forever, delays=(0.0, 0.0, 0.0)) is None
+    assert len(calls) == 3, f"persistent transport exceptions must stop after the last attempt, got {len(calls)}"
+    print("OK: ls-remote retries TimeoutExpired/OSError and still fails closed")
+
+
 def main() -> int:
     mod = _load_module()
     failures: list[str] = []
@@ -216,6 +342,12 @@ def main() -> int:
         case_file_issue_skips_when_open,
         case_git_log_parsing_robust,
         case_pin_failure_fails_closed,
+        case_cap_keeps_newest_drops_oldest,
+        case_uncapped_returns_everything,
+        case_fit_body_keeps_footer,
+        case_uncapped_requires_dry_run,
+        case_ls_remote_retries_transient_failures,
+        case_ls_remote_retries_transport_exceptions,
     ):
         try:
             case(mod)
@@ -225,7 +357,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 6 upstream-drift hygiene case(s) passed")
+    print("\nOK: 12 upstream-drift hygiene case(s) passed")
     return 0
 
 

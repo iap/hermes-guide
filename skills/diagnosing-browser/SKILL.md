@@ -1,7 +1,7 @@
 ---
 name: diagnosing-browser
 description: Diagnose Hermes browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating, and browser tool errors.
-version: 1.0.1
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, browser, cdp, playwright, troubleshooting]
@@ -42,8 +42,8 @@ browser:
 
 1. **Browser not connecting** — (a) browser not started with `--remote-debugging-port=9222`; (b) port 9222 not open; (c) wrong endpoint URL. → Launch browser with `--remote-debugging-port=9222 --user-data-dir=$HOME/.hermes/chrome-debug`; verify port is open (`curl http://127.0.0.1:9222/json/version`); check endpoint in config.yaml.
 2. **Chrome 144+ CDP tools fail despite successful connect** — known issue (#12912): Chrome 144+ built-in Remote debugging reports success but CDP tools fail. → Downgrade Chrome to <144 or use `--remote-debugging-port` flag explicitly; check `hermes_cli/browser_connect.py` for endpoint normalization.
-3. **Playwright not found** — (a) Playwright not installed; (b) browser binaries not downloaded. → Run `pip install playwright && playwright install chromium`; verify with `python -c "from playwright.sync_api import sync_playwright; print('ok')"`.
-4. **agent-browser gating blocks CDP** — known issue (#15952): `check_fn` requires agent-browser even when CDP endpoint is configured. → Install agent-browser (`pip install agent-browser`) or use `/browser connect` directly.
+3. **Playwright not found** — (a) Playwright not installed; (b) browser binaries not downloaded. → On a PM-era install run `hermes pm install playwright` (these components are PM-managed opt-outs; a bare `pip install` targets your shell's Python, not Hermes's); on an older checkout `pip install playwright && playwright install chromium`; verify through Hermes's own interpreter, not the shell's — `python -c "import playwright"` can report the module missing even after `hermes pm install playwright` succeeded, sending you back to a repair you already did (there is no `python` shim on a PM-era install). Use `hermes doctor` or check the committed environment directly.
+4. **agent-browser gating blocks CDP** — known issue (#15952): `check_fn` requires agent-browser even when CDP endpoint is configured. → Install agent-browser — `hermes pm install agent-browser` on a PM-era install, `pip install agent-browser` on an older checkout or use `/browser connect` directly.
 5. **Browser tools return empty or timeout** — (a) browser crashed or closed; (b) page not loaded; (c) selector not found. → Check `/browser status`; verify page loaded; use `browser_snapshot` to inspect DOM.
 6. **Camofox backend unsupported** — Camofox is REST-only, no CDP surface. → Switch to CDP or Playwright backend.
 7. **Browser profile conflicts** — multiple Hermes instances using same user-data-dir. → Use separate `user_data_dir` per profile; close other browser instances.

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -39,7 +39,7 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 ## 3. Pitfalls (symptom → cause → fix)
 
 1. **Server not listed at all** — YAML syntax error in `config.yaml` drops servers (or the whole file), `enabled: false` skips the server entirely, or the entry was **simply never added**. → **Permanent:** validate YAML, check the entry exists under `mcp_servers:`, set `enabled: true` or remove the field. **Temporary:** `/reload-mcp` picks up a corrected config without restarting the session.
-2. **`command not found` / spawn ENOENT** — `command` is not on PATH. On Windows point at the `.cmd`/`.exe` or use an absolute path; verify with `node --version` / `npx --version` in the same shell Hermes uses.
+2. **`command not found` / spawn ENOENT** — `command` is not on PATH. On Windows point at the `.cmd`/`.exe` or use an absolute path; check the PATH the server will actually be spawned with. Note that Hermes's own JS runs on the PM-managed Node, not a system Node, so `node --version` in your shell does not describe the interpreter Hermes uses — it only tells you what a server you launch with a bare `node` would get.
 3. **Tools missing** — a `tools.include`/`exclude` filter removed them (include wins), or the server session lacks the capability (resource/prompt wrappers only register when the server supports them), or the server failed to connect so nothing registered. → Run `hermes mcp configure <name>`; check status in `hermes mcp`.
 4. **OAuth never completes** — (a) config edited inside a running session: the version-dependent auto-reload window can interrupt the browser flow → run `hermes mcp login <name>` from a fresh terminal; (b) headless/remote host → use paste-back of the redirect URL, SSH port-forward, or `oauth.redirect_uri` (`tools/mcp_oauth.py`, verified); (c) WAF 403s loopback redirects → check the redirect-host knob **in your version** (`oauth.redirect_host` is not present in `tools/mcp_oauth*.py` at current main — verify before relying on it).
 5. **OAuth login "works" but tool calls time out** — the provider rejects dynamic client registration (Google Drive, Atlassian): `tools/list` succeeds unauthenticated, so login looks fine but no token lands. → Create an OAuth client in the provider console and set `oauth.client_id` / `oauth.client_secret`, then `hermes mcp login <name>`.
