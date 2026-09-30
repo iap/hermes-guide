@@ -137,24 +137,30 @@ jobs:
               r"|clean\s+(?:compile|compilation|build|syntax)",
               re.I)
 
-          # A bare regex search also matches a pass phrase INSIDE its own
-          # negation -- "Not all tests passed" contains "all tests passed" --
-          # which turned an honest failure report into a pass claim and could
-          # then fail this job. So judge one SENTENCE at a time and only accept
-          # a pass phrase whose own sentence carries no failure signal.
+          # Sentence-level vetoes are too blunt if every failure word counts: a genuine
+          # pass claim followed by an unrelated caveat ("All tests passed, but CI
+          # has not run yet") was read as no claim at all, which lets anyone dodge
+          # the check by appending a clause. So split the signal by what each word
+          # actually asserts.
           #
-          # Note the deliberate absence of a bare "no" token: it is the negator
-          # in "had no errors", which is itself a genuine pass claim. Removing
-          # it keeps that phrase detectable while "not"/"failed" still reject.
+          # NEGATOR  - states a stance about the claim. It only negates when it
+          #            PRECEDES the pass phrase, so "not all tests passed" is
+          #            rejected while a trailing caveat is not mistaken for one.
+          # OUTCOME  - states a result, so it vetoes wherever it appears,
+          #            including "15 of 16 tests passed, 1 failed".
           #
-          # The one `no` form that DOES negate a pass is "no tests/checks/gates
-          # passed", which reads as a pass claim because it contains the
-          # "tests passed" substring. Spell that out instead of reinstating the
-          # bare token, so "mypy had no errors" stays detectable.
-          FAILURE = re.compile(
-              r"\b(?:not|never|cannot|unable|failed|failing|failure|fails"
-              r"|except|however|but|yet|partial|remain(?:s|ed)?)\b"
-              r"|n['’]t\b"
+          # Concessive markers (but/yet/however) are deliberately in neither set:
+          # they only mattered when an outcome word followed, and OUTCOME already
+          # catches that. "except" is an OUTCOME because "all tests passed except
+          # one" is itself a partial result.
+          #
+          # A bare "no" is in neither set: it is the negator in "had no errors",
+          # which is itself a genuine pass claim. Only the no-form that negates a
+          # pass is spelled out.
+          NEGATOR = re.compile(
+              r"\b(?:not|never|cannot|unable)\b|n['’]t\b", re.I)
+          OUTCOME = re.compile(
+              r"\b(?:failed|failing|failure|fails|except|partial|remain(?:s|ed)?)\b"
               r"|\bno\s+(?:tests?|checks?|gates?)\s+passed\b",
               re.I)
 
@@ -164,8 +170,14 @@ jobs:
               # 1 failed" is one claim, and splitting on the comma would let the
               # failing half hide behind a passing half.
               for sentence in re.split(r"(?:\r?\n)+|(?<=[.;!?])\s+", text):
-                  if PASS.search(sentence) and not FAILURE.search(sentence):
-                      return True
+                  found = PASS.search(sentence)
+                  if not found:
+                      continue
+                  if NEGATOR.search(sentence[:found.start()]):
+                      continue
+                  if OUTCOME.search(sentence):
+                      continue
+                  return True
               return False
 
           if not claims_pass(body):
