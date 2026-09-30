@@ -81,7 +81,11 @@ def _stub(directory, name, body):
 
 def _bad_shim(directory, name):
     """A console script whose interpreter line cannot resolve, like a GNU
-    `realpath -- "$0"` shim on a host that has no GNU realpath."""
+    `realpath -- "$0"` shim on a host that has no GNU realpath.
+
+    Host-dependent by nature: where GNU realpath *is* present the shim resolves
+    and runs. Use `_unusable` for behaviour; keep this for the premise check.
+    """
     return _stub(
         directory,
         name,
@@ -89,6 +93,17 @@ def _bad_shim(directory, name):
         "'''exec' \"$(dirname -- \"$(realpath -- \"$0\")\")\"/'python3' \"$0\" \"$@\"\n"
         "' '''\n",
     )
+
+
+def _unusable(directory, name, code=126):
+    """A candidate that cannot answer, identically on every host.
+
+    Behavioural tests need the resolver to reject a candidate, not the host to
+    lack `realpath`. Both codes a POSIX shell uses for "I could not launch this"
+    are exercised.
+    """
+    return _stub(directory, name,
+                 f"#!/bin/sh\necho 'cannot exec' >&2\nexit {code}\n")
 
 
 def _working(directory, name, marker):
@@ -122,13 +137,44 @@ def test_sibling_outranks_path():
 
 
 def test_falls_through_broken_shim():
-    """An unusable entry point falls through to the next candidate."""
+    """An unusable entry point falls through to the next candidate.
+
+    Both codes a shell uses for "could not launch this" are covered, so the
+    resolver is exercised rather than whatever the host lacks.
+    """
+    for code in (126, 127):
+        with tempfile.TemporaryDirectory() as tmp:
+            sibling, other = os.path.join(tmp, "sibling"), os.path.join(tmp, "other")
+            os.makedirs(sibling), os.makedirs(other)
+            exe = _fake_interpreter(sibling)
+            _unusable(sibling, HERMES_EXE, code)
+            _working(other, HERMES_EXE, "FALLBACK")
+
+            original_exe, original_path = sys.executable, os.environ["PATH"]
+            try:
+                sys.executable = exe
+                os.environ["PATH"] = other + os.pathsep + original_path
+                rc, out, _ = checks._run_hermes(["config", "path"])
+            finally:
+                sys.executable, os.environ["PATH"] = original_exe, original_path
+
+            check(f"unusable candidate (rc={code}) falls through to next",
+                  rc == 0 and "FALLBACK" in out, f"rc={rc} out={out.strip()!r}")
+
+
+def test_non_executable_candidate_falls_through():
+    """A candidate that exists but cannot be launched is unusable, not an answer.
+
+    This is the EACCES branch of the errno whitelist: without it a permissions
+    problem reports unknown instead of consulting the next install.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         sibling, other = os.path.join(tmp, "sibling"), os.path.join(tmp, "other")
         os.makedirs(sibling), os.makedirs(other)
         exe = _fake_interpreter(sibling)
-        _bad_shim(sibling, HERMES_EXE)
-        _working(other, HERMES_EXE, "FALLBACK")
+        blocked = _working(sibling, HERMES_EXE, "SHOULD-NOT-RUN")
+        os.chmod(blocked, 0o644)  # readable, not executable
+        _working(other, HERMES_EXE, "PERM-FALLBACK")
 
         original_exe, original_path = sys.executable, os.environ["PATH"]
         try:
@@ -138,8 +184,9 @@ def test_falls_through_broken_shim():
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
 
-        check("broken shim falls through to next candidate",
-              rc == 0 and "FALLBACK" in out, f"rc={rc} out={out.strip()!r}")
+        check("non-executable candidate falls through",
+              rc == 0 and "PERM-FALLBACK" in out and "SHOULD-NOT-RUN" not in out,
+              f"rc={rc} out={out.strip()!r}")
 
 
 def test_broken_shim_reproduces_126():
@@ -226,6 +273,7 @@ def test_no_candidate_reports_clearly():
 def main():
     test_sibling_outranks_path()
     test_falls_through_broken_shim()
+    test_non_executable_candidate_falls_through()
     test_broken_shim_reproduces_126()
     test_real_failure_is_not_retried()
     test_path_only_still_resolves()
