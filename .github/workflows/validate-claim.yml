@@ -32,8 +32,6 @@ on:
 
 permissions:
   contents: read
-  # Needed only to post/update the sticky comment. No write to code, no secrets.
-  pull-requests: write
 
 concurrency:
   group: validate-claim-${{ github.event.pull_request.number || github.ref }}
@@ -44,8 +42,23 @@ jobs:
     # Linux-only: the hermetic tier is POSIX-oriented and the repo's own CI
     # already runs these legs on ubuntu. One runner is enough; this is a
     # re-check of fast tests, not a second full matrix.
+    #
+    # PERMISSIONS: deliberately `contents: read` ONLY. This job checks out the
+    # untrusted PR head and EXECUTES it (`tools/check_gates.py` is PR-authored
+    # code), so anything writable here is writable by the PR author. The
+    # `pull-requests: write` token lives only in the `report` job below, which
+    # never checks out or runs PR code. That separation is the whole reason
+    # this workflow does not need pull_request_target.
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      # Handed to `report`, which has the write token. Only plain strings cross
+      # this boundary -- never the PR body, which is attacker-controlled.
+      verdict: ${{ steps.judge.outputs.verdict }}
+      reason: ${{ steps.judge.outputs.reason }}
+      summary: ${{ steps.actual.outputs.summary }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -101,20 +114,45 @@ jobs:
               print("reason=empty PR body - nothing claimed to verify")
               sys.exit(0)
 
-          claims_pass = bool(re.search(
+          # Phrasings actually used in real PR bodies, including the one on
+          # PR #121 ("all 18 skills carry a compliant footer"), so an
+          # over-precise regex cannot be used to dodge the check.
+          PASS = re.compile(
               r"all\s+(?:the\s+)?(?:tests?|checks?)\s+(?:have\s+)?passed"
               r"|tests?\s+passed"
               r"|all\s+passed"
               r"|gates?\s+(?:are\s+)?(?:green|passed|ok)"
-              # Phrasings actually used in real PR bodies, including the one on
-              # PR #121 ("all 18 skills carry a compliant footer"), so an
-              # over-precise regex cannot be used to dodge the check.
               r"|all\s+\d+\s+\w+(?:s)?\s+carry"
               r"|(?:had|has)\s+no\s+(?:errors?|failures?|violations?)"
               r"|clean\s+(?:compile|compilation|build|syntax)",
-              body, re.I))
+              re.I)
 
-          if not claims_pass:
+          # A bare regex search also matches a pass phrase INSIDE its own
+          # negation -- "Not all tests passed" contains "all tests passed" --
+          # which turned an honest failure report into a pass claim and could
+          # then fail this job. So judge one SENTENCE at a time and only accept
+          # a pass phrase whose own sentence carries no failure signal.
+          #
+          # Note the deliberate absence of a bare "no" token: it is the negator
+          # in "had no errors", which is itself a genuine pass claim. Removing
+          # it keeps that phrase detectable while "not"/"failed" still reject.
+          FAILURE = re.compile(
+              r"\b(?:not|never|cannot|unable|failed|failing|failure|fails"
+              r"|except|however|but|yet|partial|remain(?:s|ed)?)\b"
+              r"|n['’]t\b",
+              re.I)
+
+          def claims_pass(text):
+              # Blank lines and sentence/clause terminators delimit a claim.
+              # Commas are deliberately NOT a boundary: "15 of 16 tests passed,
+              # 1 failed" is one claim, and splitting on the comma would let the
+              # failing half hide behind a passing half.
+              for sentence in re.split(r"(?:\r?\n)+|(?<=[.;!?])\s+", text):
+                  if PASS.search(sentence) and not FAILURE.search(sentence):
+                      return True
+              return False
+
+          if not claims_pass(body):
               print("verdict=skip")
               print("reason=PR body makes no machine-checkable pass claim")
           elif actual_exit == 0:
@@ -141,9 +179,24 @@ jobs:
           echo "::error::to state the real outcome. See CONTRIBUTING.md."
           exit 1
 
-      # Sticky comment: update in place so a re-push does not spam the thread.
+  # Sticky comment: update in place so a re-push does not spam the thread.
+  #
+  # This is the ONLY job holding `pull-requests: write`, and it deliberately
+  # has NO checkout step: nothing from the PR is ever written to disk or
+  # executed here. It renders a fixed comment from three plain-string outputs.
+  # `always()` keeps the comment posting even when `verify` failed -- which is
+  # precisely the contradicted case, where the author most needs to be told.
+  report:
+    needs: verify
+    if: always() && github.event_name == 'pull_request' && needs.verify.outputs.verdict != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Issue-comment write is the only capability used; nothing here reads or
+      # checks out the repo, so `contents` is deliberately absent.
+      pull-requests: write
+    steps:
       - name: Report the verdict on the PR
-        if: always() && github.event_name == 'pull_request' && steps.judge.outputs.verdict != 'skip'
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
         with:
           script: |
@@ -179,6 +232,6 @@ jobs:
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
         env:
-          VERDICT: ${{ steps.judge.outputs.verdict }}
-          REASON: ${{ steps.judge.outputs.reason }}
-          ACTUAL_SUMMARY: ${{ steps.actual.outputs.summary }}
+          VERDICT: ${{ needs.verify.outputs.verdict }}
+          REASON: ${{ needs.verify.outputs.reason }}
+          ACTUAL_SUMMARY: ${{ needs.verify.outputs.summary }}
