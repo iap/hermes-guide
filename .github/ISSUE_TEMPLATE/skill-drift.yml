@@ -35,7 +35,7 @@ body:
     attributes:
       label: Hermes version / commit
       description: "`hermes --version`, or the git SHA you verified against"
-      placeholder: "v2026.8.31"
+      placeholder: "v2026.9.24"
     validations:
       required: true
   - type: textarea
