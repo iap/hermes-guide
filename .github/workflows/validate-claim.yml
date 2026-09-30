@@ -125,6 +125,12 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
           EVENT_BODY: ${{ github.event.pull_request.body }}
           REPO: ${{ github.repository }}
+          # The body reaches the judge as a FILE, not a GITHUB_OUTPUT block. A
+          # multiline output delimiter is only safe while it cannot occur in the
+          # value, and a PR description is arbitrary user text -- one containing a
+          # line matching the delimiter would truncate the claim. A file has no
+          # such constraint.
+          BODY_FILE: ${{ runner.temp }}/pr-body.txt
         run: |
           body="$EVENT_BODY"
           source="event"
@@ -136,12 +142,9 @@ jobs:
             body=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .body 2>/dev/null || printf '')
             source="api"
           fi
-          {
-            echo 'body<<PRBODY_EOF'
-            printf '%s' "$body"
-            echo
-            echo 'PRBODY_EOF'
-          } >> "$GITHUB_OUTPUT"
+          printf '%s' "$body" > "$BODY_FILE"
+          echo "path=$BODY_FILE" >> "$GITHUB_OUTPUT"
+          echo "chars=${#body}" >> "$GITHUB_OUTPUT"
           echo "description source: $source (${#body} chars)"
 
       - name: Compare the actual result against the PR claim
@@ -149,13 +152,25 @@ jobs:
         env:
           ACTUAL_EXIT: ${{ steps.actual.outputs.exit }}
           ACTUAL_SUMMARY: ${{ steps.actual.outputs.summary }}
-          PR_BODY: ${{ steps.prbody.outputs.body }}
+          PR_BODY_FILE: ${{ steps.prbody.outputs.path }}
         run: |
           set +e
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import os, re, sys
 
-          body = os.environ.get("PR_BODY") or ""
+          def read_body():
+              # Read from the file the resolver step wrote, so an arbitrary
+              # description cannot be truncated by a GITHUB_OUTPUT delimiter.
+              # An absent or unreadable path degrades to no claim, which is the
+              # pre-existing fail-open behaviour rather than a wrong verdict.
+              path = os.environ.get("PR_BODY_FILE") or ""
+              try:
+                  with open(path, encoding="utf-8", errors="replace") as fh:
+                      return fh.read()
+              except OSError:
+                  return ""
+
+          body = read_body()
           actual_exit = int(os.environ.get("ACTUAL_EXIT") or "1")
           summary = os.environ.get("ACTUAL_SUMMARY") or ""
           # A merge_group ref has no PR body to audit; nothing to contradict.
@@ -171,7 +186,7 @@ jobs:
               r"all\s+(?:the\s+)?(?:tests?|checks?)\s+(?:have\s+)?passed"
               r"|tests?\s+passed"
               r"|all\s+passed"
-              r"|gates?\s+(?:are\s+)?(?:green|passed|ok)"
+              r"|gates?(?:\(s\))?\s+(?:are\s+)?(?:green|passed|ok)"
               r"|all\s+\d+\s+\w+(?:s)?\s+carry"
               r"|(?:had|has)\s+no\s+(?:errors?|failures?|violations?)"
               r"|clean\s+(?:compile|compilation|build|syntax)",
