@@ -5,7 +5,8 @@ The weekly drift watch was hardened to (a) scan upstream git history at
 commit granularity, (b) use exact-title dedup so a substring-matching issue
 cannot suppress a real alert, (c) fail the run on transport failures, and
 (d) block filing when the CI-pin freshness check cannot run, and (e) cap
-the report sections without losing the footer. Each case below
+the report sections without losing the footer, and (f) retry transient
+ls-remote failures — exit codes and transport exceptions — in the pin check. Each case below
 pins one of those behaviors.
 
 No network, no `gh` CLI, no upstream clone: git/gh are monkeypatched.
@@ -257,6 +258,80 @@ def case_uncapped_requires_dry_run(mod):
     print("OK: uncapped mode requires DRIFT_DRY_RUN=1 (filing path stays bounded)")
 
 
+def case_ls_remote_retries_transient_failures(mod):
+    """A flaky ls-remote is retried; persistent failure still fails closed."""
+    class _Proc:
+        def __init__(self, returncode, stdout=""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = ""
+
+    calls = []
+
+    def flaky(cmd, **kwargs):
+        calls.append(cmd)
+        if len(calls) < 3:
+            return _Proc(128)
+        return _Proc(0, "abc123\trefs/tags/v2026.9.24\n")
+
+    proc = mod._run_ls_remote(runner=flaky, delays=(0.0, 0.0, 0.0))
+    assert proc is not None, "third attempt should succeed"
+    assert len(calls) == 3, f"expected 3 attempts, got {len(calls)}"
+
+    calls.clear()
+
+    def always_failing(cmd, **kwargs):
+        calls.append(cmd)
+        return _Proc(128)
+
+    assert mod._run_ls_remote(runner=always_failing, delays=(0.0, 0.0, 0.0)) is None
+    assert len(calls) == 3, f"must stop after the last attempt, got {len(calls)}"
+
+    with mock.patch.object(
+        mod, "_run_ls_remote",
+        return_value=_Proc(0, "abc\trefs/tags/v2026.9.21^{}\nxyz\trefs/tags/v2026.9.24\n"),
+    ):
+        assert mod.latest_upstream_tag() == "v2026.9.24", "max tag must win; ^{} peeled ref skipped"
+    with mock.patch.object(mod, "_run_ls_remote", return_value=None):
+        assert mod.latest_upstream_tag() is None, "persistent failure -> None (fail closed)"
+    print("OK: ls-remote retries transient failures, still fails closed")
+
+
+def case_ls_remote_retries_transport_exceptions(mod):
+    """Timeout/OSError transport failures retry the same way exit codes do.
+
+    Greptile P2 on PR #124: the retry also handles TimeoutExpired/OSError,
+    so a regression there must fail this suite, not just the weekly run.
+    """
+    class _Proc:
+        def __init__(self, returncode, stdout=""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = ""
+
+    calls = []
+
+    def timeout_then_success(cmd, **kwargs):
+        calls.append(cmd)
+        if len(calls) < 2:
+            raise subprocess.TimeoutExpired(cmd, 60)
+        return _Proc(0, "abc123\trefs/tags/v2026.9.24\n")
+
+    proc = mod._run_ls_remote(runner=timeout_then_success, delays=(0.0, 0.0, 0.0))
+    assert proc is not None, "a timeout on the first attempt must be retried"
+    assert len(calls) == 2, f"expected 2 attempts, got {len(calls)}"
+
+    calls.clear()
+
+    def os_error_forever(cmd, **kwargs):
+        calls.append(cmd)
+        raise OSError("network unreachable")
+
+    assert mod._run_ls_remote(runner=os_error_forever, delays=(0.0, 0.0, 0.0)) is None
+    assert len(calls) == 3, f"persistent transport exceptions must stop after the last attempt, got {len(calls)}"
+    print("OK: ls-remote retries TimeoutExpired/OSError and still fails closed")
+
+
 def main() -> int:
     mod = _load_module()
     failures: list[str] = []
@@ -271,6 +346,8 @@ def main() -> int:
         case_uncapped_returns_everything,
         case_fit_body_keeps_footer,
         case_uncapped_requires_dry_run,
+        case_ls_remote_retries_transient_failures,
+        case_ls_remote_retries_transport_exceptions,
     ):
         try:
             case(mod)
@@ -280,7 +357,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 10 upstream-drift hygiene case(s) passed")
+    print("\nOK: 12 upstream-drift hygiene case(s) passed")
     return 0
 
 

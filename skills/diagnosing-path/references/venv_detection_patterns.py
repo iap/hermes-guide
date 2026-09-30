@@ -32,10 +32,10 @@ def find_venv_dirs(project_root: Path) -> list[Path]:
     """Return existing venv directories in resolution order.
 
     Checks `venv` (installer default) first, then `.venv` (uv default) —
-    mirroring hermes_constants.py::project_venv_dir, which resolves
-    `venv` before `.venv` ("venv wins when both exist"). The pyvenv.cfg
-    filter here is deliberately stricter than the upstream resolver: this
-    function lists only *valid* venvs.
+    mirroring hermes_constants.py::project_venv_dir, whose in-tree scan
+    resolves `venv` before `.venv` ("venv wins when both exist"). The
+    pyvenv.cfg filter here is deliberately stricter than the upstream
+    resolver: this function lists only *valid* venvs.
     """
     candidates = [project_root / "venv", project_root / ".venv"]
     return [c for c in candidates if c.is_dir() and (c / "pyvenv.cfg").exists()]
@@ -46,18 +46,23 @@ def resolve_venv(project_root: Optional[Path] = None) -> Optional[Path]:
 
     Resolution order:
     1. VIRTUAL_ENV environment variable (if set and valid)
-    2. sys.prefix (if running inside a venv inside the project)
+    2. sys.prefix (if running inside a venv)
     3. venv/ (installer default — project_venv_dir() resolves this first)
     4. .venv/ (uv default)
     5. None (system Python, no venv)
 
     Prefer importing project_venv_dir() from hermes_constants when Hermes
     core is importable; this replica is for use outside the checkout.
-    Steps 1-2 add pyvenv.cfg validation (this replica's own robustness
-    check); steps 3-4 mirror project_venv_dir() exactly — is_dir() alone,
-    no manifest check — so this function and Hermes can never disagree on
-    a dual-layout checkout (an empty stray directory wins the same way it
-    does upstream).
+    Steps 1-2 are active-venv detection, not ownership: when a script runs
+    inside *another* install's venv they return that venv even though Hermes
+    would not adopt it — the upstream out-of-tree fallback requires the
+    venv's direct_url.json to record *this* checkout, a proof this replica
+    cannot make. For "which venv does Hermes use for this checkout", prefer
+    project_venv_dir() — or read steps 3-4 first. Those two steps mirror
+    upstream's candidate scan exactly (is_dir() alone, no manifest check),
+    so on a dual-layout checkout they agree with Hermes (an empty stray
+    directory wins the same way it does upstream); steps 1-2 remain a
+    best-effort approximation of upstream's running-venv fallback.
     """
     # 1. Explicit override
     env_venv = os.environ.get("VIRTUAL_ENV")

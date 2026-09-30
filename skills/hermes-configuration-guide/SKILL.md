@@ -1,7 +1,7 @@
 ---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.3.0
+version: 1.3.1
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -78,7 +78,7 @@ Notes:
 - Memory not persisting ("it forgot"), an external memory provider silently unavailable, or `MEMORY.md`/`USER.md` errors → **`diagnosing-memory`**
 - Desktop app build/launch failures, wrong backend, or blank window → **`diagnosing-desktop`**; terminal/TUI rendering issues are `diagnosing-cli-tui`, not desktop
 - Model provider issues — custom endpoints flooding the picker with hundreds of models, `discover_models` misbehaving, persisted catalogs bloating `config.yaml`, or provider/auth failures → **`diagnosing-providers`**
-- Script/path/venv problems (wrong interpreter, `venv/bin/python` missing, the dual `.venv`/`venv` layout) → **`diagnosing-path`**
+- Script/path/venv problems (wrong interpreter — on PM-era installs the launcher runs the PM-store Python, not the shell's; on older checkouts `venv/bin/python` missing or the dual `.venv`/`venv` layout) → **`diagnosing-path`**
 - Terminal/TUI issues on **native Windows** (misrendering, themes, indicators, launch failures) → **`diagnosing-cli-tui`**; on POSIX/WSL there is no dedicated skill yet — start with `hermes doctor` and the `display:` block of `config.yaml`
 - A bot/agent profile not answering, a per-bot `config.yaml` problem, or a routine not firing for a bot → **`diagnosing-bot-mode`**
 - Browser automation not connecting, Chrome/CDP version problems, or a missing Playwright → **`diagnosing-browser`**

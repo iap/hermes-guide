@@ -32,6 +32,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 UPSTREAM_REPO = os.environ.get("UPSTREAM_REPO", "NousResearch/hermes-agent")
@@ -260,17 +261,41 @@ def _tag_key(tag: str) -> tuple[int, ...]:
     return tuple(int(p) if p.isdigit() else 0 for p in tag.lstrip("v").split("."))
 
 
+def _run_ls_remote(runner=None, attempts: int = 3,
+                  delays: tuple[float, ...] = (0.0, 3.0, 10.0)):
+    """`git ls-remote --tags v*`, retried across transient transport failures.
+
+    The 2026-09-29 scheduled run failed end-to-end on a one-off ls-remote
+    flake (Actions run 36594772795), so a blip now costs a retry instead of
+    a failed (and report-less) week. Fail-closed is preserved: only a
+    successful listing returns a process; persistent failure returns None.
+    """
+    run = subprocess.run if runner is None else runner
+    cmd = ["git", "ls-remote", "--tags",
+           f"https://github.com/{UPSTREAM_REPO}.git", "refs/tags/v*"]
+    for attempt in range(max(1, attempts)):
+        if attempt:
+            delay = delays[attempt] if attempt < len(delays) else (delays[-1] if delays else 0.0)
+            if delay:
+                time.sleep(delay)
+        try:
+            proc = run(cmd, capture_output=True, text=True, timeout=60)
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+        if proc.returncode == 0:
+            return proc
+    return None
+
+
 def latest_upstream_tag() -> str | None:
-    """Latest `v*` tag on upstream via ls-remote (no tag fetch into the clone)."""
-    try:
-        proc = subprocess.run(
-            ["git", "ls-remote", "--tags",
-             f"https://github.com/{UPSTREAM_REPO}.git", "refs/tags/v*"],
-            capture_output=True, text=True, timeout=60,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return None
-    if proc.returncode != 0:
+    """Latest `v*` tag on upstream via ls-remote (no tag fetch into the clone).
+
+    Listings are fetched with retries (see `_run_ls_remote`); a persistent
+    transport failure still returns None, so `verify_ci_pin` fails the run
+    closed rather than filing an unverified report.
+    """
+    proc = _run_ls_remote()
+    if proc is None:
         return None
     tags = []
     for line in proc.stdout.splitlines():

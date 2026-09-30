@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.2
+version: 1.2.3
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -20,11 +20,11 @@ Goal: reduce any "it forgot what I told it" / "my memories are gone" / memory-pr
 | Layer | Files / source | Controlled by |
 |---|---|---|
 | **Built-in** (always available) | `$HERMES_HOME/memories/MEMORY.md` (agent notes) + `USER.md` (user profile) | `memory.memory_enabled`, `memory.user_profile_enabled` in `config.yaml` |
-| **External provider** (opt-in, one at a time) | plugin at `$HERMES_HOME/plugins/memory/<name>/` + pip deps in the active venv + secrets in `$HERMES_HOME/.env` | `memory.provider:` in `config.yaml` (empty string = built-in only) |
+| **External provider** (opt-in, one at a time) | plugin at `$HERMES_HOME/plugins/memory/<name>/` + pip deps in the install's dependency environment (PM-era: `$HERMES_HOME/installs`; older checkouts: the in-tree venv) + secrets in `$HERMES_HOME/.env` | `memory.provider:` in `config.yaml` (empty string = built-in only) |
 
-The `provider:` comment in `config.yaml` lists the built-in set (`openviking`, `mem0`, `hindsight`, `holographic`, `retaindb`, `byterover`) — that list is **not exhaustive**. Providers shipped as optional skills/plugins (e.g. `honcho`, from `optional-skills/autonomous-ai-agents/honcho`, pip `honcho-ai`) install the same way and show up in the installed-plugins list of `hermes memory status`. Trust that list over any comment.
+The `provider:` comment in `config.yaml` lists the one-at-a-time set — `openviking`, `mem0`, `holographic`, `retaindb`, `byterover`, plus catalog-installed ones such as `hindsight` (bundled → catalog move, 2026-09) — and that list is **not exhaustive**. Providers shipped as optional skills/plugins (e.g. `honcho`, from `optional-skills/autonomous-ai-agents/honcho`, pip `honcho-ai`) install the same way and show up in the installed-plugins list of `hermes memory status`. Trust that list over any comment.
 
-A provider is *available* only when all four hold: plugin installed, its pip dependencies importable in the active venv, its env vars set, and its `is_available()` check passing. Any one missing → silent fallback to built-in (see the warning above).
+A provider is *available* only when all four hold: plugin installed, its pip dependencies importable in the install's dependency environment (PM-era: `$HERMES_HOME/installs`; older checkouts: the in-tree venv), its env vars set, and its `is_available()` check passing. Any one missing → silent fallback to built-in (see the warning above).
 
 > [!IMPORTANT]
 > **Built-in memory is a frozen snapshot.** `MEMORY.md`/`USER.md` are injected into the system prompt once at session start. Mid-session saves hit disk immediately but do **not** update the current session's prompt — this is by design (it keeps the prompt cache stable). "It forgot what I just told it" is usually this, not a bug: the write landed and appears next session. Verify with a file read before diagnosing further.
@@ -69,7 +69,7 @@ Probe in this order — the first two are built-in helpers and answer most cases
 | External provider "not available ✗", missing env var listed | Secret absent from `$HERMES_HOME/.env` | **Temporary:** none needed — built-in memory is already carrying the running session (the fallback happened at session start). **Permanent:** add the var to `.env` (and to the service environment for gateway/systemd) via `hermes memory setup <provider>`; alternatively `hermes memory off` to stop future external-provider attempts — it takes effect for **subsequently started** sessions, not the current one. Keep secrets out of `config.yaml` |
 | Provider works in terminal, not in gateway/systemd | Services do not inherit `$HERMES_HOME/.env` | Set the provider's env vars in the service environment itself |
 | `hermes memory status`: "Plugin: NOT installed ✗" | `memory.provider` names a provider with no plugin under `$HERMES_HOME/plugins/memory/` | Install the provider plugin (hub: `hermes plugins install …`), or `hermes memory off` to go built-in-only |
-| `hermes doctor`: "honcho-ai not installed" / "mem0ai not installed" | venv rebuild/sync stripped provider pip deps | Re-run `hermes memory setup <provider>` (force-reinstalls its deps) or `hermes update` |
+| `hermes doctor`: "honcho-ai not installed" / "mem0ai not installed" | dependency-environment resync stripped provider pip deps (PM-era: `$HERMES_HOME/installs`; older checkouts: the in-tree venv) | Re-run `hermes memory setup <provider>` (force-reinstalls its deps) or `hermes update` |
 | Hindsight local mode fails to import | local mode needs `hindsight-all`, not `hindsight-client` | `hermes memory setup hindsight` after setting `mode: local` in `hindsight/config.json` |
 | Memory tool missing from the tool schema | Both stores disabled: `memory.memory_enabled: false` **and** `user_profile_enabled: false` | Re-enable one in `config.yaml`; both off removes the tool entirely |
 | Writes rejected: "…would exceed the limit. Consolidate now…" | Char limits are hard caps (defaults 2200 / 1375 chars) — there is no auto-compaction | **Temporary:** consolidate/dedupe in the same turn. **Permanent:** raise `memory.memory_char_limit` deliberately, or keep entries dated (`[YYYY-MM-DD] …`) so consolidation stays cheap |
@@ -198,4 +198,4 @@ operate on the live database.
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/memory_tool_store.py` (limits + rejection text), `hermes_cli/config_defaults.py` (the `memory:` block and its provider comment), `agent/memory_provider.py` (plugin path), `agent/system_prompt.py` (the external-provider gate), `hermes_cli/mem_trim.py` (`context.memory_trim`), `hermes_cli/subcommands/journey.py` (`memory-graph` alias), plus `optional-skills/autonomous-ai-agents/honcho/` for the provider-list note. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/memory_tool_store.py` (limits + rejection text), `hermes_cli/config_defaults.py` (the `memory:` block and its provider comment), `agent/memory_provider.py` (plugin path), `agent/system_prompt.py` (the external-provider gate), `hermes_cli/mem_trim.py` (`context.memory_trim`), `hermes_cli/subcommands/journey.py` (`memory-graph` alias), plus `optional-skills/autonomous-ai-agents/honcho/` for the provider-list note; provider comment re-verified 2026-09-29 at `5000e2993` (`hindsight` is now catalog-installed). Re-verify before reuse.*
