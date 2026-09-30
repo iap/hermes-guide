@@ -1,0 +1,184 @@
+name: validate-claim
+
+# Verifies the PR body's self-reported test results instead of trusting them.
+#
+# WHY THIS EXISTS
+# A PR body that says "all tests passed" is prose, not evidence. On a fork PR the
+# CI run can sit at `action_required` (created, never approved, never executed)
+# while the checks list looks settled. A reviewer reading "all passed" has no way
+# to tell 15/15 from 15/16, or which host produced it. This workflow closes that
+# gap: it re-runs the repo's own fast, hermetic gate tier against the PR head and
+# compares the ACTUAL result to the CLAIM in the body.
+#
+# SCOPE AND LIMITS (deliberate, and narrower than it looks)
+# - It verifies the claim's DIRECTION, not its completeness. "You said tests
+#   passed, tests failed" is caught. "You said nothing" is not an error.
+# - It only re-runs the hermetic tier (no network, no `hermes` install), so it is
+#   fast and cannot be rate-limited. It does NOT re-run the tap smoke test or
+#   citation clone. CI remains the real gate; this is an honesty check.
+# - It deliberately does NOT use pull_request_target, because it checks out the
+#   untrusted PR head and runs that code. pull_request_target would grant a
+#   write token and secrets to exactly the code we are trying to distrust. See
+#   https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions
+#   ("Using pull_request_target in untrusted workflows"). Consequence: like all
+#   pull_request workflows on a fork, this may land at `action_required` and
+#   need a maintainer to approve it. That is the correct trade: read-only
+#   execution, no secrets, no write token.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  # Needed only to post/update the sticky comment. No write to code, no secrets.
+  pull-requests: write
+
+concurrency:
+  group: validate-claim-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # Linux-only: the hermetic tier is POSIX-oriented and the repo's own CI
+    # already runs these legs on ubuntu. One runner is enough; this is a
+    # re-check of fast tests, not a second full matrix.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The version-bump guard resolves a merge base against the base ref,
+          # so a depth-1 checkout would make it silently skip.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # The hermetic tier: no network, no `hermes` binary, no upstream clone.
+      # These are exactly the checks a contributor is expected to have run, so
+      # they are the ones whose claim we can actually re-verify cheaply.
+      # Run ONCE: the exit code is captured, not allowed to abort the step, so the
+      # comparison step can report a real failure instead of the job dying early
+      # with no verdict.
+      - name: Re-run the hermetic gate tier
+        id: actual
+        run: |
+          set +e
+          python3 tools/check_gates.py > /tmp/gates.txt 2>&1
+          rc=$?
+          {
+            echo "exit=$rc"
+            echo "summary=$(grep -E '^(OK|FAIL)' /tmp/gates.txt | tail -1)"
+          } >> "$GITHUB_OUTPUT"
+          echo "--- actual result ---"
+          cat /tmp/gates.txt
+          echo "--- captured exit=$rc ---"
+          # Deliberately do NOT exit non-zero here. The verdict step decides
+          # whether an actual failure should fail the job; a failure with no
+          # matching claim is the contributor's business, not this check's.
+
+      - name: Compare the actual result against the PR claim
+        id: judge
+        env:
+          ACTUAL_EXIT: ${{ steps.actual.outputs.exit }}
+          ACTUAL_SUMMARY: ${{ steps.actual.outputs.summary }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set +e
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+
+          body = os.environ.get("PR_BODY") or ""
+          actual_exit = int(os.environ.get("ACTUAL_EXIT") or "1")
+          summary = os.environ.get("ACTUAL_SUMMARY") or ""
+          # A merge_group ref has no PR body to audit; nothing to contradict.
+          if not body.strip():
+              print("verdict=skip")
+              print("reason=empty PR body - nothing claimed to verify")
+              sys.exit(0)
+
+          claims_pass = bool(re.search(
+              r"all\s+(?:the\s+)?(?:tests?|checks?)\s+(?:have\s+)?passed"
+              r"|tests?\s+passed"
+              r"|all\s+passed"
+              r"|gates?\s+(?:are\s+)?(?:green|passed|ok)"
+              # Phrasings actually used in real PR bodies, including the one on
+              # PR #121 ("all 18 skills carry a compliant footer"), so an
+              # over-precise regex cannot be used to dodge the check.
+              r"|all\s+\d+\s+\w+(?:s)?\s+carry"
+              r"|(?:had|has)\s+no\s+(?:errors?|failures?|violations?)"
+              r"|clean\s+(?:compile|compilation|build|syntax)",
+              body, re.I))
+
+          if not claims_pass:
+              print("verdict=skip")
+              print("reason=PR body makes no machine-checkable pass claim")
+          elif actual_exit == 0:
+              print("verdict=confirmed")
+              print("reason=PR claims the gate passed, and it did")
+          else:
+              print("verdict=contradicted")
+              print("reason=PR claims the gate passed, but re-running it failed")
+          print("actual_summary=" + summary.replace("\n", " ")[:200])
+          PY
+          echo "verdict=${{ steps.judge.outputs.verdict }}"
+          echo "reason=${{ steps.judge.outputs.reason }}"
+
+      # Fail ONLY on a genuine contradiction. A missing or unparseable claim
+      # passes silently: this workflow is an honesty check, not a new gate that
+      # can block an honest contributor who documented nothing.
+      - name: Fail on a contradicted claim
+        if: steps.judge.outputs.verdict == 'contradicted'
+        run: |
+          echo "::error title=Validation claim contradicted::The PR body claims the"
+          echo "::error::hermetic gate passed, but re-running tools/check_gates.py against"
+          echo "::error::this PR head exited non-zero. Actual result: ${{ steps.actual.outputs.summary }}"
+          echo "::error::Either fix the failure, or correct the Validation Results section"
+          echo "::error::to state the real outcome. See CONTRIBUTING.md."
+          exit 1
+
+      # Sticky comment: update in place so a re-push does not spam the thread.
+      - name: Report the verdict on the PR
+        if: always() && github.event_name == 'pull_request' && steps.judge.outputs.verdict != 'skip'
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const marker = '<!-- validate-claim -->';
+            const verdict = process.env.VERDICT || 'unknown';
+            const summary = process.env.ACTUAL_SUMMARY || '';
+            const reason = process.env.REASON || '';
+
+            const icon = verdict === 'confirmed' ? '✅' : '❌';
+            let body = `${marker}\n### ${icon} Validation claim: ${verdict}\n\n`;
+            body += `${reason}\n\n`;
+            if (summary) body += `Re-ran \`tools/check_gates.py\` on this PR's head:\n\n\`\`\`\n${summary}\n\`\`\`\n\n`;
+            if (verdict === 'contradicted') {
+              body += 'The **Verification** section of this PR must be corrected to state the real outcome. ';
+              body += 'A green claim that does not reproduce blocks merge.\n';
+            } else {
+              body += 'This is an honesty check on the claim, not a substitute for CI. CI remains the gate.\n';
+            }
+            body += '\n<sub>This comment is updated in place on each push. Only the hermetic gate tier is re-run here; ' +
+                    'the network-dependent legs are covered by CI.</sub>';
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            // Find our previous comment so we update instead of re-posting.
+            const comments = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.data.find((c) => (c.body || '').includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+        env:
+          VERDICT: ${{ steps.judge.outputs.verdict }}
+          REASON: ${{ steps.judge.outputs.reason }}
+          ACTUAL_SUMMARY: ${{ steps.actual.outputs.summary }}
