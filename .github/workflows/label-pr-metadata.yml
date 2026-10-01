@@ -83,7 +83,9 @@ jobs:
           # labeler.yml references labels that must exist or the action errors, and
           # a new OS/priority label would otherwise have to be created by hand
           # before the first matching PR. Create on demand, idempotently.
-          for label in $(printf '%s' "$LABELS" | tr -d '[]"' | tr ',' ' '); do
+          # Space-stripped for the same reason as the apply step: a bare tr ','
+          # split yields " P2" and gh then looks for a label with that leading space.
+          for label in $(python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)))' <<< "$LABELS"); do
             [ -n "$label" ] || continue
             if ! gh label list --repo "$REPO" --limit 200 --json name \
                  --jq ".[] | select(.name == \"$label\") | .name" | grep -q .; then
@@ -103,7 +105,10 @@ jobs:
           LABELS: ${{ steps.derive.outputs.labels }}
         run: |
           set -euo pipefail
-          csv=$(printf '%s' "$LABELS" | tr -d '[]"' | tr ',' ',')
+          # One label per line out of the JSON array. tr cannot drop the space a
+          # comma-separated split leaves behind: "macos, P2" makes GitHub look for
+          # a label literally named " P2" and fail the whole step.
+          csv=$(python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))' <<< "$LABELS")
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$csv" >/dev/null
           echo "  applied: $csv"
 
