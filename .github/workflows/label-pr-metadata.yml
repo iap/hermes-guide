@@ -116,22 +116,20 @@ jobs:
           # comma-separated split leaves behind: "macos, P2" makes GitHub look for
           # a label literally named " P2" and fail the whole step.
           csv=$(python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))' <<< "$LABELS")
-          # Remove the labels THIS workflow previously derived before adding the
-          # current set. Without this, editing a description from macOS to Windows
-          # leaves both attached. Only the derived vocabulary is touched --
-          # bug, ci, skills and anything a human applied stay put.
-          DERIVED="macos linux windows wsl P1 P2 P3"
-          current=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
-                      --jq '[.labels[].name] | join("\n")' 2>/dev/null || printf '')
-          for label in $DERIVED; do
-            if printf '%s\n' "$current" | grep -qx -- "$label"; then
-              case ",$csv," in
-                *",$label,"*) : ;;                      # still asserted, keep it
-                *) gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$label" >/dev/null
-                   echo "  removed stale: $label" ;;
-              esac
-            fi
-          done
+          # Only ever ADD. An earlier version removed derived labels that were no
+          # longer asserted, on the reasoning that anything in the derived
+          # vocabulary is this workflow's to manage. That is wrong: the vocabulary
+          # is shared. A maintainer who tags P1 by hand has the same label a
+          # derived P1 uses, and the API exposes no ownership flag on a label, so
+          # the cleanup would silently strip human triage. Ownership can be
+          # reconstructed from the issue timeline's labeled events, but the
+          # attribution is not reliable enough to delete on -- and a bot that
+          # removes a human's priority label is worse than one that leaves a
+          # stale one.
+          #
+          # The `edited` trigger means this runs again when the description
+          # changes, so a corrected description adds the right labels; the
+          # superseded ones are visible in the label list for a human to drop.
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$csv" >/dev/null
           echo "  applied: $csv"
 

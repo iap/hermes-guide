@@ -31,8 +31,10 @@ Design constraints, all deliberate:
   cross-platform PR and collapsing it to one platform loses the signal.
 
 Usage:
-    python tools/pr_metadata_labels.py --body-file <path> [--json]
-    python tools/pr_metadata_labels.py --body -            # read stdin
+    python tools/pr_metadata_labels.py --body-file <path>   # read a file
+    python tools/pr_metadata_labels.py --body-file -         # read stdin
+    python tools/pr_metadata_labels.py --body - --json      # -body works too:
+                                                       # argparse prefix-matches
     python tools/pr_metadata_labels.py --selftest
 
 Exit codes: 0 labels produced or nothing to label (never a failure), 2 unusable
