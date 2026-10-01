@@ -19,8 +19,16 @@ the result. Fill in the columns instead.
 maintained from macOS/POSIX and native Windows checkouts in parallel, and a
 claim verified on one is not verified on the other. Keep the line reusable
 (OS name only); when a platform-specific claim depends on a release or
-WSL version, state it with that claim. -->
+WSL version, state it with that claim.
+
+The OS / shell value is READ BY label-pr-metadata.yml and becomes a `macos`,
+`linux`, `windows` or `wsl` label. A `Priority: P1` line below becomes a
+priority label. Both are optional and both fail open: leave them bracketed or
+omit them and no label is applied. Labeler v5 cannot read the body, which is
+why a separate workflow does this rather than .github/labeler.yml. -->
 - OS / shell: [e.g. macOS + zsh (POSIX) / Linux + bash / Windows native + PowerShell / WSL]
+- Priority: [P1 / P2 / P3 — optional; P1 blocks a release for a user, P2 is a
+real defect, P3 is polish]
 - Python: [e.g. 3.11.9 / 3.12.x / 3.13.x]
 - Hermes version: [`hermes --version` output]
 - Install route: [install.sh / Desktop app / Nix / PyPI / git checkout]

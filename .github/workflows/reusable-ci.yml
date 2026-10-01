@@ -222,6 +222,12 @@ jobs:
       - name: Scope validation regression
         run: python tools/test_scope_validation.py
 
+      - name: PR metadata label parser regression
+        # The parser drives auto-labelling, so its vocabulary and its
+        # placeholder handling are behavior, not configuration. Pure string
+        # work: no network, no git, no CLI.
+        run: python tools/pr_metadata_labels.py --selftest
+
       - name: Doc skill/check count consistency
         run: python tools/test_skill_counts.py
 

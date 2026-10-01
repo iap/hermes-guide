@@ -1,0 +1,158 @@
+name: label-pr-metadata
+
+# OS and priority come from the PR description, which `actions/labeler` v5
+# cannot read: its match surface is changed-files, base-branch and head-branch
+# only, with no title or body matcher. So this is a separate reader for the
+# `## Environment` block the template asks for.
+#
+# The area labels (skills/ci/tooling/documentation/drift) stay in
+# .github/labeler.yml, where changed-files IS the right matcher. The two jobs
+# are complementary, not duplicates.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: label-pr-metadata-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No code checkout. The parser runs from the BASE branch (pull_request_target),
+      # so an untrusted PR cannot influence which labels get applied to it. The
+      # description is read through the API and passed as a file, never executed.
+      - name: Resolve the PR description
+        id: prbody
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+          EVENT_BODY: ${{ github.event.pull_request.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          body="$EVENT_BODY"
+          source="event"
+          if [ -z "$body" ]; then
+            # Fork PRs arrive with an empty payload. Without this an author could
+            # skip OS/priority labelling just by opening from a fork.
+            body=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .body 2>/dev/null || printf '')
+            source="api"
+          fi
+          printf '%s' "$body" > "$RUNNER_TEMP/pr-body.txt"
+          echo "chars=${#body}" >> "$GITHUB_OUTPUT"
+          echo "description source: $source (${#body} chars)"
+
+      - name: Derive metadata labels
+        id: derive
+        env:
+          BODY_FILE: ${{ runner.temp }}/pr-body.txt
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          # The parser is fetched from the BASE commit, never from
+          # github.event.pull_request.head.sha. A head SHA on a fork is chosen by
+          # the PR author, so fetching and executing it here would run their code
+          # under this job's pull-requests:write token. Base is the only SHA whose
+          # content this workflow is entitled to trust.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://raw.githubusercontent.com/${REPO}/${BASE_SHA}/tools/pr_metadata_labels.py" \
+            -o "$RUNNER_TEMP/pr_metadata_labels.py" || {
+              # Fail open AND say so in the output the later steps compare
+              # against: without labels=[] the empty string is not "[]", so the
+              # apply step would try to parse "" as JSON and fail.
+              echo "  could not fetch the parser from the base commit; leaving labels unchanged"
+              echo "labels=[]" >> "$GITHUB_OUTPUT"
+              exit 0
+            }
+
+          labels=$(python3 "$RUNNER_TEMP/pr_metadata_labels.py" \
+                     --body-file "$BODY_FILE" --json)
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+          echo "  derived: $labels"
+
+      - name: Create any missing labels
+        if: steps.derive.outputs.labels != '[]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          LABELS: ${{ steps.derive.outputs.labels }}
+        run: |
+          set -euo pipefail
+          # labeler.yml references labels that must exist or the action errors, and
+          # a new OS/priority label would otherwise have to be created by hand
+          # before the first matching PR. Create on demand, idempotently.
+          # Space-stripped for the same reason as the apply step: a bare tr ','
+          # split yields " P2" and gh then looks for a label with that leading space.
+          for label in $(python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)))' <<< "$LABELS"); do
+            [ -n "$label" ] || continue
+            if ! gh label list --repo "$REPO" --limit 200 --json name \
+                 --jq ".[] | select(.name == \"$label\") | .name" | grep -q .; then
+              gh label create "$label" --repo "$REPO" \
+                --description "Derived from the PR description by label-pr-metadata" \
+                --color "ededed" >/dev/null
+              echo "  created label: $label"
+            fi
+          done
+
+      - name: Apply labels
+        if: steps.derive.outputs.labels != '[]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          LABELS: ${{ steps.derive.outputs.labels }}
+        run: |
+          set -euo pipefail
+          # One label per line out of the JSON array. tr cannot drop the space a
+          # comma-separated split leaves behind: "macos, P2" makes GitHub look for
+          # a label literally named " P2" and fail the whole step.
+          csv=$(python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))' <<< "$LABELS")
+          # Only ever ADD. An earlier version removed derived labels that were no
+          # longer asserted, on the reasoning that anything in the derived
+          # vocabulary is this workflow's to manage. That is wrong: the vocabulary
+          # is shared. A maintainer who tags P1 by hand has the same label a
+          # derived P1 uses, and the API exposes no ownership flag on a label, so
+          # the cleanup would silently strip human triage. Ownership can be
+          # reconstructed from the issue timeline's labeled events, but the
+          # attribution is not reliable enough to delete on -- and a bot that
+          # removes a human's priority label is worse than one that leaves a
+          # stale one.
+          #
+          # The `edited` trigger means this runs again when the description
+          # changes, so a corrected description adds the right labels; the
+          # superseded ones are visible in the label list for a human to drop.
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$csv" >/dev/null
+          echo "  applied: $csv"
+
+      - name: Summary
+        if: always()
+        env:
+          LABELS: ${{ steps.derive.outputs.labels }}
+          CHARS: ${{ steps.prbody.outputs.chars }}
+        run: |
+          {
+            echo "### PR metadata labels"
+            echo
+            if [ "$LABELS" = "[]" ]; then
+              echo "No OS or priority value found in the description (${CHARS:-0} chars)."
+              echo
+              echo "Add one of these to \`## Environment\` in the PR description:"
+              echo
+              echo "- \`- OS / shell: macOS + zsh (POSIX)\` -> \`macos\`"
+              echo "- \`- OS / shell: Windows native + PowerShell\` -> \`windows\`"
+              echo "- \`- OS / shell: Linux + bash\` -> \`linux\`"
+              echo "- \`- OS / shell: WSL\` -> \`wsl\`"
+              echo "- \`- Priority: P1\` / \`P2\` / \`P3\`"
+            else
+              echo "Applied: \`${LABELS}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
