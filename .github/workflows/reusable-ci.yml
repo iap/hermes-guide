@@ -1,0 +1,283 @@
+name: reusable-ci
+
+# Reusable CI body for iap/hermes-guide. Called by ci.yml; not invoked directly
+# in normal operation, but a `workflow_call`-only workflow cannot also be run by
+# hand, so `workflow_dispatch` is exposed for reproducing a leg locally.
+on:
+  workflow_call:
+    inputs:
+      # Set by the caller from `github.event_name`. The tap-install smoke test
+      # tolerates a "Could not fetch" miss ONLY for pull_request, because the
+      # tap serves master and a PR that ADDS a skill cannot be installable from
+      # it until merge. Passing the event name in as an input keeps that
+      # condition identical in the called workflow instead of re-deriving it.
+      event-name:
+        description: "GitHub event that triggered the caller (e.g. pull_request, push, merge_group)"
+        type: string
+        required: false
+        default: pull_request
+      # The caller resolves the base ref. Kept as an input so the version-bump
+      # guard can diff against it without the callee guessing at a default.
+      # Value is a GIT REF (origin/<branch>), not a bare branch name, because
+      # tools/check_skill_version_bump.py resolves it with `git merge-base`.
+      base-ref:
+        description: "Git ref the change is compared against, e.g. origin/master"
+        type: string
+        required: false
+        default: origin/master
+      # Skip the slowest, network-dependent legs on ordinary pushes. CI on a PR
+      # always runs them; a direct push to master runs the fast tier only.
+      run-full-gate:
+        description: "Run the network-dependent legs (Hermes install, tap smoke test, citation clone)"
+        type: boolean
+        required: false
+        default: true
+    outputs:
+      plugin-result:
+        description: "Concatenated matrix result for the plugin job"
+        value: ${{ jobs.plugin.result }}
+  # Manual entry point: `gh workflow run reusable-ci.yml` is not available for a
+  # workflow_call-only file, so keep workflow_dispatch for reproducing a leg.
+  workflow_dispatch:
+    inputs:
+      run-full-gate:
+        description: "Run the network-dependent legs"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # NOTE: `concurrency` in a called workflow is IGNORED for the callee's jobs in
+  # some GitHub Actions versions; the caller's group is authoritative. This group
+  # is kept anyway so a manual dispatch of this file cancels its own prior run.
+  group: reusable-ci-${{ github.ref }}-${{ github.run_attempt }}
+  cancel-in-progress: true
+
+jobs:
+  plugin:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # Floor (3.11) tracks upstream's .python-version; ceiling (3.12) is
+        # what this repo already ran. Upstream declares >=3.11,<3.15 (verified
+        # against tag v2026.9.24), so a single pin in either direction just
+        # moves the drift.
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    # Windows runs the same steps except mypy, the plugin doctor, the tap smoke
+    # test, the host-pressure probe, and the CLI-resolution test, which stay
+    # Linux-gated (POSIX /tmp workaround, no bash on Windows, and
+    # Hermes-on-Windows CI unexplored upstream).
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the version-bump guard can resolve the merge base
+          # against the base ref (a depth-1 checkout makes it silently skip).
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          # Cache the pip download cache, never an installed environment: several
+          # tests assert on a freshly resolved interpreter and on `hermes` being
+          # present, so a cached site-packages would mask a real resolution bug.
+          cache: 'pip'
+          cache-dependency-path: '**/requirements*.txt'
+
+      - name: Install Hermes
+        if: inputs.run-full-gate
+        shell: bash
+        run: |
+          # pip/PyPI is no longer a supported Hermes distribution method
+          # (PyPI is stale at 0.19.0). Install from the upstream git tag as an
+          # editable install — wheel/sdist builds are blocked outside Nix, but
+          # editable installs are the documented dev path. $RUNNER_TEMP keeps
+          # the clone path valid on both Linux and Windows runners.
+          git clone --depth 1 --branch v2026.9.24 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
+          pip install -e "$RUNNER_TEMP/hermes-agent"
+
+      - name: Python syntax check
+        run: python -m py_compile __init__.py checks.py constants.py
+
+      - name: Type check
+        # The /tmp package-copy workaround is POSIX-only; widen later if
+        # Windows mypy coverage is wanted.
+        if: runner.os == 'Linux' && inputs.run-full-gate
+        run: |
+          pip install mypy types-PyYAML
+          # mypy rejects the hyphenated `hermes-guide` dir as a package name;
+          # typecheck the modules under a valid package name.
+          mkdir -p /tmp/hermes_guide
+          cp __init__.py checks.py constants.py /tmp/hermes_guide/
+          mypy /tmp/hermes_guide
+
+      - name: Plugin doctor
+        # Hermes-on-Windows CI is unexplored upstream; the runtime tests below
+        # already cover the plugin's own cross-platform paths.
+        if: runner.os == 'Linux' && inputs.run-full-gate
+        run: hermes plugins doctor . --ci
+
+      - name: Docs self-claim guard
+        run: python tools/check_self_claim.py
+
+      - name: No-mutation guard
+        run: |
+          python tools/check_no_mutation.py --selftest
+          python tools/check_no_mutation.py
+
+      - name: Host-pressure probe behavioral test
+        # Linux legs only: the probe is a bash script reading /proc, and the
+        # fixtures stub macOS tools (sysctl/top/vm_stat) that do not exist here.
+        # Windows has no bash at all. Test itself skips non-applicable cases.
+        if: runner.os == 'Linux' && inputs.run-full-gate
+        run: python3 tools/test_host_pressure_probe.py
+
+      - name: Read-only runtime smoke test
+        # Requires the `hermes` CLI on PATH, so it MUST stay behind the same gate
+        # as the install above. It has no internal skip guard, so running it with
+        # run-full-gate=false would fail on every direct push to master.
+        if: inputs.run-full-gate
+        run: python tools/test_readonly_runtime.py
+
+      - name: MCP shape regression test
+        run: python tools/test_mcp_shape.py
+
+      - name: Memory hygiene regression test
+        run: python tools/test_memory_hygiene.py
+
+      - name: Exit contract (guide CLI)
+        run: python tools/test_exit_contract.py
+
+      - name: Check-envelope regression test
+        run: python tools/test_check_envelopes.py
+
+      - name: CLI resolution regression test
+        # Fabricates POSIX console scripts to stand in for hermes entry points,
+        # which needs a POSIX shell and real permission bits — same reason the
+        # probe above is Linux-gated. The hermes.exe branch of the resolver is
+        # left to the Windows-owned surface.
+        if: runner.os == 'Linux' && inputs.run-full-gate
+        run: python tools/test_checks_cli_resolution.py
+
+      - name: Skill version bump guard
+        run: python tools/check_skill_version_bump.py ${{ inputs.base-ref }}
+
+      - name: Version bump guard regression
+        run: python tools/test_skill_version_bump.py
+
+      - name: Version consistency guard
+        # plugin.yaml is the shipped version and release.yml compares only the
+        # tag against it, so __init__.py and SECURITY.md can drift silently.
+        run: |
+          python tools/check_version_consistency.py --selftest
+          python tools/check_version_consistency.py
+
+      - name: Skill-library behavioral test
+        run: python tools/test_skill_checks.py
+
+      - name: Hooks allowlist reachability regression
+        run: python tools/test_reachable_allowlist_check.py
+
+      - name: Plugin notes regression
+        run: python tools/test_plugins_notes.py
+
+      - name: Portable plugin.json discovery regression
+        run: python tools/test_portable_plugin_manifest.py
+
+      - name: Subcategory-dir constants regression
+        run: python tools/test_plugin_skip_source.py
+
+      - name: Upstream drift hygiene regression
+        run: python tools/test_upstream_drift_hygiene.py
+
+      - name: Citation integrity against the upstream baseline
+        # The cited symbols/lines live in the Hermes tree, so this check resolves
+        # them against the revision recorded in .github/upstream-drift.baseline —
+        # not the CI install tag. One leg is enough: the check is OS- and
+        # interpreter-independent. Same blobless --no-checkout clone idiom as
+        # check_upstream_drift.py; `git show <rev>:<path>` lazily fetches only the
+        # blobs the checker reads. The revision is read by the script itself, never
+        # passed via $(cat ...) — the baseline file is CRLF in a Windows checkout
+        # and a stray CR breaks git's SHA parsing.
+        if: runner.os == 'Linux' && matrix.python-version == '3.11' && inputs.run-full-gate
+        run: |
+          # Offline parser regression first (no clone needed), then the real check.
+          python3 tools/check_citation_integrity.py --selftest
+          git clone --filter=blob:none --no-checkout --single-branch --branch main \
+            https://github.com/NousResearch/hermes-agent.git /tmp/hermes-citation
+          python3 tools/check_citation_integrity.py --src /tmp/hermes-citation
+
+      - name: Skill provenance footer guard
+        # Requires a dated upstream-anchored footer per skill.
+        run: |
+          python tools/check_skill_provenance.py --selftest
+          python tools/check_skill_provenance.py
+          python tools/test_skill_provenance.py
+
+      - name: Scope validation regression
+        run: python tools/test_scope_validation.py
+
+      - name: Doc skill/check count consistency
+        run: python tools/test_skill_counts.py
+
+      - name: Tap discovery smoke test
+        if: runner.os == 'Linux' && inputs.run-full-gate && inputs.event-name == 'pull_request'
+        timeout-minutes: 10
+        # Installs run authenticated: on CI there is no $HERMES_HOME/.env and
+        # no gh login, so get_secret() falls through to os.environ and
+        # GitHubAuth picks this up (priority 1). Anonymous installs shared the
+        # runner IP's 60 req/hr quota and died wholesale on #49 ("Could not
+        # fetch ... rate limit exhausted"). Trade-off: the anonymous cold-user
+        # path is no longer exercised here; scanner honesty is (no --force).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          hermes skills tap add iap/hermes-guide
+          # Derive the list from the checkout, never hardcode it: a stale
+          # hardcoded list is how the scanner verdicts on diagnosing-memory
+          # and diagnosing-desktop shipped unnoticed (the step kept testing
+          # nine skills while the repo had eleven).
+          SKILLS=$(for d in skills/*/; do basename "$d"; done | sort | tr '\n' ' ')
+          echo "skills under test: $SKILLS"
+          pr_added=""
+          failed=0
+          for s in $SKILLS; do
+            echo "::group::install $s"
+            if ! out=$(hermes skills install --yes "iap/hermes-guide/skills/$s" 2>&1); then
+              printf '%s\n' "$out"
+              echo "::endgroup::"
+              # No --force: every skill must pass the install scanner honestly.
+              # The tap serves master, so on a PR ADDING a skill the fetch misses
+              # until merge. Tolerate exactly that miss (the "Could not fetch"
+              # signature) on pull_request events only; scanner verdicts, auth
+              # failures, and every other failure still fail the step - on PRs
+              # and on post-merge master pushes alike.
+              if [ "${{ inputs.event-name }}" = "pull_request" ] \
+                 && printf '%s' "$out" | grep -q 'Could not fetch' \
+                 && ! hermes skills list | grep -q "$s"; then
+                echo "::warning::$s is added by this PR - not installable from the tap until merge"
+                pr_added="$pr_added $s"
+                continue
+              fi
+              echo "install failed: $s"
+              failed=1
+            else
+              echo "::endgroup::"
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then exit 1; fi
+          echo "OK: tap-install pass done; new-in-PR skills pending merge:${pr_added:- none}"
+
+      - name: Security lint (bandit)
+        run: |
+          pip install bandit
+          # Scan plugin runtime sources only (tools/ are CI utilities). B404/B603
+          # are informational noise: this plugin legitimately calls the `hermes`
+          # CLI via subprocess.run (list args, no shell=True).
+          bandit __init__.py checks.py constants.py --skip B404,B603

@@ -1,0 +1,378 @@
+name: validate-claim
+
+# Verifies the PR body's self-reported test results instead of trusting them.
+#
+# WHY THIS EXISTS
+# A PR body that says "all tests passed" is prose, not evidence. On a fork PR the
+# CI run can sit at `action_required` (created, never approved, never executed)
+# while the checks list looks settled. A reviewer reading "all passed" has no way
+# to tell 15/15 from 15/16, or which host produced it. This workflow closes that
+# gap: it re-runs the repo's own fast, hermetic gate tier against the PR head and
+# compares the ACTUAL result to the CLAIM in the body.
+#
+# SCOPE AND LIMITS (deliberate, and narrower than it looks)
+# - It verifies the claim's DIRECTION, not its completeness. "You said tests
+#   passed, tests failed" is caught. "You said nothing" is not an error.
+# - It only re-runs the hermetic tier (one small pip install, no `hermes`
+#   install), so it is fast and cannot be rate-limited. It does NOT re-run the
+#   tap smoke test or citation clone. CI remains the real gate; this is an
+#   honesty check.
+# - It deliberately does NOT use pull_request_target, because it checks out the
+#   untrusted PR head and runs that code. pull_request_target would grant a
+#   write token and secrets to exactly the code we are trying to distrust. See
+#   https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions
+#   ("Using pull_request_target in untrusted workflows"). Consequence: like all
+#   pull_request workflows on a fork, this may land at `action_required` and
+#   need a maintainer to approve it. That is the correct trade: read-only
+#   execution, no secrets, no write token.
+# - FORKS GET NO COMMENT, BY DESIGN. Two GitHub behaviours combine here. The
+#   `pull_request` payload is EMPTY for fork PRs, so the description has to be
+#   fetched through the API (the verify job does this). And `GITHUB_TOKEN` is
+#   downgraded to read-only for fork PRs regardless of the declared
+#   `pull-requests: write`, so the report job's comment step cannot succeed.
+#   A fork PR therefore gets its verdict re-run but never sees it posted. The
+#   alternative -- a `pull_request_target` job that comments -- would hand a
+#   write token to a workflow on a repository where outside contributors can
+#   open pull requests, which is a far worse trade than a missing comment on a
+#   check whose real output is in the Actions log either way.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-claim-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # Linux-only: the hermetic tier is POSIX-oriented and the repo's own CI
+    # already runs these legs on ubuntu. One runner is enough; this is a
+    # re-check of fast tests, not a second full matrix.
+    #
+    # PERMISSIONS: deliberately `contents: read` ONLY. This job checks out the
+    # untrusted PR head and EXECUTES it (`tools/check_gates.py` is PR-authored
+    # code), so anything writable here is writable by the PR author. The
+    # `pull-requests: write` token lives only in the `report` job below, which
+    # never checks out or runs PR code. That separation is the whole reason
+    # this workflow does not need pull_request_target.
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      # Handed to `report`, which has the write token. Only plain strings cross
+      # this boundary -- never the PR body, which is attacker-controlled.
+      verdict: ${{ steps.judge.outputs.verdict }}
+      reason: ${{ steps.judge.outputs.reason }}
+      summary: ${{ steps.actual.outputs.summary }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The version-bump guard resolves a merge base against the base ref,
+          # so a depth-1 checkout would make it silently skip.
+          fetch-depth: 0
+          # Pin the verdict to the PR's own code. Without `ref` the checkout
+          # resolves `github.sha`, which on a `pull_request` event is the merge
+          # commit -- so a base that drifted after the PR opened could produce a
+          # verdict about code the author never touched. `merge_group` has no
+          # `pull_request` object and genuinely wants the merge ref, so the
+          # expression falls back to `github.sha` for it.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # The hermetic tier needs PyYAML and nothing else. `test_skill_counts.py`
+      # imports checks.py, which imports yaml; the other four gates are stdlib
+      # only. Unlike reusable-ci.yml this job deliberately does not install
+      # Hermes to pick the dependency up transitively, and a bare
+      # setup-python interpreter has no PyYAML -- so without this the tier
+      # dies on ModuleNotFoundError and reports 4/5 for the wrong reason.
+      - name: Install gate dependency
+        run: pip install pyyaml
+
+      # The hermetic tier: no `hermes` binary, no upstream clone, no rate-limited
+      # API. These are exactly the checks a contributor is expected to have run,
+      # so they are the ones whose claim we can actually re-verify cheaply.
+      # Run ONCE: the exit code is captured, not allowed to abort the step, so the
+      # comparison step can report a real failure instead of the job dying early
+      # with no verdict.
+      - name: Re-run the hermetic gate tier
+        id: actual
+        run: |
+          set +e
+          python3 tools/check_gates.py > /tmp/gates.txt 2>&1
+          rc=$?
+          {
+            echo "exit=$rc"
+            echo "summary=$(grep -E '^(OK|FAIL)' /tmp/gates.txt | tail -1)"
+          } >> "$GITHUB_OUTPUT"
+          echo "--- actual result ---"
+          cat /tmp/gates.txt
+          echo "--- captured exit=$rc ---"
+          # Deliberately do NOT exit non-zero here. The verdict step decides
+          # whether an actual failure should fail the job; a failure with no
+          # matching claim is the contributor's business, not this check's.
+
+      # The `pull_request` payload is EMPTY for pull requests from forks, so
+      # `github.event.pull_request.body` is empty there and the judge below sees
+      # no claim at all -- which would let a fork PR write "All tests passed" in
+      # its description, fail the gates, and still come back `skip`. The read-only
+      # token a fork PR receives can still READ the pull request, so fall back to
+      # the API and read the body there. The body is passed through `env`, never
+      # interpolated into the script, so a crafted description cannot inject shell.
+      - name: Resolve the PR description
+        id: prbody
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+          EVENT_BODY: ${{ github.event.pull_request.body }}
+          REPO: ${{ github.repository }}
+          # The body reaches the judge as a FILE, not a GITHUB_OUTPUT block. A
+          # multiline output delimiter is only safe while it cannot occur in the
+          # value, and a PR description is arbitrary user text -- one containing a
+          # line matching the delimiter would truncate the claim. A file has no
+          # such constraint.
+          BODY_FILE: ${{ runner.temp }}/pr-body.txt
+        run: |
+          body="$EVENT_BODY"
+          source="event"
+          if [ -z "$body" ]; then
+            # Fork PRs land here. If the number survived the empty payload and the
+            # API is reachable, this closes the bypass; if either fails we stay on
+            # the empty body, which degrades to the existing fail-open behaviour
+            # rather than inventing a verdict.
+            body=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .body 2>/dev/null || printf '')
+            source="api"
+          fi
+          printf '%s' "$body" > "$BODY_FILE"
+          echo "path=$BODY_FILE" >> "$GITHUB_OUTPUT"
+          echo "chars=${#body}" >> "$GITHUB_OUTPUT"
+          echo "description source: $source (${#body} chars)"
+
+      - name: Compare the actual result against the PR claim
+        id: judge
+        env:
+          ACTUAL_EXIT: ${{ steps.actual.outputs.exit }}
+          ACTUAL_SUMMARY: ${{ steps.actual.outputs.summary }}
+          PR_BODY_FILE: ${{ steps.prbody.outputs.path }}
+        run: |
+          set +e
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+
+          def read_body():
+              # Read from the file the resolver step wrote, so an arbitrary
+              # description cannot be truncated by a GITHUB_OUTPUT delimiter.
+              # An absent or unreadable path degrades to no claim, which is the
+              # pre-existing fail-open behaviour rather than a wrong verdict.
+              path = os.environ.get("PR_BODY_FILE") or ""
+              try:
+                  with open(path, encoding="utf-8", errors="replace") as fh:
+                      raw = fh.read()
+              except OSError:
+                  return ""
+              # Drop HTML comments before judging. They are invisible to a human
+              # reviewer, so text inside them is not a claim the author made --
+              # and this repo's own PR template carries guidance comments
+              # containing "gates passed" and "all passed". Scanning them raw
+              # made every unfilled template look like a pass claim, which would
+              # block a contributor who filled in nothing at all.
+              return re.sub(r"<!--.*?-->", "", raw, flags=re.S)
+
+          body = read_body()
+          actual_exit = int(os.environ.get("ACTUAL_EXIT") or "1")
+          summary = os.environ.get("ACTUAL_SUMMARY") or ""
+          # A merge_group ref has no PR body to audit; nothing to contradict.
+          if not body.strip():
+              print("verdict=skip")
+              print("reason=empty PR body - nothing claimed to verify")
+              sys.exit(0)
+
+          # Phrasings actually used in real PR bodies, including the one on
+          # PR #121 ("all 18 skills carry a compliant footer"), so an
+          # over-precise regex cannot be used to dodge the check.
+          PASS = re.compile(
+              r"all\s+(?:the\s+)?(?:tests?|checks?)\s+(?:have\s+)?passed"
+              r"|tests?\s+passed"
+              r"|all\s+passed"
+              r"|gates?(?:\(s\))?\s+(?:are\s+)?(?:green|passed|ok)"
+              r"|all\s+\d+\s+\w+(?:s)?\s+carry"
+              r"|(?:had|has)\s+no\s+(?:errors?|failures?|violations?)"
+              r"|clean\s+(?:compile|compilation|build|syntax)",
+              re.I)
+
+          # Sentence-level vetoes are too blunt if every failure word counts: a genuine
+          # pass claim followed by an unrelated caveat ("All tests passed, but CI
+          # has not run yet") was read as no claim at all, which lets anyone dodge
+          # the check by appending a clause. So split the signal by what each word
+          # actually asserts.
+          #
+          # NEGATOR  - states a stance about the claim. It only negates when it
+          #            PRECEDES the pass phrase, so "not all tests passed" is
+          #            rejected while a trailing caveat is not mistaken for one.
+          # OUTCOME  - states a result, so it vetoes wherever it appears,
+          #            including "15 of 16 tests passed, 1 failed".
+          #
+          # Concessive markers (but/yet/however) are deliberately in neither set:
+          # they only mattered when an outcome word followed, and OUTCOME already
+          # catches that. "except" is an OUTCOME because "all tests passed except
+          # one" is itself a partial result.
+          #
+          # A bare "no" is in neither set: it is the negator in "had no errors",
+          # which is itself a genuine pass claim. Only the no-form that negates a
+          # pass is spelled out.
+          NEGATOR = re.compile(
+              r"\b(?:not|never|cannot|unable)\b|n['’]t\b", re.I)
+          # An outcome word is negated by a preceding NO/ZERO/NONE as readily as by
+          # NOT: "mypy has no violations" and "ruff found zero errors" are genuine
+          # PASS claims, not outcome reports. This is checked per occurrence
+          # rather than encoded per word, so extending the vocabulary below cannot
+          # re-break a negated pass phrase.
+          NEG_BEFORE_OUTCOME = re.compile(
+              r"\b(?:not|never|no|zero|none|without|cannot|unable)\b|n['’]t\b",
+              re.I)
+          OUTCOME = re.compile(
+              r"\b(?:failed|failing|failure|fails|except|partial|remain(?:s|ed)?"
+              r"|violations?|regressions?|problems?|errors?|issues?"
+              r"|broken|breakage|incomplete|skipped|dropped|degraded|unstable)\b"
+              r"|did\s+not\s+(?:complete|run|pass|finish|start|reach)"
+              r"|\b(?:no|zero|0)\s+(?:tests?|checks?|gates?)\s+passed\b",
+              re.I)
+          # Negation belongs to the CLAUSE that holds the word it negates, not to
+          # the whole sentence. In "Tests passed, no CI log was attached, but one
+          # test failed" the "no" belongs to the middle clause and must not
+          # suppress the "failed" in the third.
+          CLAUSE_BOUNDARY = re.compile(
+              r"[,;:—–]|\b(?:but|and|however|although|though|while|whereas|yet)\b",
+              re.I)
+
+          def clause_prefix(text, pos):
+              """Text from the start of pos's own clause up to pos."""
+              last = None
+              for m in CLAUSE_BOUNDARY.finditer(text, 0, pos):
+                  last = m
+              return text[last.end():pos] if last else text[:pos]
+
+          def claims_pass(text):
+              # Blank lines and sentence terminators delimit a claim. A semicolon
+              # is NOT a terminator: it joins related clauses, so splitting on it
+              # would isolate "Tests passed;" from the "; but one test failed" that
+              # qualifies it. Commas are likewise not sentence boundaries: "15 of
+              # 16 tests passed, 1 failed" is one claim, and splitting it would let
+              # the failing half hide behind the passing half. Both are clause
+              # boundaries for negation only, via clause_prefix.
+              for sentence in re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", text):
+                  # Every candidate pass phrase is judged on its own clause, so an
+                  # unrelated earlier negator cannot hide a real claim.
+                  candidates = list(PASS.finditer(sentence))
+                  for found in candidates:
+                      if NEGATOR.search(clause_prefix(sentence, found.start())):
+                          continue
+                      # An outcome word vetoes the whole sentence, but only if it
+                      # is not itself negated within its own clause.
+                      if any(not NEG_BEFORE_OUTCOME.search(
+                                  clause_prefix(sentence, m.start()))
+                             for m in OUTCOME.finditer(sentence)):
+                          continue
+                      return True
+              return False
+
+          if not claims_pass(body):
+              print("verdict=skip")
+              print("reason=PR body makes no machine-checkable pass claim")
+          elif actual_exit == 0:
+              print("verdict=confirmed")
+              print("reason=PR claims the gate passed, and it did")
+          else:
+              print("verdict=contradicted")
+              print("reason=PR claims the gate passed, but re-running it failed")
+          print("actual_summary=" + summary.replace("\n", " ")[:200])
+          PY
+          echo "verdict=${{ steps.judge.outputs.verdict }}"
+          echo "reason=${{ steps.judge.outputs.reason }}"
+
+      # Fail ONLY on a genuine contradiction. A missing or unparseable claim
+      # passes silently: this workflow is an honesty check, not a new gate that
+      # can block an honest contributor who documented nothing.
+      - name: Fail on a contradicted claim
+        if: steps.judge.outputs.verdict == 'contradicted'
+        run: |
+          echo "::error title=Validation claim contradicted::The PR body claims the"
+          echo "::error::hermetic gate passed, but re-running tools/check_gates.py against"
+          echo "::error::this PR head exited non-zero. Actual result: ${{ steps.actual.outputs.summary }}"
+          echo "::error::Either fix the failure, or correct the Validation Results section"
+          echo "::error::to state the real outcome. See CONTRIBUTING.md."
+          exit 1
+
+  # Sticky comment: update in place so a re-push does not spam the thread.
+  #
+  # This is the ONLY job holding `pull-requests: write`, and it deliberately
+  # has NO checkout step: nothing from the PR is ever written to disk or
+  # executed here. It renders a fixed comment from three plain-string outputs.
+  # `always()` keeps the comment posting even when `verify` failed -- which is
+  # precisely the contradicted case, where the author most needs to be told.
+  report:
+    needs: verify
+    # `verdict != ''` is load-bearing, and `needs.verify.result` is deliberately
+    # NOT used here. If `verify` dies before the judge step, `outputs.verdict`
+    # is empty, which satisfies `!= 'skip'` and would post an `unknown` verdict
+    # for a run that never evaluated anything. Gating on `result == 'success'`
+    # would fix that, but the "Fail on a contradicted claim" step ends in
+    # `exit 1` by design -- so that gate would also suppress the comment for
+    # every genuinely contradicted PR, which is exactly the case that needs it.
+    # Test whether the judge actually ran, not whether the job passed.
+    if: always() && github.event_name == 'pull_request' && needs.verify.outputs.verdict != '' && needs.verify.outputs.verdict != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Issue-comment write is the only capability used; nothing here reads or
+      # checks out the repo, so `contents` is deliberately absent.
+      pull-requests: write
+    steps:
+      - name: Report the verdict on the PR
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const marker = '<!-- validate-claim -->';
+            const verdict = process.env.VERDICT || 'unknown';
+            const summary = process.env.ACTUAL_SUMMARY || '';
+            const reason = process.env.REASON || '';
+
+            const icon = verdict === 'confirmed' ? '✅' : '❌';
+            let body = `${marker}\n### ${icon} Validation claim: ${verdict}\n\n`;
+            body += `${reason}\n\n`;
+            if (summary) body += `Re-ran \`tools/check_gates.py\` on this PR's head:\n\n\`\`\`\n${summary}\n\`\`\`\n\n`;
+            if (verdict === 'contradicted') {
+              body += 'The **Verification** section of this PR must be corrected to state the real outcome. ';
+              body += 'A green claim that does not reproduce blocks merge.\n';
+            } else {
+              body += 'This is an honesty check on the claim, not a substitute for CI. CI remains the gate.\n';
+            }
+            body += '\n<sub>This comment is updated in place on each push. Only the hermetic gate tier is re-run here; ' +
+                    'the network-dependent legs are covered by CI.</sub>';
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            // Find our previous comment so we update instead of re-posting.
+            const comments = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.data.find((c) => (c.body || '').includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+        env:
+          VERDICT: ${{ needs.verify.outputs.verdict }}
+          REASON: ${{ needs.verify.outputs.reason }}
+          ACTUAL_SUMMARY: ${{ needs.verify.outputs.summary }}
