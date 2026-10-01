@@ -66,10 +66,10 @@ _OS_PATTERNS = (
 # Built from PRIORITY_LABELS so the vocabulary lives in exactly one place. A
 # hand-written p[0-3] here would drift from the tuple above and silently accept
 # a P0, which is not a label this repo defines.
-_PRIORITY_RE = re.compile(
+_PRIORITY_LINE_RE = re.compile(
     r"^\s*(?:[-*]\s*)?(?:\*\*)?\s*priority\s*(?:\(p([0-3])\))?\s*(?:\*\*)?\s*:?\s*"
     r"(?:\*\*)?\s*(p([0-3]))?\b",
-    re.I | re.M,
+    re.I,
 )
 
 # The environment assertion is a specific line, not a phrase anywhere. Without
@@ -84,6 +84,10 @@ _OS_LINE_RE = re.compile(
 )
 _PLACEHOLDER_RE = re.compile(r"[\[<]")
 
+# A fenced block is an example, not an assertion. ``~~~`` fences are valid
+# Markdown too, and an info string (```text) is common on a shell example.
+FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
+
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 
 
@@ -95,24 +99,31 @@ def strip_comments(text: str) -> str:
 def os_labels(body: str) -> list[str]:
     """Every platform the body actually asserts, in vocabulary order.
 
-    Only the ``OS / shell:`` line counts, and only the value after it. The PR
-    template ships that line as a bracketed placeholder --
-    ``- OS / shell: [e.g. macOS + zsh (POSIX) / Linux + bash / ...]`` -- so an
-    unfilled template would otherwise name all four platforms and stamp every
-    untouched PR with four contradictory OS labels.
+    Three rules keep it from over-labelling, each from a real false positive:
 
-    Two rules follow from that:
-
-    * The line must start with the OS/shell key. A stray "works on macOS" in a
-      code sample or a discussion paragraph is not an environment assertion.
-    * A value still inside ``[...]`` or ``(...)`` is a placeholder, not a claim,
-      so it is skipped rather than read.
+    * Only the ``OS / shell:`` line counts, and only the value after it. The PR
+      template ships that line as a bracketed placeholder --
+      ``- OS / shell: [e.g. macOS + zsh (POSIX) / Linux + bash / ...]`` -- so an
+      unfilled template would otherwise name all four platforms and stamp every
+      untouched PR with four contradictory OS labels.
+    * A value still inside ``[]`` or ``<>`` is a placeholder, not a claim.
+    * Fenced code blocks are skipped. A PR that documents a Windows example
+      (`````\\n- OS / shell: Windows native + PowerShell\\n`````) is describing
+      something, not asserting its own environment, and would otherwise collect
+      both platforms.
     """
     found: set[str] = set()
+    in_fence = False
     for line in body.splitlines():
-        if not _OS_LINE_RE.match(line):
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
             continue
-        value = _OS_LINE_RE.match(line).group("value")
+        if in_fence:
+            continue
+        match = _OS_LINE_RE.match(line)
+        if not match:
+            continue
+        value = match.group("value")
         if _PLACEHOLDER_RE.search(value):
             continue
         for name, pattern in _OS_PATTERNS:
@@ -122,19 +133,31 @@ def os_labels(body: str) -> list[str]:
 
 
 def priority_label(body: str) -> str | None:
-    """First ``Priority: PN`` line, if any, validated against the vocabulary.
+    """First ``Priority: PN`` line outside a fenced block, if any.
+
+    Fenced blocks are skipped for the same reason ``os_labels`` skips them: a PR
+    that shows a priority line as an example is documenting it, not claiming it.
 
     The regex only recognises the shape; this is what enforces that the value is
     a label this repo actually defines.
     """
-    match = _PRIORITY_RE.search(body)
-    if not match:
-        return None
-    value = match.group(2) or match.group(1)
-    if value is None:
-        return None
-    candidate = value.upper()
-    return candidate if candidate in PRIORITY_LABELS else None
+    in_fence = False
+    for line in body.splitlines():
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        match = _PRIORITY_LINE_RE.match(line)
+        if not match:
+            continue
+        value = match.group(2) or match.group(1)
+        if value is None:
+            continue
+        candidate = value.upper()
+        if candidate in PRIORITY_LABELS:
+            return candidate
+    return None
 
 
 def derive_labels(body: str) -> list[str]:
@@ -193,6 +216,22 @@ def _selftest() -> int:
         ("This mentions Windows in prose but asserts no OS line.", [],
          "a platform named outside the key line is not an environment claim"),
         ("- OS and shell: Linux + bash", ["linux"], "key spelled with 'and'"),
+        # Fenced examples. A PR that documents a Windows example is describing
+        # something, not asserting its own environment.
+        ("- OS / shell: macOS\n\n```text\n- OS / shell: Windows native\n```",
+         ["macos"], "OS line inside a fenced block is an example"),
+        ("- OS / shell: macOS\n\n~~~\n- OS / shell: Linux\n~~~",
+         ["macos"], "~~~ fences count too"),
+        ("- OS / shell: macOS\n\n```\n- Priority: P1\n```",
+         ["macos"], "Priority inside a fenced block is an example"),
+        ("```\n- OS / shell: Windows\n```\n- OS / shell: macOS",
+         ["macos"], "fence before the real assertion is skipped"),
+        ("- Priority: P1\n```\nunclosed fence\n- Priority: P2",
+         ["P1"], "unclosed fence still skips what follows"),
+        # A fence toggles, so a CLOSED pair must not latch the skip on: the
+        # Windows line is fenced out, the macOS line after it is not.
+        ("```\n- OS / shell: Windows\n```\n- OS / shell: macOS\n```",
+         ["macos"], "closed fences toggle rather than latch"),
     ]
 
     failures = []

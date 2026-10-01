@@ -53,17 +53,24 @@ jobs:
         env:
           BODY_FILE: ${{ runner.temp }}/pr-body.txt
           REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          # The parser is fetched from the BASE commit, never from
+          # github.event.pull_request.head.sha. A head SHA on a fork is chosen by
+          # the PR author, so fetching and executing it here would run their code
+          # under this job's pull-requests:write token. Base is the only SHA whose
+          # content this workflow is entitled to trust.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          # Read the parser from the BASE branch, not the PR head: under
-          # pull_request_target the working tree is the base anyway, and this
-          # makes the trust boundary explicit rather than incidental.
           curl -fsSL \
-            -H "Authorization: Bearer ${GH_TOKEN:-}" \
-            "https://raw.githubusercontent.com/${REPO}/${HEAD_SHA}/tools/pr_metadata_labels.py" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://raw.githubusercontent.com/${REPO}/${BASE_SHA}/tools/pr_metadata_labels.py" \
             -o "$RUNNER_TEMP/pr_metadata_labels.py" || {
-              echo "  could not fetch the parser; leaving labels unchanged"
+              # Fail open AND say so in the output the later steps compare
+              # against: without labels=[] the empty string is not "[]", so the
+              # apply step would try to parse "" as JSON and fail.
+              echo "  could not fetch the parser from the base commit; leaving labels unchanged"
+              echo "labels=[]" >> "$GITHUB_OUTPUT"
               exit 0
             }
 
@@ -109,6 +116,22 @@ jobs:
           # comma-separated split leaves behind: "macos, P2" makes GitHub look for
           # a label literally named " P2" and fail the whole step.
           csv=$(python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))' <<< "$LABELS")
+          # Remove the labels THIS workflow previously derived before adding the
+          # current set. Without this, editing a description from macOS to Windows
+          # leaves both attached. Only the derived vocabulary is touched --
+          # bug, ci, skills and anything a human applied stay put.
+          DERIVED="macos linux windows wsl P1 P2 P3"
+          current=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
+                      --jq '[.labels[].name] | join("\n")' 2>/dev/null || printf '')
+          for label in $DERIVED; do
+            if printf '%s\n' "$current" | grep -qx -- "$label"; then
+              case ",$csv," in
+                *",$label,"*) : ;;                      # still asserted, keep it
+                *) gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$label" >/dev/null
+                   echo "  removed stale: $label" ;;
+              esac
+            fi
+          done
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$csv" >/dev/null
           echo "  applied: $csv"
 
