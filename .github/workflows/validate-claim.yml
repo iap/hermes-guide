@@ -231,8 +231,19 @@ jobs:
           # pass is spelled out.
           NEGATOR = re.compile(
               r"\b(?:not|never|cannot|unable)\b|n['’]t\b", re.I)
+          # An outcome word is negated by a preceding NO/ZERO/NONE as readily as by
+          # NOT: "mypy has no violations" and "ruff found zero errors" are genuine
+          # PASS claims, not outcome reports. This is checked per occurrence
+          # rather than encoded per word, so extending the vocabulary below cannot
+          # re-break a negated pass phrase.
+          NEG_BEFORE_OUTCOME = re.compile(
+              r"\b(?:not|never|no|zero|none|without|cannot|unable)\b|n['’]t\b",
+              re.I)
           OUTCOME = re.compile(
-              r"\b(?:failed|failing|failure|fails|except|partial|remain(?:s|ed)?)\b"
+              r"\b(?:failed|failing|failure|fails|except|partial|remain(?:s|ed)?"
+              r"|violations?|regressions?|problems?|errors?|issues?"
+              r"|broken|breakage|incomplete|skipped|dropped|degraded|unstable)\b"
+              r"|did\s+not\s+(?:complete|run|pass|finish|start|reach)"
               r"|\bno\s+(?:tests?|checks?|gates?)\s+passed\b",
               re.I)
 
@@ -245,9 +256,12 @@ jobs:
                   found = PASS.search(sentence)
                   if not found:
                       continue
+                  # A negator before the pass phrase negates the claim itself.
                   if NEGATOR.search(sentence[:found.start()]):
                       continue
-                  if OUTCOME.search(sentence):
+                  # An outcome word vetoes, unless it is itself negated.
+                  if any(not NEG_BEFORE_OUTCOME.search(sentence[:m.start()])
+                         for m in OUTCOME.finditer(sentence)):
                       continue
                   return True
               return False
