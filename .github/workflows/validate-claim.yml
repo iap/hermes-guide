@@ -241,8 +241,17 @@ jobs:
               re.I)
           OUTCOME = re.compile(
               r"\b(?:failed|failing|failure|fails|except|partial|remain(?:s|ed)?"
-              r"|violations?|regressions?|problems?|errors?|issues?"
+              r"|violations?|problems?|errors?|issues?"
               r"|broken|breakage|incomplete|skipped|dropped|degraded|unstable)\b"
+              # `regression(s)` is an outcome word ("2 regressions were found")
+              # but it is ALSO the head of a positive pass phrase this repo uses
+              # in exactly that word order: "Regression test suite: All passed",
+              # "All hermetic gates and regression tests passed". Without the
+              # lookahead, OUTCOME matched the noun and vetoed the claim, so a
+              # false claim written in the project's own wording was reported as
+              # no claim at all. Require that a following word is not the head of
+              # a pass phrase, which keeps both readings correct.
+              r"|regressions?\b(?!\s*(?:tests?|suite|checks?|gates?)\b)"
               r"|did\s+not\s+(?:complete|run|pass|finish|start|reach)"
               r"|\b(?:no|zero|0)\s+(?:tests?|checks?|gates?)\s+passed\b",
               re.I)
