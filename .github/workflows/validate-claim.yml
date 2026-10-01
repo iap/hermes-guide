@@ -244,26 +244,45 @@ jobs:
               r"|violations?|regressions?|problems?|errors?|issues?"
               r"|broken|breakage|incomplete|skipped|dropped|degraded|unstable)\b"
               r"|did\s+not\s+(?:complete|run|pass|finish|start|reach)"
-              r"|\bno\s+(?:tests?|checks?|gates?)\s+passed\b",
+              r"|\b(?:no|zero|0)\s+(?:tests?|checks?|gates?)\s+passed\b",
+              re.I)
+          # Negation belongs to the CLAUSE that holds the word it negates, not to
+          # the whole sentence. In "Tests passed, no CI log was attached, but one
+          # test failed" the "no" belongs to the middle clause and must not
+          # suppress the "failed" in the third.
+          CLAUSE_BOUNDARY = re.compile(
+              r"[,;:—–]|\b(?:but|and|however|although|though|while|whereas|yet)\b",
               re.I)
 
+          def clause_prefix(text, pos):
+              """Text from the start of pos's own clause up to pos."""
+              last = None
+              for m in CLAUSE_BOUNDARY.finditer(text, 0, pos):
+                  last = m
+              return text[last.end():pos] if last else text[:pos]
+
           def claims_pass(text):
-              # Blank lines and sentence/clause terminators delimit a claim.
-              # Commas are deliberately NOT a boundary: "15 of 16 tests passed,
-              # 1 failed" is one claim, and splitting on the comma would let the
-              # failing half hide behind a passing half.
-              for sentence in re.split(r"(?:\r?\n)+|(?<=[.;!?])\s+", text):
-                  found = PASS.search(sentence)
-                  if not found:
-                      continue
-                  # A negator before the pass phrase negates the claim itself.
-                  if NEGATOR.search(sentence[:found.start()]):
-                      continue
-                  # An outcome word vetoes, unless it is itself negated.
-                  if any(not NEG_BEFORE_OUTCOME.search(sentence[:m.start()])
-                         for m in OUTCOME.finditer(sentence)):
-                      continue
-                  return True
+              # Blank lines and sentence terminators delimit a claim. A semicolon
+              # is NOT a terminator: it joins related clauses, so splitting on it
+              # would isolate "Tests passed;" from the "; but one test failed" that
+              # qualifies it. Commas are likewise not sentence boundaries: "15 of
+              # 16 tests passed, 1 failed" is one claim, and splitting it would let
+              # the failing half hide behind the passing half. Both are clause
+              # boundaries for negation only, via clause_prefix.
+              for sentence in re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", text):
+                  # Every candidate pass phrase is judged on its own clause, so an
+                  # unrelated earlier negator cannot hide a real claim.
+                  candidates = list(PASS.finditer(sentence))
+                  for found in candidates:
+                      if NEGATOR.search(clause_prefix(sentence, found.start())):
+                          continue
+                      # An outcome word vetoes the whole sentence, but only if it
+                      # is not itself negated within its own clause.
+                      if any(not NEG_BEFORE_OUTCOME.search(
+                                  clause_prefix(sentence, m.start()))
+                             for m in OUTCOME.finditer(sentence)):
+                          continue
+                      return True
               return False
 
           if not claims_pass(body):
