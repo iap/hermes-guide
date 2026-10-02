@@ -193,6 +193,7 @@ jobs:
         run: python tools/test_checks_cli_resolution.py
 
       - name: Skill version bump guard
+        if: inputs.run-full-gate
         run: python tools/check_skill_version_bump.py ${{ inputs.base-ref }}
 
       - name: Version bump guard regression

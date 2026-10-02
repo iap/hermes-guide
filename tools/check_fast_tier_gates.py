@@ -54,6 +54,13 @@ _ALWAYS_OK = {
     "Fast-tier gate guard",
 }
 
+# Workflows this guard does not govern. The invariant is specific to
+# `reusable-ci.yml`'s `run-full-gate` input: a workflow without that input has
+# no fast tier to mis-gate, and its steps install their own dependencies.
+# Scoping by input rather than by filename, so a new reusable workflow is
+# audited by default instead of silently skipped.
+_UNGOVERNED = "no run-full-gate input"
+
 # A step-level `- name:` block in a workflow job, with its attributes.
 _STEP = re.compile(
     r"^      - name: (?P<name>.+?)\n(?P<body>(?:^ {8}.*\n|^ {6}\n)*)", re.MULTILINE
@@ -95,13 +102,19 @@ def gate_reason(source: str) -> str:
 
     # The `hermes` CLI is on PATH only after `Install Hermes`. Match argv[0]
     # exactly, so a `hermes` temp directory or an `echo hermes` argument does
-    # not count.
+    # not count, and require the call to be a `subprocess` one -- an unrelated
+    # `client.run([...])` is not shelling out to anything.
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         fn = node.func
-        name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
-        if name not in {"run", "Popen", "call", "check_call", "check_output"}:
+        if not (
+            isinstance(fn, ast.Attribute)
+            and isinstance(fn.value, ast.Name)
+            and fn.value.id == "subprocess"
+        ):
+            continue
+        if fn.attr not in {"run", "Popen", "call", "check_call", "check_output"}:
             continue
         for arg in node.args[:1]:
             if not isinstance(arg, (ast.List, ast.Tuple)) or not arg.elts:
@@ -114,20 +127,75 @@ def gate_reason(source: str) -> str:
 
 
 def parse_steps(workflow: str) -> list[dict[str, str]]:
-    """Extract each step's name, `if:` condition, and `run:` command."""
+    """Extract each step's name, `if:` condition, and full `run:` body.
+
+    ``run: |`` blocks are folded into a single newline-joined string, because a
+    one-line-only capture silently skips every multiline step -- and a guard that
+    cannot see the step it is meant to audit is worse than no guard.
+    """
     out = []
     for match in _STEP.finditer(workflow):
         body = match.group("body")
         cond = re.search(r"^        if: (.+?)\s*$", body, re.MULTILINE)
         run = re.search(r"^        run: (.+?)\s*$", body, re.MULTILINE)
+        commands = run.group(1) if run else ""
+        if commands.strip() in {"|", ">", "|-", ">-", "|+", ">+"}:
+            # Block scalar: collect the indented body that follows.
+            first = body[: run.start()].count("\n") + 1
+            block = body.split("\n")[first:]
+            body_lines = []
+            for line in block:
+                if not line.strip():
+                    body_lines.append("")
+                elif line.startswith(" " * 10):  # deeper than the step's own keys
+                    body_lines.append(line.strip())
+                else:
+                    break
+            commands = "\n".join(body_lines)
         out.append(
             {
                 "name": match.group("name"),
                 "if": cond.group(1) if cond else "",
-                "run": run.group(1) if run else "",
+                "run": commands,
             }
         )
     return out
+
+
+def _is_gated(condition: str) -> bool:
+    """True when `condition` genuinely requires run-full-gate to be true.
+
+    A substring test accepts `!inputs.run-full-gate` and
+    `inputs.run-full-gate || true`, both of which run the step when the gate is
+    false -- exactly the condition the guard exists to catch. Require the
+    positive term and reject negation and `||` escape hatches.
+    """
+    if not condition.strip():
+        return False
+    if f"!inputs.{_FULL_GATE}" in condition or f"! inputs.{_FULL_GATE}" in condition:
+        return False
+    # Any `||` branch can short-circuit to true without the gate.
+    if "||" in condition:
+        return False
+    return f"inputs.{_FULL_GATE}" in condition
+
+
+def _python_scripts(run: str) -> list[str]:
+    """Every `python <script>.py` invoked by a step, one-line or block.
+
+    `run.split()[-1]` would yield `--verbose` for `python t.py --verbose` and
+    silently skip the step, so take the first token after the interpreter that
+    looks like a script path.
+    """
+    found = []
+    for line in run.split("\n"):
+        parts = line.strip().split()
+        for idx, tok in enumerate(parts):
+            if tok in {"python", "python3"} and idx + 1 < len(parts):
+                cand = parts[idx + 1]
+                if cand.endswith(".py"):
+                    found.append(cand)
+    return found
 
 
 def audit(workflow_dir: Path) -> tuple[int, list[str]]:
@@ -143,27 +211,33 @@ def audit(workflow_dir: Path) -> tuple[int, list[str]]:
         except OSError as exc:
             violations.append(f"{workflow}: unreadable ({exc})")
             continue
+        # Only a workflow that actually defines the gate is in scope. One
+        # without it (`release.yml`, which runs on tags and installs its own
+        # dependencies) has no fast tier, so gating its steps would be wrong.
+        if f"run-full-gate" not in text:
+            continue
         for step in parse_steps(text):
-            run = step["run"].strip()
-            if not run.startswith("python"):
+            scripts = _python_scripts(step["run"])
+            if not scripts:
                 continue
             checked += 1
             name = step["name"]
             if name in _ALWAYS_OK:
                 continue
-            script = run.split()[-1]
-            path = workflow_dir.parent.parent / script
-            if not path.is_file():
-                continue  # not a repo script; out of scope
-            reason = gate_reason(path.read_text(encoding="utf-8"))
-            if not reason:
+            if _is_gated(step["if"]):
                 continue
-            if _FULL_GATE in step["if"]:
-                continue
-            violations.append(
-                f"{workflow.name}: '{name}' ({script}) {reason}, "
-                f"but has no `if: inputs.{_FULL_GATE}`"
-            )
+            repo = workflow_dir.parent.parent
+            for script in scripts:
+                path = repo / script
+                if not path.is_file():
+                    continue  # not a repo script; out of scope
+                reason = gate_reason(path.read_text(encoding="utf-8"))
+                if not reason:
+                    continue
+                violations.append(
+                    f"{workflow.name}: '{name}' ({script}) {reason}, "
+                    f"but is not behind `if: inputs.{_FULL_GATE}`"
+                )
     return checked, violations
 
 
@@ -191,12 +265,49 @@ _SELFTEST_CASES: list[tuple[str, bool]] = [
     ("import hermes_agent", False),  # upstream package, not this plugin
     ('subprocess.run(["git", "log"])', False),
     ("import hermes_guide_ish", False),  # prefix must match the package exactly
+    ('client.run(["hermes", "config"])', False),  # not a subprocess call
+    ("runner.run(['hermes'])", False),
+    ("self.run(['hermes'])", False),
+    ("subprocess.run(['hermes-guide'])", False),  # not the CLI exactly
+]
+
+# (condition, is_gated) -- the gate must be genuinely required, not merely
+# mentioned. `!inputs.run-full-gate` and `|| true` both run when it is false.
+_GATE_CASES: list[tuple[str, bool]] = [
+    ("inputs.run-full-gate", True),
+    ("inputs.run-full-gate && runner.os == 'Linux'", True),
+    ("runner.os == 'Linux' && inputs.run-full-gate", True),
+    ("", False),
+    ("runner.os == 'Linux'", False),
+    ("!inputs.run-full-gate", False),  # runs when the gate is FALSE
+    ("! inputs.run-full-gate", False),
+    ("inputs.run-full-gate || true", False),  # escape hatch
+    ("inputs.run-full-gate || runner.os == 'Linux'", False),
+    ("inputs.run-fast-gate", False),  # a different input
+]
+
+# (run text, expected script paths) -- one-liners with arguments, block scalars,
+# and multi-command blocks.
+_SCRIPT_CASES: list[tuple[str, list[str]]] = [
+    ("python tools/test_a.py", ["tools/test_a.py"]),
+    ("python tools/test_a.py --verbose", ["tools/test_a.py"]),
+    ("python3 tools/test_a.py --selftest", ["tools/test_a.py"]),
+    ("python tools/test_a.py --flag 2>&1", ["tools/test_a.py"]),
+    ("|\n          python tools/test_a.py\n", ["tools/test_a.py"]),
+    ("|\n          python tools/test_a.py --selftest\n          python tools/test_b.py\n",
+     ["tools/test_a.py", "tools/test_b.py"]),
+    ("set -e\npython tools/test_a.py\n", ["tools/test_a.py"]),
+    ("pip install bandit", []),
+    ("bash scripts/thing.sh", []),
+    ("", []),
 ]
 
 
 def selftest() -> int:
     failures = 0
+    total = 0
     for snippet, expect in _SELFTEST_CASES:
+        total += 1
         got = bool(gate_reason(snippet))
         if got != expect:
             failures += 1
@@ -205,10 +316,30 @@ def selftest() -> int:
                 f"for: {snippet!r}",
                 file=sys.stderr,
             )
+    for condition, expect in _GATE_CASES:
+        total += 1
+        got = _is_gated(condition)
+        if got != expect:
+            failures += 1
+            print(
+                f"SELFTEST FAIL: expected is_gated={expect} got={got} "
+                f"for condition {condition!r}",
+                file=sys.stderr,
+            )
+    for run, expect in _SCRIPT_CASES:
+        total += 1
+        got = _python_scripts(run)
+        if got != expect:
+            failures += 1
+            print(
+                f"SELFTEST FAIL: expected scripts={expect} got={got} "
+                f"for run {run!r}",
+                file=sys.stderr,
+            )
     if failures:
         print(f"{failures} selftest case(s) failed", file=sys.stderr)
         return 1
-    print(f"selftest OK: {len(_SELFTEST_CASES)} cases")
+    print(f"selftest OK: {total} cases")
     return 0
 
 
