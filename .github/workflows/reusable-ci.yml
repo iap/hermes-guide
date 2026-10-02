@@ -130,6 +130,15 @@ jobs:
           python tools/check_no_mutation.py --selftest
           python tools/check_no_mutation.py
 
+      - name: Fast-tier gate guard
+        # Stdlib only, so it runs in the fast tier -- which is the point: it
+        # audits the tier that skips `Install Hermes`, so a step needing the
+        # plugin package or the `hermes` CLI is caught on the push where that
+        # would otherwise fail. Ungated by necessity and by design.
+        run: |
+          python tools/check_fast_tier_gates.py --selftest
+          python tools/check_fast_tier_gates.py
+
       - name: Host-pressure probe behavioral test
         # Linux legs only: the probe is a bash script reading /proc, and the
         # fixtures stub macOS tools (sysctl/top/vm_stat) that do not exist here.
@@ -155,12 +164,15 @@ jobs:
         run: python tools/test_mcp_shape.py
 
       - name: Memory hygiene regression test
+        if: inputs.run-full-gate
         run: python tools/test_memory_hygiene.py
 
       - name: Exit contract (guide CLI)
+        if: inputs.run-full-gate
         run: python tools/test_exit_contract.py
 
       - name: Check-envelope regression test
+        if: inputs.run-full-gate
         run: python tools/test_check_envelopes.py
 
       - name: Claim-judge regression test
@@ -194,18 +206,23 @@ jobs:
           python tools/check_version_consistency.py
 
       - name: Skill-library behavioral test
+        if: inputs.run-full-gate
         run: python tools/test_skill_checks.py
 
       - name: Hooks allowlist reachability regression
+        if: inputs.run-full-gate
         run: python tools/test_reachable_allowlist_check.py
 
       - name: Plugin notes regression
+        if: inputs.run-full-gate
         run: python tools/test_plugins_notes.py
 
       - name: Portable plugin.json discovery regression
+        if: inputs.run-full-gate
         run: python tools/test_portable_plugin_manifest.py
 
       - name: Subcategory-dir constants regression
+        if: inputs.run-full-gate
         run: python tools/test_plugin_skip_source.py
 
       - name: Upstream drift hygiene regression
@@ -236,6 +253,7 @@ jobs:
           python tools/test_skill_provenance.py
 
       - name: Scope validation regression
+        if: inputs.run-full-gate
         run: python tools/test_scope_validation.py
 
       - name: PR metadata label parser regression
@@ -245,6 +263,7 @@ jobs:
         run: python tools/pr_metadata_labels.py --selftest
 
       - name: Doc skill/check count consistency
+        if: inputs.run-full-gate
         run: python tools/test_skill_counts.py
 
       - name: Tap discovery smoke test
