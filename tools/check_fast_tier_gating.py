@@ -63,6 +63,35 @@ _GATE = "inputs.run-full-gate"
 # index form is skipped entirely and never audited.
 _GATE_SPELLING = re.compile(r"inputs\s*\[\s*['\"]\s*run-full-gate\s*['\"]\s*\]")
 
+# A workflow that runs on a branch push with no gate input is unauditable. This
+# lets a maintainer assert the exception in the file, so the exemption is
+# visible in review rather than living in this script's logic.
+_PUSH_UNGATED_OK = re.compile(r"no Hermes install needed")
+
+
+def _on_block(text: str) -> object:
+    """The workflow's trigger block.
+
+    YAML 1.1 parses a bare `on:` key as the boolean True, so a plain `on: push:`
+    lands under the key `True` rather than `"on"`. Check both or the triggers
+    are silently invisible.
+    """
+    try:
+        doc = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return {}
+    return doc.get("on", doc.get(True, {}))
+
+
+def _is_tag_only_push(text: str) -> bool:
+    """True when a push trigger is narrowed to tags.
+
+    `on: push: tags: [...]` fires only when a tag is pushed, not on a branch
+    push, so the missing fast-tier gate cannot redden master.
+    """
+    on = _on_block(text)
+    return isinstance(on, dict) and isinstance(on.get("push"), dict) and "tags" in on["push"]
+
 
 def _condition(step: dict) -> str:
     """The step's `if:` expression, with any index spelling of the gate normalised."""
@@ -244,6 +273,16 @@ def selftest() -> int:
                    stale_allowlist_entries(live[:-1]),
                    [sorted(FAST_TIER_SAFE)[-1]]))
 
+    # YAML 1.1 turns a bare `on:` key into the boolean True.
+    cases_.append(("bare `on:` is found under the True key",
+                   triggers_on_push("on:\n  push:\njobs: {}\n"), True))
+    cases_.append(("tag-filtered push is recognised",
+                   _is_tag_only_push("on:\n  push:\n    tags: ['v*']\njobs: {}\n"), True))
+    cases_.append(("plain push is not tag-filtered",
+                   _is_tag_only_push("on:\n  push:\njobs: {}\n"), False))
+    cases_.append(("schedule-only is not a push trigger",
+                   triggers_on_push("on:\n  schedule: []\njobs: {}\n"), False))
+
     failures = [
         f"{label}: got {got!r}, want {want!r}"
         for label, got, want in cases_
@@ -272,6 +311,21 @@ def stale_allowlist_entries(steps: list[dict]) -> list[str]:
     return sorted(FAST_TIER_SAFE - used)
 
 
+def triggers_on_push(workflow: str) -> bool:
+    """True when the workflow can run from a push (any branch, no tag filter).
+
+    A workflow that runs on a branch push but has no fast-tier gate is the case
+    that silently escapes: nothing installs Hermes, and nothing checks.
+    """
+    try:
+        on = _on_block(workflow)
+    except yaml.YAMLError:
+        return False
+    if on is True or on == "push":
+        return True
+    return isinstance(on, dict) and "push" in on
+
+
 def main(argv: list[str]) -> int:
     if "--selftest" in argv:
         return selftest()
@@ -284,18 +338,39 @@ def main(argv: list[str]) -> int:
     # GitHub Actions accepts both extensions; a `.yaml` workflow with an ungated
     # dependency would otherwise slip past unnoticed.
     workflows = sorted(wf_dir.glob("*.yml")) + sorted(wf_dir.glob("*.yaml"))
+    # `FAST_TIER_SAFE` is global across every audited workflow, so accumulate
+    # ungated usage across all of them before judging staleness. Comparing per
+    # workflow would report every entry the *other* workflow uses as unused.
+    ungated: list[str] = []
     for workflow in workflows:
         text = workflow.read_text(encoding="utf-8")
-        if _GATE not in _GATE_SPELLING.sub(_GATE, text):
-            continue  # no fast tier to mis-gate
+        # "Mentions the gate" covers all three spellings: the dotted expression
+        # in a step condition, the indexed one, and the bare input key a caller
+        # passes to a reusable workflow. ci.yml only ever uses the third.
+        if "run-full-gate" not in text:
+            # No gate input means no fast tier to audit -- unless it can run
+            # from a push, where it would still have no Hermes installed. A
+            # tags/push filter means it only fires on a tag, which is safe.
+            if _PUSH_UNGATED_OK.match(text) or _is_tag_only_push(text):
+                continue
+            if triggers_on_push(text):
+                findings.append(
+                    f"{workflow.name}: runs on push with no run-full-gate input, "
+                    f"so its steps have no Hermes installed and this guard cannot "
+                    f"audit them -- add the gate, restrict it to tags, or assert "
+                    f"'no Hermes install needed' in a comment"
+                )
+            continue
         audited += 1
         steps = steps_of(text)
         findings += [f"{workflow.name}: {v}" for v in violations(steps, tools_dir)]
-        for entry in stale_allowlist_entries(steps):
-            findings.append(
-                f"{workflow.name}: FAST_TIER_SAFE lists {entry}, which no ungated "
-                f"step invokes -- remove it so it cannot permit a future ungated use"
-            )
+        ungated += [s for _label, s in ungated_scripts(steps, tools_dir)]
+
+    for entry in sorted(FAST_TIER_SAFE - set(ungated)):
+        findings.append(
+            f"FAST_TIER_SAFE lists {entry}, which no ungated step in any audited "
+            f"workflow invokes -- remove it so it cannot permit a future ungated use"
+        )
 
     if findings:
         print("FAIL: CI step(s) that would break on a push to master:", file=sys.stderr)
