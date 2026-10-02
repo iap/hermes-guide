@@ -145,6 +145,13 @@ jobs:
         run: python tools/test_readonly_runtime.py
 
       - name: MCP shape regression test
+        # Copies the plugin into a temp dir and imports it, so it needs PyYAML
+        # from the install above. Its own import block hides that: every
+        # module-level import is stdlib, and the plugin import sits inside
+        # main(), so nothing at the step level reads as dependency-bearing.
+        # It has no internal skip guard, so run-full-gate=false would fail on
+        # every direct push to master.
+        if: inputs.run-full-gate
         run: python tools/test_mcp_shape.py
 
       - name: Memory hygiene regression test
