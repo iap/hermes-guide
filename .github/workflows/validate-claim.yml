@@ -240,7 +240,16 @@ jobs:
               r"\b(?:not|never|no|zero|none|without|cannot|unable)\b|n['’]t\b",
               re.I)
           OUTCOME = re.compile(
-              r"\b(?:failed|failing|failure|fails|except|partial|remain(?:s|ed)?"
+              # `failures?` must carry its plural. A vocabulary has to be closed
+              # over inflection, and `\bfailure\b` cannot match the `s` in
+              # `failures`: `\b` asserts a non-word character on one side, and
+              # `e`/`s` are both word characters, so the singular-only
+              # alternative silently skipped every plural. Every other noun here
+              # is already written `word?` for that reason. The plural form is
+              # not a rare construction: "All tests passed, but regression test
+              # failures were found." states a failure outright, and the judge
+              # read it as a clean pass claim.
+              r"\b(?:failed|failing|failures?|fails|except|partial|remain(?:s|ed)?"
               r"|violations?|problems?|errors?|issues?"
               r"|broken|breakage|incomplete|skipped|dropped|degraded|unstable)\b"
               # `regression(s)` is an outcome word ("2 regressions were found")
