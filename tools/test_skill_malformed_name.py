@@ -59,6 +59,59 @@ def _load_checks(td: str):
     return checks
 
 
+def _plugin_skill_names_cases() -> list[str]:
+    """``_plugin_skill_names`` walks the plugin's OWN ``skills/`` directory.
+
+    It has the same unvalidated-YAML hazard as ``check_skills``: the declared
+    ``name`` is fed straight into ``set.add``, so a mapping or sequence value
+    raises TypeError instead of degrading. It cannot be reached through
+    ``$HERMES_HOME`` (that is ``check_skills``' job), so it needs a plugin-side
+    fixture: a copy of the repo whose ``skills/`` holds one malformed file.
+
+    A non-string name must fall back to the directory basename so the inventory
+    stays usable, and the malformed file is reported by the count/provenance
+    guards rather than crashing the plugin.
+    """
+    failures: list[str] = []
+    for shape, name_line in BAD_NAMES.items():
+        with tempfile.TemporaryDirectory() as td:
+            checks = _load_checks(td)
+            plugin_root = Path(td) / "plugin"
+            (plugin_root / "skills").mkdir(parents=True)
+
+            # one healthy skill so the inventory is not empty
+            _write(
+                plugin_root / "skills/healthy/SKILL.md",
+                "---\nname: healthy\ndescription: fine\nversion: 1.0.0\n---\nbody\n",
+            )
+            _write(
+                plugin_root / "skills/malformed/SKILL.md",
+                f"---\n{name_line}description: unhashable name\nversion: 1.0.0\n---\nbody\n",
+            )
+
+            checks._cache.clear()
+            # point the walker at the fixture instead of the real repo skills/
+            checks.__file__ = str(plugin_root / "checks.py")
+            try:
+                names = checks._plugin_skill_names()
+            except Exception as exc:  # noqa: BLE001 - that is the regression
+                failures.append(
+                    f"[plugin/{shape}] _plugin_skill_names raised "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                continue
+
+            if not any(isinstance(n, str) for n in names):
+                failures.append(f"[plugin/{shape}] inventory unusable: {names!r}")
+            if "healthy" not in names:
+                failures.append(f"[plugin/{shape}] healthy skill lost from inventory: {names!r}")
+            # the malformed one must be tracked by basename, not crash or vanish
+            if "malformed" not in names:
+                failures.append(
+                    f"[plugin/{shape}] malformed skill not tracked by basename: {names!r}"
+                )
+    return failures
+
 def main(argv: list[str]) -> int:
     failures: list[str] = []
 
@@ -140,6 +193,8 @@ def main(argv: list[str]) -> int:
                         f"{_healthy_only.get(label)!r} -> {env.get('status')!r} "
                         f"({env.get('reason')!r})"
                     )
+
+    failures.extend(_plugin_skill_names_cases())
 
     if failures:
         for f in failures:
