@@ -80,19 +80,29 @@ def is_gated(step: dict) -> bool:
     condition = str(step.get("if") or "")
     if f"!{_GATE}" in condition or "! " + _GATE in condition:
         return False
+    # A comparison names the gate but inverts it: `== false` and `!= true` are
+    # true exactly when the fast tier is active. Tolerate parentheses.
+    if re.search(rf"\(?\s*{re.escape(_GATE)}\s*\)?\s*(==|!=)\s*(true|false)", condition):
+        return False
     if "||" in condition:
         return False
     return _GATE in condition
 
 
-def violations(steps: list[dict]) -> list[str]:
-    """Human-readable problems for every ungated step invoking a non-allowlisted script."""
+def violations(steps: list[dict], tools: Path | None = None) -> list[str]:
+    """Human-readable problems for every ungated step that may need the full tier."""
     out = []
     for step in steps:
         if is_gated(step):
             continue
         label = step.get("name") or str(step.get("uses", "<unnamed>")).split("@")[0]
-        for script in _scripts_in(str(step.get("run") or "")):
+        run = str(step.get("run") or "")
+        if _unresolvable(run):
+            out.append(
+                f"{label}: invokes python through a variable, so this checker "
+                f"cannot confirm it is fast-tier safe -- spell the script out"
+            )
+        for script in _scripts_in(run, tools):
             if script not in FAST_TIER_SAFE:
                 out.append(
                     f"{label}: tools/{script} runs in the fast tier but is not "
@@ -101,41 +111,78 @@ def violations(steps: list[dict]) -> list[str]:
     return out
 
 
-def _scripts_in(run: str) -> list[str]:
-    return re.findall(r"tools/([A-Za-z0-9_-]+\.py)", run)
+def _scripts_in(run: str, tools: Path | None = None) -> list[str]:
+    """Names of `tools/` scripts a step appears to invoke.
+
+    Two shapes matter. The common one spells the path out (`tools/x.py`). But a
+    step may `cd tools` first and call `python x.py`, so a bare basename counts
+    too -- resolved against `tools/` so an unrelated `docs/notes.py` is not
+    mistaken for a harness script.
+    """
+    names = []
+    for raw in re.findall(r"([A-Za-z0-9_./-]*[A-Za-z0-9_-]+\.py)", run):
+        base = raw.rsplit("/", 1)[-1]
+        if tools is None or (tools / base).is_file():
+            names.append(base)
+    return names
+
+
+def _unresolvable(run: str) -> bool:
+    """True when a step invokes python through a path this checker cannot read.
+
+    `python "$SCRIPT"` or `python ${TOOL}` names the script at runtime. Rather
+    than assume such a step is safe, report it: an unreadable invocation is
+    treated as ungated.
+    """
+    return bool(re.search(r"python3?\s+[\"']?\$", run))
 
 
 def selftest() -> int:
-    failures = 0
-
-    def case(label: str, got, want) -> None:
-        nonlocal failures
-        if got != want:
-            failures += 1
-            print(f"SELFTEST FAIL {label}: got {got!r}, want {want!r}", file=sys.stderr)
-
     # `if` is a keyword, so conditions go in via a dict literal.
-    run = "python tools/test_x.py"
-    case("gated", violations([{"name": "s", "if": _GATE, "run": run}]), [])
-    case("allowlisted", violations([{"name": "s", "run": "python tools/check_self_claim.py"}]), [])
-    case("unknown script flagged", len(violations([{"name": "s", "run": run}])), 1)
-    case("negated gate is no gate",
-         len(violations([{"name": "s", "if": f"!{_GATE}", "run": run}])), 1)
-    case("|| escape hatch is no gate",
-         len(violations([{"name": "s", "if": f"{_GATE} || runner.os == 'Linux'", "run": run}])), 1)
-    case("compound gate counts",
-         is_gated({"name": "s", "if": f"runner.os == 'Linux' && {_GATE}"}), True)
-    case("uses: step ignored", violations([{"uses": "actions/checkout@v4"}]), [])
-    case("both allowlisted in one step",
-         violations([{"name": "s", "run": "python tools/check_self_claim.py "
-                                       "&& python tools/test_claim_validation.py"}]), [])
-    case("one bad among good",
-         len(violations([{"name": "s", "run": "python tools/check_self_claim.py "
-                                             "&& python tools/test_x.py"}])), 1)
+    run = "python tools/test_mcp_shape.py"   # exists, and is correctly NOT allowlisted
+    here = Path(__file__).resolve().parent
+    v = lambda steps: violations(steps, here)  # noqa: E731
+    n = lambda **kw: len(v([{"name": "s", **kw}]))  # noqa: E731
 
-    total = 10
+    cases_: list[tuple[str, object, object]] = [
+        ("gated", v([{"name": "s", "if": _GATE, "run": run}]), []),
+        ("allowlisted",
+         v([{"name": "s", "run": "python tools/check_self_claim.py"}]), []),
+        ("unknown script flagged", n(run=run), 1),
+        ("negated gate is no gate", n(**{"if": f"!{_GATE}", "run": run}), 1),
+        ("|| escape hatch is no gate",
+         n(**{"if": f"{_GATE} || runner.os == 'Linux'", "run": run}), 1),
+        ("compound gate counts",
+         is_gated({"name": "s", "if": f"runner.os == 'Linux' && {_GATE}"}), True),
+        ("uses: step ignored", v([{"uses": "actions/checkout@v4"}]), []),
+        ("both allowlisted in one step",
+         v([{"name": "s", "run": "python tools/check_self_claim.py "
+                                "&& python tools/test_claim_validation.py"}]), []),
+        ("one bad among good",
+         n(run="python tools/check_self_claim.py && python tools/test_mcp_shape.py"), 1),
+        # `== false` / `!= true` name the gate and invert it.
+        ("== false is no gate", n(**{"if": f"{_GATE} == false", "run": run}), 1),
+        ("!= true is no gate", n(**{"if": f"{_GATE} != true", "run": run}), 1),
+        ("parenthesised == false is no gate", n(**{"if": f"({_GATE}) == false", "run": run}), 1),
+        # A step may `cd tools` and call the script by bare name.
+        ("cd-relative invocation is seen", n(run="cd tools && python test_mcp_shape.py"), 1),
+        # A script named through a variable cannot be confirmed; report it.
+        ("variable invocation is reported", n(run='python "$SCRIPT"'), 1),
+        ("bare py outside tools/ is not a harness script",
+         v([{"name": "s", "run": "python docs/notes.py"}]), []),
+    ]
+
+    failures = [
+        f"{label}: got {got!r}, want {want!r}"
+        for label, got, want in cases_
+        if got != want
+    ]
+    for failure in failures:
+        print(f"SELFTEST FAIL {failure}", file=sys.stderr)
+
+    total = len(cases_)
     if failures:
-        print(f"error: {failures}/{total} selftest case(s) failed", file=sys.stderr)
+        print(f"error: {len(failures)}/{total} selftest case(s) failed", file=sys.stderr)
         return 1
     print(f"OK: selftest {total} case(s) passed")
     return 0
@@ -146,16 +193,19 @@ def main(argv: list[str]) -> int:
         return selftest()
 
     wf_dir = Path(__file__).resolve().parent.parent / ".github" / "workflows"
+    tools_dir = Path(__file__).resolve().parent.parent / "tools"
     findings: list[str] = []
     audited = 0
 
-    for workflow in sorted(wf_dir.glob("*.yml")):
+    # GitHub Actions accepts both extensions; a `.yaml` workflow with an ungated
+    # dependency would otherwise slip past unnoticed.
+    workflows = sorted(wf_dir.glob("*.yml")) + sorted(wf_dir.glob("*.yaml"))
+    for workflow in workflows:
         text = workflow.read_text(encoding="utf-8")
         if _GATE not in text:
             continue  # no fast tier to mis-gate
         audited += 1
-        name = workflow.name
-        findings += [f"{name}: {v}" for v in violations(steps_of(text))]
+        findings += [f"{workflow.name}: {v}" for v in violations(steps_of(text), tools_dir)]
 
     if findings:
         print("FAIL: CI step(s) that would break on a push to master:", file=sys.stderr)
