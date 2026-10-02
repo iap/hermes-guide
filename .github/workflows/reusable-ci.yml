@@ -130,6 +130,14 @@ jobs:
           python tools/check_no_mutation.py --selftest
           python tools/check_no_mutation.py
 
+      - name: Tool coverage guard
+        # Stdlib only, so it runs in the fast tier. Fails if a tools/ guard or
+        # regression test is never referenced by a workflow -- unwired coverage
+        # is silently dead. Ungated by necessity and by design.
+        run: |
+          python tools/check_tool_coverage.py --selftest
+          python tools/check_tool_coverage.py
+
       - name: Host-pressure probe behavioral test
         # Linux legs only: the probe is a bash script reading /proc, and the
         # fixtures stub macOS tools (sysctl/top/vm_stat) that do not exist here.
@@ -201,6 +209,11 @@ jobs:
         run: |
           python tools/check_version_consistency.py --selftest
           python tools/check_version_consistency.py
+
+      - name: Malformed skill-name regression
+        # Imports hermes_guide.checks, so it needs the full tier.
+        if: inputs.run-full-gate
+        run: python tools/test_skill_malformed_name.py
 
       - name: Skill-library behavioral test
         if: inputs.run-full-gate
