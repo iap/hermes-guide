@@ -155,12 +155,15 @@ jobs:
         run: python tools/test_mcp_shape.py
 
       - name: Memory hygiene regression test
+        if: inputs.run-full-gate
         run: python tools/test_memory_hygiene.py
 
       - name: Exit contract (guide CLI)
+        if: inputs.run-full-gate
         run: python tools/test_exit_contract.py
 
       - name: Check-envelope regression test
+        if: inputs.run-full-gate
         run: python tools/test_check_envelopes.py
 
       - name: Claim-judge regression test
@@ -181,9 +184,15 @@ jobs:
         run: python tools/test_checks_cli_resolution.py
 
       - name: Skill version bump guard
+        if: inputs.run-full-gate
         run: python tools/check_skill_version_bump.py ${{ inputs.base-ref }}
 
       - name: Version bump guard regression
+        # Needs PyYAML: its negative controls expect the guard to reject an
+        # unbumped change, but check_skill_version_bump.py swallows the missing
+        # import and returns "no finding" (exit 0), so the test passes vacuously
+        # instead of failing.
+        if: inputs.run-full-gate
         run: python tools/test_skill_version_bump.py
 
       - name: Version consistency guard
@@ -194,18 +203,23 @@ jobs:
           python tools/check_version_consistency.py
 
       - name: Skill-library behavioral test
+        if: inputs.run-full-gate
         run: python tools/test_skill_checks.py
 
       - name: Hooks allowlist reachability regression
+        if: inputs.run-full-gate
         run: python tools/test_reachable_allowlist_check.py
 
       - name: Plugin notes regression
+        if: inputs.run-full-gate
         run: python tools/test_plugins_notes.py
 
       - name: Portable plugin.json discovery regression
+        if: inputs.run-full-gate
         run: python tools/test_portable_plugin_manifest.py
 
       - name: Subcategory-dir constants regression
+        if: inputs.run-full-gate
         run: python tools/test_plugin_skip_source.py
 
       - name: Upstream drift hygiene regression
@@ -236,6 +250,7 @@ jobs:
           python tools/test_skill_provenance.py
 
       - name: Scope validation regression
+        if: inputs.run-full-gate
         run: python tools/test_scope_validation.py
 
       - name: PR metadata label parser regression
@@ -245,6 +260,7 @@ jobs:
         run: python tools/pr_metadata_labels.py --selftest
 
       - name: Doc skill/check count consistency
+        if: inputs.run-full-gate
         run: python tools/test_skill_counts.py
 
       - name: Tap discovery smoke test
