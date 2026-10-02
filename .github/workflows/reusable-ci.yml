@@ -156,6 +156,15 @@ jobs:
       - name: Check-envelope regression test
         run: python tools/test_check_envelopes.py
 
+      - name: Claim-judge regression test
+        # Extracts and runs the judge embedded in validate-claim.yml, so the
+        # OUTCOME vocabulary cannot silently lose a plural again. The test list
+        # here is explicit rather than a glob, so a new test file that nobody
+        # adds to this workflow simply never runs -- which is how the judge's
+        # `failure`/`failures` gap survived with no failing test to point at it.
+        # Needs only the stdlib, so it is safe in the fast tier too.
+        run: python tools/test_claim_validation.py
+
       - name: CLI resolution regression test
         # Fabricates POSIX console scripts to stand in for hermes entry points,
         # which needs a POSIX shell and real permission bits — same reason the
