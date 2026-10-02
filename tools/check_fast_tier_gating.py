@@ -109,6 +109,18 @@ def is_gated(step: dict) -> bool:
     return _GATE in condition
 
 
+def ungated_scripts(steps: list[dict], tools: Path | None = None) -> list[tuple[str, str]]:
+    """(step label, script) for every script an ungated step may invoke."""
+    found = []
+    for step in steps:
+        if is_gated(step):
+            continue
+        label = step.get("name") or str(step.get("uses", "<unnamed>")).split("@")[0]
+        run = str(step.get("run") or "")
+        found += [(label, s) for s in _scripts_in(run, tools)]
+    return found
+
+
 def violations(steps: list[dict], tools: Path | None = None) -> list[str]:
     """Human-readable problems for every ungated step that may need the full tier."""
     out = []
@@ -223,6 +235,15 @@ def selftest() -> int:
     cases_.append(("job-level negated gate is no gate",
                    len(violations(steps_of(negated_job), here)), 1))
 
+    # An allowlist entry nothing invokes is a permission nobody granted.
+    live = [{"name": "s", "run": f"python tools/{e}"}
+            for e in sorted(FAST_TIER_SAFE)]
+    cases_.append(("no stale entries when every entry is used",
+                   stale_allowlist_entries(live), []))
+    cases_.append(("an unused entry is reported",
+                   stale_allowlist_entries(live[:-1]),
+                   [sorted(FAST_TIER_SAFE)[-1]]))
+
     failures = [
         f"{label}: got {got!r}, want {want!r}"
         for label, got, want in cases_
@@ -237,6 +258,18 @@ def selftest() -> int:
         return 1
     print(f"OK: selftest {total} case(s) passed")
     return 0
+
+
+def stale_allowlist_entries(steps: list[dict]) -> list[str]:
+    """Allowlisted scripts that no ungated step actually invokes.
+
+    An entry stops protecting anything once its step gains a gate, but it stays
+    in `FAST_TIER_SAFE` and keeps silently permitting a future ungated use. That
+    is how an allowlist rots into a list of permissions nobody granted. Report
+    the entry so removing it is a deliberate act.
+    """
+    used = {s for _label, s in ungated_scripts(steps)}
+    return sorted(FAST_TIER_SAFE - used)
 
 
 def main(argv: list[str]) -> int:
@@ -256,7 +289,13 @@ def main(argv: list[str]) -> int:
         if _GATE not in _GATE_SPELLING.sub(_GATE, text):
             continue  # no fast tier to mis-gate
         audited += 1
-        findings += [f"{workflow.name}: {v}" for v in violations(steps_of(text), tools_dir)]
+        steps = steps_of(text)
+        findings += [f"{workflow.name}: {v}" for v in violations(steps, tools_dir)]
+        for entry in stale_allowlist_entries(steps):
+            findings.append(
+                f"{workflow.name}: FAST_TIER_SAFE lists {entry}, which no ungated "
+                f"step invokes -- remove it so it cannot permit a future ungated use"
+            )
 
     if findings:
         print("FAIL: CI step(s) that would break on a push to master:", file=sys.stderr)
