@@ -57,6 +57,16 @@ FAST_TIER_SAFE = frozenset({
 })
 
 _GATE = "inputs.run-full-gate"
+# Actions accepts `inputs.run-full-gate` and `inputs['run-full-gate']` as the
+# same input. Normalise the index spelling to the dotted one so the scoping
+# prefilter and is_gated() both see either form; otherwise a workflow using the
+# index form is skipped entirely and never audited.
+_GATE_SPELLING = re.compile(r"inputs\s*\[\s*['\"]\s*run-full-gate\s*['\"]\s*\]")
+
+
+def _condition(step: dict) -> str:
+    """The step's `if:` expression, with any index spelling of the gate normalised."""
+    return _GATE_SPELLING.sub(_GATE, str(step.get("if") or ""))
 
 
 def steps_of(workflow: str) -> list[dict]:
@@ -77,7 +87,7 @@ def is_gated(step: dict) -> bool:
     (`inputs.run-full-gate || runner.os == 'Linux'`) both evaluate true when the
     fast tier is active, so neither counts as gating.
     """
-    condition = str(step.get("if") or "")
+    condition = _condition(step)
     if f"!{_GATE}" in condition or "! " + _GATE in condition:
         return False
     # A comparison names the gate but inverts it: `== false` and `!= true` are
@@ -170,6 +180,15 @@ def selftest() -> int:
         ("variable invocation is reported", n(run='python "$SCRIPT"'), 1),
         ("bare py outside tools/ is not a harness script",
          v([{"name": "s", "run": "python docs/notes.py"}]), []),
+        # The index spelling of the input is the same gate, not an escape.
+        ("index spelling gates",
+         is_gated({"name": "s", "if": "inputs['run-full-gate']"}), True),
+        ("index spelling, negated",
+         is_gated({"name": "s", "if": "!inputs['run-full-gate']"}), False),
+        ("index spelling, == false",
+         is_gated({"name": "s", "if": "inputs['run-full-gate'] == false"}), False),
+        ("index spelling, || escape",
+         is_gated({"name": "s", "if": "inputs['run-full-gate'] || runner.os == 'Windows'"}), False),
     ]
 
     failures = [
@@ -202,7 +221,7 @@ def main(argv: list[str]) -> int:
     workflows = sorted(wf_dir.glob("*.yml")) + sorted(wf_dir.glob("*.yaml"))
     for workflow in workflows:
         text = workflow.read_text(encoding="utf-8")
-        if _GATE not in text:
+        if _GATE not in _GATE_SPELLING.sub(_GATE, text):
             continue  # no fast tier to mis-gate
         audited += 1
         findings += [f"{workflow.name}: {v}" for v in violations(steps_of(text), tools_dir)]
