@@ -138,6 +138,16 @@ jobs:
           python tools/check_tool_coverage.py --selftest
           python tools/check_tool_coverage.py
 
+      - name: Fast-tier gating guard
+        # Needs PyYAML to parse steps accurately. Runs in the full tier, which is
+        # where it matters: the mistake is caught on the PR, before a workflow
+        # edit can reach master and run a dependency-needing step in the tier
+        # that skips `Install Hermes`.
+        if: inputs.run-full-gate
+        run: |
+          python tools/check_fast_tier_gating.py --selftest
+          python tools/check_fast_tier_gating.py
+
       - name: Host-pressure probe behavioral test
         # Linux legs only: the probe is a bash script reading /proc, and the
         # fixtures stub macOS tools (sysctl/top/vm_stat) that do not exist here.
