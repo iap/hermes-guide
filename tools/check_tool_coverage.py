@@ -17,11 +17,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-# `tools/<name>.py` as written in a workflow `run:` block. Anchored on the path
-# so a prose mention of a filename in a comment or a `name:` label is not
-# mistaken for an invocation; both are acceptable signals anyway, so the match
-# is deliberately loose on purpose.
-_MENTION = re.compile(r"tools/([A-Za-z0-9_]+)\.py")
+# `tools/<name>.py` as written in a workflow `run:` block. The name allows
+# hyphens (scripts are not restricted to identifiers), and the trailing
+# negative lookahead rejects compound suffixes so a `.py.bak` or `.pyc` left in
+# the tree cannot stand in for a real invocation.
+_MENTION = re.compile(r"tools/([A-Za-z0-9_-]+)\.py(?![A-Za-z0-9_.])")
 
 # Prefixes that must be executed. `tools/pr_metadata_labels.py` and friends are
 # helpers invoked by their own step, so they are covered by the same rule.
@@ -34,10 +34,12 @@ def find_orphans(tools_dir: Path, workflow_dir: Path) -> list[str]:
     for workflow in sorted(workflow_dir.glob("*.yml")) + sorted(workflow_dir.glob("*.yaml")):
         referenced |= set(_MENTION.findall(workflow.read_text(encoding="utf-8")))
 
+    # `is_file()` first: a *directory* named `check_helpers.py` would otherwise
+    # be globbed, counted as a script, and reported as unwired forever.
     on_disk = {
         p.stem
         for p in tools_dir.glob("*.py")
-        if not p.name.startswith("_")
+        if p.is_file() and not p.name.startswith("_")
     }
     return sorted(n for n in on_disk if n.startswith(_PREFIXES) and n not in referenced)
 
@@ -56,6 +58,13 @@ def selftest() -> int:
         (["_shared.py"], "", []),
         # Flags and args in the invocation still count as wired.
         (["test_a.py"], "run: python tools/test_a.py --selftest", []),
+        # A hyphen is a legal filename character, not a word boundary.
+        (["test_cli-v2.py"], "run: python tools/test_cli-v2.py", []),
+        # A compound suffix is not a real invocation of the script.
+        (["test_a.py"], "run: python tools/test_a.py.bak", ["test_a"]),
+        (["test_a.py"], "run: python tools/test_a.pyc", ["test_a"]),
+        # A directory named like a script is not a script.
+        (["check_helpers.py/"], "", []),
     ]
     failures = 0
     for names, workflow, expect in cases:
@@ -65,7 +74,10 @@ def selftest() -> int:
             tools.mkdir()
             wf.mkdir()
             for n in names:
-                (tools / n).write_text("", encoding="utf-8")
+                if n.endswith("/"):
+                    (tools / n.rstrip("/")).mkdir()
+                else:
+                    (tools / n).write_text("", encoding="utf-8")
             (wf / "ci.yml").write_text(workflow, encoding="utf-8")
             got = find_orphans(tools, wf)
         if got != expect:
