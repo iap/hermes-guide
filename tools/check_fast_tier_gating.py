@@ -70,14 +70,24 @@ def _condition(step: dict) -> str:
 
 
 def steps_of(workflow: str) -> list[dict]:
-    """Every step across every job in a workflow document."""
-    data = yaml.safe_load(workflow)
-    return [
-        step
-        for job in (data.get("jobs") or {}).values()
-        for step in (job.get("steps") or [])
-        if isinstance(step, dict)
-    ]
+    """Every step across every job, carrying its effective condition.
+
+    A job-level `if:` gates all of its steps, so it has to be folded in. Both
+    conditions apply, so they combine with `&&` rather than the step's own
+    condition replacing the job's -- without this, every step of a gated job
+    looks ungated and the guard cries wolf.
+    """
+    steps: list[dict] = []
+    for job in (yaml.safe_load(workflow).get("jobs") or {}).values():
+        job_if = str(job.get("if") or "")
+        for step in (job.get("steps") or []):
+            if not isinstance(step, dict):
+                continue
+            if not job_if or step.get("if"):
+                steps.append(step)
+                continue
+            steps.append({**step, "if": job_if})
+    return steps
 
 
 def is_gated(step: dict) -> bool:
@@ -190,6 +200,28 @@ def selftest() -> int:
         ("index spelling, || escape",
          is_gated({"name": "s", "if": "inputs['run-full-gate'] || runner.os == 'Windows'"}), False),
     ]
+
+    # A job-level `if:` gates every step in that job; it must not read as ungated.
+    gated_job = """
+    on:
+      workflow_call:
+        inputs:
+          run-full-gate:
+            type: boolean
+    jobs:
+      x:
+        if: inputs.run-full-gate
+        runs-on: ubuntu-latest
+        steps:
+          - name: Needs deps
+            run: python tools/test_mcp_shape.py
+    """
+    cases_.append(("job-level gate covers its steps",
+                   violations(steps_of(gated_job), here), []))
+
+    negated_job = gated_job.replace("if: inputs.run-full-gate", "if: '!inputs.run-full-gate'")
+    cases_.append(("job-level negated gate is no gate",
+                   len(violations(steps_of(negated_job), here)), 1))
 
     failures = [
         f"{label}: got {got!r}, want {want!r}"
