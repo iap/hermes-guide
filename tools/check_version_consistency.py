@@ -55,10 +55,10 @@ SECURITY_TABLE_ROW = re.compile(
 
 
 def read(path: Path) -> str | None:
-    """Return the file's text, or None when it cannot be read."""
+    """Return the file's text, or None when it cannot be read or decoded."""
     try:
         return path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
 
 
@@ -68,11 +68,18 @@ def project_version(root: Path) -> tuple[str | None, str | None]:
     if text is None:
         return None, "cannot read pyproject.toml"
     try:
-        version = tomllib.loads(text).get("project", {}).get("version")
+        project = tomllib.loads(text).get("project")
     except tomllib.TOMLDecodeError as exc:
         return None, f"cannot parse pyproject.toml: {exc}"
+    if project is None:
+        return None, "no [project] table in pyproject.toml"
+    if not isinstance(project, dict):
+        return None, f"pyproject.toml [project] is {type(project).__name__}, not a table"
+    version = project.get("version")
     if version is None:
-        return None, "no [project] version in pyproject.toml"
+        return None, "no version in pyproject.toml's [project] table"
+    if not isinstance(version, str):
+        return None, f"pyproject.toml [project] version is {type(version).__name__}, not a string"
     return version, None
 
 
@@ -232,6 +239,58 @@ def selftest() -> int:
         if code != 2:
             failures.append(f"unparseable pyproject expected 2, got {code}")
 
+        # A `project = "demo"` key makes [project] a plain string, so the
+        # detector has to type-check the table before subscripting it.
+        scalar_project = base / "scalar_project"
+        scalar_project.mkdir()
+        _fixture(scalar_project, "9.9.9", pyproject='project = "demo"\nversion = "9.9.9"\n')
+        code, _ = audit(scalar_project)
+        if code != 2:
+            failures.append(f"scalar [project] expected 2, got {code}")
+
+        # A non-string version can never agree with the plugin.yaml string, so
+        # it is unusable input rather than drift to be reconciled.
+        array_project = base / "array_project"
+        array_project.mkdir()
+        _fixture(array_project, "9.9.9", pyproject="[project]\nversion = [1, 2]\n")
+        code, _ = audit(array_project)
+        if code != 2:
+            failures.append(f"non-string version expected 2, got {code}")
+
+        # Undecodable bytes must not raise out of read(); every site it guards
+        # is then reported as missing instead of crashing the whole guard.
+        bad_utf8_pyproject = base / "bad_utf8_pyproject"
+        bad_utf8_pyproject.mkdir()
+        _fixture(bad_utf8_pyproject, "9.9.9")
+        (bad_utf8_pyproject / "pyproject.toml").write_bytes(b'[project]\nversion = "\xff\xfe"\n')
+        code, _ = audit(bad_utf8_pyproject)
+        if code != 2:
+            failures.append(f"undecodable pyproject expected 2, got {code}")
+
+        bad_utf8_init = base / "bad_utf8_init"
+        bad_utf8_init.mkdir()
+        _fixture(bad_utf8_init, "9.9.9")
+        (bad_utf8_init / "__init__.py").write_bytes(b'__version__ = "\xff"\n')
+        code, _ = audit(bad_utf8_init)
+        if code != 2:
+            failures.append(f"undecodable __init__.py expected 2, got {code}")
+
+        bad_utf8_security = base / "bad_utf8_security"
+        bad_utf8_security.mkdir()
+        _fixture(bad_utf8_security, "9.9.9")
+        (bad_utf8_security / "SECURITY.md").write_bytes(b"version `\xff`\n")
+        code, _ = audit(bad_utf8_security)
+        if code != 2:
+            failures.append(f"undecodable SECURITY.md expected 2, got {code}")
+
+        bad_utf8_plugin = base / "bad_utf8_plugin"
+        bad_utf8_plugin.mkdir()
+        _fixture(bad_utf8_plugin, "9.9.9")
+        (bad_utf8_plugin / "plugin.yaml").write_bytes(b"version: \xff\n")
+        code, _ = audit(bad_utf8_plugin)
+        if code != 2:
+            failures.append(f"undecodable plugin.yaml expected 2, got {code}")
+
         unusable = base / "unusable"
         unusable.mkdir()
         code, _ = audit(unusable)
@@ -244,7 +303,9 @@ def selftest() -> int:
         return 1
     print("OK: selftest (clean, drift-sentence, drift-table, obsolete-row, "
           "drift-version, drift-pyproject, reformatted-pyproject, "
-          "no-project-table, broken-pyproject, unusable)")
+          "no-project-table, broken-pyproject, scalar-project, "
+          "non-string-version, undecodable-pyproject, undecodable-init, "
+          "undecodable-security, undecodable-plugin, unusable)")
     return 0
 
 
