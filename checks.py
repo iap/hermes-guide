@@ -425,13 +425,20 @@ def check_skills():
         # basename — so an unreadable/nameless skill is never inferred to be
         # bundled.
         name = fm.get("name") if fm else None
-        tag = " [bundled]" if name in bundled else ""
+        # `name` is unvalidated YAML: a mapping or sequence value is unhashable,
+        # so `name in bundled` raises TypeError and crashes the whole check.
+        # Only a real string can match a bundled name; anything else is simply
+        # not bundled, and the missing-`name` finding below reports it.
+        tag = " [bundled]" if isinstance(name, str) and name in bundled else ""
         if fm is None:
             findings.append(f"{dirpath}: SKILL.md has no valid frontmatter{tag}")
             continue
         for req in ("name", "description"):
-            if not fm.get(req):
-                findings.append(f"{dirpath}: frontmatter missing `{req}`{tag}")
+            # Require a non-empty *string*: a truthy non-string (mapping, sequence,
+            # int) is not a usable name or description, and must not pass as one.
+            val = fm.get(req)
+            if not isinstance(val, str) or not val.strip():
+                findings.append(f"{dirpath}: frontmatter missing or non-string `{req}`{tag}")
 
     if findings:
         return {"status": "broken", "reason": f"{len(findings)} skill issue(s)", "detail": findings}
