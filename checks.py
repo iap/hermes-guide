@@ -208,7 +208,13 @@ def _plugin_skill_names():
         for dirpath, dirnames, filenames in os.walk(root):
             if "SKILL.md" in filenames:
                 fm = frontmatter(os.path.join(dirpath, "SKILL.md"))
-                names.add((fm or {}).get("name") or os.path.basename(dirpath))
+                # Same unvalidated-YAML hazard as `check_skills`: a mapping
+                # or sequence `name` is unhashable, so `names.add` would raise
+                # TypeError instead of naming the bad file. A non-string name
+                # falls back to the directory basename, and the count/provenance
+                # guards report the malformed file separately.
+                raw = (fm or {}).get("name")
+                names.add(raw if isinstance(raw, str) and raw else os.path.basename(dirpath))
     _cache["plugin_skills"] = names
     return names
 
