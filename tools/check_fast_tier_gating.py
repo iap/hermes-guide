@@ -65,8 +65,19 @@ _GATE_SPELLING = re.compile(r"inputs\s*\[\s*['\"]\s*run-full-gate\s*['\"]\s*\]")
 
 # A workflow that runs on a branch push with no gate input is unauditable. This
 # lets a maintainer assert the exception in the file, so the exemption is
-# visible in review rather than living in this script's logic.
-_PUSH_UNGATED_OK = re.compile(r"no Hermes install needed")
+# visible in review rather than living in this script's logic. Matched inside a
+# comment, so the phrase in a run block cannot exempt anything by accident.
+_PUSH_UNGATED_OK = re.compile(r"^[ \t]*#.*\bno Hermes install needed\b", re.M)
+
+# `! (inputs.run-full-gate)`, `!(inputs.run-full-gate)` and `!  <gate>` all mean
+# the step runs in the fast tier, so a plain substring test misses them. `!=`
+# is deliberately not matched: after `!` comes `=`, not the gate.
+_NEGATED_GATE = re.compile(r"!\s*\(?\s*" + re.escape(_GATE))
+
+# The gate on the *right* of a comparison (`foo != inputs.run-full-gate`) is not
+# a gate; only the left-hand forms are covered by the inverted-pair test below.
+_GATE_ON_RIGHT_OF_COMPARISON = re.compile(
+    r"(==|!=|<=|>=|<|>)\s*\(?\s*" + re.escape(_GATE))
 
 
 def _on_block(text: str) -> object:
@@ -90,7 +101,12 @@ def _is_tag_only_push(text: str) -> bool:
     push, so the missing fast-tier gate cannot redden master.
     """
     on = _on_block(text)
-    return isinstance(on, dict) and isinstance(on.get("push"), dict) and "tags" in on["push"]
+    if not isinstance(on, dict) or not isinstance(on.get("push"), dict):
+        return False
+    push = on["push"]
+    if "branches" in push or "branches-ignore" in push:
+        return False  # also fires on a branch push, so it is not tag-only
+    return "tags" in push
 
 
 def _condition(step: dict) -> str:
@@ -127,11 +143,15 @@ def is_gated(step: dict) -> bool:
     fast tier is active, so neither counts as gating.
     """
     condition = _condition(step)
-    if f"!{_GATE}" in condition or "! " + _GATE in condition:
+    if _NEGATED_GATE.search(condition):
         return False
-    # A comparison names the gate but inverts it: `== false` and `!= true` are
-    # true exactly when the fast tier is active. Tolerate parentheses.
-    if re.search(rf"\(?\s*{re.escape(_GATE)}\s*\)?\s*(==|!=)\s*(true|false)", condition):
+    if _GATE_ON_RIGHT_OF_COMPARISON.search(condition):
+        return False  # `foo != gate` is not a gate either
+    # Only the *inverting* comparisons are not gates. `gate == true` and
+    # `gate != false` are both equivalent to a bare gate and must be accepted.
+    if re.search(rf"\(?\s*{re.escape(_GATE)}\s*\)?\s*==\s*false", condition):
+        return False
+    if re.search(rf"\(?\s*{re.escape(_GATE)}\s*\)?\s*!=\s*true", condition):
         return False
     if "||" in condition:
         return False
@@ -283,6 +303,37 @@ def selftest() -> int:
     cases_.append(("schedule-only is not a push trigger",
                    triggers_on_push("on:\n  schedule: []\njobs: {}\n"), False))
 
+    # `!` may be followed by spaces or an open paren; `!=` may not be read as one.
+    for bad in (f"!{_GATE}", f"! {_GATE}", f"!  {_GATE}",
+                f"! ({_GATE})", f"!({_GATE})", f"! ( {_GATE} )"):
+        cases_.append((f"negated gate {bad!r} is no gate",
+                       is_gated({"name": "s", "if": bad}), False))
+    cases_.append(("`!=` is a comparison, not a negation",
+                   is_gated({"name": "s", "if": f"foo != {_GATE}"}), False))
+
+    # Positive comparison forms are equivalent to a bare gate; only the
+    # inverting ones mean the step runs in the fast tier.
+    for good in (f"{_GATE} == true", f"{_GATE} != false", f"({_GATE} == true)"):
+        cases_.append((f"{good!r} is a gate",
+                       is_gated({"name": "s", "if": good}), True))
+    for badc in (f"{_GATE} == false", f"{_GATE} != true", f"({_GATE} == false)"):
+        cases_.append((f"{badc!r} is not a gate",
+                       is_gated({"name": "s", "if": badc}), False))
+
+    # A push trigger carrying a branch filter still fires on branch pushes.
+    for extra in ("branches", "branches-ignore"):
+        cases_.append((f"tags + {extra} is not tag-only",
+                       _is_tag_only_push(f"on:\n  push:\n    tags: ['v*']\n"
+                                         f"    {extra}: [master]\njobs: {{}}\n"), False))
+
+    # The exemption is a comment, anywhere in the file -- not at byte zero.
+    cases_.append(("exemption comment is found after `name:`",
+                   bool(_PUSH_UNGATED_OK.search(
+                       "name: rel\non:\n  push:\njobs: {}\n# no Hermes install needed\n")), True))
+    cases_.append(("exemption needs a comment marker",
+                   bool(_PUSH_UNGATED_OK.search(
+                       "name: rel\nrun: echo 'no Hermes install needed'\n")), False))
+
     failures = [
         f"{label}: got {got!r}, want {want!r}"
         for label, got, want in cases_
@@ -351,7 +402,7 @@ def main(argv: list[str]) -> int:
             # No gate input means no fast tier to audit -- unless it can run
             # from a push, where it would still have no Hermes installed. A
             # tags/push filter means it only fires on a tag, which is safe.
-            if _PUSH_UNGATED_OK.match(text) or _is_tag_only_push(text):
+            if _PUSH_UNGATED_OK.search(text) or _is_tag_only_push(text):
                 continue
             if triggers_on_push(text):
                 findings.append(
