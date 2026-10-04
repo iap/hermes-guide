@@ -1,6 +1,9 @@
 # Contributing
 
-Thank you for your interest in contributing to hermes-guide.
+This repository documents Hermes behavior, so every skill is a claim about what a
+specific Hermes version actually does. Verify each claim against the version in
+use, then run `python tools/check_gates.py` — the gate list is under
+[Pull requests](#pull-requests).
 
 **This file is the authoring standard.** It owns *what gets written* — skill
 naming, frontmatter, content rules, voice, and the PR workflow. It does not
@@ -237,6 +240,16 @@ their place:
 > [!IMPORTANT] — required for success
 > [!WARNING] — breakage or data-loss risk
 > [!CAUTION] — irreversible action
+
+## Questions
+
+A question is not a defect report. Ask in the issue tracker rather than opening
+a `bug-report.yml`: include the Hermes version, your platform (native Windows or
+POSIX), and the output of `hermes config path` — most configuration questions
+turn on exactly one of those three.
+
+Check first whether a shipped skill already answers it. `hermes-configuration-guide`
+is the map, and the [skill table](README.md#whats-included) lists the rest.
 
 ## Pull requests
 
