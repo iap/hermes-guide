@@ -214,9 +214,10 @@ def selftest() -> int:
             failures += 1
             print("SELFTEST FAIL: missing skills/ dir should be (0, [])", file=sys.stderr)
 
-    # Unreadable directories must be findings, not "empty and clean". chmod is
-    # a no-op for root, so skip rather than assert something untrue.
-    if os.geteuid() != 0:
+    # Unreadable directories must be findings, not "empty and clean". Two
+    # platform reasons to skip: os.geteuid() does not exist on Windows, and
+    # chmod does not restrict root, so asserting either would be untrue.
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
             blocked = tmp / "profiles" / "locked" / "skills"
