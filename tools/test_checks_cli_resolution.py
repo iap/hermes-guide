@@ -314,22 +314,205 @@ def test_no_candidate_reports_clearly():
         os.makedirs(elsewhere)
         exe = _fake_interpreter(elsewhere)
 
-        # `checks.shutil` IS the stdlib shutil module, so patching `which` on it
-        # affects every other caller in this process. Restore it, not just the
-        # locals, or later tests get None from every shutil.which().
+        # The resolver walks `PATH` itself, so an empty `PATH` is how "no
+        # candidate anywhere" is expressed now that `shutil.which` is gone.
         original_exe, original_path = sys.executable, os.environ["PATH"]
-        original_which = shutil.which
         try:
             sys.executable = exe
             os.environ["PATH"] = elsewhere
-            checks.shutil.which = lambda *_a, **_k: None
             rc, out, err = checks._run_hermes(["config", "path"])
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
-            checks.shutil.which = original_which
 
         check("no candidate is a clear error",
               rc == -127 and HERMES_EXE in err, f"rc={rc} err={err!r}")
+
+
+def test_every_path_entry_is_a_candidate():
+    """A broken first `hermes` on PATH must not hide a working one behind it.
+
+    The production failure this pins: macOS before 13 has no `realpath(1)`, so
+    the install venv's pip console script exited 126, `shutil.which` returned
+    only that one path, and every check reported "cannot resolve
+    $HERMES_HOME" while a healthy `hermes` sat further down PATH. Resolution
+    must reach it.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        broken_dir = os.path.join(tmp, "broken")
+        working_dir = os.path.join(tmp, "working")
+        os.makedirs(broken_dir), os.makedirs(working_dir)
+        exe = _fake_interpreter(working_dir)
+        _unusable(broken_dir, HERMES_EXE, 126)
+        _working(working_dir, HERMES_EXE, "DEEP-ON-PATH")
+
+        original_exe, original_path = sys.executable, os.environ["PATH"]
+        try:
+            sys.executable = exe
+            os.environ["PATH"] = broken_dir + os.pathsep + working_dir + os.pathsep + original_path
+            rc, out, _ = checks._run_hermes(["config", "path"])
+        finally:
+            sys.executable, os.environ["PATH"] = original_exe, original_path
+
+        check("working hermes behind a broken PATH entry is reached",
+              rc == 0 and "DEEP-ON-PATH" in out, f"rc={rc} out={out.strip()!r}")
+
+
+def test_path_walk_is_deduplicated():
+    """The same directory twice in PATH costs one attempt, not two."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lonely = os.path.join(tmp, "lonely")
+        os.makedirs(lonely)
+        _working(lonely, HERMES_EXE, "ONCE")
+
+        original_path = os.environ["PATH"]
+        try:
+            os.environ["PATH"] = os.pathsep.join([lonely, lonely, original_path])
+            found = checks._path_hermes_executables()
+        finally:
+            os.environ["PATH"] = original_path
+
+        # Candidates come back resolved (see _path_hermes_executables), so
+        # compare resolved values on both sides.
+        target = os.path.realpath(os.path.join(lonely, HERMES_EXE))
+        count = sum(1 for p in found if os.path.realpath(p) == target)
+        check("repeated PATH entry appears once", count == 1, f"found={found!r}")
+
+
+def test_unset_path_searches_os_defpath():
+    """PATH unset must search os.defpath, as shutil.which does.
+
+    `os.environ.get("PATH", "")` collapses "unset" into "explicitly empty", so
+    the walk searched only the current directory and reported a hermes sitting
+    in a default directory as missing. An explicitly empty PATH is a DIFFERENT
+    state -- one empty component, meaning cwd -- and must not gain the defaults.
+
+    os.defpath points at /bin:/usr/bin, which are not writable and hold no
+    hermes, so it is redirected at a temp dir; otherwise the assertion holds
+    vacuously and the test passes even with the bug present.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        defpath_dir = os.path.join(tmp, "defpath-bin")
+        os.makedirs(defpath_dir)
+        _working(defpath_dir, HERMES_EXE, "DEFPATH")
+        in_defpath = os.path.join(defpath_dir, HERMES_EXE)
+
+        cwd_dir = os.path.join(tmp, "cwd")
+        os.makedirs(cwd_dir)
+
+        saved_defpath = os.defpath
+        saved_path = os.environ.get("PATH")
+        was_set = "PATH" in os.environ
+        saved_cwd = os.getcwd()
+        try:
+            os.defpath = defpath_dir
+            os.chdir(cwd_dir)
+
+            os.environ.pop("PATH", None)
+            unset_found = checks._path_hermes_executables()
+            check("unset PATH consults os.defpath",
+                  os.path.realpath(in_defpath) in {os.path.realpath(p) for p in unset_found},
+                  f"found={unset_found!r}")
+
+            # An explicitly empty PATH is one empty component (cwd), and must
+            # NOT acquire the default directories.
+            os.environ["PATH"] = ""
+            empty_found = checks._path_hermes_executables()
+            check("explicitly empty PATH stays off os.defpath",
+                  os.path.realpath(in_defpath) not in
+                  {os.path.realpath(p) for p in empty_found},
+                  f"found={empty_found!r}")
+        finally:
+            os.chdir(saved_cwd)
+            os.defpath = saved_defpath
+            if was_set:
+                os.environ["PATH"] = saved_path
+            else:
+                os.environ.pop("PATH", None)
+
+
+def test_symlinked_duplicates_collapse_to_one_attempt():
+    """Two PATH entries symlinking to ONE hermes must cost one attempt.
+
+    `abspath` normalises `.`/`..` but leaves symlinks intact, so a realpath key
+    is required: `~/.local/bin/hermes` and a versioned bin dir can both be on
+    PATH and both point at the same binary. Launching it twice also means
+    waiting out its timeout twice.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        real_dir = os.path.join(tmp, "real")
+        os.makedirs(real_dir)
+        _working(real_dir, HERMES_EXE, "REAL")
+        real = os.path.join(real_dir, HERMES_EXE)
+
+        first_dir = os.path.join(tmp, "a")
+        second_dir = os.path.join(tmp, "b")
+        os.makedirs(first_dir)
+        os.makedirs(second_dir)
+        for d in (first_dir, second_dir):
+            os.symlink(real, os.path.join(d, HERMES_EXE))
+
+        original_path = os.environ["PATH"]
+        try:
+            os.environ["PATH"] = os.pathsep.join([first_dir, second_dir])
+            found = checks._path_hermes_executables()
+        finally:
+            os.environ["PATH"] = original_path
+
+        check("symlinked duplicate collapses to one candidate",
+              len(found) == 1, f"found={found!r}")
+
+
+def test_empty_path_component_searches_current_directory():
+    """`PATH=:/usr/bin` must find `./hermes` — an empty component means cwd.
+
+    POSIX (and the equivalent Windows behaviour) reads an empty PATH component
+    as the current directory, and shutil.which maps it to os.curdir. Treating
+    it as nothing to skip drops that rung, so an install invoked as `./hermes`
+    becomes undiscoverable.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        cwd_dir = os.path.join(tmp, "cwd")
+        os.makedirs(cwd_dir)
+        _working(cwd_dir, HERMES_EXE, "CWD-INSTALL")
+
+        original_cwd = os.getcwd()
+        original_path = os.environ["PATH"]
+        try:
+            os.chdir(cwd_dir)
+            os.environ["PATH"] = ":" + original_path
+            found = checks._path_hermes_executables()
+        finally:
+            os.chdir(original_cwd)
+            os.environ["PATH"] = original_path
+
+        # Compare resolved paths: on macOS the temp dir arrives under /var but
+        # the walk returns /private/var (getcwd resolves the symlink), so a
+        # literal join would never match.
+        target = os.path.realpath(os.path.join(cwd_dir, HERMES_EXE))
+        check("empty PATH component searches current directory",
+              any(os.path.realpath(p) == target for p in found),
+              f"found={found[:4]!r}")
+
+
+def test_non_file_path_entry_is_ignored():
+    """A directory named `hermes` on PATH is not a candidate.
+
+    PATH entries can hold anything; only a regular file can be exec'd, so a
+    directory or a dangling name must not become an attempt.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        decoy_dir = os.path.join(tmp, "decoy")
+        os.makedirs(os.path.join(decoy_dir, HERMES_EXE))  # a DIRECTORY named hermes
+
+        original_path = os.environ["PATH"]
+        try:
+            os.environ["PATH"] = decoy_dir + os.pathsep + original_path
+            found = checks._path_hermes_executables()
+        finally:
+            os.environ["PATH"] = original_path
+
+        check("directory named hermes is not a candidate",
+              not any(os.path.isdir(p) for p in found), f"found={found!r}")
 
 
 def main():
@@ -341,6 +524,12 @@ def main():
     test_real_failure_is_not_retried()
     test_path_only_still_resolves()
     test_no_candidate_reports_clearly()
+    test_every_path_entry_is_a_candidate()
+    test_path_walk_is_deduplicated()
+    test_non_file_path_entry_is_ignored()
+    test_unset_path_searches_os_defpath()
+    test_symlinked_duplicates_collapse_to_one_attempt()
+    test_empty_path_component_searches_current_directory()
 
     cleanup()
 

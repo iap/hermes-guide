@@ -20,7 +20,6 @@ import importlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 
@@ -36,6 +35,20 @@ HERMES_EXE = "hermes.exe" if sys.platform == "win32" else "hermes"
 # the generic unexpected failure, where we cannot tell a launch problem from a
 # real one, so it is reported rather than silently retried elsewhere.
 _NOT_EXECUTABLE = (-127, -126, 126, 127)
+
+# Wall-clock budget for the two `hermes` subcommands the checks shell out to.
+#
+# These are per-CANDIDATE, not per-call: `_run_hermes` may try more than one
+# entry point before one answers. The floor has to clear a cold `hermes`
+# start on a loaded host. Measured on a macOS 12.7 install where `hermes
+# config path` took 12-25 s across runs, so a 15 s budget made every check
+# report "cannot resolve $HERMES_HOME" through no fault of the install - the
+# answer arrived a few seconds after the deadline. `config path` pays full
+# interpreter start plus config load; `hooks doctor` runs the same boot path
+# and enumerates hooks, so it gets the larger budget rather than the 30 s that
+# left it close to the edge.
+_CONFIG_PATH_TIMEOUT = 60
+_HOOKS_DOCTOR_TIMEOUT = 90
 
 # Errno values that mean "this path cannot be launched here", mirroring
 # _NOT_EXECUTABLE on the exception path. Anything outside this set is host or
@@ -96,20 +109,66 @@ def _run(cmd, timeout=20):
         return -1, "", repr(exc)
 
 
+def _path_hermes_executables():
+    """Every `hermes` on `PATH`, in search order, deduplicated.
+
+    `shutil.which` returns only the FIRST match, so a resolver that stops there
+    cannot fall through when that one entry point is present but unusable - a
+    pip console script whose trampoline needs a utility this host lacks (macOS
+    before 13 has no `realpath(1)`) exits 126 and the check answers for no
+    install even though a working `hermes` sits further down `PATH`. Walking
+    the whole `PATH` is what makes the fall-through contract meaningful.
+    """
+    found = []
+    seen = set()
+    # An UNSET PATH and an explicitly EMPTY one are different states. Unset
+    # means "use the system default", so search os.defpath -- which is what
+    # shutil.which does. Empty means one empty component, i.e. the current
+    # directory, and must NOT gain the default directories. Reading the
+    # variable with a "" default conflates them and searches only `.`.
+    raw_path = os.environ.get("PATH")
+    search = os.defpath if raw_path is None else raw_path
+    for directory in search.split(os.pathsep):
+        # An EMPTY PATH component means the current directory in POSIX (and the
+        # equivalent Windows behaviour), so `PATH=:/usr/bin` searches `./`. Map it
+        # to os.curdir, as shutil.which does; dropping empty components instead
+        # makes a PATH-only install in the working directory undiscoverable.
+        candidate = os.path.join(directory or os.curdir, HERMES_EXE)
+        if not os.path.isfile(candidate):
+            continue
+        # Dedupe on the RESOLVED target, not the abspath: abspath only
+        # normalises `.`/`..` and leaves symlinks intact, so two PATH entries
+        # that symlink to one hermes both survive and the same binary is
+        # launched -- and waited on -- twice. realpath() collapses them.
+        # Store the resolved path, not PATH's spelling. A relative candidate
+        # (the empty-component `./hermes` case) would otherwise be resolved
+        # against whatever cwd the CALLER has by launch time, not the cwd it
+        # was discovered from -- so it is stored absolute, and dedup keys off
+        # the same value.
+        resolved = os.path.realpath(candidate)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        found.append(resolved)
+    return found
+
+
 def _hermes_candidates():
     """Candidate `hermes` executables, most authoritative first.
 
     The install executing this check is the one whose answers are true, so its
     own entry point (beside `sys.executable`) outranks whatever `PATH` happens
     to resolve. A second install earlier on `PATH` must not answer for us.
+
+    After that sibling, EVERY `hermes` on `PATH` is a candidate in search order.
+    One unusable entry point must not exhaust the list: the resolver's own
+    contract is "the most authoritative executable that works", and it can only
+    keep that promise if a working install is reachable after a broken one.
     """
     bindir = os.path.dirname(os.path.abspath(sys.executable))
-    on_path = shutil.which(HERMES_EXE)
-    return list(dict.fromkeys(
-        path for path in (os.path.join(bindir, HERMES_EXE) if bindir else None,
-                          os.path.abspath(on_path) if on_path else None)
-        if path
-    ))
+    ordered = [os.path.join(bindir, HERMES_EXE) if bindir else None]
+    ordered.extend(_path_hermes_executables())
+    return [path for path in dict.fromkeys(ordered) if path and os.path.exists(path)]
 
 
 def _run_hermes(args, timeout=20):
@@ -140,7 +199,7 @@ _cache: dict = {}
 
 def _hermes_config_path():
     if "config_path" not in _cache:
-        rc, stdout, _ = _run_hermes(["config", "path"], timeout=15)
+        rc, stdout, _ = _run_hermes(["config", "path"], timeout=_CONFIG_PATH_TIMEOUT)
         lines = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
         # Use stdout only (never stderr) — the path is printed to stdout.
         _cache["config_path"] = lines[-1] if rc == 0 and lines else None
@@ -625,7 +684,7 @@ def check_hooks():
     # `hermes hooks doctor` exits 0 even with problems, so we parse its output
     # (rc is not a reliable signal — it is 0 in all cases). Count the ✗/⚠ markers
     # emitted per hook rather than matching the summary line's exact wording.
-    rc, stdout, _ = _run_hermes(["hooks", "doctor"], timeout=30)
+    rc, stdout, _ = _run_hermes(["hooks", "doctor"], timeout=_HOOKS_DOCTOR_TIMEOUT)
     if rc != 0 or not stdout.strip():
         return {
             "status": "unknown",
