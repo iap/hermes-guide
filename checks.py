@@ -121,7 +121,14 @@ def _path_hermes_executables():
     """
     found = []
     seen = set()
-    for directory in os.environ.get("PATH", "").split(os.pathsep):
+    # An UNSET PATH and an explicitly EMPTY one are different states. Unset
+    # means "use the system default", so search os.defpath -- which is what
+    # shutil.which does. Empty means one empty component, i.e. the current
+    # directory, and must NOT gain the default directories. Reading the
+    # variable with a "" default conflates them and searches only `.`.
+    raw_path = os.environ.get("PATH")
+    search = os.defpath if raw_path is None else raw_path
+    for directory in search.split(os.pathsep):
         # An EMPTY PATH component means the current directory in POSIX (and the
         # equivalent Windows behaviour), so `PATH=:/usr/bin` searches `./`. Map it
         # to os.curdir, as shutil.which does; dropping empty components instead

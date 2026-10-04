@@ -378,6 +378,58 @@ def test_path_walk_is_deduplicated():
         check("repeated PATH entry appears once", count == 1, f"found={found!r}")
 
 
+def test_unset_path_searches_os_defpath():
+    """PATH unset must search os.defpath, as shutil.which does.
+
+    `os.environ.get("PATH", "")` collapses "unset" into "explicitly empty", so
+    the walk searched only the current directory and reported a hermes sitting
+    in a default directory as missing. An explicitly empty PATH is a DIFFERENT
+    state -- one empty component, meaning cwd -- and must not gain the defaults.
+
+    os.defpath points at /bin:/usr/bin, which are not writable and hold no
+    hermes, so it is redirected at a temp dir; otherwise the assertion holds
+    vacuously and the test passes even with the bug present.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        defpath_dir = os.path.join(tmp, "defpath-bin")
+        os.makedirs(defpath_dir)
+        _working(defpath_dir, HERMES_EXE, "DEFPATH")
+        in_defpath = os.path.join(defpath_dir, HERMES_EXE)
+
+        cwd_dir = os.path.join(tmp, "cwd")
+        os.makedirs(cwd_dir)
+
+        saved_defpath = os.defpath
+        saved_path = os.environ.get("PATH")
+        was_set = "PATH" in os.environ
+        saved_cwd = os.getcwd()
+        try:
+            os.defpath = defpath_dir
+            os.chdir(cwd_dir)
+
+            os.environ.pop("PATH", None)
+            unset_found = checks._path_hermes_executables()
+            check("unset PATH consults os.defpath",
+                  os.path.realpath(in_defpath) in {os.path.realpath(p) for p in unset_found},
+                  f"found={unset_found!r}")
+
+            # An explicitly empty PATH is one empty component (cwd), and must
+            # NOT acquire the default directories.
+            os.environ["PATH"] = ""
+            empty_found = checks._path_hermes_executables()
+            check("explicitly empty PATH stays off os.defpath",
+                  os.path.realpath(in_defpath) not in
+                  {os.path.realpath(p) for p in empty_found},
+                  f"found={empty_found!r}")
+        finally:
+            os.chdir(saved_cwd)
+            os.defpath = saved_defpath
+            if was_set:
+                os.environ["PATH"] = saved_path
+            else:
+                os.environ.pop("PATH", None)
+
+
 def test_symlinked_duplicates_collapse_to_one_attempt():
     """Two PATH entries symlinking to ONE hermes must cost one attempt.
 
@@ -475,6 +527,7 @@ def main():
     test_every_path_entry_is_a_candidate()
     test_path_walk_is_deduplicated()
     test_non_file_path_entry_is_ignored()
+    test_unset_path_searches_os_defpath()
     test_symlinked_duplicates_collapse_to_one_attempt()
     test_empty_path_component_searches_current_directory()
 
