@@ -262,6 +262,22 @@ jobs:
           python tools/check_skill_provenance.py
           python tools/test_skill_provenance.py
 
+      - name: Profile skill frontmatter guard
+        # checks.py only walks the ACTIVE profile's skills, so a corrupt
+        # SKILL.md under profiles/<name>/skills is invisible to `hermes guide`.
+        # Selftest always runs; the live scan needs a populated Hermes home, so
+        # it is scoped to runners that have one.
+        run: |
+          python tools/check_profile_skills.py --selftest
+      - name: Profile skill frontmatter live scan
+        # CI has no Hermes install, so the live scan would have nothing to walk
+        # and would always pass vacuously. Run it only where a real home exists
+        # (Hermes' own workflows, or a self-hosted runner with one installed).
+        if: ${{ env.HERMES_PROFILES_SCAN == '1' }}
+        env:
+          HERMES_HOME: ${{ env.HERMES_PROFILES_SCAN_HOME }}
+        run: python tools/check_profile_skills.py
+
       - name: Scope validation regression
         if: inputs.run-full-gate
         run: python tools/test_scope_validation.py

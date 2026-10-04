@@ -376,6 +376,38 @@ def test_path_walk_is_deduplicated():
         check("repeated PATH entry appears once", count == 1, f"found={found!r}")
 
 
+def test_empty_path_component_searches_current_directory():
+    """`PATH=:/usr/bin` must find `./hermes` — an empty component means cwd.
+
+    POSIX (and the equivalent Windows behaviour) reads an empty PATH component
+    as the current directory, and shutil.which maps it to os.curdir. Treating
+    it as nothing to skip drops that rung, so an install invoked as `./hermes`
+    becomes undiscoverable.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        cwd_dir = os.path.join(tmp, "cwd")
+        os.makedirs(cwd_dir)
+        _working(cwd_dir, HERMES_EXE, "CWD-INSTALL")
+
+        original_cwd = os.getcwd()
+        original_path = os.environ["PATH"]
+        try:
+            os.chdir(cwd_dir)
+            os.environ["PATH"] = ":" + original_path
+            found = checks._path_hermes_executables()
+        finally:
+            os.chdir(original_cwd)
+            os.environ["PATH"] = original_path
+
+        # Compare resolved paths: on macOS the temp dir arrives under /var but
+        # the walk returns /private/var (getcwd resolves the symlink), so a
+        # literal join would never match.
+        target = os.path.realpath(os.path.join(cwd_dir, HERMES_EXE))
+        check("empty PATH component searches current directory",
+              any(os.path.realpath(p) == target for p in found),
+              f"found={found[:4]!r}")
+
+
 def test_non_file_path_entry_is_ignored():
     """A directory named `hermes` on PATH is not a candidate.
 
@@ -409,6 +441,7 @@ def main():
     test_every_path_entry_is_a_candidate()
     test_path_walk_is_deduplicated()
     test_non_file_path_entry_is_ignored()
+    test_empty_path_component_searches_current_directory()
 
     cleanup()
 

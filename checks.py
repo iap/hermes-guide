@@ -121,9 +121,11 @@ def _path_hermes_executables():
     """
     found = []
     for directory in os.environ.get("PATH", "").split(os.pathsep):
-        if not directory:
-            continue
-        candidate = os.path.join(directory, HERMES_EXE)
+        # An EMPTY PATH component means the current directory in POSIX (and the
+        # equivalent Windows behaviour), so `PATH=:/usr/bin` searches `./`. Map it
+        # to os.curdir, as shutil.which does; dropping empty components instead
+        # makes a PATH-only install in the working directory undiscoverable.
+        candidate = os.path.join(directory or os.curdir, HERMES_EXE)
         # Dedupe on the resolved path so a directory repeated in `PATH`, or one
         # reached through a symlink, costs one attempt rather than two.
         resolved = os.path.abspath(candidate)
