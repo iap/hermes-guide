@@ -139,10 +139,17 @@ def emoji_outside_strings(src: str) -> list[tuple[int, list[str]]]:
 _CONTAINER_PREFIX = re.compile(r"^(?:(?:\s*>\s?)|(?:\s*(?:[-+*]|\d+[.)])\s+))+")
 
 # A code span opens with a run of N backticks and closes only on a run of
-# exactly N (CommonMark 6.1). The naive `[^`]*` body also matches a newline,
-# which both leaks quoted text into the prose and renumbers every line after a
-# span that happens to straddle one.
-_CODE_SPAN = re.compile(r"(`+)(?:(?!\1).)*\1")
+# exactly N (CommonMark 6.1). The body is `(?!\1).` rather than a character
+# class, so re.DOTALL is what lets a span straddle a newline -- and a span may
+# straddle one, because CommonMark does not confine a code span to one line.
+# It is applied per line in prose_only(), never across the joined text, so the
+# match cannot swallow the line breaks that line numbers depend on.
+_CODE_SPAN = re.compile(r"(`+)(?:(?!\1).)*\1", re.DOTALL)
+
+# Four spaces of indent is an indented code block (CommonMark 4.4), which is
+# quoted code just as much as a fence is -- and this repo's docs use it for
+# nested list examples, so it has to be blanked before the prose scan.
+_INDENTED_CODE = "    "
 
 
 def prose_only(text: str) -> str:
@@ -152,8 +159,9 @@ def prose_only(text: str) -> str:
     transcribing `hermes` output, or a doc showing an example of phrasing to
     avoid. Refusing those would force the carve-out to grow into an allowlist.
 
-    Line numbers are preserved: a span is replaced in place rather than
-    deleted, so a finding on line N is still reported as line N.
+    Line numbers are preserved: fenced lines, indented code lines and code
+    spans are all replaced in place rather than deleted, so a finding on line
+    N is still reported as line N.
     """
     kept: list[str] = []
     # (marker char, delimiter length). The length is load-bearing: inside a
@@ -177,8 +185,24 @@ def prose_only(text: str) -> str:
         if fence is not None:
             kept.append("")
             continue
+        # An indented code block is quoted code too. Blanked rather than
+        # dropped, for the same line-number reason as the fence lines.
+        if line.startswith(_INDENTED_CODE) and line.strip():
+            kept.append("")
+            continue
         kept.append(line)
-    return _CODE_SPAN.sub(" ", "\n".join(kept))
+    return _CODE_SPAN.sub(_keep_newlines, "\n".join(kept))
+
+
+def _keep_newlines(match: re.Match[str]) -> str:
+    """Replace a code span with as many newlines as it contained.
+
+    A span may straddle a newline (CommonMark 6.1 does not confine it to one
+    line), so matching has to run across the joined text -- and the match then
+    swallows those newlines. Restoring the count keeps every later line at its
+    original number, which is what a finding cites.
+    """
+    return "\n" * match.group(0).count("\n")
 
 
 def filler_hits(text: str) -> list[tuple[int, str, str]]:
@@ -193,14 +217,24 @@ def filler_hits(text: str) -> list[tuple[int, str, str]]:
 
 
 def tracked(pattern: str) -> list[Path]:
-    """Tracked files matching a git pathspec. Raises if git cannot answer."""
-    proc = subprocess.run(
-        ["git", "-C", str(REPO), "ls-files", pattern],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    """Tracked files matching a git pathspec. Raises if git cannot answer.
+
+    Both failure modes raise RuntimeError so main() can map them to the
+    advertised exit code 2. A git that exits non-zero is one case; git that
+    cannot be LAUNCHED at all (absent from PATH, not executable) raises OSError
+    out of subprocess.run, and without this it escapes as a traceback instead
+    of the documented "unusable scan target".
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO), "ls-files", pattern],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as exc:
+        raise RuntimeError(f"git unavailable: {exc}") from exc
     if proc.returncode != 0:
         raise RuntimeError(
             f"git ls-files failed: {proc.stderr.strip() or proc.returncode}"
@@ -316,6 +350,18 @@ _PROSE_CASES: list[tuple[str, int, str]] = [
         1,
         "multi-line code span still reports the right line",
     ),
+    # --- filler quoted INSIDE a span that straddles a newline is not prose
+    (
+        "line one\n`code span\nThanks so much!\ncontinues here`\nline four\n",
+        0,
+        "filler inside a multi-line code span",
+    ),
+    # --- an indented code block is quoted code too (CommonMark 4.4)
+    (
+        "Intro.\n\n    Thanks so much for the review!\n\nAfter.\n",
+        0,
+        "filler in a four-space indented code block",
+    ),
 ]
 
 # Line numbers are load-bearing: a finding cites a line a human then opens, so
@@ -337,6 +383,11 @@ _PROSE_LINENO_CASES: list[tuple[str, int, str]] = [
         "- item\n\n  ```\n  code\n  ```\n\nThanks so much!\n",
         7,
         "after a list-nested fenced block",
+    ),
+    (
+        "Intro.\n\n    code block\n\nThanks so much!\n",
+        5,
+        "after an indented code block",
     ),
 ]
 
