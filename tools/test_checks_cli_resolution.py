@@ -371,9 +371,43 @@ def test_path_walk_is_deduplicated():
         finally:
             os.environ["PATH"] = original_path
 
-        target = os.path.abspath(os.path.join(lonely, HERMES_EXE))
-        count = sum(1 for p in found if p == target)
+        # Candidates come back resolved (see _path_hermes_executables), so
+        # compare resolved values on both sides.
+        target = os.path.realpath(os.path.join(lonely, HERMES_EXE))
+        count = sum(1 for p in found if os.path.realpath(p) == target)
         check("repeated PATH entry appears once", count == 1, f"found={found!r}")
+
+
+def test_symlinked_duplicates_collapse_to_one_attempt():
+    """Two PATH entries symlinking to ONE hermes must cost one attempt.
+
+    `abspath` normalises `.`/`..` but leaves symlinks intact, so a realpath key
+    is required: `~/.local/bin/hermes` and a versioned bin dir can both be on
+    PATH and both point at the same binary. Launching it twice also means
+    waiting out its timeout twice.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        real_dir = os.path.join(tmp, "real")
+        os.makedirs(real_dir)
+        _working(real_dir, HERMES_EXE, "REAL")
+        real = os.path.join(real_dir, HERMES_EXE)
+
+        first_dir = os.path.join(tmp, "a")
+        second_dir = os.path.join(tmp, "b")
+        os.makedirs(first_dir)
+        os.makedirs(second_dir)
+        for d in (first_dir, second_dir):
+            os.symlink(real, os.path.join(d, HERMES_EXE))
+
+        original_path = os.environ["PATH"]
+        try:
+            os.environ["PATH"] = os.pathsep.join([first_dir, second_dir])
+            found = checks._path_hermes_executables()
+        finally:
+            os.environ["PATH"] = original_path
+
+        check("symlinked duplicate collapses to one candidate",
+              len(found) == 1, f"found={found!r}")
 
 
 def test_empty_path_component_searches_current_directory():
@@ -441,6 +475,7 @@ def main():
     test_every_path_entry_is_a_candidate()
     test_path_walk_is_deduplicated()
     test_non_file_path_entry_is_ignored()
+    test_symlinked_duplicates_collapse_to_one_attempt()
     test_empty_path_component_searches_current_directory()
 
     cleanup()

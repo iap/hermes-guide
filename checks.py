@@ -120,17 +120,29 @@ def _path_hermes_executables():
     the whole `PATH` is what makes the fall-through contract meaningful.
     """
     found = []
+    seen = set()
     for directory in os.environ.get("PATH", "").split(os.pathsep):
         # An EMPTY PATH component means the current directory in POSIX (and the
         # equivalent Windows behaviour), so `PATH=:/usr/bin` searches `./`. Map it
         # to os.curdir, as shutil.which does; dropping empty components instead
         # makes a PATH-only install in the working directory undiscoverable.
         candidate = os.path.join(directory or os.curdir, HERMES_EXE)
-        # Dedupe on the resolved path so a directory repeated in `PATH`, or one
-        # reached through a symlink, costs one attempt rather than two.
-        resolved = os.path.abspath(candidate)
-        if os.path.isfile(candidate) and resolved not in found:
-            found.append(resolved)
+        if not os.path.isfile(candidate):
+            continue
+        # Dedupe on the RESOLVED target, not the abspath: abspath only
+        # normalises `.`/`..` and leaves symlinks intact, so two PATH entries
+        # that symlink to one hermes both survive and the same binary is
+        # launched -- and waited on -- twice. realpath() collapses them.
+        # Store the resolved path, not PATH's spelling. A relative candidate
+        # (the empty-component `./hermes` case) would otherwise be resolved
+        # against whatever cwd the CALLER has by launch time, not the cwd it
+        # was discovered from -- so it is stored absolute, and dedup keys off
+        # the same value.
+        resolved = os.path.realpath(candidate)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        found.append(resolved)
     return found
 
 
