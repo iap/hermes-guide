@@ -48,6 +48,15 @@ Hidden directories (`.archive`, `.curator_backups`, `.hub`) are skipped —
 they are Hermes bookkeeping, not loadable skills, so archived or backed-up
 copies cannot produce false positives.
 
+Two rules keep a green result meaningful:
+
+- **A directory that cannot be read is a finding, not an empty one.** The walk
+  records `PermissionError` as an issue, because an unreadable tree and a
+  clean tree must never look alike.
+- **Without PyYAML the guard fails closed** rather than guessing from a line
+  reader, which cannot tell `name: [a, b]` (a list Hermes will not accept)
+  from `name: skill`, nor detect a malformed block.
+
 ## Reading the result
 
 A reported path needs a decision, and the guard cannot make it for you:
@@ -70,7 +79,15 @@ hand-authoring replacement instructions a model might act on.
 pure string/YAML work and needs no install.
 
 The live scan is opt-in, because GitHub-hosted CI has no Hermes install and
-the scan would pass vacuously with nothing to walk:
+the scan would pass vacuously with nothing to walk. It is gated on a
+declared `workflow_call` input — pass `profile-scan-home` when invoking the
+reusable workflow:
 
-    HERMES_PROFILES_SCAN: '1'
-    HERMES_PROFILES_SCAN_HOME: /path/to/.hermes
+    # ci.yml, or `gh workflow run reusable-ci.yml`
+    profile-scan-home: /path/to/.hermes
+
+Gating on an environment variable does not work here: GitHub evaluates
+`if: env.X` against workflow/job/step `env` blocks only, so a variable
+exported on a self-hosted runner never satisfies it and the step stays
+permanently skipped. An input is also auditable in the run summary, which an
+invisible runner export is not.

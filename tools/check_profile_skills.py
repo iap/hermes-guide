@@ -36,14 +36,19 @@ def _default_home() -> str | None:
     deliberately independent of ``checks.py`` so this runs standalone — CI has
     no Hermes import path.
     """
-    env = os.environ.get("HERMES_HOME")
+    env = (os.environ.get("HERMES_HOME") or "").strip()
     if env:
         return env
-    if sys.platform == "darwin":
-        return str(Path.home() / ".hermes")
-    if os.name == "nt":
-        return os.environ.get("LOCALAPPDATA", "") or None
-    return os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share")) + "/hermes"
+    # Mirrors hermes_constants._get_platform_default_hermes_home: Windows uses
+    # %LOCALAPPDATA%\hermes, every other platform is ~/.hermes. There is no
+    # XDG branch upstream -- honouring XDG_DATA_HOME here would scan a
+    # directory the CLI never reads.
+    suffix = os.environ.get("HERMES_DATA_DIR_SUFFIX", "")
+    if sys.platform == "win32":
+        local_appdata = (os.environ.get("LOCALAPPDATA") or "").strip()
+        base = Path(local_appdata) if local_appdata else Path.home() / "AppData" / "Local"
+        return str(base / ("hermes" + suffix))
+    return str(Path.home() / (".hermes" + suffix))
 
 
 def _profiles_root(home: str) -> Path:
@@ -71,9 +76,9 @@ def has_valid_frontmatter(path: Path) -> tuple[bool, str]:
     """Return ``(ok, reason)`` for one SKILL.md.
 
     Requires a leading ``---`` fence, a parseable YAML mapping, and a non-empty
-    string ``name`` — the minimum Hermes needs to register the skill. Parsing is
-    done with PyYAML when available and a conservative line reader otherwise, so
-    the guard still works on a bare interpreter.
+    string ``name`` — the minimum Hermes needs to register the skill. PyYAML does
+    the parsing; without it this fails closed, because a line reader cannot
+    distinguish a scalar ``name`` from a list or a malformed block.
     """
     try:
         text = path.read_text(encoding="utf-8-sig")
@@ -89,9 +94,11 @@ def has_valid_frontmatter(path: Path) -> tuple[bool, str]:
     try:
         import yaml  # noqa: PLC0415 -- optional; guard must run without it
     except ImportError:
-        return (True, "") if any(
-            ln.strip().startswith("name:") and ln.strip() != "name:" for ln in block.splitlines()
-        ) else (False, "frontmatter missing `name`")
+        # No parser: do NOT guess. A line reader cannot tell `name: [a, b]`
+        # (a list, unusable) from `name: skill` (a string), nor detect a
+        # malformed block -- it reported both as valid. Fail closed and say so,
+        # rather than passing skills this guard never actually validated.
+        return False, "cannot validate: PyYAML not installed"
     try:
         fm = yaml.safe_load(block)
     except Exception as exc:
@@ -110,12 +117,23 @@ def scan(skills_root: Path) -> tuple[int, list[tuple[Path, str]]]:
     Mirrors the loader: hidden directories (``.archive``, ``.curator_backups``,
     ``.hub``) hold bookkeeping, not loadable skills, and are skipped so archived
     or backed-up copies cannot produce false positives.
+
+    A directory that cannot be read is reported as a finding, never as empty --
+    an unreadable tree and a clean one must not look alike.
     """
     seen = 0
     findings: list[tuple[Path, str]] = []
+
+    def onerror(exc: OSError) -> None:
+        # os.walk() swallows traversal errors unless given a handler, so an
+        # unreadable directory would look exactly like an empty one and the
+        # audit would pass while inspecting nothing.
+        target = Path(exc.filename) if exc.filename else skills_root
+        findings.append((target, f"unreadable directory ({type(exc).__name__})"))
+
     if not skills_root.is_dir():
         return 0, findings
-    for dirpath, dirnames, filenames in os.walk(skills_root):
+    for dirpath, dirnames, filenames in os.walk(skills_root, onerror=onerror):
         dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
         if "SKILL.md" not in filenames:
             continue
@@ -196,7 +214,97 @@ def selftest() -> int:
             failures += 1
             print("SELFTEST FAIL: missing skills/ dir should be (0, [])", file=sys.stderr)
 
-    total = len(cases) + 4
+    # Unreadable directories must be findings, not "empty and clean". chmod is
+    # a no-op for root, so skip rather than assert something untrue.
+    if os.geteuid() != 0:
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            blocked = tmp / "profiles" / "locked" / "skills"
+            blocked.mkdir(parents=True)
+            (blocked / "SKILL.md").write_text(
+                "---\nname: hidden\ndescription: d\n---\n", encoding="utf-8")
+            blocked.chmod(0o000)
+            seen, findings = scan(tmp / "profiles" / "locked" / "skills")
+            blocked.chmod(0o755)
+            if not findings or seen != 0:
+                failures += 1
+                print(
+                    f"SELFTEST FAIL: unreadable skills/ dir must be a finding, "
+                    f"got seen={seen} findings={findings}", file=sys.stderr)
+
+    # The default-home fallback must match hermes_constants
+    # ._get_platform_default_hermes_home. Upstream has no XDG branch, so
+    # honouring XDG_DATA_HOME would scan a directory the CLI never reads.
+    saved_env = {k: os.environ.get(k) for k in
+                 ("HERMES_HOME", "XDG_DATA_HOME", "HERMES_DATA_DIR_SUFFIX", "LOCALAPPDATA")}
+    saved_platform = sys.platform
+    try:
+        for key in ("HERMES_HOME", "XDG_DATA_HOME", "HERMES_DATA_DIR_SUFFIX"):
+            os.environ.pop(key, None)
+        os.environ["XDG_DATA_HOME"] = "/nonexistent-xdg-probe"
+        for plat, expected in (("darwin", ".hermes"), ("linux", ".hermes")):
+            sys.platform = plat
+            got = _default_home()
+            if Path(got).name != expected or "/nonexistent-xdg-probe" in got:
+                failures += 1
+                print(
+                    f"SELFTEST FAIL: {plat} default home should be ~/{expected}, "
+                    f"got {got}", file=sys.stderr)
+        # Windows appends the data-directory name under %LOCALAPPDATA%.
+        sys.platform = "win32"
+        os.environ["LOCALAPPDATA"] = str(Path(tempfile.gettempdir()))
+        got = _default_home()
+        if Path(got).name != "hermes" or Path(got).parent != Path(tempfile.gettempdir()):
+            failures += 1
+            print(f"SELFTEST FAIL: win32 default home should be "
+                  f"%LOCALAPPDATA%\\hermes, got {got}", file=sys.stderr)
+        # HERMES_HOME wins, and is stripped.
+        sys.platform = "darwin"
+        os.environ["HERMES_HOME"] = "  /tmp/explicit-home  "
+        if _default_home() != "/tmp/explicit-home":
+            failures += 1
+            print(f"SELFTEST FAIL: HERMES_HOME not honoured: {_default_home()!r}",
+                  file=sys.stderr)
+    finally:
+        sys.platform = saved_platform
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    # Without PyYAML the guard must FAIL CLOSED. The old line-reader fallback
+    # called `name: [a, b]` and a malformed block valid, because it only asked
+    # whether some line started with `name:`.
+    import builtins as _builtins
+    saved_import = _builtins.__import__
+    real_import = saved_import
+
+    def _no_yaml(name, *a, **k):
+        if name == "yaml":
+            raise ImportError("PyYAML unavailable (selftest)")
+        return real_import(name, *a, **k)
+
+    try:
+        _builtins.__import__ = _no_yaml
+        with tempfile.TemporaryDirectory() as d:
+            probe = Path(d) / "SKILL.md"
+            for label, body, expect_ok in (
+                ("non-string name", "---\nname: [a, b]\ndescription: d\n---\n", False),
+                ("malformed block", "---\nname: x\n  bad indent: [\n---\n", False),
+                ("otherwise valid", "---\nname: ok\ndescription: d\n---\n", False),
+            ):
+                probe.write_text(body, encoding="utf-8")
+                got_ok = has_valid_frontmatter(probe)[0]
+                if got_ok != expect_ok:
+                    failures += 1
+                    print(
+                        f"SELFTEST FAIL: no-PyYAML {label}: expected valid={expect_ok}, "
+                        f"got valid={got_ok} (must fail closed)", file=sys.stderr)
+    finally:
+        _builtins.__import__ = real_import
+
+    total = len(cases) + 12
     if failures:
         print(f"error: {failures}/{total} selftest case(s) failed", file=sys.stderr)
         return 1
@@ -223,7 +331,13 @@ def main(argv: list[str]) -> int:
         print(f"error: Hermes home does not exist: {home}", file=sys.stderr)
         return 1
 
-    profiles = discover_profiles(home)
+    try:
+        profiles = discover_profiles(home)
+    except OSError as exc:
+        # is_dir() can succeed while iterdir() still fails (permissions). Turn
+        # that into an audit failure rather than an uncaught traceback.
+        print(f"error: cannot read {Path(home) / 'profiles'}: {exc}", file=sys.stderr)
+        return 1
     if args.profile:
         wanted = set(args.profile)
         profiles = [(n, r) for n, r in profiles if n in wanted]

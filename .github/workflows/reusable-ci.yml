@@ -32,6 +32,17 @@ on:
         type: boolean
         required: false
         default: true
+      # Opt-in live scan of the runner's Hermes profile skills. Off by default:
+      # GitHub-hosted CI has no Hermes install, so the scan would pass
+      # vacuously. Declared as an INPUT because `if: env.X` only sees env set
+      # in workflow/job/step blocks -- a self-hosted runner's exported
+      # environment never reaches the expression, which left the gate
+      # permanently closed.
+      profile-scan-home:
+        description: "Absolute path to a Hermes home whose profiles should be audited (empty = skip)"
+        type: string
+        required: false
+        default: ""
     outputs:
       plugin-result:
         description: "Concatenated matrix result for the plugin job"
@@ -270,12 +281,14 @@ jobs:
         run: |
           python tools/check_profile_skills.py --selftest
       - name: Profile skill frontmatter live scan
-        # CI has no Hermes install, so the live scan would have nothing to walk
-        # and would always pass vacuously. Run it only where a real home exists
-        # (Hermes' own workflows, or a self-hosted runner with one installed).
-        if: ${{ env.HERMES_PROFILES_SCAN == '1' }}
+        # Gated on a declared input, not an env var: GitHub evaluates `if: env.X`
+        # against workflow/job/step env only, so a self-hosted runner's exported
+        # HERMES_PROFILES_SCAN would never satisfy it. Callers (including
+        # workflow_dispatch) pass profile-scan-home instead. Empty = skip, which
+        # is what hosted CI must do -- it has no Hermes install to audit.
+        if: ${{ inputs.profile-scan-home != '' }}
         env:
-          HERMES_HOME: ${{ env.HERMES_PROFILES_SCAN_HOME }}
+          HERMES_HOME: ${{ inputs.profile-scan-home }}
         run: python tools/check_profile_skills.py
 
       - name: Scope validation regression
