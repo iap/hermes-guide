@@ -15,15 +15,16 @@
 default_language_version:
   python: python3
 
-# Fast gate. Refuses the commit when the counts, routing table, provenance
-# footer, self-claim deny-list, plugin version, or read-only guarantee break.
+# Fast gate. Refuses the commit when the generated doc blocks, the skill
+# inventories, the provenance footer, the self-claim deny-list, the tone rules,
+# the plugin version, or the read-only guarantee break.
 # Runs the neighbor scripts via tools/check_gates.py; no checking logic is
 # duplicated here.
 repos:
   - repo: local
     hooks:
       - id: hermes-guide-gates
-        name: hermes-guide gates (counts, provenance, self-claim, read-only)
+        name: hermes-guide gates (generated docs, counts, provenance, self-claim, tone, read-only)
         entry: python tools/check_gates.py
         language: system
         pass_filenames: false

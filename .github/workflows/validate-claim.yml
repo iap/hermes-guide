@@ -89,12 +89,12 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      # The hermetic tier needs PyYAML and nothing else. `test_skill_counts.py`
-      # imports checks.py, which imports yaml; the other four gates are stdlib
-      # only. Unlike reusable-ci.yml this job deliberately does not install
-      # Hermes to pick the dependency up transitively, and a bare
-      # setup-python interpreter has no PyYAML -- so without this the tier
-      # dies on ModuleNotFoundError and reports 4/5 for the wrong reason.
+      # The hermetic tier is stdlib-only: it reads files and parses `checks.py`
+      # with `ast` rather than importing it, so no gate pulls in PyYAML or the
+      # plugin's import graph. Unlike reusable-ci.yml this job does not install
+      # Hermes to pick dependencies up transitively. The install below is kept
+      # as a floor for contributors who add a gate that needs one -- if every
+      # gate is stdlib-only, it is dead weight and can go.
       - name: Install gate dependency
         run: pip install pyyaml
 

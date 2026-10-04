@@ -2,10 +2,16 @@
 
 > **Package / slug:** `hermes-guide`
 
-Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent). **It complements — not replaces — Hermes's built-in diagnostics** (`hermes doctor`, `hermes verify`, and the platform helpers): it is an extra layer covering what they don't. It ships two things:
+Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
-1. **A plugin** — `/hermes-doctor` (in-session) and `hermes guide` (terminal): read-only diagnostics across config, mcp, skills, commands, hooks, plugins, and memories — each name is a valid scope.
-2. **Nineteen troubleshooting skills** — teach an agent how to locate and fix each surface, plus install, venv, auth, memory, desktop, model-provider, bot-mode, voice, browser, cron, and gateway guides.
+It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. It ships two independent things:
+
+1. **A plugin.** `/hermes-doctor` in a session, `hermes guide` in a terminal. Read-only health checks across <!-- BEGIN GENERATED: intro-scopes -->
+`config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`
+<!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
+2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
+**Nineteen troubleshooting skills** — one install guide, one configuration map, and seventeen per-surface `diagnosing-*` playbooks.
+<!-- END GENERATED: intro-inventory -->
 
 ## Install the plugin
 
@@ -21,7 +27,7 @@ hermes plugins install iap/hermes-guide --ref <40-char-SHA> --enable
 
 ### Manual install
 
-Alternatively, clone this repo directly into your Hermes plugins directory:
+Alternatively, clone this repo into your Hermes plugins directory:
 
 ```bash
 # POSIX / WSL: $HERMES_HOME is ~/.hermes
@@ -29,12 +35,15 @@ git clone --depth 1 https://github.com/iap/hermes-guide ~/.hermes/plugins/hermes
 hermes plugins enable hermes-guide
 ```
 
-A clone (rather than `cp -r .`) keeps VCS metadata and local caches out of the plugin directory. On native Windows `$HERMES_HOME` is `%LOCALAPPDATA%\hermes` (not `~/.hermes`); run `hermes config path` to confirm.
+A clone (rather than `cp -r .`) keeps VCS metadata and local caches out of the plugin directory.
 
-## Usage
+> [!NOTE]
+> On native Windows `$HERMES_HOME` is `%LOCALAPPDATA%\hermes`, not `~/.hermes`. Run `hermes config path` to confirm where yours is.
 
-- In a session: `/hermes-doctor` (all surfaces) or `/hermes-doctor mcp` (one surface).
-- In a terminal: `hermes guide` — exits `1` if any surface is broken or unknown (indeterminate), and `2` for an unrecognized scope name.
+## Use the plugin
+
+- **In a session:** `/hermes-doctor` for every surface, or `/hermes-doctor mcp` for one.
+- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy.
 
 ### Proactive mode (opt-in)
 
@@ -50,32 +59,27 @@ plugins:
 
 Drift findings are then logged at session start/end — watch `hermes logs --follow`.
 
-## Install the skills (tap)
+## Install the skills
 
-Installing the plugin (above) does **not** list or install the skills — they ship
-as separate, opt-in reference material. To make them appear under `hermes skills`,
-add this repo as a skills tap, then install what you want:
+Installing the plugin does **not** install the skills; they ship as separate, opt-in reference material. Add the repo as a skills tap, then install what you want:
 
 ```bash
 hermes skills tap add iap/hermes-guide
-hermes skills install iap/hermes-guide/skills/hermes-configuration-guide
+hermes skills install iap/hermes-guide/skills/diagnosing-mcp
 ```
 
-The other eighteen skills use the same `iap/hermes-guide/skills/<name>` form:
-`installing-hermes`, `diagnosing-mcp`, `diagnosing-skills`, `diagnosing-commands`, `diagnosing-hooks`, `diagnosing-plugins`, `diagnosing-path`, `diagnosing-cli-tui`, `diagnosing-auth`, `diagnosing-memory`, `diagnosing-desktop`, `diagnosing-providers`, `diagnosing-bot-mode`, `diagnosing-voice`, `diagnosing-browser`, `diagnosing-cron`, `diagnosing-gateway`, `diagnosing-host-pressure`.
+> [!IMPORTANT]
+> The identifier must include the `skills/` prefix — it is the repo-relative path to the skill's `SKILL.md`. The shorter `iap/hermes-guide/<name>` form does not resolve.
 
-> [!NOTE]
-> The identifier must include the `skills/` prefix (it is the repo-relative path to the skill's `SKILL.md`). The shorter `iap/hermes-guide/<name>` form does not resolve.
+### Install all skills at once
 
-#### Install all skills at once
-
+<!-- BEGIN GENERATED: install-all-loop -->
 ```bash
-for s in diagnosing-mcp diagnosing-skills diagnosing-commands diagnosing-hooks diagnosing-plugins diagnosing-path diagnosing-cli-tui diagnosing-auth diagnosing-memory diagnosing-desktop diagnosing-providers diagnosing-bot-mode diagnosing-voice diagnosing-browser diagnosing-cron diagnosing-gateway diagnosing-host-pressure installing-hermes hermes-configuration-guide; do hermes skills install "iap/hermes-guide/skills/$s"; done
+for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-skills diagnosing-voice hermes-configuration-guide installing-hermes; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
+<!-- END GENERATED: install-all-loop -->
 
-Each skill still passes its own scan + consent individually (scanner-honest, individually updatable).
-
-Each installed skill is also available as a slash command (e.g. `/hermes-configuration-guide`).
+Each skill still passes its own scan and consent individually, so it stays individually updatable. Every installed skill is also available as a slash command (e.g. `/diagnosing-mcp`).
 
 ## What's included
 
@@ -88,7 +92,7 @@ Each installed skill is also available as a slash command (e.g. `/hermes-configu
 | `diagnosing-commands` | Missing or overridden slash commands — skills-as-commands, bundles, plugin commands, per-platform permissions |
 | `diagnosing-hooks` | Hooks that don't fire — the four hook systems, shell-hook consent, `hermes hooks doctor` |
 | `diagnosing-plugins` | Plugins that don't load — the `plugins.enabled` gate, capability consent, discovery locations |
-| `diagnosing-path` | Path issues — the dual-venv layout (.venv/venv) on older checkouts, the PM-era no-in-tree-venv case, detection, canonical resolution order, cross-platform best practices |
+| `diagnosing-path` | Path issues — the dual-venv layout on older checkouts, the PM-era no-in-tree-venv case, detection, canonical resolution order, cross-platform best practices |
 | `diagnosing-cli-tui` | CLI/TUI issues on native Windows — rendering artifacts, themes, busy indicators, mouse modes, encoding, launch/resume |
 | `diagnosing-auth` | Hub-install auth failures — dead/shadowing `GITHUB_TOKEN` in the profile `.env`, `gh-cli` fallback, 401 vs anonymous probes, rate-limit verdicts |
 | `diagnosing-memory` | Memory problems — built-in `MEMORY.md`/`USER.md` stores, external providers configured but silently unavailable, missing plugins/keys, char-limit and approval gates |
@@ -103,7 +107,7 @@ Each installed skill is also available as a slash command (e.g. `/hermes-configu
 
 ## Design principle
 
-**Complement, don't duplicate.** When a built-in (`hermes doctor`, `hermes verify`, per-surface helpers) already answers the question, use it — hermes-guide exists for the gaps: deep per-surface troubleshooting playbooks, deterministic read-only health checks, and the routing map between surfaces. If a check here ever starts duplicating a built-in, the built-in wins and the check gets trimmed.
+**Complement, don't duplicate.** When a built-in already answers the question, use it — hermes-guide exists for the gaps: deep per-surface playbooks, deterministic read-only health checks, and the routing map between surfaces. If a check here ever starts duplicating a built-in, the built-in wins and the check gets trimmed.
 
 Every diagnosis resolves to a concrete action: a `hermes <subcommand>` command or a specific file + field edit, then a `/reload-*` or restart to apply.
 

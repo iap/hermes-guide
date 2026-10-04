@@ -1,227 +1,207 @@
 #!/usr/bin/env python3
-"""Regression: skill/check counts stated in README.md, AGENTS.md, and
-CONTRIBUTING.md match reality.
+"""Fail if a doc claims an inventory the repo does not have, or hides one.
 
-Manual counts were the repo's most recurring doc defect (AGENTS.md said "six
-skills" when there were eight; README said "eight" when there were nine). Each
-case here pins one count-bearing phrase against ground truth:
+Why this exists
+---------------
+This guard used to pin the *wording* of three files. Regexes matched sentences
+like "bundles six SKILL.md files" and "The other eighteen skills", because
+hand-maintained counts in prose drift (AGENTS.md once said six when there were
+eight) and the maintainers wanted CI to catch it.
 
-  - number of skills/ dirs with a SKILL.md (the actual skills)
-  - number of check labels in checks._CHECKS (the actual checks)
-  - README: "N troubleshooting skills" phrase, skill-table row count,
-    "The other N skills" tap-install list
-  - skill-drift issue template: one dropdown option per shipped skill
-  - AGENTS.md: "bundles N SKILL.md files", "The N skills (one map + M
-    diagnostics)", "The N read-only health checks" + its scope list
-  - CONTRIBUTING.md: "bundles N SKILL.md files" (same phrase, same ground truth)
+That worked, but it also froze the prose: rephrasing a sentence broke the build,
+so the documentation could be corrected but never improved. `tools/render_docs.py`
+now generates every count-bearing line into a marker-delimited block, and this
+guard covers what generation cannot — the three hand-written inventories:
 
-Word-numbers are expected (two..twenty); a digit in any of these phrases is
-treated as a mismatch to keep the prose style consistent.
+  1. The README skill table lists exactly the skills that ship — no missing row,
+     no renamed leftover, no row for a skill that was deleted.
+  2. The skill-drift issue template offers one option per shipped skill, and no
+     ghost option for a deleted one.
+  3. Every `diagnosing-*` skill is reachable from the configuration map's Routing
+     section. An unrouted skill is unreachable, and no count catches that.
+  4. The AGENTS.md layout table mentions every tracked top-level path and every
+     CI workflow. It went stale for six files before this check existed, and a
+     structure table that omits a file is worse than no table.
 
-Run: python3 tools/test_skill_counts.py
+Checks 1-3 are set equality — an extra entry is a ghost that sends readers (and
+issue reporters) to something that no longer exists. Check 4 is coverage only:
+the layout table deliberately groups and globs (`tools/check_*.py`), so it is
+allowed to say more than the file list, but never less.
+
+Counts and scope lists are no longer checked here; render_docs.py owns them.
+
+Run: python tools/test_skill_counts.py
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-_WORDS = [
-    "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
-    "seventeen", "eighteen", "nineteen", "twenty",
-]
-_NUM = {w: i + 2 for i, w in enumerate(_WORDS)}
+# Frontmatter `name:` values the README skill table keys on.
+_TABLE_ROW = re.compile(r"^\| `([a-z0-9-]+)` \|", re.M)
 
 
-def _word_num(n: int) -> str:
-    try:
-        return _WORDS[n - 2]
-    except IndexError:
-        raise AssertionError(f"no word for {n} — extend _WORDS in this test")
+def section(text: str, heading: str) -> str:
+    """The body of `## heading`, up to the next top-level heading."""
+    if heading not in text:
+        return ""
+    return re.split(r"\n## ", text.split(heading, 1)[1], maxsplit=1)[0]
 
 
-def _parse_wordNum(text: str, pattern: str, label: str) -> int:
-    """Extract a word-number via `pattern` (one capture group) and convert."""
-    m = re.search(pattern, text, re.IGNORECASE)
-    assert m, f"{label}: phrase not found"
-    word = m.group(1).lower()
-    assert word in _NUM, f"{label}: expected a word-number, got {word!r}"
-    return _NUM[word]
+def skill_ids() -> list[str]:
+    return sorted(p.parent.name for p in REPO.glob("skills/*/SKILL.md"))
+
+
+def git_ls_files() -> list[str]:
+    """Tracked paths. Raises on failure — an empty inventory must not read as clean."""
+    proc = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git ls-files failed: {proc.stderr.strip() or proc.returncode}"
+        )
+    return [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+
+
+def expected_paths(tracked: list[str]) -> list[str]:
+    """Tracked paths the AGENTS.md layout table must mention.
+
+    Every top-level entry (a file, or a directory) plus every file under
+    `.github/`. Skills and tools children are not enumerated: the table covers
+    those with one globbed row each.
+    """
+    out: set[str] = set()
+    for path in tracked:
+        out.add(path if path.startswith(".github/") else path.split("/", 1)[0])
+    return sorted(out)
+
+
+def documented_names(layout: str) -> set[str]:
+    """Every inline-code span in the layout section — the names the table claims."""
+    return set(re.findall(r"`([^`]+)`", layout))
+
+
+def _uncovered(paths: list[str], layout: str) -> list[str]:
+    """Tracked paths the layout table never names.
+
+    A path counts as covered by a mention of its full path, its basename, or any
+    ancestor directory. The table is allowed to cover `tools/` with one row rather
+    than twenty, and `.github/workflows/label-prs.yml, label-pr-metadata.yml` is
+    one row naming two files — but a workflow nothing mentions is still a gap.
+    """
+    names = documented_names(layout)
+    uncovered = []
+    for path in paths:
+        if path in names or path.rsplit("/", 1)[-1] in names:
+            continue
+        parts = path.split("/")
+        # An ancestor directory token (`tools/`) covers everything beneath it,
+        # and a token that descends from `path` (`skills/<name>/SKILL.md`)
+        # covers the directory itself.
+        if any(f"{'/'.join(parts[: i + 1])}/" in names for i in range(len(parts))):
+            continue
+        if any(n.startswith(f"{path}/") for n in names):
+            continue
+        uncovered.append(path)
+    return uncovered
+
+
+def _equality_problems(label: str, expected: set[str], actual: set[str]) -> list[str]:
+    problems = []
+    missing = sorted(expected - actual)
+    ghosts = sorted(actual - expected)
+    if missing:
+        problems.append(f"{label}: missing " + ", ".join(missing))
+    if ghosts:
+        problems.append(f"{label}: lists " + ", ".join(ghosts) + " - not shipped")
+    return problems
 
 
 def main() -> int:
+    try:
+        tracked = git_ls_files()
+    except RuntimeError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 2
+    if not tracked:
+        print(
+            "FAIL: git ls-files returned nothing; refusing to report clean",
+            file=sys.stderr,
+        )
+        return 2
+
+    ids = skill_ids()
+    if len(ids) < 2:
+        print(
+            f"FAIL: sanity: found {len(ids)} skills, expected the full library",
+            file=sys.stderr,
+        )
+        return 2
+
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     agents = (REPO / "AGENTS.md").read_text(encoding="utf-8")
-    contributing = (REPO / "CONTRIBUTING.md").read_text(encoding="utf-8")
-
-    actual_skills = len(list(REPO.glob("skills/*/SKILL.md")))
-    assert actual_skills >= 2, "sanity: no skills found"
-
-    # The repo dir is hyphenated ("hermes-guide") so it can't be imported as a
-    # package directly — mirror tools/test_readonly_runtime.py's shim.
-    import shutil
-    import tempfile
-
-    td = Path(tempfile.mkdtemp())
-    pkg = td / "hermes_guide"
-    pkg.mkdir()
-    for name in ("__init__.py", "checks.py", "constants.py"):
-        shutil.copy(REPO / name, pkg / name)
-    sys.path.insert(0, str(td))
-    import hermes_guide.checks as checks_mod  # noqa: E402
-
-    actual_checks = len(checks_mod.labels())
-    actual_diagnostics = len(list(REPO.glob("skills/diagnosing-*/SKILL.md")))
+    expected_ids = set(ids)
 
     failures: list[str] = []
 
-    def expect(label: str, stated: int, actual: int) -> None:
-        if stated != actual:
-            failures.append(f"{label}: stated {stated}, actual {actual}")
-
-    # README — headline count and skill table
-    expect(
-        "README 'N troubleshooting skills'",
-        _parse_wordNum(readme, r"\*\*([A-Za-z]+) troubleshooting skills\*\*", "README headline"),
-        actual_skills,
-    )
-    table_rows = re.findall(r"^\| `(?:hermes-|diagnosing-|installing-)[a-z0-9-]+` \|", readme, re.M)
-    expect("README skill-table rows", len(table_rows), actual_skills)
-    expect(
-        "README 'The other N skills'",
-        _parse_wordNum(readme, r"The other ([A-Za-z]+) skills", "README tap list"),
-        actual_skills - 1,
+    # 1. README skill table vs the shipped inventory.
+    failures += _equality_problems(
+        "README skill table", expected_ids, set(_TABLE_ROW.findall(readme))
     )
 
-    # README install-all loop identifiers must exactly match the shipped
-    # skills/ inventory (a rename/add that skips the loop leaves it stale
-    # while the count assertions above would still pass — #65 review P2).
-    loop_m = re.search(r"for s in ([a-z0-9- ]+); do", readme)
-    assert loop_m, "README: install-all loop not found"
-    loop_ids = sorted(loop_m.group(1).split())
-    dir_ids = sorted(p.parent.name for p in REPO.glob("skills/*/SKILL.md"))
-    expect("README install-all loop identifiers", len(loop_ids), len(dir_ids))
-    if loop_ids != dir_ids:
-        failures.append(
-            "README install-all loop identifiers differ from skills/ inventory: "
-            f"loop-only={sorted(set(loop_ids) - set(dir_ids))} "
-            f"inventory-only={sorted(set(dir_ids) - set(loop_ids))}"
-        )
+    # 2. skill-drift issue template: one option per shipped skill.
+    template = (REPO / ".github" / "ISSUE_TEMPLATE" / "skill-drift.yml").read_text(
+        encoding="utf-8"
+    )
+    options = set(re.findall(r"^\s+- ([a-z0-9-]+)$", template, re.M))
+    failures += _equality_problems("skill-drift issue template", expected_ids, options)
 
-    # The skill-drift issue template offers one option per skill — and only
-    # shipped skills. A skill added without an option sends its drift reports
-    # to "Other" (seven were missing when this guard landed); a rename or
-    # removal that keeps its old option leaves reporters a dead choice.
-    template = (REPO / ".github" / "ISSUE_TEMPLATE" / "skill-drift.yml").read_text(encoding="utf-8")
-    template_opts = set(re.findall(r"^\s+- ([a-z0-9-]+)$", template, re.M))
-    template_missing = sorted(pid for pid in dir_ids if pid not in template_opts)
-    if template_missing:
-        failures.append("skill-drift template omits: " + ", ".join(template_missing))
-    template_stale = sorted(opt for opt in template_opts if opt not in set(dir_ids))
-    if template_stale:
-        failures.append("skill-drift template lists no-longer-shipped skill(s): " + ", ".join(template_stale))
-
-    # AGENTS.md — overview, structure rows
-    expect(
-        "AGENTS.md 'bundles N SKILL.md files'",
-        _parse_wordNum(agents, r"bundles ([A-Za-z]+) SKILL\.md files", "AGENTS.md overview"),
-        actual_skills,
+    # 3. Configuration-map routing: every diagnosing-* skill reachable.
+    guide = (REPO / "skills" / "hermes-configuration-guide" / "SKILL.md").read_text(
+        encoding="utf-8"
     )
-    expect(
-        "AGENTS.md 'The N skills ship separately'",
-        _parse_wordNum(agents, r"the ([A-Za-z]+) skills ship separately", "AGENTS.md init row"),
-        actual_skills,
-    )
-    expect(
-        "AGENTS.md skills row total",
-        _parse_wordNum(agents, r"([A-Za-z]+) skills: one config map", "AGENTS.md skills row"),
-        actual_skills,
-    )
-    expect(
-        "AGENTS.md skills row diagnostics",
-        _parse_wordNum(agents, r"([A-Za-z]+) `diagnosing", "AGENTS.md skills row"),
-        actual_diagnostics,
-    )
-
-    # AGENTS.md — checks row: count and the scope list must match checks.labels()
-    expect(
-        "AGENTS.md 'The N read-only health checks'",
-        _parse_wordNum(agents, r"The ([A-Za-z]+) read-only health checks", "AGENTS.md checks row"),
-        actual_checks,
-    )
-    m = re.search(r"The [A-Za-z]+ read-only health checks \(([a-z/]+)\)", agents)
-    assert m, "AGENTS.md checks row: scope list not found"
-    stated_scopes = m.group(1).split("/")
-    if stated_scopes != checks_mod.labels():
-        failures.append(
-            f"AGENTS.md checks row scopes: stated {stated_scopes}, actual {checks_mod.labels()}"
-        )
-
-    # README — plugin capability line must list exactly the check labels.
-    # Parse the documented scope list and compare names exactly (substring
-    # matching would accept stale or renamed scopes like `memories-old`).
-    m = re.search(r"read-only diagnostics across ([^.]+)\.", readme)
-    assert m, "README: plugin diagnostics line not found"
-    items = []
-    for item in m.group(1).split(","):
-        item = re.sub(r"\s*\(.*$", "", item.strip())   # trailing annotation
-        item = re.sub(r"\s+—.*$", "", item).strip()    # em-dash tail
-        item = re.sub(r"^and\s+", "", item)
-        if item:
-            items.append(item)
-    if sorted(items) != sorted(checks_mod.labels()):
-        failures.append(
-            f"README plugin line scopes: stated {items}, actual {checks_mod.labels()}"
-        )
-
-    # CONTRIBUTING.md — overview count (same phrase as AGENTS.md; drifted
-    # unnoticed in #69 because only README/AGENTS.md were guarded).
-    expect(
-        "CONTRIBUTING.md 'bundles N SKILL.md files'",
-        _parse_wordNum(contributing, r"bundles ([A-Za-z]+) SKILL\.md files", "CONTRIBUTING.md overview"),
-        actual_skills,
-    )
-
-    # The configuration map is the project's entry point: every shipped
-    # diagnosing-* skill must be reachable from its `## Routing` list. A new
-    # skill the map never mentions is unreachable — and the counts above would
-    # still pass (the v0.5.0 five-skill batch landed in exactly that state).
-    guide_path = REPO / "skills" / "hermes-configuration-guide" / "SKILL.md"
-    guide = guide_path.read_text(encoding="utf-8")
-    # Bound to the Routing SECTION: stop at the next top-level heading or the
-    # `---` footer. Searching to EOF would let a later prose mention of a skill
-    # name satisfy the guard even after its route bullet was removed.
-    routing = ""
-    if "## Routing" in guide:
-        tail = guide.split("## Routing", 1)[1]
-        routing = re.split(r"\n(?:## |---)", tail, maxsplit=1)[0]
-    unrouted = sorted(
-        p.parent.name for p in REPO.glob("skills/diagnosing-*/SKILL.md")
-        if f"`{p.parent.name}`" not in routing
-    )
-    if unrouted:
-        failures.append("configuration map routing omits: " + ", ".join(unrouted))
+    routing = section(guide, "## Routing")
     if not routing:
         failures.append("configuration map has no `## Routing` section")
+    unrouted = [
+        i for i in ids if i.startswith("diagnosing-") and f"`{i}`" not in routing
+    ]
+    if unrouted:
+        failures.append("configuration map routing omits: " + ", ".join(unrouted))
+
+    # 4. AGENTS.md layout table: coverage of the tracked tree.
+    layout = section(agents, "## Layout")
+    if not layout:
+        failures.append("AGENTS.md has no `## Layout` section")
+    expected = expected_paths(tracked)
+    gaps = _uncovered(expected, layout)
+    if gaps:
+        failures.append("AGENTS.md layout table never mentions: " + ", ".join(gaps))
 
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
         print(
-            f"{len(failures)} count mismatch(es) — update README.md/AGENTS.md/CONTRIBUTING.md "
-            f"(actual: {actual_skills} skills, {actual_diagnostics} diagnostics, "
-            f"{actual_checks} checks: {_word_num(actual_skills)}/"
-            f"{_word_num(actual_diagnostics)}/{_word_num(actual_checks)})",
+            "Counts and scope lists are generated - run `python tools/render_docs.py --write`. "
+            "The inventory rows themselves are hand-written.",
             file=sys.stderr,
         )
         return 1
+
     print(
-        f"OK: counts consistent ({actual_skills} skills, {actual_diagnostics} "
-        f"diagnostics, {actual_checks} checks)"
+        f"OK: {len(ids)} skills consistent across README table, issue template and "
+        f"config-map routing; {len(expected)} tracked paths covered by the "
+        f"AGENTS.md layout table"
     )
     return 0
 

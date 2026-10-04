@@ -1,18 +1,76 @@
 # Contributing
 
-Thank you for your interest in contributing to hermes-guide!
+Thank you for your interest in contributing to hermes-guide.
+
+**This file is the authoring standard.** It owns *what gets written* — skill
+naming, frontmatter, content rules, voice, and the PR workflow. It does not
+duplicate how the repo's gates work or how to run them; that is
+[AGENTS.md](AGENTS.md), and the two files split on that line deliberately. If you
+find the same rule in both, one of them is wrong — fix the copy that drifted.
 
 ## What this project is
 
-hermes-guide is a [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin + skills tap. The plugin (`plugin.yaml` + `__init__.py`/`checks.py`/`constants.py`) ships read-only diagnostics (`/hermes-doctor` and `hermes guide`), and the `skills/` directory bundles nineteen SKILL.md files that teach configuration and troubleshooting for MCP, skills, commands, hooks, plugins, hub auth, memory, paths/venvs, the Windows CLI/TUI, the desktop app, model providers, bot mode, voice, browser automation, cron scheduling, and gateway/messaging.
+hermes-guide is a [Hermes Agent](https://github.com/NousResearch/hermes-agent)
+plugin **plus** a skills tap, and they are installed separately.
 
-## Reporting Issues
+- The **plugin** (`plugin.yaml` + `__init__.py` / `checks.py` / `constants.py`)
+  ships read-only diagnostics: `/hermes-doctor` in a session and `hermes guide` in
+  a terminal.
+- The **skills tap** (`skills/`) ships per-surface troubleshooting playbooks.
 
-If a skill contains inaccurate guidance for a specific Hermes version, or is missing a known pitfall, please [open an issue](https://github.com/iap/hermes-guide/issues).
+The counts live in a generated block in [README.md](README.md) and
+[AGENTS.md](AGENTS.md) — `python tools/render_docs.py` renders them from the
+tree, so there is no number in this file to keep in sync.
 
-## Branch Naming
+## Reporting issues
 
-Short-lived branches, prefixed by type. Branch → merge to `master` → delete; never keep long-lived category buckets.
+If a skill gives inaccurate guidance for a specific Hermes version, or misses a
+known pitfall, [open an issue](https://github.com/iap/hermes-guide/issues). Pick
+the template that matches — `bug-report.yml` for a defect, `skill-drift.yml` for
+a fact that no longer matches Hermes, `config.yml` for configuration problems —
+and fill in the required fields. Blank issues are disabled, and the
+`skill-drift.yml` dropdown carries one option per shipped skill, so pick the
+right one to keep drift reports attributable. What happens after you submit is
+in [Contribution gate](#contribution-gate).
+
+## Contribution gate
+
+What happens after you submit, stated up front so nothing is a surprise later.
+
+**The bar.** An issue or PR is reviewable when it clears all of these:
+
+- It uses a template. Blank issues are disabled
+  (`.github/ISSUE_TEMPLATE/config.yml`), and the templates carry the required
+  fields: `bug-report.yml` requires the Hermes version, `skill-drift.yml`
+  requires the skill.
+- It is about this repo. A Hermes-core defect or feature request belongs
+  upstream; both contact links are in `config.yml`.
+- A vulnerability goes to the private advisory route in
+  [SECURITY.md](SECURITY.md), not the public tracker.
+- It states what was expected and what happened, with the command and its output.
+  Redact tokens.
+- It is not a question a shipped skill already answers — start with
+  `hermes-configuration-guide` and the [skill table](README.md#whats-included).
+
+**What a maintainer may do.** Close an issue or PR that misses the bar, with a
+reason recorded on it. That reason is the response: no further discussion is
+promised. Reopening is not automatic and is not granted on request — but a
+maintainer may reopen at any time, including when a later Hermes release changes
+the answer.
+
+Clearing the bar does not oblige anyone to review or merge. The same discretion
+applies to pull requests; the parts of the PR bar that machines already enforce
+are listed under [Pull requests](#pull-requests).
+
+This section is policy rather than a machine gate, with two exceptions that
+already are: `blank_issues_enabled: false` is structural, and
+`tools/test_skill_counts.py` fails when the `skill-drift.yml` dropdown and the
+shipped skills disagree.
+
+## Branch naming
+
+Short-lived branches, prefixed by type. Branch → merge to `master` → delete.
+Never keep long-lived category buckets.
 
 | Prefix | Use for |
 |---|---|
@@ -23,14 +81,14 @@ Short-lived branches, prefixed by type. Branch → merge to `master` → delete;
 | `refactor/` | Same behavior, different structure |
 | `perf/` | Performance improvements |
 | `test/` | Tests |
-| `chore/` | CI, deps, build tooling |
-| `ci/` | CI workflow changes (may overlap `chore/`; prefer `ci/` when the change is workflow-only) |
+| `chore/` | Deps, build tooling |
+| `ci/` | CI workflow changes (prefer `ci/` over `chore/` for workflow-only changes) |
 
 Add a new prefix only when you actually need it.
 
-## Commit Messages
+## Commit messages
 
-Use Conventional Commits format: `type(scope): summary`
+Conventional Commits: `type(scope): summary`.
 
 | Type | Use for |
 |---|---|
@@ -42,59 +100,146 @@ Use Conventional Commits format: `type(scope): summary`
 | `perf` | Performance |
 | `test` | Tests |
 | `ci` | CI workflow changes |
-| `chore` | CI, deps, build |
+| `chore` | Deps, build |
 
-Scope is the affected surface (`mcp`, `checks`, `config`, `skills`, `hooks`, `plugins`, `ci`, `deps`).
+Scope is the affected surface: `mcp`, `checks`, `config`, `skills`, `hooks`,
+`plugins`, `ci`, `deps`.
 
 Examples:
+
 - `fix(mcp): correct key constants for OAuth flow`
-- `docs(agents): add venv path convention rule`
-- `feat(guide): add diagnosing-path skill`
+- `docs(skills): document the PM-era no-in-tree-venv case`
+- `feat(guide): add the diagnosing-cron skill`
 
-## Skill naming convention
+## Tone
 
-- `diagnosing-<surface>` for diagnostic skills (e.g. `diagnosing-mcp`, `diagnosing-path`).
-- `hermes-` prefix reserved for the configuration map skill (`hermes-configuration-guide`).
-- Kebab-case, lowercase, ≤20 characters. The configuration map skill
-  (`hermes-configuration-guide`, 26 chars) predates this limit and is exempt;
-  every `diagnosing-*` name must fit it.
+Rules for everything a contribution carries: commit messages, PR bodies, issue
+comments, source, and documentation.
 
-## Pull Requests
+- **Short and direct.** Lead with the result.
+- **No cheerful filler.** "Thanks @user", not `Thanks so much @user!`. No
+  `great question`, `hope this helps`, or apologies for things that were not your
+  fault.
+- **Technical prose only.** No enthusiasm, no reassurance, no restatement of the
+  request before answering it.
+- **No emoji** in prose, commit messages, PR or issue bodies, or source.
 
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b fix/diagnosing-mcp-oauth`).
-3. Edit or add SKILL.md files under `skills/<name>/`, and/or the plugin files (`plugin.yaml`, `__init__.py`, `checks.py`, `constants.py`).
-4. Verify frontmatter parses (valid YAML between `---` fences, `name`, `description`, `version`).
-5. Run `python tools/check_gates.py` — the hermetic gate tier in one call (counts, routing table, provenance footer, self-claim, version consistency, read-only) — plus `python -m py_compile __init__.py checks.py constants.py`, `hermes plugins doctor . --ci`, and the guard linters + regression tests in `tools/` (see the checklist in [AGENTS.md](AGENTS.md)).
+Three carve-outs, because each of these quotes rather than decorates:
 
-   Optional: `pre-commit install` wires the same tier to commit time via `.pre-commit-config.yaml`, so a broken count or footer is refused before you push rather than in CI. `python tools/check_gates.py --list` shows what the fast tier covers and what stays in CI.
-6. Cross-check every `hermes <subcommand>` reference against the installed Hermes docs or `--help` output.
-7. Commit with a descriptive message and open a pull request.
+- **Transcribed output.** Inside a fenced code block or an inline code span, a
+  glyph is part of the data. A skill reproducing what a terminal prints has to
+  match it byte for byte, or it is lying to the reader.
+- **Protocol characters in code.** `checks.py` parses the hook markers
+  `hermes hooks doctor` emits, so those glyphs belong in the string literal that
+  matches them — never in a comment, where the codepoint name (`U+2717 BALLOT X`)
+  is both ASCII-safe and more precise.
+- **Bot-generated GitHub output.** `validate-claim.yml` posts a verdict icon in
+  its PR comment on purpose; an at-a-glance pass/fail marker is the point.
 
-## Content Guidelines
+`tools/check_doc_style.py` enforces the half that is mechanically decidable:
+emoji outside string literals in Python, and a deny-list of filler phrases in
+Markdown prose. Emoji in Markdown prose, commit messages, and PR bodies are left
+to review — every legitimate exception above would need an allowlist, and an
+allowlist rots.
 
-- Every diagnosis must resolve to a concrete action: a `hermes <subcommand>` or a specific file + field edit, then `/reload-*` or restart.
-- Use GitHub alert callouts where they genuinely help readers:
-  - `> [!NOTE]` — context not to miss
-  - `> [!TIP]` — optional shortcut
-  - `> [!IMPORTANT]` — required for success
-  - `> [!WARNING]` — breakage or data loss risk
-  - `> [!CAUTION]` — irreversible action (e.g., deleting config, removing a plugin)
-- Hermes configuration is YAML (`config.yaml`), never JSON.
-- `$HERMES_HOME` is `~/.hermes` on POSIX, `%LOCALAPPDATA%\hermes` on native Windows. Teach `hermes config path` as ground truth.
-- When Hermes changes behavior, update the affected skill(s) and bump their `version`.
-- See [AGENTS.md](AGENTS.md) for the full set of agent instructions and false-positive hazards to avoid.
+Quoting a banned phrase is fine as long as it sits in a code span, which is why
+the examples above are in backticks: the guard must not flag the standard for
+stating itself.
 
-## Writing style
+## Adding or changing a skill
 
-Describe behavior — don't assert quality. Docs should say what the plugin and skills *do*, not how good they are.
+A skill is one directory, `skills/<name>/SKILL.md`, with YAML frontmatter
+carrying exactly three keys:
+
+```yaml
+---
+name: diagnosing-mcp
+description: "One or two sentences an agent can route on."
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [hermes, mcp, troubleshooting, guide]
+    related_skills: [hermes-configuration-guide]
+---
+```
+
+- **Naming.** `diagnosing-<surface>` for playbooks, lowercase kebab-case, ≤20
+  characters. `installing-hermes` is the install guide and `hermes-configuration-guide`
+  is the routing map — both predate the length limit and are exempt. Do not rename
+  either to fit it.
+- **Description.** This is the only thing a router sees. Name the surface and the
+  symptom; do not spend it on adjectives.
+- **Version.** Any change to a `SKILL.md` bumps `version`, and the bump must go
+  *up* — a downgrade fails the same way a missing bump does.
+- **Provenance footer.** The final non-empty line must be dated and upstream-anchored:
+  `*Facts (re-)verified YYYY-MM-DD against upstream source at \`<rev>\` (<files/symbols>).*`
+  Refresh the date when you re-check the facts. Leave it alone when you only
+  reworded prose — otherwise the footer starts claiming work that did not happen.
+- **Routing.** Every new `diagnosing-*` skill needs a bullet in the configuration
+  map's `## Routing` section, and an entry in the README table and the
+  `.github/ISSUE_TEMPLATE/skill-drift.yml` dropdown. `render_docs.py` refreshes
+  the generated blocks; the rest is yours to edit.
+
+### Content rules
+
+- **Ground every fact in the installed Hermes.** `website/docs/` for
+  documentation, `hermes_cli/` / `agent/` / `hermes_constants.py` for source
+  truth. Web search alone is not evidence.
+- **End on an action.** Every diagnosis resolves to a `hermes <subcommand>` or a
+  specific file + field edit, followed by a `/reload-*` or a restart. Advice the
+  reader cannot execute is not a diagnosis.
+- **Name the exact command.** `hermes config path`, not "run the config command".
+- **Configuration is YAML.** `config.yaml`, never JSON syntax.
+- **Paths are platform-dependent.** `$HERMES_HOME` is `~/.hermes` on POSIX and
+  `%LOCALAPPDATA%\hermes` on native Windows; teach `hermes config path` as the
+  ground truth rather than picking one.
+- **One surface per skill.** If a section would need a second `## Routing` entry
+  to be found, it belongs in another skill.
+- **Citations must resolve.** `path.py::symbol` and `path.py:123` are checked
+  against the revision pinned in `.github/upstream-drift.baseline`.
+- **Cite the behavior, not the plan.** Do not describe a feature that upstream has
+  not shipped; if the upstream change is behind a release, say which.
+
+### Content voice
+
+How the *content* reads — distinct from the conversational tone above. Describe
+behavior; never assert quality.
 
 - ✅ "Skills track the Hermes source"
 - ✅ "Checks report malformed bundles, missing plugins, and slug collisions"
 - ❌ "The most reliable, fully accurate guide to Hermes"
 
-CI enforces this with a self-claim guard over all Markdown files (`tools/check_self_claim.py`). The deny-list lives in that script. If it trips, reword the line to a factual description of behavior.
+The ✅/❌ markers above are the one place Markdown prose uses emoji, and they are
+exempt on purpose: they mark a good example against a bad one, which is a
+judgment no reader should have to infer.
 
-## Questions?
+`tools/check_self_claim.py` enforces the substance over every Markdown file in the
+repo and holds the deny-list. If it trips, reword the line into a factual
+statement of what the code does.
 
-Open an issue and we'll help.
+Structure prose for scanning: tables for structured data (pitfall catalogs,
+system comparisons), lists for steps, and GitHub alert callouts where they earn
+their place:
+
+> [!NOTE] — context not to miss
+> [!TIP] — optional shortcut
+> [!IMPORTANT] — required for success
+> [!WARNING] — breakage or data-loss risk
+> [!CAUTION] — irreversible action
+
+## Pull requests
+
+1. Fork and branch: `git checkout -b fix/diagnosing-mcp-oauth`.
+2. Make the change.
+3. Run the gates. `python tools/check_gates.py` is the fast tier;
+   `python tools/render_docs.py --write` refreshes generated blocks; see
+   [AGENTS.md](AGENTS.md) for the full list and what CI adds on top.
+4. Fill in the PR template — **Environment** and **Validation Results** are read
+   by workflows, not just by reviewers. The validation table is machine-checked:
+   `validate-claim.yml` re-runs the hermetic gates against your head and fails the
+   check if your table does not match reality.
+5. Report anything you could not run as `not run` rather than omitting the row.
+   An honest gap is accepted; an unsupported claim is not.
+
+Because this repo is maintained from several platforms in parallel, a claim
+verified on one host is not verified on the others. Name the platform in the PR.

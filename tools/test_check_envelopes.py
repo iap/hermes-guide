@@ -27,8 +27,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-MARK_BAD = "\u2717"   # ✗
-MARK_WARN = "\u26a0"  # ⚠
+MARK_BAD = "\u2717"   # U+2717 BALLOT X
+MARK_WARN = "\u26a0"  # U+26A0 WARNING SIGN
 
 
 def _load_checks():

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.3.2
+version: 1.4.0
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -163,6 +163,38 @@ def resolve_venv(project_root: Path | None = None) -> Path | None:
     return None
 ```
 
+### D. PM-era installs: ask the package manager
+
+The in-tree resolver answers "which venv directory does this checkout have". On a
+**PM-era install (2026-09 onward)** there is no in-tree venv at all: PM keeps the
+dependency environment under `$HERMES_HOME/installs/<key>/environments/` and the
+shared runtime store in `$HERMES_HOME/tools`, and it removes a legacy in-tree
+venv once a generation is committed.
+
+So `project_venv_dir()` can return `None` **even though a dependency environment
+exists** — it never looks under `$HERMES_HOME/installs/<key>/environments/`. A
+`None` there means "wrong question", not "nothing installed".
+
+Ask PM instead:
+
+| Call | Returns |
+|---|---|
+| `committed_venv(root)` | the **venv directory** PM committed |
+| `project_python(root)` | the **interpreter executable** inside it |
+
+**These are not interchangeable.** `venv_bin_dir()` appends `bin`/`Scripts` to a
+venv *directory*, so pass it `committed_venv()`'s result — never
+`project_python()`'s, which would yield `.../bin/bin/python`.
+
+Handle both outcomes rather than assuming success:
+
+- **`None`** — no generation is committed yet. Not an error yet; the first
+  `hermes update` creates it.
+- **`RuntimeError`** — the record exists but cannot be read or parsed (the
+  record-reading helper in `pm/environments.py`). Treat this as *corrupt dependency
+  state*: re-run `hermes update`. Do **not** report it as "no environment",
+  which sends the reader down the wrong path entirely.
+
 ## Cross-platform path construction
 
 **Never hardcode `venv/bin/` or `venv/Scripts/`.** Use `venv_bin_dir()` from `hermes_constants.py`:
@@ -219,7 +251,7 @@ python = project_root / "venv" / "bin" / "python"  # Breaks on Windows, breaks o
 ### For documentation
 
 - **Do:** Reference `hermes config path` as the ground-truth command.
-- **Do:** On a checkout that carries an in-tree venv, resolve via `project_venv_dir()` from `hermes_constants.py` (it picks `venv/` before `.venv/`). That resolver only looks in the project root and `sys.prefix`, so on a PM-era install it returns `None` — use `pm.environments.committed_venv()` (venv directory) or `project_python()` (interpreter executable) there instead.
+- **Do:** On a checkout that carries an in-tree venv, resolve via `project_venv_dir()` from `hermes_constants.py` (it picks `venv/` before `.venv/`). That resolver only looks in the project root and `sys.prefix`, so on a PM-era install it returns `None` — see **D. PM-era installs** for the PM API to call instead (`committed_venv()` vs `project_python()`, and the `RuntimeError` that means corrupt state rather than a missing one).
 - **Do:** Mention both layouts — `venv/` (installers) and `.venv/` (uv).
 - **Don't:** Hardcode either name alone, or document an activation path without noting the other layout.
 

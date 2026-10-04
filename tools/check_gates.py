@@ -30,16 +30,21 @@ REPO = Path(__file__).resolve().parent.parent
 
 # script -> why it is safe to run on every commit.
 _GATES: dict[str, str] = {
-    "test_skill_counts.py": "pure file reads; no git, network, or CLI",
+    "test_skill_counts.py": "pure file reads plus `git ls-files`; no network or Hermes",
+    "render_docs.py": "regenerates doc blocks and diffs them; pure file reads",
     "check_skill_provenance.py": "regex over SKILL.md text",
     "check_self_claim.py": "deny-list scan over docs",
+    "check_doc_style.py": "tone scan; `git ls-files` plus a tokenizer pass",
     "check_version_consistency.py": "compares manifest/entrypoint literals",
     "check_no_mutation.py": "AST parse; no imports executed",
 }
 
-_QUICK = ("test_skill_counts.py", "check_skill_provenance.py")
+_QUICK = ("test_skill_counts.py", "render_docs.py", "check_skill_provenance.py")
 
-_USAGE = "run the hermetic gate tier (counts, routing, provenance, self-claim, read-only)"
+_USAGE = (
+    "run the hermetic gate tier (generated docs, counts, routing, provenance, "
+    "self-claim, tone, read-only)"
+)
 
 # Gates CI runs that this tier leaves out, and the constraint that excludes it.
 _SLOW: dict[str, str] = {
