@@ -132,28 +132,53 @@ def emoji_outside_strings(src: str) -> list[tuple[int, list[str]]]:
     return findings
 
 
+# Markdown lets a fence or a list item sit inside a block quote, and lets a
+# doc quote a fence inside a list item, so the container marker has to come off
+# before the delimiter can be recognised. Without this a fence nested in a list
+# item is invisible: its body is read as prose.
+_CONTAINER_PREFIX = re.compile(r"^(?:(?:\s*>\s?)|(?:\s*(?:[-+*]|\d+[.)])\s+))+")
+
+# A code span opens with a run of N backticks and closes only on a run of
+# exactly N (CommonMark 6.1). The naive `[^`]*` body also matches a newline,
+# which both leaks quoted text into the prose and renumbers every line after a
+# span that happens to straddle one.
+_CODE_SPAN = re.compile(r"(`+)(?:(?!\1).)*\1")
+
+
 def prose_only(text: str) -> str:
     """Markdown prose with fenced code blocks and inline code spans removed.
 
     Both are places where a glyph is quoted rather than used: a skill
     transcribing `hermes` output, or a doc showing an example of phrasing to
     avoid. Refusing those would force the carve-out to grow into an allowlist.
+
+    Line numbers are preserved: a span is replaced in place rather than
+    deleted, so a finding on line N is still reported as line N.
     """
     kept: list[str] = []
-    fence: str | None = None
+    # (marker char, delimiter length). The length is load-bearing: inside a
+    # four-backtick block a three-backtick line is CONTENT, not the closer
+    # (CommonMark 4.5), so a shorter fence must not end the block.
+    fence: tuple[str, int] | None = None
     for line in text.splitlines():
-        stripped = line.lstrip()
+        stripped = _CONTAINER_PREFIX.sub("", line).lstrip()
         if stripped.startswith("```") or stripped.startswith("~~~"):
-            marker = stripped[:3]
+            marker = stripped[0]
+            length = len(stripped) - len(stripped.lstrip(marker))
             if fence is None:
-                fence = marker
-            elif marker == fence:
+                fence = (marker, length)
+            elif marker == fence[0] and length >= fence[1]:
                 fence = None
+            # The delimiter line is blanked, not dropped. Dropping it would
+            # renumber every line after the block, and a finding cites a line
+            # its reader then opens -- so the number has to be the real one.
+            kept.append("")
             continue
         if fence is not None:
+            kept.append("")
             continue
         kept.append(line)
-    return re.sub(r"`[^`]*`", " ", "\n".join(kept))
+    return _CODE_SPAN.sub(" ", "\n".join(kept))
 
 
 def filler_hits(text: str) -> list[tuple[int, str, str]]:
@@ -242,6 +267,77 @@ _PROSE_CASES: list[tuple[str, int, str]] = [
         "filler in an inline code span",
     ),
     ('- ✅ "Skills track the source"\n', 0, "emoji marker is not prose filler"),
+    # --- code spans: the delimiter run length decides the match (CommonMark 6.1)
+    (
+        "The doc quotes ``Thanks so much for the review!`` verbatim.\n",
+        0,
+        "filler in a two-backtick code span",
+    ),
+    (
+        "Quoted: ```Great question``` here.\n",
+        0,
+        "filler in a three-backtick code span",
+    ),
+    # --- fences: a shorter fence is content, not the closer (CommonMark 4.5)
+    (
+        "````markdown\n```\nThanks so much!\n````\n",
+        0,
+        "three-backtick line inside a four-backtick block",
+    ),
+    (
+        "~~~~markdown\n~~~\nGreat question\n~~~~\n",
+        0,
+        "three-tilde line inside a four-tilde block",
+    ),
+    (
+        "`````markdown\n```\nThanks so much!\n`````\n",
+        0,
+        "three-backtick line inside a five-backtick block",
+    ),
+    # --- fences nested in containers need the marker stripped first
+    (
+        "- ```\n  Thanks so much!\n  ```\n",
+        0,
+        "filler in a fence nested in a list item",
+    ),
+    (
+        "1. ```\n   Great question\n   ```\n",
+        0,
+        "filler in a fence nested in an ordered list item",
+    ),
+    (
+        "> ```\n> Thanks so much!\n> ```\n",
+        0,
+        "filler in a fence nested in a block quote",
+    ),
+    # --- a span straddling a newline must not renumber later lines
+    (
+        "line one\n`code span\ncontinues here`\nline four\nThanks so much!\n",
+        1,
+        "multi-line code span still reports the right line",
+    ),
+]
+
+# Line numbers are load-bearing: a finding cites a line a human then opens, so
+# an off-by-one sends them to the wrong line. Asserted separately from the
+# counts because every other case would still pass with the number wrong.
+_PROSE_LINENO_CASES: list[tuple[str, int, str]] = [
+    ("Thanks so much!\n", 1, "single line"),
+    (
+        "Intro.\n```\ncode\n```\nThanks so much!\n",
+        5,
+        "after a fenced block",
+    ),
+    (
+        "Intro.\n`a`\n`code span\ncontinues here`\nThanks so much!\n",
+        5,
+        "after a multi-line code span",
+    ),
+    (
+        "- item\n\n  ```\n  code\n  ```\n\nThanks so much!\n",
+        7,
+        "after a list-nested fenced block",
+    ),
 ]
 
 _EMOJI_CASES: list[tuple[str, list[int], str]] = [
@@ -264,19 +360,30 @@ _EMOJI_CASES: list[tuple[str, list[int], str]] = [
 def _selftest() -> int:
     fails = 0
     for md, expected, label in _PROSE_CASES:
-        got = len(filler_hits(md))
-        if got != expected:
+        count = len(filler_hits(md))
+        if count != expected:
             print(
-                f"selftest FAIL ({label}): expected {expected} filler hit(s), got {got}"
+                f"selftest FAIL ({label}): expected {expected} filler hit(s), got {count}"
             )
             fails += 1
-    for src, expected, label in _EMOJI_CASES:
-        got = [lineno for lineno, _ in emoji_outside_strings(src)]
-        if got != expected:
-            print(f"selftest FAIL ({label}): expected lines {expected!r}, got {got!r}")
+    for md, expected, label in _PROSE_LINENO_CASES:
+        hits = filler_hits(md)
+        lineno = hits[0][0] if hits else None
+        if lineno != expected:
+            print(
+                f"selftest FAIL ({label}): expected line {expected}, got {lineno!r}"
+            )
+            fails += 1
+    for src, expected_lines, label in _EMOJI_CASES:
+        found_lines = [lineno for lineno, _ in emoji_outside_strings(src)]
+        if found_lines != expected_lines:
+            print(
+                f"selftest FAIL ({label}): expected lines {expected_lines!r}, "
+                f"got {found_lines!r}"
+            )
             fails += 1
 
-    total = len(_PROSE_CASES) + len(_EMOJI_CASES)
+    total = len(_PROSE_CASES) + len(_PROSE_LINENO_CASES) + len(_EMOJI_CASES)
     if fails:
         return 1
     print(f"selftest OK ({total} cases)")
