@@ -230,13 +230,20 @@ def splice(text: str, name: str, body: list[str]) -> str:
 
 
 def _read(path: Path) -> tuple[str, str]:
-    """Return (text with \\n endings, the file's original line ending)."""
-    raw = path.read_text(encoding="utf-8-sig", newline="")
+    """Return (text with \\n endings, the file's original line ending).
+
+    Uses builtin ``open()`` rather than ``Path.read_text(newline=...)``: that
+    keyword only exists from Python 3.13, and this repo's CI matrix is 3.11/3.12.
+    ``open()`` has taken ``newline`` since Python 2, so it works on every leg.
+    """
+    with open(path, encoding="utf-8-sig", newline="") as handle:
+        raw = handle.read()
     return raw.replace("\r\n", "\n"), ("\r\n" if "\r\n" in raw else "\n")
 
 
 def _write(path: Path, text: str, newline: str) -> None:
-    path.write_text(text.replace("\n", newline), encoding="utf-8", newline="")
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        handle.write(text.replace("\n", newline))
 
 
 def context() -> dict:
