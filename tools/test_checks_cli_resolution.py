@@ -314,22 +314,87 @@ def test_no_candidate_reports_clearly():
         os.makedirs(elsewhere)
         exe = _fake_interpreter(elsewhere)
 
-        # `checks.shutil` IS the stdlib shutil module, so patching `which` on it
-        # affects every other caller in this process. Restore it, not just the
-        # locals, or later tests get None from every shutil.which().
+        # The resolver walks `PATH` itself, so an empty `PATH` is how "no
+        # candidate anywhere" is expressed now that `shutil.which` is gone.
         original_exe, original_path = sys.executable, os.environ["PATH"]
-        original_which = shutil.which
         try:
             sys.executable = exe
             os.environ["PATH"] = elsewhere
-            checks.shutil.which = lambda *_a, **_k: None
             rc, out, err = checks._run_hermes(["config", "path"])
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
-            checks.shutil.which = original_which
 
         check("no candidate is a clear error",
               rc == -127 and HERMES_EXE in err, f"rc={rc} err={err!r}")
+
+
+def test_every_path_entry_is_a_candidate():
+    """A broken first `hermes` on PATH must not hide a working one behind it.
+
+    The production failure this pins: macOS before 13 has no `realpath(1)`, so
+    the install venv's pip console script exited 126, `shutil.which` returned
+    only that one path, and every check reported "cannot resolve
+    $HERMES_HOME" while a healthy `hermes` sat further down PATH. Resolution
+    must reach it.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        broken_dir = os.path.join(tmp, "broken")
+        working_dir = os.path.join(tmp, "working")
+        os.makedirs(broken_dir), os.makedirs(working_dir)
+        exe = _fake_interpreter(working_dir)
+        _unusable(broken_dir, HERMES_EXE, 126)
+        _working(working_dir, HERMES_EXE, "DEEP-ON-PATH")
+
+        original_exe, original_path = sys.executable, os.environ["PATH"]
+        try:
+            sys.executable = exe
+            os.environ["PATH"] = broken_dir + os.pathsep + working_dir + os.pathsep + original_path
+            rc, out, _ = checks._run_hermes(["config", "path"])
+        finally:
+            sys.executable, os.environ["PATH"] = original_exe, original_path
+
+        check("working hermes behind a broken PATH entry is reached",
+              rc == 0 and "DEEP-ON-PATH" in out, f"rc={rc} out={out.strip()!r}")
+
+
+def test_path_walk_is_deduplicated():
+    """The same directory twice in PATH costs one attempt, not two."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lonely = os.path.join(tmp, "lonely")
+        os.makedirs(lonely)
+        _working(lonely, HERMES_EXE, "ONCE")
+
+        original_path = os.environ["PATH"]
+        try:
+            os.environ["PATH"] = os.pathsep.join([lonely, lonely, original_path])
+            found = checks._path_hermes_executables()
+        finally:
+            os.environ["PATH"] = original_path
+
+        target = os.path.abspath(os.path.join(lonely, HERMES_EXE))
+        count = sum(1 for p in found if p == target)
+        check("repeated PATH entry appears once", count == 1, f"found={found!r}")
+
+
+def test_non_file_path_entry_is_ignored():
+    """A directory named `hermes` on PATH is not a candidate.
+
+    PATH entries can hold anything; only a regular file can be exec'd, so a
+    directory or a dangling name must not become an attempt.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        decoy_dir = os.path.join(tmp, "decoy")
+        os.makedirs(os.path.join(decoy_dir, HERMES_EXE))  # a DIRECTORY named hermes
+
+        original_path = os.environ["PATH"]
+        try:
+            os.environ["PATH"] = decoy_dir + os.pathsep + original_path
+            found = checks._path_hermes_executables()
+        finally:
+            os.environ["PATH"] = original_path
+
+        check("directory named hermes is not a candidate",
+              not any(os.path.isdir(p) for p in found), f"found={found!r}")
 
 
 def main():
@@ -341,6 +406,9 @@ def main():
     test_real_failure_is_not_retried()
     test_path_only_still_resolves()
     test_no_candidate_reports_clearly()
+    test_every_path_entry_is_a_candidate()
+    test_path_walk_is_deduplicated()
+    test_non_file_path_entry_is_ignored()
 
     cleanup()
 
