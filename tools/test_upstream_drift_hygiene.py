@@ -6,8 +6,9 @@ commit granularity, (b) use exact-title dedup so a substring-matching issue
 cannot suppress a real alert, (c) fail the run on transport failures, and
 (d) block filing when the CI-pin freshness check cannot run, and (e) cap
 the report sections without losing the footer, and (f) retry transient
-ls-remote failures — exit codes and transport exceptions — in the pin check. Each case below
-pins one of those behaviors.
+ls-remote failures — exit codes and transport exceptions — in the pin check,
+and (g) find the install pin wherever the workflow files keep it.
+Each case below pins one of those behaviors.
 
 No network, no `gh` CLI, no upstream clone: git/gh are monkeypatched.
 
@@ -332,6 +333,67 @@ def case_ls_remote_retries_transport_exceptions(mod):
     print("OK: ls-remote retries TimeoutExpired/OSError and still fails closed")
 
 
+def case_pin_reads_the_real_tree(mod):
+    """The pin lookup finds the real pin wherever the workflows keep it.
+
+    The CI split (#128) moved the `git clone --branch` line from ci.yml to
+    reusable-ci.yml: a lookup that reads one hardcoded filename returns None
+    here and fails this case. The workflows dir is patched to an absolute
+    path so the check does not depend on the runner's working directory.
+    """
+    workflows = REPO / ".github" / "workflows"
+    with mock.patch.object(mod, "WORKFLOWS_DIR", workflows):
+        pinned = mod.read_pinned_tag()
+    assert pinned is not None, (
+        "no install pin found in the repository's real workflows - the lookup "
+        "must scan .github/workflows/, not one hardcoded file"
+    )
+    assert pinned.startswith("v") and pinned[1].isdigit(), (
+        f"unexpected pin shape: {pinned!r}"
+    )
+    texts = "\n".join(p.read_text(encoding="utf-8") for p in workflows.glob("*.y*ml"))
+    assert f"--branch {pinned} " in texts, (
+        f"lookup returned {pinned!r}, which no workflow file actually clones"
+    )
+    print(f"OK: pin lookup reads the real workflow tree (found {pinned})")
+
+
+def case_pin_absent_fails_closed(mod):
+    """No `git clone --branch` line anywhere -> None, and verify_ci_pin errors."""
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "ci.yml").write_text("on: push\n", encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() is None, "absent pin must return None"
+            mismatches, error = mod.verify_ci_pin()
+        assert mismatches == [], f"absent pin must not produce findings: {mismatches}"
+        assert error and "could not read" in error, f"absent pin must surface an error: {error!r}"
+    finally:
+        shutil.rmtree(td)
+    print("OK: absent pin fails closed (no findings, error surfaced)")
+
+
+def case_pin_conflict_fails_closed(mod):
+    """Conflicting pins across workflow files -> None, never a coin flip."""
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "a.yml").write_text(
+            "git clone --depth 1 --branch v2026.1.1 https://example.test/h.git d\n",
+            encoding="utf-8")
+        (wf / "b.yml").write_text(
+            "git clone --depth 1 --branch v2026.2.2 https://example.test/h.git d\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() is None, "conflicting pins must return None"
+    finally:
+        shutil.rmtree(td)
+    print("OK: conflicting pins fail closed")
+
+
 def main() -> int:
     mod = _load_module()
     failures: list[str] = []
@@ -348,6 +410,9 @@ def main() -> int:
         case_uncapped_requires_dry_run,
         case_ls_remote_retries_transient_failures,
         case_ls_remote_retries_transport_exceptions,
+        case_pin_reads_the_real_tree,
+        case_pin_absent_fails_closed,
+        case_pin_conflict_fails_closed,
     ):
         try:
             case(mod)
@@ -357,7 +422,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 12 upstream-drift hygiene case(s) passed")
+    print("\nOK: 15 upstream-drift hygiene case(s) passed")
     return 0
 
 
