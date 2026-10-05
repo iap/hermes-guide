@@ -25,13 +25,24 @@ tree, so there is no number in this file to keep in sync.
 ## Reporting issues
 
 If a skill gives inaccurate guidance for a specific Hermes version, or misses a
-known pitfall, [open an issue](https://github.com/iap/hermes-guide/issues). Pick
-the template that matches — `bug-report.yml` for a defect, `skill-drift.yml` for
-a fact that no longer matches Hermes, `config.yml` for configuration problems —
-and fill in the required fields. Blank issues are disabled, and the
-`skill-drift.yml` dropdown carries one option per shipped skill, so pick the
-right one to keep drift reports attributable. What happens after you submit is
-in [Contribution gate](#contribution-gate).
+known pitfall, [open an issue](https://github.com/iap/hermes-guide/issues). There
+are two templates — `bug-report.yml` for anything broken in the plugin, checks or
+docs, and `skill-drift.yml` for a fact that no longer matches Hermes — and blank
+issues are disabled. The `skill-drift.yml` dropdown carries one option per shipped
+skill, so pick the right one to keep drift reports attributable. Both templates
+require the Hermes version; `skill-drift.yml` also requires the skill and the
+evidence for the drift.
+
+A configuration problem is not a separate form. `config.yml` in
+`.github/ISSUE_TEMPLATE/` is GitHub's chooser configuration, not a report you can
+select, so it is not offered in the new-issue list. Report a wrong configuration
+answer through `skill-drift.yml` when a skill documents it, or `bug-report.yml`
+when the checks produce it.
+
+For a question rather than a defect, do not open an issue — see
+[Questions](#questions).
+
+What happens after you submit is in [Contribution gate](#contribution-gate).
 
 ## Contribution gate
 
