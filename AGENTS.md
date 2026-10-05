@@ -207,6 +207,20 @@ The artifact-level rules — no emoji in commits, PR bodies, or source — and t
 carve-outs are in [CONTRIBUTING.md](CONTRIBUTING.md#tone). The mechanically
 decidable half is enforced by `tools/check_doc_style.py`.
 
+### Explaining
+
+Applies when the answer is not a one-liner. Brevity is governed in **Tone**
+above; this covers what a longer answer owes the reader.
+
+- Structure a non-trivial design or problem as problem → concrete example or
+  short trace → solution, then say why the solution is necessary rather than
+  optional complexity.
+- Prefer concrete behavior and a small illustration over an abstract summary,
+  dense terminology, or an unexplained list of changes. Name the exact command,
+  file, and field rather than the category it belongs to.
+- Removing filler does not license replacing it with hedging. A short answer
+  plus the command that produced the fact beats an adjective about the fact.
+
 ## Traps
 
 Details live in the skills. These are the one-liners worth keeping in your head.
