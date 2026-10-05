@@ -249,7 +249,13 @@ def frontmatter(path):
     try:
         fm = yaml.safe_load(parts[1])
     except Exception:
-        return {}
+        # Mirror Hermes' parse_frontmatter fallback: recover key:value lines
+        # from malformed YAML so a recoverable `name:` is not lost.
+        fm = {}
+        for line in parts[1].strip().split("\n"):
+            if ":" in line:
+                key, value = line.split(":", 1)
+                fm[key.strip()] = value.strip()
     return fm if isinstance(fm, dict) else None
 
 
@@ -500,14 +506,16 @@ def check_skills():
             # cannot use this.
             findings.append(f"{dirpath}: SKILL.md has non-mapping frontmatter{tag}")
             continue
-        # Only report what the loader genuinely cannot use: a `name` that is
-        # present but not a non-empty string. Missing `name` is fine (the
-        # loader falls back to the directory name); missing `description` is
-        # fine (the loader falls back to the first body line).
-        if "name" in fm:
-            val = fm["name"]
-            if not isinstance(val, str) or not val.strip():
-                findings.append(f"{dirpath}: frontmatter `name` is not a non-empty string{tag}")
+        # Only report what the loader genuinely cannot use: a `name` or
+        # `description` that is present but not a non-empty string. Missing
+        # `name` is fine (the loader falls back to the directory name);
+        # missing `description` is fine (the loader falls back to the first
+        # body line).
+        for req in ("name", "description"):
+            if req in fm:
+                val = fm[req]
+                if not isinstance(val, str) or not val.strip():
+                    findings.append(f"{dirpath}: frontmatter `{req}` is not a non-empty string{tag}")
 
     if findings:
         return {"status": "broken", "reason": f"{len(findings)} skill issue(s)", "detail": findings}

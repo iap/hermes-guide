@@ -49,8 +49,12 @@ def _build_home(root: Path) -> None:
     _write(root / "skills/weather/SKILL.md", "---\nname: weather\n---\nbody\n")
     # non-string name -> broken (the loader cannot use it)
     _write(root / "skills/bad-name/SKILL.md", "---\nname: [a, b]\ndescription: bad\n---\nbody\n")
+    # non-string description -> broken (the loader cannot use it)
+    _write(root / "skills/bad-desc/SKILL.md", "---\nname: bad-desc\ndescription: [a, b]\n---\nbody\n")
     # non-mapping frontmatter block -> broken
     _write(root / "skills/bad-block/SKILL.md", "---\n- just\n- a\n- list\n---\nbody\n")
+    # malformed YAML with recoverable name -> NOT broken (loader recovers it)
+    _write(root / "skills/malformed-yaml/SKILL.md", "---\nname: malformed-yaml\ndescription: fine\nkey: [unclosed\n---\nbody\n")
     _write(root / "skills/foo/SKILL.md", "---\nname: foo\ndescription: old\n---\nold\n")
     _write(root / "skills/category/foo/SKILL.md", "---\nname: foo\ndescription: new\nversion: 1.2.0\n---\nnew\n")
     _write(root / "skills/.archive/foo-old/SKILL.md", "---\nname: foo\ndescription: archived\nversion: 0.1.0\n---\narchived\n")
@@ -77,15 +81,15 @@ def main(argv: list[str]) -> int:
 
         # (1) hidden/archive dirs are skipped
         walked = list(checks._iter_skills())
-        if len(walked) != 10:
-            failures.append(f"expected 10 skills (hidden .archive skipped), got {len(walked)}")
+        if len(walked) != 12:
+            failures.append(f"expected 12 skills (hidden .archive skipped), got {len(walked)}")
         if any(".archive" in d for d, _ in walked):
             failures.append("hidden .archive dir was not skipped")
 
         # (2) bundled label comes only from declared name, never basename
         sr = checks.check_skills()
         sdetail = sr.get("detail") or []
-        if sr["status"] != "broken" or sr["reason"] != "2 skill issue(s)":
+        if sr["status"] != "broken" or sr["reason"] != "3 skill issue(s)":
             failures.append(f"check_skills unexpected: {sr['status']} - {sr['reason']}")
         # weather has a valid name but no description -> healthy, not in findings
         if any("weather" in d for d in sdetail):
@@ -107,9 +111,15 @@ def main(argv: list[str]) -> int:
         # non-string name IS broken
         if not any("bad-name" in d for d in sdetail):
             failures.append("non-string name (bad-name) not reported")
+        # non-string description IS broken
+        if not any("bad-desc" in d for d in sdetail):
+            failures.append("non-string description (bad-desc) not reported")
         # non-mapping frontmatter IS broken
         if not any("bad-block" in d for d in sdetail):
             failures.append("non-mapping frontmatter (bad-block) not reported")
+        # malformed YAML with recoverable name is NOT broken (loader recovers it)
+        if any("malformed-yaml" in d for d in sdetail):
+            failures.append("malformed-yaml (recoverable name) reported as broken")
 
         # (3) collision messages carry versions and skip archived copies
         cr = checks.check_commands()
