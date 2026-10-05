@@ -208,8 +208,12 @@ Both calls read the same record, so both raise `RuntimeError` when it exists but
   record-reading helper in `pm/environments.py`). Treat this as *corrupt dependency
   state*: re-run `hermes update`. Do **not** report it as "no environment",
   which sends the reader down the wrong path entirely.
-- **A path that fails `is_file()`** — the committed record is gone or was removed
-  by hand. Re-run `hermes update`; do not launch the path.
+- **`committed_venv()` → a path that fails `is_dir()`** — the record names an
+  environment that is gone, or it was removed by hand. Re-run `hermes update`.
+  Note the asymmetry: this is a **directory**, so test it with `is_dir()`.
+  `is_file()` belongs only to the executable from `project_python()`, and a
+  valid committed environment is not a file — checking the directory with
+  `is_file()` rejects every healthy install.
 
 ## Cross-platform path construction
 
