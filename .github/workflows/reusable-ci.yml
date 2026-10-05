@@ -135,6 +135,16 @@ jobs:
           python tools/check_doc_style.py --selftest
           python tools/check_doc_style.py
 
+      - name: Issue-template guard
+        # The reporter-facing surface is the one place a doc can promise a path
+        # that does not exist: #141 pointed reporters at config.yml as a
+        # template, and #147 sent questions to an issue tracker that
+        # blank_issues_enabled had closed off. Both were invisible to a prose
+        # linter. Pure file reads, so it belongs in the fast tier.
+        run: |
+          python tools/check_issue_templates.py --selftest
+          python tools/check_issue_templates.py
+
       - name: No-mutation guard
         run: |
           python tools/check_no_mutation.py --selftest
