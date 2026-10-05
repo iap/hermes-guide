@@ -36,6 +36,7 @@ _GATES: dict[str, str] = {
     "check_self_claim.py": "deny-list scan over docs",
     "check_doc_style.py": "tone scan; `git ls-files` plus a tokenizer pass",
     "check_version_consistency.py": "compares manifest/entrypoint literals",
+    "check_issue_templates.py": "reads .github/ISSUE_TEMPLATE/ and the docs beside it",
     "check_no_mutation.py": "AST parse; no imports executed",
 }
 
