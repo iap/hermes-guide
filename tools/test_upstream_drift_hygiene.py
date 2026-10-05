@@ -7,8 +7,8 @@ cannot suppress a real alert, (c) fail the run on transport failures, and
 (d) block filing when the CI-pin freshness check cannot run, and (e) cap
 the report sections without losing the footer, and (f) retry transient
 ls-remote failures — exit codes and transport exceptions — in the pin check,
-and (g) find the install pin wherever the workflow files keep it.
-Each case below pins one of those behaviors.
+and (g) find the install pin wherever the workflow files keep it,
+ignoring unrelated clones. Each case below pins one of those behaviors.
 
 No network, no `gh` CLI, no upstream clone: git/gh are monkeypatched.
 
@@ -382,16 +382,45 @@ def case_pin_conflict_fails_closed(mod):
         wf = td / "workflows"
         wf.mkdir()
         (wf / "a.yml").write_text(
-            "git clone --depth 1 --branch v2026.1.1 https://example.test/h.git d\n",
+            "git clone --depth 1 --branch v2026.1.1 "
+            "https://github.com/NousResearch/hermes-agent.git d\n",
             encoding="utf-8")
         (wf / "b.yml").write_text(
-            "git clone --depth 1 --branch v2026.2.2 https://example.test/h.git d\n",
+            "git clone --depth 1 --branch v2026.2.2 "
+            "https://github.com/NousResearch/hermes-agent.git d\n",
             encoding="utf-8")
         with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
             assert mod.read_pinned_tag() is None, "conflicting pins must return None"
     finally:
         shutil.rmtree(td)
     print("OK: conflicting pins fail closed")
+
+
+def case_pin_ignores_unrelated_clones(mod):
+    """An unrelated shallow clone must not pollute the pin lookup.
+
+    Macroscope review on PR #149: with the match unscoped, a second
+    `git clone --depth 1 --branch main <other-repo>` would join the tag set
+    and flip the lookup to None, failing the weekly run instead of
+    monitoring the pin. Scoped, the Hermes clone still wins.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "git clone --depth 1 --branch v2026.9.24 "
+            "https://github.com/NousResearch/hermes-agent.git d\n",
+            encoding="utf-8")
+        (wf / "other.yml").write_text(
+            "git clone --depth 1 --branch main https://example.test/tools.git d\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() == "v2026.9.24", (
+                "an unrelated shallow clone must not hide the Hermes pin")
+    finally:
+        shutil.rmtree(td)
+    print("OK: unrelated shallow clones do not pollute the pin lookup")
 
 
 def main() -> int:
@@ -413,6 +442,7 @@ def main() -> int:
         case_pin_reads_the_real_tree,
         case_pin_absent_fails_closed,
         case_pin_conflict_fails_closed,
+        case_pin_ignores_unrelated_clones,
     ):
         try:
             case(mod)
@@ -422,7 +452,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 15 upstream-drift hygiene case(s) passed")
+    print("\nOK: 16 upstream-drift hygiene case(s) passed")
     return 0
 
 
