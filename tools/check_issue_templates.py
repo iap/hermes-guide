@@ -57,6 +57,10 @@ _GITHUB_HOSTS = frozenset({"github.com", "www.github.com"})
 # Docs allowed to describe the reporter-facing surface.
 _DOCS = ("CONTRIBUTING.md", "README.md", "AGENTS.md")
 
+# GitHub accepts .yml and .yaml forms. Globbing only one leaves a broken form
+# of the other spelling invisible to every check here.
+_FORMS = "*.y*ml"
+
 
 def top_scalar(text: str, key: str) -> str | None:
     """The first top-level ``key: value`` in ``text``, unquoted, or None.
@@ -127,7 +131,13 @@ def read_chooser(text: str) -> tuple[dict[str, Any], list[str]]:
         key, raw = key.strip(), _scalar(raw.strip())
 
         if item:
-            in_links = True
+            if not in_links:
+                # A list item before any `contact_links:` key is invalid YAML
+                # (PyYAML raises), and must not be read as a configured link.
+                # Still absorb the item's fields so the single reported cause
+                # is not followed by one message per indented line.
+                problems.append(f"line {lineno}: list item outside {CONTACT_LINKS}")
+                in_links = True
             current = {}
             links.append(current)
             indent = max(indent, 2)
@@ -158,7 +168,7 @@ def check_forms(templates: Path) -> list[str]:
     either renders blank or is skipped, and the reporter never sees it.
     """
     bad: list[str] = []
-    for form in sorted(templates.glob("*.yml")):
+    for form in sorted(templates.glob(_FORMS)):
         if form.name == CHOOSER:
             continue
         text = form.read_text(encoding="utf-8")
@@ -242,7 +252,7 @@ def check_route_exists(repo: Path) -> list[str]:
         f"{link.get('name','')} {link.get('url','')} {link.get('about','')}"
         for link in chooser.get(CONTACT_LINKS) or []
     ]
-    for form in sorted(templates.glob("*.yml")):
+    for form in sorted(templates.glob(_FORMS)):
         if form.name == CHOOSER:
             continue
         # The chooser-visible name only. A reporter sees that, not the filename,
@@ -333,6 +343,12 @@ def selftest() -> int:
         # A promise with no chooser at all is check_chooser's finding, not a crash.
         ({"bug-report.yml": bug_only}, {"CONTRIBUTING.md": promise},
          ["config.yml: missing"]),
+        # A list item with no `contact_links:` key above it is invalid YAML,
+        # and must not be read as a configured link.
+        ({"config.yml": "blank_issues_enabled: false\n- name: A\n"
+                        "  url: https://github.com/iap/hermes-guide/discussions\n"
+                        "  about: no key above me\n"}, {},
+         ["list item outside contact_links"]),
         # The chooser shows `name`, never the filename: a defect form called
         # help.yml offers no question route.
         ({"config.yml": link, "help.yml": "name: Bug report\ndescription: a defect\n"},
@@ -349,6 +365,11 @@ def selftest() -> int:
         ({"config.yml": link, "bug-report.yml": "name: B\n"}, {},
          ["missing or empty 'description'"]),
         ({"config.yml": link, "bug-report.yml": bug_only}, {}, []),
+        # A .yaml form is a form; a broken one must not hide behind the spelling.
+        ({"config.yml": link, "bug-report.yaml": "description: d\n"}, {},
+         ["missing or empty 'name'"]),
+        ({"config.yml": link, "question.yaml": "name: Question\ndescription: ask\n"},
+         {"CONTRIBUTING.md": promise}, []),
     ]
 
     failures = 0
@@ -400,7 +421,7 @@ def main(argv: list[str]) -> int:
 
     templates = REPO / TEMPLATES
     chooser, _ = read_chooser((templates / CHOOSER).read_text(encoding="utf-8"))
-    n_forms = len([p for p in templates.glob("*.yml") if p.name != CHOOSER])
+    n_forms = len([p for p in templates.glob(_FORMS) if p.name != CHOOSER])
     print(
         f"OK: {n_forms} template(s), "
         f"{len(chooser.get(CONTACT_LINKS) or [])} contact link(s), docs agree"
