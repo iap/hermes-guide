@@ -206,7 +206,7 @@ def _hermes_home_from_library():
     Returns None when the import fails (e.g. outside a live Hermes process).
     """
     try:
-        from hermes_constants import get_hermes_home
+        from hermes_constants import get_hermes_home  # type: ignore[import-not-found]
 
         home = get_hermes_home()
         if home and os.path.isdir(home):
