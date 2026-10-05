@@ -125,6 +125,16 @@ jobs:
       - name: Docs self-claim guard
         run: python tools/check_self_claim.py
 
+      - name: Tone guard
+        # Emoji outside string literals in Python, filler phrases in Markdown
+        # prose. Reads the tree via `git ls-files` and tokenizes Python, so it
+        # needs no Hermes install and belongs in the fast tier. The tokenizer
+        # pass is what lets checks.py keep the hook markers it parses from
+        # `hermes hooks doctor` while still refusing emoji in comments.
+        run: |
+          python tools/check_doc_style.py --selftest
+          python tools/check_doc_style.py
+
       - name: No-mutation guard
         run: |
           python tools/check_no_mutation.py --selftest
@@ -275,6 +285,16 @@ jobs:
       - name: Doc skill/check count consistency
         if: inputs.run-full-gate
         run: python tools/test_skill_counts.py
+
+      - name: Generated doc blocks
+        # The counts, scope list and install loop in README.md / AGENTS.md are
+        # rendered from the tree by tools/render_docs.py. Check mode is the
+        # script's default, so a hand-edit inside a BEGIN/END GENERATED block —
+        # or a new skill that nobody re-rendered for — fails here. Pure file
+        # reads, so it belongs in the fast tier too.
+        run: |
+          python tools/render_docs.py --selftest
+          python tools/render_docs.py
 
       - name: Tap discovery smoke test
         if: runner.os == 'Linux' && inputs.run-full-gate && inputs.event-name == 'pull_request'

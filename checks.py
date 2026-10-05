@@ -682,8 +682,9 @@ def _check_allowlist_json():
 
 def check_hooks():
     # `hermes hooks doctor` exits 0 even with problems, so we parse its output
-    # (rc is not a reliable signal — it is 0 in all cases). Count the ✗/⚠ markers
-    # emitted per hook rather than matching the summary line's exact wording.
+    # (rc is not a reliable signal — it is 0 in all cases). Count the U+2717 /
+    # U+26A0 markers emitted per hook rather than matching the summary line's
+    # exact wording.
     rc, stdout, _ = _run_hermes(["hooks", "doctor"], timeout=_HOOKS_DOCTOR_TIMEOUT)
     if rc != 0 or not stdout.strip():
         return {
@@ -694,7 +695,7 @@ def check_hooks():
     if "No shell hooks configured" in stdout:
         result = {"status": "healthy", "reason": "no shell hooks configured", "detail": None}
     else:
-        # ✗ and ⚠ are the only stable per-hook markers in the output.
+        # U+2717 and U+26A0 are the only stable per-hook markers in the output.
         markers = re.findall(r"\s+[✗⚠]", stdout)
         if markers:
             result = {

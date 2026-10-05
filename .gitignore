@@ -42,5 +42,6 @@ venv/
 # Local agent / verification scratch (not part of the published plugin + tap)
 .cluster/
 .verify/
+.openclaw/
 /tmp*.json
 /q*.json

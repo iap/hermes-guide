@@ -48,11 +48,12 @@ can compare it against the re-run. -->
 | Check | Command | Result | Notes |
 |---|---|---|---|
 | Hermetic gates | `python tools/check_gates.py` | [x/y] | [paste the `OK: x/y` line] |
+| Generated doc blocks | `python tools/render_docs.py` | [x/y] | [add/removed a skill? run `--write` first] |
 | Version bump | `python tools/check_skill_version_bump.py <base-ref>` | [x/y] | [paste the line] |
 | Syntax | `python -m py_compile __init__.py checks.py constants.py` | [x/y] | [paste the line] |
 | Regression tests | `python tools/test_*.py` | [x/y] | [paste the line; list any that did not run here] |
 | Citation integrity | `python tools/check_citation_integrity.py --src <checkout>` | [x/y or not run] | [needs a Hermes checkout] |
-| Provenance | `python tools/check_skill_provenance.py --warn` | [x/y or not run] | [paste the line] |
+| Provenance | `python tools/check_skill_provenance.py` | [x/y or not run] | [paste the line] |
 | Counts | `python tools/test_skill_counts.py` | [x/y or not run] | [paste the line] |
 
 - [ ] Changed `SKILL.md` files have version bumps

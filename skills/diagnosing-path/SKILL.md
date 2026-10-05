@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.3.2
+version: 1.5.0
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -163,6 +163,58 @@ def resolve_venv(project_root: Path | None = None) -> Path | None:
     return None
 ```
 
+### D. PM-era installs: ask the package manager
+
+The in-tree resolver answers "which venv directory does this checkout have". On a
+**PM-era install (2026-09 onward)** there is no in-tree venv at all: PM keeps the
+dependency environment under `$HERMES_HOME/installs/<key>/environments/` and the
+shared runtime store in `$HERMES_HOME/tools`, and it removes a legacy in-tree
+venv once a generation is committed.
+
+So `project_venv_dir()` can return `None` **even though a dependency environment
+exists** — it never looks under `$HERMES_HOME/installs/<key>/environments/`. A
+`None` there means "wrong question", not "nothing installed".
+
+Ask PM instead:
+
+| Call | Returns |
+|---|---|
+| `committed_venv(root)` | the **venv directory** PM committed, or `None` |
+| `project_python(root)` | the **interpreter executable** — never `None` |
+
+**These are not interchangeable, in two ways.**
+
+`venv_bin_dir()` appends `bin`/`Scripts` to a venv *directory*, so pass it
+`committed_venv()`'s result — never `project_python()`'s, which would yield
+`.../bin/bin/python`.
+
+And they answer different questions, which decides which one you may trust.
+`project_python()` is `venv_python(selected_venv(root))`, and `selected_venv()`
+falls back through `base_venv()` to the in-tree `venv` directory — so it
+**cannot return `None`** even when PM has committed nothing. On an install with
+no committed generation it returns `<root>/venv/bin/python`, a path that does
+not exist, and a caller that launches it gets a failure that looks like a broken
+interpreter rather than an uncommitted environment.
+
+> [!IMPORTANT]
+> Verify a committed environment exists before using `project_python()`. Either call `committed_venv(root)` first and handle `None`, or check the returned path with `Path.is_file()` before executing it. `venv_python()` is documented as returning a path that *may not exist*, so the existence check is the caller's job.
+
+Both calls read the same record, so both raise `RuntimeError` when it exists but cannot be read or parsed. Handle three outcomes rather than assuming success:
+
+- **`committed_venv()` → `None`** — no generation is committed yet. Not an error
+  yet; the first `hermes update` creates it. Do **not** fall back to
+  `project_python()` here: that is the stale-interpreter path above.
+- **`RuntimeError`** — the record exists but cannot be read or parsed (the
+  record-reading helper in `pm/environments.py`). Treat this as *corrupt dependency
+  state*: re-run `hermes update`. Do **not** report it as "no environment",
+  which sends the reader down the wrong path entirely.
+- **`committed_venv()` → a path that fails `is_dir()`** — the record names an
+  environment that is gone, or it was removed by hand. Re-run `hermes update`.
+  Note the asymmetry: this is a **directory**, so test it with `is_dir()`.
+  `is_file()` belongs only to the executable from `project_python()`, and a
+  valid committed environment is not a file — checking the directory with
+  `is_file()` rejects every healthy install.
+
 ## Cross-platform path construction
 
 **Never hardcode `venv/bin/` or `venv/Scripts/`.** Use `venv_bin_dir()` from `hermes_constants.py`:
@@ -219,7 +271,7 @@ python = project_root / "venv" / "bin" / "python"  # Breaks on Windows, breaks o
 ### For documentation
 
 - **Do:** Reference `hermes config path` as the ground-truth command.
-- **Do:** On a checkout that carries an in-tree venv, resolve via `project_venv_dir()` from `hermes_constants.py` (it picks `venv/` before `.venv/`). That resolver only looks in the project root and `sys.prefix`, so on a PM-era install it returns `None` — use `pm.environments.committed_venv()` (venv directory) or `project_python()` (interpreter executable) there instead.
+- **Do:** On a checkout that carries an in-tree venv, resolve via `project_venv_dir()` from `hermes_constants.py` (it picks `venv/` before `.venv/`). That resolver only looks in the project root and `sys.prefix`, so on a PM-era install it returns `None` — see **D. PM-era installs** for the PM API to call instead (`committed_venv()` vs `project_python()`, and the `RuntimeError` that means corrupt state rather than a missing one).
 - **Do:** Mention both layouts — `venv/` (installers) and `.venv/` (uv).
 - **Don't:** Hardcode either name alone, or document an activation path without noting the other layout.
 
@@ -289,4 +341,4 @@ Windows venvs use `Scripts\python.exe`, not `bin/python`. Use `venv_bin_dir()` o
 
 ---
 
-*Facts verified 2026-09-29 against upstream source at `5000e2993` (`hermes_constants.py` — `project_venv_dir()` in-tree order plus the out-of-tree running-venv fallback gated by `direct_url.json`, commit `f9f235e`; `venv_bin_dir()` delegating to `pm/environments.py`; `pyproject.toml` `requires-python` now `>=3.11,<3.15`); earlier verification 2026-09-14 at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway_service_unit.py`, `pyproject.toml`); the gateway-bypass citation moved to `gateway_service_unit.py` at `2f6170bf` (2026-09-22, drift #103) and again to `hermes_cli/gateway.py` at `5000e299` (2026-09-29, drift #123 — the service-PATH bypass retired); upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout); live layouts on two hosts (mid-2026 observations): a Linux/WSL installer install (`venv/`, Python 3.11.15, pre-pm) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21); re-checked 2026-09-29 for PR #124: PM-era installs keep the dependency environment outside the checkout (locked Python 3.14.7) and remove a legacy in-tree venv once a generation is committed. Re-verify before reuse.*
+*Facts verified 2026-10-05 against upstream source at `5000e2993` (`pm/environments.py` — `project_python()` = `venv_python(selected_venv(root))`, `selected_venv()` = `_recorded_venv() or base_venv()`, `base_venv()` = `payload_venv() or project_venv_dir() or <root>/venv`, `venv_python()` documented as returning a path that may not exist, `committed_venv()` = `_recorded_venv() or payload_venv()`); the PM-era layout and `project_venv_dir()` in-tree order carry a 2026-09-29 check at the same revision (`hermes_constants.py`, `pyproject.toml` `requires-python` `>=3.11,<3.15`); earlier verification 2026-09-14 at `8aa219ef` (`hermes_constants.py`, `hermes_cli/gateway_service_unit.py`, `pyproject.toml`); the gateway-bypass citation moved to `gateway_service_unit.py` at `2f6170bf` (2026-09-22, drift #103) and again to `hermes_cli/gateway.py` at `5000e299` (2026-09-29, drift #123 — the service-PATH bypass retired); upstream issue tracker (#79542 open, #76091 closed, #92376 unrelated to venv layout); live layouts on two hosts (mid-2026 observations): a Linux/WSL installer install (`venv/`, Python 3.11.15, pre-pm) and a Windows desktop-app install (`.venv/`, Python 3.13.14, uv 0.11.21); re-checked 2026-09-29 for PR #124: PM-era installs keep the dependency environment outside the checkout (locked Python 3.14.7) and remove a legacy in-tree venv once a generation is committed. The `project_python()` fallback was additionally confirmed by EXECUTION on 2026-10-05, not by reading alone: in a temp install root with no committed generation, `committed_venv()` returned `None` while `project_python()` returned `<root>/venv/bin/python`, which does not exist; with a generation recorded both returned the committed environment, and a malformed record raised `RuntimeError` from both. Re-verify before reuse.*
