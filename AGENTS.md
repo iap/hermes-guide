@@ -44,6 +44,7 @@ Two install paths, both out of tree: the plugin (`hermes plugins install iap/her
 | `.github/ISSUE_TEMPLATE/` | Bug report, config, and per-skill drift templates |
 | `.github/PULL_REQUEST_TEMPLATE.md` | The validation table `validate-claim.yml` checks |
 | `.github/labeler.yml` | Path-based labels (the body-based ones live in a workflow, since labeler v5 cannot read the body) |
+| `.github/dependabot.yml` | Weekly version-update PRs for the SHA-pinned actions |
 | `.pre-commit-config.yaml` | Local hook running the hermetic gate tier at commit time |
 | `AGENTS.md` | This file |
 | `CLAUDE.md` | `@AGENTS.md` import — the Claude Code entry point |
