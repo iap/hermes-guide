@@ -8,7 +8,7 @@ plugin can silently go stale.
 
 This script diffs the watched schema files between a stored baseline commit
 (`.github/upstream-drift.baseline`) and upstream HEAD, asserts drift-prone facts
-(`DRIFT_FACTS`) and the CI install pin (`.github/workflows/ci.yml`) against
+(`DRIFT_FACTS`) and the CI install pin (located in `.github/workflows/`) against
 upstream, and files a GitHub issue on this repo listing the drift. It
 deduplicates (skips) if a drift issue is already open, and tells the reviewer to
 bump the baseline afterward. Runs in CI via
@@ -44,7 +44,7 @@ WATCH_FILES = os.environ.get(
     "hermes_cli/config_defaults.py skills/autonomous-ai-agents/hermes-agent",
 ).split()
 BASELINE_FILE = Path(".github/upstream-drift.baseline")
-CI_WORKFLOW = Path(".github/workflows/ci.yml")
+WORKFLOWS_DIR = Path(".github/workflows")
 ISSUE_TITLE_UPSTREAM = "Upstream schema drift detected — review checks.py"
 CLONE_DIR = "/tmp/hermes-agent-upstream"
 
@@ -247,13 +247,37 @@ def scan_upstream_history(repo_dir: str, base: str, head: str,
 
 
 def read_pinned_tag() -> str | None:
-    """The Hermes tag CI installs (`git clone --branch <tag>` in ci.yml), or None."""
-    try:
-        text = CI_WORKFLOW.read_text(encoding="utf-8")
-    except OSError:
-        return None
-    m = re.search(r"git clone --depth 1 --branch (\S+) ", text)
-    return m.group(1) if m else None
+    """The Hermes tag CI installs (the `git clone --branch <tag>` line), or None.
+
+    The pin is not tied to one filename: CI has already moved the clone line
+    between workflow files once (#128), so the lookup scans the files under
+    `.github/workflows/` instead of reading a hardcoded path. Only the clone
+    of the Hermes source itself carries the pin; unrelated or commented-out
+    clones are ignored. Exactly one distinct tag wins; none found, or
+    conflicting tags, returns None so the caller fails the run closed.
+    """
+    patterns = ("*.yml", "*.yaml")
+    tags: set[str] = set()
+    for pattern in patterns:
+        for path in sorted(WORKFLOWS_DIR.glob(pattern)):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            # Anchored to executable lines (optionally behind `- ` / `run: `):
+            # a commented-out `# git clone ...` example is documentation, not an
+            # install, and must not join the tag set.
+            for m in re.finditer(
+                r"(?m)^[ \t]*(?:-\s*)?(?:run:\s*)?git clone --depth 1 --branch (\S+) (\S+)",
+                text,
+            ):
+                tag, url = m.group(1), m.group(2)
+                # Only the Hermes source clone carries the pin; an unrelated
+                # shallow clone in another workflow must not join the tag set.
+                if not url.rstrip("/").endswith(("hermes-agent", "hermes-agent.git")):
+                    continue
+                tags.add(tag)
+    return tags.pop() if len(tags) == 1 else None
 
 
 def _tag_key(tag: str) -> tuple[int, ...]:
@@ -307,7 +331,7 @@ def latest_upstream_tag() -> str | None:
 
 
 def verify_ci_pin() -> tuple[list[str], str | None]:
-    """Flag the ci.yml install pin when upstream has published a newer tag.
+    """Flag the CI install pin when upstream has published a newer tag.
 
     Returns (mismatches, error). *error* is set when the check itself could
     not run (unreadable pin, ls-remote failure). Infrastructure trouble must
@@ -316,14 +340,17 @@ def verify_ci_pin() -> tuple[list[str], str | None]:
     """
     pinned = read_pinned_tag()
     if not pinned:
-        return [], "could not read the pinned tag from .github/workflows/ci.yml"
+        return [], (
+            "could not read the pinned tag from the .github/workflows/ files "
+            "(expected exactly one clone pin)"
+        )
     latest = latest_upstream_tag()
     if latest is None:
         return [], "could not list upstream tags (git ls-remote failed)"
     if _tag_key(latest) > _tag_key(pinned):
         return [
-            f"CI install pin: ci.yml installs `{pinned}` but upstream's latest tag is "
-            f"`{latest}` — bump the pin in `.github/workflows/ci.yml` and re-verify "
+            f"CI install pin: the workflows install `{pinned}` but upstream's latest tag is "
+            f"`{latest}` — bump the CI install pin in `.github/workflows/` and re-verify "
             "constants.py / the SKILL.md facts against that tag."
         ], None
     return [], None
