@@ -63,6 +63,10 @@ def top_scalar(text: str, key: str) -> str | None:
 
     Forms carry a large body this guard never inspects, so it reads the one
     field it needs instead of parsing the file.
+
+    A ``#`` preceded by whitespace starts a comment in YAML, so ``name: # fill
+    this in`` is a null value -- PyYAML returns None for it, and this must too,
+    or the guard accepts a form whose chooser entry GitHub will not render.
     """
     pattern = re.compile(rf"^{key}:[ \t]*(.*?)[ \t]*$")
     for line in text.splitlines():
@@ -70,16 +74,19 @@ def top_scalar(text: str, key: str) -> str | None:
             continue
         match = pattern.match(line)
         if match:
-            value = match.group(1)
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-                value = value[1:-1]
-            return value or None
+            return _scalar(match.group(1)) or None
     return None
 
 
 def _scalar(raw: str) -> Any:
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
-        return raw[1:-1]
+    """A YAML scalar, with comments stripped the way YAML strips them."""
+    raw = raw.strip()
+    if raw.startswith("#"):
+        return ""  # a comment is the whole value, so the field is null
+    if raw and raw[0] in "\"'":
+        end = raw.find(raw[0], 1)
+        return raw[1:end] if end > 0 else ""
+    raw = re.split(r"\s+#", raw, maxsplit=1)[0].strip()
     if raw in ("true", "True"):
         return True
     if raw in ("false", "False"):
@@ -190,9 +197,13 @@ def check_chooser(templates: Path) -> list[str]:
             bad.append(f"{where}: keys must be exactly {sorted(_LINK_KEYS)}, got {sorted(link)}")
             continue
         for field, value in link.items():
-            if not isinstance(value, str) or not value.strip():
+            if not isinstance(value, str):
+                bad.append(f"{where}: {field!r} must be a string, got {type(value).__name__}")
+            elif not value.strip():
                 bad.append(f"{where}: empty {field!r}")
         url = link.get("url", "")
+        if not isinstance(url, str) or not url.strip():
+            continue  # already reported by the field loop above
         parsed = urlparse(url)
         if parsed.scheme != "https":
             bad.append(f"{where}: url must be https, got {url!r}")
@@ -221,6 +232,8 @@ def check_route_exists(repo: Path) -> list[str]:
         return []
 
     templates = repo / TEMPLATES
+    if not (templates / CHOOSER).is_file():
+        return []  # check_chooser already reports the missing chooser
     chooser, _ = read_chooser((templates / CHOOSER).read_text(encoding="utf-8"))
     if chooser.get("blank_issues_enabled") is not False:
         return []
@@ -232,7 +245,9 @@ def check_route_exists(repo: Path) -> list[str]:
     for form in sorted(templates.glob("*.yml")):
         if form.name == CHOOSER:
             continue
-        routes.append(f"{top_scalar(form.read_text(encoding='utf-8'), 'name') or ''} {form.name}")
+        # The chooser-visible name only. A reporter sees that, not the filename,
+        # so a defect form filed as help.yml offers no question route.
+        routes.append(top_scalar(form.read_text(encoding="utf-8"), "name") or "")
 
     if any(_ROUTE.search(r) for r in routes):
         return []
@@ -311,6 +326,23 @@ def selftest() -> int:
         ({"config.yml": "blank_issues_enabled: false\nlabels:\n  - one\n"}, {},
          ["cannot parse"]),
         ({}, {}, ["config.yml: missing"]),
+        # --- the four findings from review ---
+        # A non-string url must be reported, not handed to urlparse.
+        ({"config.yml": https_only + "  - name: A\n    url: true\n    about: z\n"}, {},
+         ["'url' must be a string, got bool"]),
+        # A promise with no chooser at all is check_chooser's finding, not a crash.
+        ({"bug-report.yml": bug_only}, {"CONTRIBUTING.md": promise},
+         ["config.yml: missing"]),
+        # The chooser shows `name`, never the filename: a defect form called
+        # help.yml offers no question route.
+        ({"config.yml": link, "help.yml": "name: Bug report\ndescription: a defect\n"},
+         {"CONTRIBUTING.md": promise}, ["no form or contact_links entry accepts one"]),
+        # `name: # fill this in` is null in YAML, so the entry would not render.
+        ({"config.yml": link, "bug-report.yml": "name: # fill this in\ndescription: d\n"}, {},
+         ["missing or empty 'name'"]),
+        # A '#' inside a quoted value is data, not a comment.
+        ({"config.yml": https_only + "  - name: A # note\n    url: https://github.com/o/r\n"
+                         "    about: z\n"}, {}, []),
         # --- forms ---
         ({"config.yml": link, "bug-report.yml": "description: d\n"}, {},
          ["missing or empty 'name'"]),
