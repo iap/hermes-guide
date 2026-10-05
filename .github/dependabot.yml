@@ -1,0 +1,14 @@
+# Version updates for the SHA-pinned GitHub Actions.
+#
+# The repository requires full-length commit SHAs for every action
+# (sha_pinning_required), so pins cannot follow tags and need a bot to stay
+# current. One grouped PR per week; no other ecosystem is touched.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
