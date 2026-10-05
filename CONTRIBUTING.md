@@ -243,13 +243,17 @@ their place:
 
 ## Questions
 
-A question is not a defect report. Ask in the issue tracker rather than opening
-a `bug-report.yml`: include the Hermes version, your platform (native Windows or
-POSIX), and the output of `hermes config path` — most configuration questions
-turn on exactly one of those three.
+A question is not a defect report. `bug-report.yml` and `skill-drift.yml` both
+want a reproduction, and "how do I..." has none — so the new-issue list offers a
+Questions entry that opens Discussions instead.
 
-Check first whether a shipped skill already answers it. `hermes-configuration-guide`
-is the map, and the [skill table](README.md#whats-included) lists the rest.
+Before asking, check whether a shipped skill already answers it:
+`hermes-configuration-guide` is the map, and the
+[skill table](README.md#whats-included) lists the rest.
+
+When you do ask, three facts turn most questions into answers: the Hermes
+version, your platform (native Windows or POSIX), and the output of
+`hermes config path`.
 
 ## Pull requests
 

@@ -6,3 +6,6 @@ contact_links:
   - name: Security-scanner false positives (Hermes core)
     url: https://github.com/NousResearch/hermes-agent/issues/92021
     about: Canonical upstream issue for skills/plugins scanner false positives.
+  - name: Question about this repo or a skill
+    url: https://github.com/iap/hermes-guide/discussions
+    about: A question is not a defect report. Use Discussions for "how do I...", not bug-report.yml.
