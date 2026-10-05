@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail when the issue-template surface and the docs that describe it diverge.
 
-Two defects in this repo's history were the same shape: a doc named a path
+Three defects in this repo's history were the same shape: a doc named a path
 the reporter could not actually use.
 
 * CONTRIBUTING.md told a reporter to pick ``config.yml`` as one of three
@@ -9,10 +9,15 @@ the reporter could not actually use.
 * CONTRIBUTING.md said a question is not a defect report, then pointed at
   the issue tracker -- while ``blank_issues_enabled: false`` meant there was
   no such route. A reader had nowhere to go.
+* A contact link to ``https://github.com.attacker.example`` passed a
+  substring test for ``github.com``.
 
-Neither is visible to a linter that reads Markdown prose. These are
-structural invariants over ``.github/ISSUE_TEMPLATE/`` and the one phrase
-that promises a route, so CI refuses the regression.
+Stdlib only, on purpose. Every other gate in this tier is stdlib only
+because ``PyYAML`` is installed in a full-gate step, not a fast-tier one --
+importing it here breaks every matrix leg on a direct push. So the small,
+fixed schema is read directly: :func:`read_chooser` fails *closed* on any line
+it does not understand, and forms only need two top-level scalars, which
+:func:`top_scalar` reads without parsing the body at all.
 
 Scope: files in the issue-template directory only. Deliberately *not* a
 general "every filename in the docs exists" check -- the docs legitimately
@@ -32,34 +37,111 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 REPO = Path(__file__).resolve().parent.parent
 TEMPLATES = Path(".github") / "ISSUE_TEMPLATE"
 CHOOSER = "config.yml"
+CONTACT_LINKS = "contact_links"
+_LINK_KEYS = frozenset({"name", "url", "about"})
 
 # A doc has promised a non-defect route if it says either of these.
 _PROMISE = re.compile(r"^##\s+Questions?\b|not a defect report", re.MULTILINE | re.IGNORECASE)
-# What counts as offering one: a form, or a contact link, named for questions.
+# What counts as offering one: a form or link named for questions.
 _ROUTE = re.compile(r"question|discussion|ask|help", re.IGNORECASE)
+
+# The only legitimate destinations for a contact link. A substring test for
+# "github.com" would accept github.com.attacker.example.
+_GITHUB_HOSTS = frozenset({"github.com", "www.github.com"})
 
 # Docs allowed to describe the reporter-facing surface.
 _DOCS = ("CONTRIBUTING.md", "README.md", "AGENTS.md")
 
 
-def _load_yaml(path: Path) -> Any:
-    import yaml
+def top_scalar(text: str, key: str) -> str | None:
+    """The first top-level ``key: value`` in ``text``, unquoted, or None.
 
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
-
-
-def _mapping(path: Path) -> dict[str, Any]:
-    """The file as a mapping; ``{}`` when it is empty or not one.
-
-    ``_load_yaml(...) or {}`` reads the same but widens to ``object`` under
-    mypy, which then rejects every ``.get`` on it.
+    Forms carry a large body this guard never inspects, so it reads the one
+    field it needs instead of parsing the file.
     """
-    data = _load_yaml(path)
-    return data if isinstance(data, dict) else {}
+    pattern = re.compile(rf"^{key}:[ \t]*(.*?)[ \t]*$")
+    for line in text.splitlines():
+        if not line or line[:1].isspace() or line.lstrip().startswith("#"):
+            continue
+        match = pattern.match(line)
+        if match:
+            value = match.group(1)
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            return value or None
+    return None
+
+
+def _scalar(raw: str) -> Any:
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+        return raw[1:-1]
+    if raw in ("true", "True"):
+        return True
+    if raw in ("false", "False"):
+        return False
+    return raw
+
+
+def read_chooser(text: str) -> tuple[dict[str, Any], list[str]]:
+    """Parse the chooser's fixed schema. Returns (data, problems).
+
+    Understands exactly: a top-level ``key: value``, a top-level
+    ``contact_links:`` followed by ``- key: value`` items with indented
+    fields. Anything else becomes a problem rather than a silent omission, so
+    a config that grows a feature this reader does not know about is reported
+    instead of quietly passing.
+    """
+    data: dict[str, Any] = {}
+    problems: list[str] = []
+    links: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    in_links = False
+
+    for lineno, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        item = stripped.startswith("- ")
+        body = stripped[2:].strip() if item else stripped
+
+        if ":" not in body:
+            # Report before registering a link: an unparseable item must not
+            # leave an empty dict behind to be reported a second time as a
+            # missing-keys failure.
+            problems.append(f"line {lineno}: cannot parse {stripped!r}")
+            continue
+        key, _, raw = body.partition(":")
+        key, raw = key.strip(), _scalar(raw.strip())
+
+        if item:
+            in_links = True
+            current = {}
+            links.append(current)
+            indent = max(indent, 2)
+
+        if item or (in_links and indent > 0):
+            if current is None:  # pragma: no cover - a list item opens one above
+                problems.append(f"line {lineno}: indented field outside a contact link")
+            else:
+                current[key] = raw
+        elif key == CONTACT_LINKS and raw == "":
+            in_links = True
+        elif indent == 0:
+            data[key] = raw
+        else:
+            problems.append(f"line {lineno}: unexpected indentation at {stripped!r}")
+
+    if CONTACT_LINKS in data:
+        problems.append(f"{CONTACT_LINKS} must be a list of mappings, not a scalar")
+    else:
+        data[CONTACT_LINKS] = links
+    return data, problems
 
 
 def check_forms(templates: Path) -> list[str]:
@@ -72,56 +154,50 @@ def check_forms(templates: Path) -> list[str]:
     for form in sorted(templates.glob("*.yml")):
         if form.name == CHOOSER:
             continue
-        data = _load_yaml(form)
-        if not isinstance(data, dict):
-            bad.append(f"{form.name}: not a YAML mapping")
-            continue
+        text = form.read_text(encoding="utf-8")
         for field in ("name", "description"):
-            value = data.get(field)
-            if not isinstance(value, str) or not value.strip():
+            if top_scalar(text, field) is None:
                 bad.append(f"{form.name}: missing or empty {field!r} (chooser entry would be blank)")
     return bad
 
 
 def check_chooser(templates: Path) -> list[str]:
-    """Validate the chooser: schema, link hygiene, no duplicate routes."""
+    """Validate the chooser: schema, link hygiene, no duplicate destinations."""
     path = templates / CHOOSER
     if not path.is_file():
         return [f"{CHOOSER}: missing -- GitHub needs it to pick the templates"]
 
-    data = _load_yaml(path)
-    if not isinstance(data, dict):
-        return [f"{CHOOSER}: not a YAML mapping"]
-
+    data, problems = read_chooser(path.read_text(encoding="utf-8"))
+    if problems:
+        # One root cause, one message. Every check below reads `data`, so
+        # running them on a file this reader could not parse would report
+        # consequences of the parse failure as separate defects.
+        return [f"{CHOOSER}: {p}" for p in problems]
     bad: list[str] = []
+
     blank = data.get("blank_issues_enabled")
     if not isinstance(blank, bool):
         bad.append(f"{CHOOSER}: blank_issues_enabled must be a bool, got {blank!r}")
 
-    links = data.get("contact_links")
-    if links is None:
-        return bad + ([] if blank else [f"{CHOOSER}: blank issues disabled but no contact_links to reach"])
-
-    if not isinstance(links, list):
-        return bad + [f"{CHOOSER}: contact_links must be a list, got {type(links).__name__}"]
+    links = data.get(CONTACT_LINKS) or []
+    if blank is False and not links:
+        bad.append(f"{CHOOSER}: blank issues disabled but no contact_links to reach")
 
     seen: dict[str, int] = {}
     for i, link in enumerate(links):
         where = f"{CHOOSER}: contact_links[{i}]"
-        if not isinstance(link, dict):
-            bad.append(f"{where}: not a mapping")
-            continue
-        if set(link) != {"name", "url", "about"}:
-            bad.append(f"{where}: keys must be exactly name/url/about, got {sorted(link)}")
+        if set(link) != _LINK_KEYS:
+            bad.append(f"{where}: keys must be exactly {sorted(_LINK_KEYS)}, got {sorted(link)}")
             continue
         for field, value in link.items():
             if not isinstance(value, str) or not value.strip():
                 bad.append(f"{where}: empty {field!r}")
         url = link.get("url", "")
-        if not url.startswith("https://"):
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
             bad.append(f"{where}: url must be https, got {url!r}")
-        elif "github.com" not in url:
-            bad.append(f"{where}: url must be a github.com path, got {url!r}")
+        elif (parsed.hostname or "").lower() not in _GITHUB_HOSTS:
+            bad.append(f"{where}: url must be on github.com, got host {parsed.hostname!r}")
         seen[url] = seen.get(url, 0) + 1
     for url, n in seen.items():
         if n > 1:
@@ -132,36 +208,38 @@ def check_chooser(templates: Path) -> list[str]:
 def check_route_exists(repo: Path) -> list[str]:
     """A doc promising questions must not promise a route that is absent.
 
-    Blank issues disabled means every report goes through a form or a contact
-    link. If the docs say a question is not a defect report, one of those has
-    to accept it -- otherwise the only advice on offer is unusable.
+    Only binding when blank issues are off: with them on a reader can file a
+    plain issue, so the promise needs no separate route.
     """
-    templates = repo / TEMPLATES
     promising = [
-        repo / name
+        name
         for name in _DOCS
-        if (repo / name).is_file() and _PROMISE.search((repo / name).read_text(encoding="utf-8"))
+        if (repo / name).is_file()
+        and _PROMISE.search((repo / name).read_text(encoding="utf-8"))
     ]
     if not promising:
         return []
 
-    chooser = _mapping(templates / CHOOSER)
-    links = chooser.get("contact_links") or []
-    routes = [f"{l.get('name','')} {l.get('url','')} {l.get('about','')}" for l in links if isinstance(l, dict)]
+    templates = repo / TEMPLATES
+    chooser, _ = read_chooser((templates / CHOOSER).read_text(encoding="utf-8"))
+    if chooser.get("blank_issues_enabled") is not False:
+        return []
+
+    routes = [
+        f"{link.get('name','')} {link.get('url','')} {link.get('about','')}"
+        for link in chooser.get(CONTACT_LINKS) or []
+    ]
     for form in sorted(templates.glob("*.yml")):
         if form.name == CHOOSER:
             continue
-        data = _load_yaml(form)
-        if isinstance(data, dict):
-            routes.append(f"{data.get('name','')} {form.name}")
+        routes.append(f"{top_scalar(form.read_text(encoding='utf-8'), 'name') or ''} {form.name}")
 
     if any(_ROUTE.search(r) for r in routes):
         return []
 
-    where = ", ".join(d.name for d in promising)
     return [
-        f"{where} tells the reader a question is not a defect report, but no form "
-        f"or contact_links entry accepts one (blank_issues_enabled is {chooser.get('blank_issues_enabled')!r})"
+        f"{', '.join(promising)} tells the reader a question is not a defect report, but no "
+        f"form or contact_links entry accepts one (blank_issues_enabled is False)"
     ]
 
 
@@ -169,73 +247,76 @@ def check(repo: Path) -> list[str]:
     templates = repo / TEMPLATES
     if not templates.is_dir():
         return [f"{TEMPLATES}: missing"]
-    return (
-        check_forms(templates)
-        + check_chooser(templates)
-        + check_route_exists(repo)
-    )
+    return check_forms(templates) + check_chooser(templates) + check_route_exists(repo)
 
 
 def selftest() -> int:
-    good_chooser = (
+    bug_only = "name: Bug\ndescription: d\n"
+    link = (
         "blank_issues_enabled: false\n"
         "contact_links:\n"
         "  - name: Hermes core bug\n"
         "    url: https://github.com/NousResearch/hermes-agent/issues\n"
         "    about: Upstream.\n"
     )
-    # A doc that steers questions away from a defect form.
+    ask_link = (
+        "blank_issues_enabled: false\n"
+        "contact_links:\n"
+        "  - name: Question about a skill\n"
+        "    url: https://github.com/iap/hermes-guide/discussions\n"
+        "    about: Ask here.\n"
+    )
     promise = "## Questions\n\nA question is not a defect report.\n"
-    cases = [
-        # (templates, docs, expected failure fragments)
-        # --- the #147 defect: doc promises a route, nothing offers one ---
-        ({"config.yml": good_chooser}, {"CONTRIBUTING.md": promise},
+    https_only = "blank_issues_enabled: false\ncontact_links:\n"
+
+    # (templates, docs, expected failure fragments)
+    cases: list[tuple[dict[str, str], dict[str, str], list[str]]] = [
+        # --- the #147 defect: docs promise a route, nothing offers one ---
+        ({"config.yml": link}, {"CONTRIBUTING.md": promise},
          ["no form or contact_links entry accepts one"]),
-        # ...and the same, with a form present but no question route.
-        ({"config.yml": good_chooser, "bug-report.yml": "name: Bug\ndescription: d\n"},
-         {"CONTRIBUTING.md": promise},
+        ({"config.yml": link, "bug-report.yml": bug_only}, {"CONTRIBUTING.md": promise},
          ["no form or contact_links entry accepts one"]),
-        # The promise only bites when a route could plausibly accept it.
-        ({"config.yml": "blank_issues_enabled: false\ncontact_links:\n"
-                        "  - name: Question about a skill\n"
-                        "    url: https://github.com/iap/hermes-guide/discussions\n"
-                        "    about: Ask here.\n",
-          "bug-report.yml": "name: Bug\ndescription: d\n"},
+        # --- blank issues on: a plain issue is available, so no route needed ---
+        ({"config.yml": "blank_issues_enabled: true\n", "bug-report.yml": bug_only},
          {"CONTRIBUTING.md": promise}, []),
-        # A form named for questions satisfies it too.
-        ({"config.yml": good_chooser,
-          "question.yml": "name: Question\ndescription: ask away\n"},
+        # --- the promise is satisfied by a link, or by a form ---
+        ({"config.yml": ask_link, "bug-report.yml": bug_only},
          {"CONTRIBUTING.md": promise}, []),
-        # No promise in the docs: nothing to enforce, whatever the routes.
-        ({"config.yml": good_chooser}, {"CONTRIBUTING.md": "nothing here\n"}, []),
+        ({"config.yml": link, "question.yml": "name: Question\ndescription: ask away\n"},
+         {"CONTRIBUTING.md": promise}, []),
+        # --- no promise, so the routes are nobody's problem ---
+        ({"config.yml": link}, {"CONTRIBUTING.md": "nothing here\n"}, []),
+        # Blank issues off with nowhere to send anyone is still a defect.
+        ({"config.yml": "blank_issues_enabled: false\n", "bug-report.yml": bug_only}, {},
+         ["no contact_links to reach"]),
         # --- chooser schema ---
         ({"config.yml": "blank_issues_enabled: maybe\n"}, {}, ["must be a bool"]),
-        ({"config.yml": "blank_issues_enabled: false\ncontact_links:\n"
-                        "  - name: A\n    url: http://x.example/y\n    about: z\n"}, {},
+        ({"config.yml": https_only + "  - name: A\n    url: http://github.com/o/r\n    about: z\n"}, {},
          ["url must be https"]),
-        ({"config.yml": "blank_issues_enabled: false\ncontact_links:\n"
-                        "  - name: A\n    url: https://example.org/o/r\n    about: z\n"}, {},
-         ["must be a github.com path"]),
-        ({"config.yml": "blank_issues_enabled: false\ncontact_links:\n"
-                        "  - name: A\n    url: https://github.com/o/r\n    about: z\n"
-                        "  - name: B\n    url: https://github.com/o/r\n    about: z2\n"}, {},
+        ({"config.yml": https_only + "  - name: A\n    url: https://example.org/o/r\n    about: z\n"}, {},
+         ["must be on github.com"]),
+        # A lookalike host must not pass a substring test.
+        ({"config.yml": https_only + "  - name: A\n    url: https://github.com.attacker.example/q\n"
+                         "    about: z\n"}, {}, ["must be on github.com"]),
+        ({"config.yml": https_only + "  - name: A\n    url: https://evil.test/github.com\n"
+                         "    about: z\n"}, {}, ["must be on github.com"]),
+        ({"config.yml": https_only + "  - name: A\n    url: https://github.com/o/r\n    about: z\n"
+                         "  - name: B\n    url: https://github.com/o/r\n    about: z2\n"}, {},
          ["offered 2 times"]),
-        ({"config.yml": "blank_issues_enabled: false\ncontact_links:\n"
-                        "  - name: A\n    url: https://github.com/o/r\n"}, {},
+        ({"config.yml": https_only + "  - name: A\n    url: https://github.com/o/r\n"}, {},
          ["keys must be exactly"]),
         ({"config.yml": "blank_issues_enabled: false\n"}, {},
          ["no contact_links to reach"]),
+        # Fail closed: a schema this reader does not know is reported, not skipped.
+        ({"config.yml": "blank_issues_enabled: false\nlabels:\n  - one\n"}, {},
+         ["cannot parse"]),
         ({}, {}, ["config.yml: missing"]),
         # --- forms ---
-        ({"config.yml": good_chooser, "bug-report.yml": "description: d\n"}, {},
+        ({"config.yml": link, "bug-report.yml": "description: d\n"}, {},
          ["missing or empty 'name'"]),
-        ({"config.yml": good_chooser, "bug-report.yml": "name: B\n"}, {},
+        ({"config.yml": link, "bug-report.yml": "name: B\n"}, {},
          ["missing or empty 'description'"]),
-        ({"config.yml": good_chooser,
-          "bug-report.yml": "name: B\ndescription: d\n"}, {}, []),
-        # --- clean by construction: blank issues allowed, so no route needed ---
-        ({"config.yml": "blank_issues_enabled: true\n",
-          "bug-report.yml": "name: B\ndescription: d\n"}, {"CONTRIBUTING.md": promise}, []),
+        ({"config.yml": link, "bug-report.yml": bug_only}, {}, []),
     ]
 
     failures = 0
@@ -249,10 +330,19 @@ def selftest() -> int:
             for name, body in docs.items():
                 (root / name).write_text(body, encoding="utf-8")
             got = check(root)
-        missing = [e for e in expect if not any(e in g for g in got)]
-        if missing:
+
+        # An empty `expect` asserts the tree is clean; a non-empty one also
+        # rejects unexpected extra failures. Without the first half, every
+        # positive case passes no matter what the guard returns.
+        if expect:
+            bad = [f"missing {e}" for e in expect if not any(e in g for g in got)]
+            bad += [f"unexpected {g}" for g in got if not any(e in g for e in expect)]
+        else:
+            bad = [] if not got else [f"expected a clean tree, got {got}"]
+        if bad:
             failures += 1
-            print(f"SELFTEST FAIL: expected {missing}, got {got}", file=sys.stderr)
+            print(f"SELFTEST FAIL {sorted(templates)}: " + "; ".join(bad), file=sys.stderr)
+
     if failures:
         print(f"error: {failures}/{len(cases)} selftest case(s) failed", file=sys.stderr)
         return 1
@@ -276,9 +366,13 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
-    n_forms = len([p for p in (REPO / TEMPLATES).glob("*.yml") if p.name != CHOOSER])
-    n_links = len(_mapping(REPO / TEMPLATES / CHOOSER).get("contact_links") or [])
-    print(f"OK: {n_forms} template(s), {n_links} contact link(s), docs agree")
+    templates = REPO / TEMPLATES
+    chooser, _ = read_chooser((templates / CHOOSER).read_text(encoding="utf-8"))
+    n_forms = len([p for p in templates.glob("*.yml") if p.name != CHOOSER])
+    print(
+        f"OK: {n_forms} template(s), "
+        f"{len(chooser.get(CONTACT_LINKS) or [])} contact link(s), docs agree"
+    )
     return 0
 
 
