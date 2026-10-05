@@ -8,7 +8,7 @@ cannot suppress a real alert, (c) fail the run on transport failures, and
 the report sections without losing the footer, and (f) retry transient
 ls-remote failures — exit codes and transport exceptions — in the pin check,
 and (g) find the install pin wherever the workflow files keep it,
-ignoring unrelated clones. Each case below pins one of those behaviors.
+ignoring unrelated or commented-out clones. Each case below pins one of those behaviors.
 
 No network, no `gh` CLI, no upstream clone: git/gh are monkeypatched.
 
@@ -423,6 +423,33 @@ def case_pin_ignores_unrelated_clones(mod):
     print("OK: unrelated shallow clones do not pollute the pin lookup")
 
 
+def case_pin_ignores_commented_clones(mod):
+    """A commented-out clone line must not join the tag set.
+
+    Macroscope review on PR #149: the raw-text scan matched `# git clone ...`
+    examples too, so a commented-out pin could flip the lookup to None.
+    Only executable lines count.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "git clone --depth 1 --branch v2026.9.24 "
+            "https://github.com/NousResearch/hermes-agent.git d\n",
+            encoding="utf-8")
+        (wf / "notes.yml").write_text(
+            "# historical: git clone --depth 1 --branch v2025.1.1 "
+            "https://github.com/NousResearch/hermes-agent.git d\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() == "v2026.9.24", (
+                "a commented-out clone must not hide the Hermes pin")
+    finally:
+        shutil.rmtree(td)
+    print("OK: commented-out clone lines are ignored")
+
+
 def main() -> int:
     mod = _load_module()
     failures: list[str] = []
@@ -443,6 +470,7 @@ def main() -> int:
         case_pin_absent_fails_closed,
         case_pin_conflict_fails_closed,
         case_pin_ignores_unrelated_clones,
+        case_pin_ignores_commented_clones,
     ):
         try:
             case(mod)
@@ -452,7 +480,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 16 upstream-drift hygiene case(s) passed")
+    print("\nOK: 17 upstream-drift hygiene case(s) passed")
     return 0
 
 

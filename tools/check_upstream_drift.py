@@ -252,8 +252,8 @@ def read_pinned_tag() -> str | None:
     The pin is not tied to one filename: CI has already moved the clone line
     between workflow files once (#128), so the lookup scans the files under
     `.github/workflows/` instead of reading a hardcoded path. Only the clone
-    of the Hermes source itself carries the pin; an unrelated shallow clone
-    elsewhere is ignored. Exactly one distinct tag wins; none found, or
+    of the Hermes source itself carries the pin; unrelated or commented-out
+    clones are ignored. Exactly one distinct tag wins; none found, or
     conflicting tags, returns None so the caller fails the run closed.
     """
     patterns = ("*.yml", "*.yaml")
@@ -264,7 +264,13 @@ def read_pinned_tag() -> str | None:
                 text = path.read_text(encoding="utf-8")
             except OSError:
                 continue
-            for m in re.finditer(r"git clone --depth 1 --branch (\S+) (\S+)", text):
+            # Anchored to executable lines (optionally behind `- ` / `run: `):
+            # a commented-out `# git clone ...` example is documentation, not an
+            # install, and must not join the tag set.
+            for m in re.finditer(
+                r"(?m)^[ \t]*(?:-\s*)?(?:run:\s*)?git clone --depth 1 --branch (\S+) (\S+)",
+                text,
+            ):
                 tag, url = m.group(1), m.group(2)
                 # Only the Hermes source clone carries the pin; an unrelated
                 # shallow clone in another workflow must not join the tag set.
