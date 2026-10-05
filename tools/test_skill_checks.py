@@ -38,14 +38,19 @@ def _build_home(root: Path) -> None:
     _write(root / "skills/.bundled_manifest", "dogfood:abc123\nstub:def456\nweather:098fed\n")
     # valid bundled skill (healthy control)
     _write(root / "skills/dogfood/SKILL.md", "---\nname: dogfood\ndescription: bundled skill\n---\nbody\n")
-    # unreadable skill whose basename matches a bundled name -> must NOT be [bundled]
+    # no-fence skill whose basename matches a bundled name -> must NOT be [bundled]
+    # and must NOT be reported as broken (Hermes loads it under its directory name)
     _write(root / "skills/stub/SKILL.md", "just text no frontmatter")
-    # unreadable skill whose basename is not bundled -> no tag
+    # no-fence skill whose basename is not bundled -> no tag, not broken
     _write(root / "skills/user-broken/SKILL.md", "also no frontmatter")
-    # nested user skill with no `name` but basename collides with bundled -> no tag
+    # nested user skill with no `name` but basename collides with bundled -> no tag, not broken
     _write(root / "skills/user-collection/dogfood/SKILL.md", "---\ndescription: user skill, no name\n---\nbody\n")
-    # declared name matches manifest but missing description -> [bundled]
+    # declared name matches manifest but missing description -> [bundled], not broken
     _write(root / "skills/weather/SKILL.md", "---\nname: weather\n---\nbody\n")
+    # non-string name -> broken (the loader cannot use it)
+    _write(root / "skills/bad-name/SKILL.md", "---\nname: [a, b]\ndescription: bad\n---\nbody\n")
+    # non-mapping frontmatter block -> broken
+    _write(root / "skills/bad-block/SKILL.md", "---\n- just\n- a\n- list\n---\nbody\n")
     _write(root / "skills/foo/SKILL.md", "---\nname: foo\ndescription: old\n---\nold\n")
     _write(root / "skills/category/foo/SKILL.md", "---\nname: foo\ndescription: new\nversion: 1.2.0\n---\nnew\n")
     _write(root / "skills/.archive/foo-old/SKILL.md", "---\nname: foo\ndescription: archived\nversion: 0.1.0\n---\narchived\n")
@@ -72,26 +77,39 @@ def main(argv: list[str]) -> int:
 
         # (1) hidden/archive dirs are skipped
         walked = list(checks._iter_skills())
-        if len(walked) != 8:
-            failures.append(f"expected 8 skills (hidden .archive skipped), got {len(walked)}")
+        if len(walked) != 10:
+            failures.append(f"expected 10 skills (hidden .archive skipped), got {len(walked)}")
         if any(".archive" in d for d, _ in walked):
             failures.append("hidden .archive dir was not skipped")
 
         # (2) bundled label comes only from declared name, never basename
         sr = checks.check_skills()
         sdetail = sr.get("detail") or []
-        if sr["status"] != "broken" or sr["reason"] != "4 skill issue(s)":
+        if sr["status"] != "broken" or sr["reason"] != "2 skill issue(s)":
             failures.append(f"check_skills unexpected: {sr['status']} - {sr['reason']}")
-        # positive: declared name in manifest -> [bundled]
-        if not any("weather" in d and "[bundled]" in d for d in sdetail):
-            failures.append("declared-name bundled skill (weather) not labelled [bundled]")
+        # weather has a valid name but no description -> healthy, not in findings
+        if any("weather" in d for d in sdetail):
+            failures.append("weather (valid name, no description) reported as broken")
         # negative: basename matches manifest but no declared name -> NOT [bundled]
         if any("stub" in d and "[bundled]" in d for d in sdetail):
-            failures.append("unreadable skill (stub) mislabelled [bundled] from basename")
+            failures.append("no-fence skill (stub) mislabelled [bundled] from basename")
         if any("user-collection/dogfood" in d and "[bundled]" in d for d in sdetail):
             failures.append("nameless nested skill mislabelled [bundled] from basename")
         if any("user-broken" in d and "[bundled]" in d for d in sdetail):
-            failures.append("unreadable user skill mislabelled [bundled]")
+            failures.append("no-fence user skill mislabelled [bundled]")
+        # no-fence skills are NOT broken (Hermes loads them under directory name)
+        if any("stub" in d for d in sdetail):
+            failures.append("no-fence skill (stub) reported as broken")
+        if any("user-broken" in d for d in sdetail):
+            failures.append("no-fence skill (user-broken) reported as broken")
+        if any("user-collection/dogfood" in d for d in sdetail):
+            failures.append("nameless skill (user-collection/dogfood) reported as broken")
+        # non-string name IS broken
+        if not any("bad-name" in d for d in sdetail):
+            failures.append("non-string name (bad-name) not reported")
+        # non-mapping frontmatter IS broken
+        if not any("bad-block" in d for d in sdetail):
+            failures.append("non-mapping frontmatter (bad-block) not reported")
 
         # (3) collision messages carry versions and skip archived copies
         cr = checks.check_commands()

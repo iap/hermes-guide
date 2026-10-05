@@ -229,12 +229,12 @@ def _read_config():
 
 
 def frontmatter(path):
-    """Extract the frontmatter mapping from a SKILL.md, or None if absent/invalid.
+    """Extract the frontmatter mapping from a SKILL.md.
 
-    Single source of truth for frontmatter parsing, shared by the skills and
-    commands checks here and by the plugin's skill registry in __init__.py.
-    Returns None (not {}) for malformed or non-mapping frontmatter so callers
-    never call .get() on a list/scalar.
+    Mirrors Hermes' ``parse_frontmatter``: returns ``{}`` for no-fence input
+    (the loader registers such skills under their directory name), and ``None``
+    only for a non-mapping frontmatter block (list/scalar root) so callers
+    never call ``.get()`` on an unusable value.
     """
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
@@ -242,14 +242,14 @@ def frontmatter(path):
     except Exception:
         return None
     if not text.startswith("---"):
-        return None
+        return {}
     parts = text.split("---", 2)
     if len(parts) < 3:
-        return None
+        return {}
     try:
         fm = yaml.safe_load(parts[1])
     except Exception:
-        return None
+        return {}
     return fm if isinstance(fm, dict) else None
 
 
@@ -496,14 +496,18 @@ def check_skills():
         # not bundled, and the missing-`name` finding below reports it.
         tag = " [bundled]" if isinstance(name, str) and name in bundled else ""
         if fm is None:
-            findings.append(f"{dirpath}: SKILL.md has no valid frontmatter{tag}")
+            # Non-mapping frontmatter block (list/scalar root) — the loader
+            # cannot use this.
+            findings.append(f"{dirpath}: SKILL.md has non-mapping frontmatter{tag}")
             continue
-        for req in ("name", "description"):
-            # Require a non-empty *string*: a truthy non-string (mapping, sequence,
-            # int) is not a usable name or description, and must not pass as one.
-            val = fm.get(req)
+        # Only report what the loader genuinely cannot use: a `name` that is
+        # present but not a non-empty string. Missing `name` is fine (the
+        # loader falls back to the directory name); missing `description` is
+        # fine (the loader falls back to the first body line).
+        if "name" in fm:
+            val = fm["name"]
             if not isinstance(val, str) or not val.strip():
-                findings.append(f"{dirpath}: frontmatter missing or non-string `{req}`{tag}")
+                findings.append(f"{dirpath}: frontmatter `name` is not a non-empty string{tag}")
 
     if findings:
         return {"status": "broken", "reason": f"{len(findings)} skill issue(s)", "detail": findings}
