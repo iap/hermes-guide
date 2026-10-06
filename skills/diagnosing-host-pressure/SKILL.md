@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: Host resource exhaustion masquerading as Hermes faults.
-version: 1.2.3
+version: 1.2.4
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -15,6 +15,8 @@ the **host** is starved — not that Hermes is misconfigured. On a machine under
 resource pressure the load average is dominated by threads blocked in
 uninterruptible I/O wait, plugin imports miss their fixed budget, and adapters
 get discarded. The visible result looks like a cluster of unrelated Hermes bugs.
+
+> **Disambiguation**: if only one surface is failing (e.g. a single MCP server, a single provider, a single skill), see the specific diagnosing skill for that surface — host pressure is for **multiple** surfaces failing at once.
 
 > [!IMPORTANT]
 > Rule out the boring cause first. Before blaming the host, confirm the thing

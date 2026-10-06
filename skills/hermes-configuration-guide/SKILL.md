@@ -1,7 +1,7 @@
 ---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.3.1
+version: 1.3.2
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -86,6 +86,16 @@ Notes:
 - Messaging-platform connectivity, allowlists, or a platform not receiving replies → **`diagnosing-gateway`**
 - Several surfaces failing at once, or adapters discarded after a load timeout — suspect host resource pressure before per-surface config → **`diagnosing-host-pressure`**
 - Voice mode not transcribing or replying, or voice-message handling problems → **`diagnosing-voice`**
+
+### Disambiguation — when two skills can claim the same symptom
+
+- **Skill not discovered vs `/command` missing**: if the skill itself is missing from the index, see `diagnosing-skills`; if the skill is present but its `/command` is missing or shadowed, see `diagnosing-commands`.
+- **MCP server up but no tools vs provider configured but unavailable**: if the MCP server connects but exposes no tools, see `diagnosing-mcp`; if a model provider is configured but silently unavailable, see `diagnosing-providers`.
+- **Plugin not loading vs provider sub-category**: if a plugin is discovered but not enabled, see `diagnosing-plugins`; if a provider sub-category (e.g. `context.engine`, `image_gen.provider`) is misconfigured, see `diagnosing-providers`.
+- **Memory not persisting vs provider store unavailable**: if built-in `MEMORY.md`/`USER.md` has errors, see `diagnosing-memory`; if an external memory provider is configured but silently unavailable, see `diagnosing-providers`.
+- **Several faults at once, intermittently**: suspect host resource pressure before per-surface config — see `diagnosing-host-pressure`.
+- **Launch/UI failure vs command surface vs app build**: if the desktop app fails to launch or shows a blank window, see `diagnosing-desktop`; if the TUI misrenders or shows unreadable indicators on native Windows, see `diagnosing-cli-tui`; if a `/command` is missing or overridden, see `diagnosing-commands`.
+- **Which venv/home applies where**: if the wrong Python interpreter is active or the dual-venv layout is confusing, see `diagnosing-path`; if the desktop app's backend resolution is wrong, see `diagnosing-desktop`; if the install itself is broken, see `installing-hermes`.
 
 Every diagnosis should end in a concrete action: a `hermes <subcommand>` command or a specific file + field edit, then a restart or `/reload-*` to apply.
 

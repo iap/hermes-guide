@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.2
+version: 1.1.3
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -11,6 +11,8 @@ metadata:
 # Diagnosing MCP Configuration
 
 Goal: reduce any MCP problem to one concrete fix — a `mcp_servers:` entry in `$HERMES_HOME/config.yaml` (resolve with `hermes config path`) or a `hermes mcp` subcommand. Hermes registers server tools as `mcp__<server>__<tool>` and one runtime toolset per contributing server (`mcp-<server>`).
+
+> **Disambiguation**: if a model provider is configured but silently unavailable (not an MCP server issue), see `diagnosing-providers`.
 
 ## 1. Configuration shape
 

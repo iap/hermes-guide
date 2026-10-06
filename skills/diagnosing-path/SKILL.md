@@ -1,7 +1,7 @@
 ---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.5.1
+version: 1.5.2
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -11,6 +11,8 @@ metadata:
 # Hermes Agent Path Diagnostics
 
 This guide explains the dual-venv layout in Hermes Agent, how to detect which virtual environment is active, and the canonical resolution order. It applies to any code, script, or documentation that needs to reference paths in a Hermes Agent checkout.
+
+> **Disambiguation**: if the desktop app's backend resolution is wrong (not a venv/interpreter issue), see `diagnosing-desktop`. If the install itself is broken (not just a path reference), see `installing-hermes`.
 
 ## The Situation
 

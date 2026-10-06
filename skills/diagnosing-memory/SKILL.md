@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.3
+version: 1.2.4
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -11,6 +11,8 @@ metadata:
 # Diagnosing Memory
 
 Goal: reduce any "it forgot what I told it" / "my memories are gone" / memory-provider failure to one concrete fix — a config field, an env var, a plugin install, or a session restart.
+
+> **Disambiguation**: if a model provider is configured but silently unavailable (not a memory issue), see `diagnosing-providers`.
 
 > [!WARNING]
 > **Hermes memory has two independent layers, and the external one fails silently.** Built-in memory (`MEMORY.md` / `USER.md`) is always active. At most one external provider can be active; if it is unavailable, **external memory is disabled for that session and built-in memory answers instead** — the agent does not announce this. "My mem0 memories are gone" usually means "mem0 was unavailable; built-in answered."

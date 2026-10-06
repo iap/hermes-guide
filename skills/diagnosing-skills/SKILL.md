@@ -1,7 +1,7 @@
 ---
 name: diagnosing-skills
 description: Diagnose Hermes skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits.
-version: 1.1.2
+version: 1.1.3
 metadata:
   hermes:
     tags: [hermes, skills, troubleshooting]
@@ -11,6 +11,8 @@ metadata:
 # Diagnosing Skill Configuration
 
 Goal: reduce any skill problem to one concrete fix. Distinguish **discovered** (appears in the index / as a `/command`) from **loading** (frontmatter parses) from **triggering** (the model chooses to use it) — they fail differently.
+
+> **Disambiguation**: if the skill is present but its `/command` is missing or shadowed, see `diagnosing-commands` — that is a command-surface problem, not a skill-discovery problem.
 
 ## 1. Where skills come from
 
