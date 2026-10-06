@@ -45,6 +45,7 @@ def _make_env(td: Path, config: str):
     sys.path.insert(0, str(root))
     import hermes_guide.checks as checks  # noqa: E402
 
+    checks._hermes_home_from_library = lambda: str(home)
     checks._hermes_config_path = lambda: str(home / "config.yaml")
     return home, checks
 
