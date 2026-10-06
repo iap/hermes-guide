@@ -225,7 +225,7 @@ def _hermes_home_from_library():
         if home and os.path.isdir(home):
             return home
     except Exception:
-        pass
+        return None
     return None
 
 
