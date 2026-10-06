@@ -1,7 +1,7 @@
 ---
 name: diagnosing-skills
 description: Diagnose Hermes skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits.
-version: 1.1.3
+version: 1.1.4
 metadata:
   hermes:
     tags: [hermes, skills, troubleshooting]
@@ -20,6 +20,18 @@ Goal: reduce any skill problem to one concrete fix. Distinguish **discovered** (
 - **External dirs**: `skills.external_dirs` in `config.yaml` (supports `~` and `${VAR}`). Non-existent paths are **silently skipped**. On a name collision, **local wins**. Upstream documents these as **read-only / externally owned** (`agent/prompt_builder.py`: *"External dirs (`skills.external_dirs`) are read-only and lose name collisions to local skills"*), so treat an edit here as unreliable — with `skills.write_approval: true`, an agent-side write to an external skill is also staged rather than applied.
 - **Hub/taps**: `hermes skills install` (official / skills-sh / well-known / github / url / clawhub / lobehub / browse-sh), each recorded in `skills/.hub/lock.json` with provenance for `hermes skills check`/`update`.
 - **Plugin-bundled**: `ctx.register_skill(name, path)` — namespaced `plugin:skill`; only available while that plugin is enabled.
+
+### Creation flows
+
+| Flow | Where it lands | Who creates it | Authoritative? |
+|---|---|---|---|
+| **User-local** | `~/.hermes/skills/<category>/<name>/SKILL.md` (POSIX) or `%LOCALAPPDATA%\hermes\skills\...` (native Windows) | Agent via `skill_manage` tool with `action='create'` | Yes — local wins on collision |
+| **In-repo authoring** | `skills/<category>/<name>/SKILL.md` or `optional-skills/<category>/<name>/SKILL.md` inside the hermes-agent repo | Contributor via `write_file` + `git add` | Ships with the package; not user-editable. `skill_manage(action='create')` does **not** target this tree |
+| **Hub install** | `$HERMES_HOME/skills/<category>/<name>/SKILL.md` | `hermes skills install` (official / skills-sh / well-known / github / url / clawhub / lobehub / browse-sh) | Recorded in `skills/.hub/lock.json`; local copy wins on collision |
+| **Plugin-bundled** | `ctx.register_skill(name, path)` — namespaced `plugin:skill` | Plugin developer | Only while that plugin is enabled |
+| **External dirs** | `skills.external_dirs` in `config.yaml` | External tool/user | Read-only; loses to local on collision |
+
+For in-repo authoring conventions (frontmatter standards, tier selection, description rules), see the upstream bundled skill `skills/software-development/hermes-agent-skill-authoring/SKILL.md` (v2.0.0) and `website/docs/developer-guide/creating-skills.md`.
 
 ## 2. SKILL.md format
 
@@ -45,7 +57,19 @@ Goal: reduce any skill problem to one concrete fix. Distinguish **discovered** (
 10. **Plugin skill gone** — the providing plugin was disabled. → `hermes plugins enable <name>`.
 11. **`hermes-agent` cannot be disabled** — it is in `ESSENTIAL_SKILLS` (`agent/skill_utils.py`): disable requests for it are ignored everywhere the disabled list is consulted, by design (it is the agent's operating manual and the system prompt points at it unconditionally). → Not a bug.
 
-## 5. Localization workflow
+## 5. Duplicates & consolidation
+
+When the same skill exists in several roots (local copy vs external dir vs plugin copy vs hub install), **local wins** and edits anywhere else silently no-op. To consolidate:
+
+1. **Enumerate every copy**: `hermes skills list --source all` — note which sources have the skill.
+2. **Pick the source of truth**: usually the local copy (`$HERMES_HOME/skills/<category>/<name>/SKILL.md`). If the skill should be hub-managed, the hub install is the source of truth.
+3. **Consolidate**:
+   - If the local copy is the source of truth: edit it directly, then remove shadows (`hermes skills reset <name>` for bundled, or delete the external-dir copy).
+   - If a hub install is the source of truth: `hermes skills update <name>` to pull the latest, then remove any local shadow.
+   - If a plugin copy is the source of truth: ensure the plugin is enabled (`hermes plugins enable <name>`).
+4. **Re-verify**: `hermes skills list --source all` to confirm only the intended source remains, then `skill_view(name)` to confirm content.
+
+## 6. Localization workflow
 
 1. `/reload-skills`, then `hermes skills list` — absent? → pitfalls 1, 5, 10, 9.
 2. Present but wrong content? → check shadowing (3) and provenance (`hermes skills list --source hub`).
@@ -55,4 +79,4 @@ Goal: reduce any skill problem to one concrete fix. Distinguish **discovered** (
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: all eight hub source names (`tools/skills_hub_*.py`), `_CONDITION_KEYS` and `ESSENTIAL_SKILLS` (`agent/skill_utils.py`), external-dir ownership (`agent/prompt_builder.py`), `skills/.hub/lock.json` (`tools/skills_hub.py`), the bundled marker and `skills opt-in --sync` / `skills reset --restore` paths (`hermes_cli/`), `required_environment_variables` (`tools/skills_tool.py`), the skills-scoped `write_approval` and `$HERMES_HOME/pending/skills/`, and `plugin:skill` qualified dispatch (`tools/skills_tool.py`). Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: all eight hub source names (`tools/skills_hub_*.py`), `_CONDITION_KEYS` and `ESSENTIAL_SKILLS` (`agent/skill_utils.py`), external-dir ownership (`agent/prompt_builder.py`), `skills/.hub/lock.json` (`tools/skills_hub.py`), the bundled marker and `skills opt-in --sync` / `skills reset --restore` paths (`hermes_cli/`), `required_environment_variables` (`tools/skills_tool.py`), the skills-scoped `write_approval` and `$HERMES_HOME/pending/skills/`, and `plugin:skill` qualified dispatch (`tools/skills_tool.py`). Creation flows table and duplicates & consolidation section added 2026-10-06, verified against upstream `skills/software-development/hermes-agent-skill-authoring/SKILL.md` (v2.0.0) at pinned baseline `5000e29936df69d5209f7cf2eea8e5776cb4cbb1`. Re-verify before reuse.*
