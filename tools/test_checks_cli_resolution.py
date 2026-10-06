@@ -537,6 +537,33 @@ def test_timeout_is_deadline_not_per_attempt():
           f"attempts={timeouts} total={total:.1f}s")
 
 
+def test_timeout_never_exceeds_remaining():
+    """The attempt timeout is capped at the remaining time.
+
+    When remaining < 1.0, max(1.0, remaining / left) would exceed the
+    deadline. The attempt must be capped at remaining so the total
+    wall-clock never exceeds the caller's timeout.
+    """
+    timeouts = []
+    clock = [1000.0]
+
+    def _recording_run(cmd, timeout=20):
+        timeouts.append(timeout)
+        clock[0] += timeout
+        return 126, "", "cannot exec"
+
+    # Start with only 0.5s remaining — less than the 1.0s floor
+    with mock.patch.object(checks, "_hermes_candidates",
+                          lambda: ["/a/hermes", "/b/hermes"]), \
+         mock.patch.object(checks, "_run", _recording_run), \
+         mock.patch.object(checks.time, "monotonic", lambda: clock[0]):
+        checks._run_hermes(["config", "path"], timeout=0.5)
+
+    check("attempt timeout never exceeds remaining",
+          all(t <= 0.5 for t in timeouts),
+          f"attempts={timeouts}")
+
+
 def test_timeout_does_not_fall_through():
     """A candidate that hangs (TimeoutExpired) is not retried elsewhere.
 
@@ -578,6 +605,7 @@ def main():
     test_symlinked_duplicates_collapse_to_one_attempt()
     test_empty_path_component_searches_current_directory()
     test_timeout_is_deadline_not_per_attempt()
+    test_timeout_never_exceeds_remaining()
     test_timeout_does_not_fall_through()
 
     cleanup()

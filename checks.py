@@ -196,7 +196,7 @@ def _run_hermes(args, timeout=20):
         if remaining <= 0:
             break
         left = len(candidates) - index
-        attempt = max(1.0, remaining / left)
+        attempt = min(remaining, max(1.0, remaining / left))
         rc, stdout, stderr = _run([exe, *args], timeout=attempt)
         if rc not in _NOT_EXECUTABLE:
             return rc, stdout, stderr
