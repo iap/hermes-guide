@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.2
+version: 1.1.3
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -11,6 +11,8 @@ metadata:
 # Diagnosing Slash Commands
 
 Hermes has **no standalone custom-command files** (no `commands/*.md` directory like Claude Code). Every `/command` comes from exactly four sources, dispatched through one central registry (`hermes_cli/commands.py`) on two surfaces: the interactive CLI/TUI and the messaging gateway. Diagnose by identifying which source the command should come from.
+
+> **Disambiguation**: if the skill itself is missing from the index (not just its `/command`), see `diagnosing-skills` — that is a skill-discovery problem, not a command-surface problem.
 
 ## 1. The four sources
 

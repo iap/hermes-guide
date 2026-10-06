@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.4
+version: 1.1.5
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -13,6 +13,8 @@ metadata:
 Playbook for running and fixing the Hermes Agent CLI/TUI on this machine.
 Use when the TUI misrenders, truncates, shows unreadable indicators, fails
 to launch, or when asked how to theme/skin Hermes on Windows.
+
+> **Disambiguation**: if the desktop app (Electron) fails to launch or shows a blank window, see `diagnosing-desktop` — that is a desktop-app problem, not a CLI/TUI problem. If a `/command` is missing or overridden, see `diagnosing-commands`.
 
 ## 0. Environment baseline (origin machine: one Windows box, re-verified 2026-09-14)
 

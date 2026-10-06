@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and provider sub-categories.
-version: 1.2.1
+version: 1.2.2
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -11,6 +11,8 @@ metadata:
 # Diagnosing Plugins
 
 A Hermes plugin is a **Python package**: a directory with a `plugin.yaml` manifest and a `register(ctx)` function. The single most common failure: **the plugin is discovered but not enabled** — Hermes deliberately loads nothing from third-party code until you add it to `plugins.enabled`.
+
+> **Disambiguation**: if a provider sub-category (e.g. `context.engine`, `image_gen.provider`) is misconfigured, see `diagnosing-providers` — that is a provider configuration problem, not a plugin-loading problem.
 
 ## 1. Discovery locations (later sources override same-name earlier ones)
 

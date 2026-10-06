@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.6
+version: 1.1.7
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -11,6 +11,8 @@ metadata:
 # Diagnosing Model Providers
 
 Goal: reduce any model-provider problem to one concrete fix — a `providers:` / `custom_providers:` entry in `$HERMES_HOME/config.yaml` (resolve with `hermes config path`) or a `hermes model` subcommand.
+
+> **Disambiguation**: if an MCP server connects but exposes no tools, see `diagnosing-mcp`. If an external memory provider is configured but silently unavailable, see `diagnosing-memory`.
 
 ## Step 0 — Resolve the config first
 
