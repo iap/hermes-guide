@@ -172,6 +172,12 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_readonly_runtime.py
 
+      - name: Dogfood check (live install)
+        # Read-only smoke test against the live Hermes install. Skips cleanly
+        # when hermes is absent. Runs only in the full tier (needs the install).
+        if: inputs.run-full-gate
+        run: python tools/check_skill_dogfood.py
+
       - name: MCP shape regression test
         # Copies the plugin into a temp dir and imports it, so it needs PyYAML
         # from the install above. Its own import block hides that: every
