@@ -52,6 +52,7 @@ _SLOW: dict[str, str] = {
     "check_citation_integrity.py": "needs a Hermes checkout (--src / HERMES_AGENT_SRC)",
     "check_skill_version_bump.py": "needs an origin/master merge base",
     "test_readonly_runtime.py": "runs the hermes CLI, which can trigger a long build",
+    "check_skill_dogfood.py": "runs read-only hermes commands against a live install",
     "tools/test_*.py (rest)": "regression suites — CI's job",
 }
 

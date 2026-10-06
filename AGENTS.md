@@ -31,6 +31,7 @@ Two install paths, both out of tree: the plugin (`hermes plugins install iap/her
 | `tools/check_*.py` | Guard linters — every one is a machine gate with an exit code |
 | `tools/check_doc_style.py` | Tone guard: emoji outside Python string literals, filler phrases in Markdown prose |
 | `tools/check_issue_templates.py` | Reporter-surface guard: issue-template schema, and docs that promise a route the chooser does not offer |
+| `tools/check_skill_dogfood.py` | Read-only live-install smoke test: version, config path, skills, plugins, doctor |
 | `tools/test_*.py` | Regression suites for the plugin and for `tools/` itself |
 | `tools/render_docs.py` | Renders the generated blocks in README.md and AGENTS.md from the repo |
 | `tools/pr_metadata_labels.py` | PR label/priority parser shared by the labelling workflows |
