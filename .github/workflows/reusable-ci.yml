@@ -277,8 +277,7 @@ jobs:
         run: |
           # Offline parser regression first (no clone needed), then the real check.
           python3 tools/check_citation_integrity.py --selftest
-          BASELINE=$(tr -d '\r\n' < .github/upstream-drift.baseline)
-          git clone --depth 1 --branch "$BASELINE" \
+          git clone --depth 1 --branch main \
             https://github.com/NousResearch/hermes-agent.git /tmp/hermes-citation
           python3 tools/check_citation_integrity.py --src /tmp/hermes-citation
 
