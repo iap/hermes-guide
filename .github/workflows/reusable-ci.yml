@@ -279,7 +279,8 @@ jobs:
           python3 tools/check_citation_integrity.py --selftest
           # Use the already-cloned Hermes install (v2026.9.24) as the citation
           # source. No separate clone needed -- the install step already has it.
-          python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent"
+          # Use --rev HEAD since the shallow clone doesn't have commit objects.
+          python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent" --rev HEAD
 
       - name: Skill provenance footer guard
         # Requires a dated upstream-anchored footer per skill.
