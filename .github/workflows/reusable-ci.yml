@@ -277,9 +277,10 @@ jobs:
         run: |
           # Offline parser regression first (no clone needed), then the real check.
           python3 tools/check_citation_integrity.py --selftest
-          git clone --filter=blob:none --no-checkout --single-branch --branch main \
-            https://github.com/NousResearch/hermes-agent.git /tmp/hermes-citation
-          python3 tools/check_citation_integrity.py --src /tmp/hermes-citation
+          # Use the already-cloned Hermes install (v2026.9.24) as the citation
+          # source. No separate clone needed -- the install step already has it.
+          # Use --rev HEAD since the shallow clone doesn't have commit objects.
+          python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent" --rev HEAD
 
       - name: Skill provenance footer guard
         # Requires a dated upstream-anchored footer per skill.
