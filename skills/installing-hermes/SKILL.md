@@ -1,7 +1,7 @@
----
+﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent on Linux/WSL2 (NixOS included) — the four install routes, what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.4
+version: 1.0.5
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -88,7 +88,7 @@ path` before trusting it.
 1. **Node builds run with `CI=1` by design now.** The pre-pm installer's npm
    workspace step — whose postinstall could open `/dev/tty` and hang a
    non-interactive shell — is gone: PM owns node builds and
-   `hermes_cli/source_build.py::source_build_env` sets `CI=1` itself. The old
+   `hermes_cli/npm_engine.py` sets `CI=1` itself. The old
    `timeout 600` / `CI=1 npm install --workspace …` workaround and the
    "npm install failed or timed out" error string no longer exist at `5000e2993` —
    if a build still hangs, capture the log and report upstream.
