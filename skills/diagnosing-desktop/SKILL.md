@@ -1,7 +1,7 @@
----
+﻿---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, 'npm was not found', 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.5
+version: 1.1.6
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -45,7 +45,7 @@ Wrong-backend symptoms almost always trace to order 3 vs 4: a `hermes` shim on P
 
 - **Boot/build log**: `$HERMES_HOME/logs/desktop.log` (written when the subcommand is `desktop`/`gui`/`dashboard`/`serve`); follow with `hermes logs gui -f`. The Electron-side log distinguishes backend-resolution kinds.
 - **Stamp file**: read `$HERMES_HOME/desktop-build-stamp.json` — `contentHash`, `sourceMode`, `builtAt` (all three verified in source; the stamp is read/written by `hermes_cli/main_desktop.py` and `hermes_cli/main_web_build.py`). A missing/stale stamp with a source change means the next plain `hermes desktop` rebuilds.
-- **Toolchain**: Node engines are pinned in `apps/desktop/package.json` — verified at current main: `"node": "^22.22.0 || ^24.11.0 || >=26.0.0"`. It drifts; read the file, don't trust docs. npm resolves through the PM-composed build environment (`hermes_cli/source_build.py:46` → `pm.ensure("npm")`); PM's locked Node/npm run the build.
+- **Toolchain**: Node engines are pinned in `apps/desktop/package.json` — verified at current main: `"node": "^22.22.0 || ^24.11.0 || >=26.0.0"`. It drifts; read the file, don't trust docs. npm resolves through the PM-composed build environment (`hermes_cli/npm_engine.py` → `pm.ensure("npm")`); PM's locked Node/npm run the build.
 - **Port readiness**: the backend must announce a port within the announce timeout — `HERMES_DESKTOP_PORT_ANNOUNCE_TIMEOUT_MS` overrides it; the default is **90 s** with a **45 s floor** (`DEFAULT_PORT_ANNOUNCE_TIMEOUT_MS = 90_000`, `MIN_PORT_ANNOUNCE_TIMEOUT_MS = 45_000` in `apps/desktop/electron/backend-ready.ts`; an override is clamped with `Math.max`, so a malformed value cannot drop below the floor). Windows cold starts legitimately approach the limit because Defender scans fresh `.pyc` files.
 - `hermes status` and `hermes doctor` have no desktop build/launch checks (macOS TCC only).
 
