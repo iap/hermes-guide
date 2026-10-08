@@ -4,11 +4,11 @@
 
 Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
-It **complements â€” never replaces â€”** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. It ships two independent things:
+It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. It ships two independent things:
 
 1. **A plugin.** `/hermes-doctor` in a session, `hermes guide` in a terminal. Read-only health checks across <!-- BEGIN GENERATED: intro-scopes -->
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`
-<!-- END GENERATED: intro-scopes --> â€” every one of those names is a valid scope.
+<!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
 **Twenty troubleshooting skills** — one install guide, one configuration map, and eighteen per-surface `diagnosing-*` playbooks.
 <!-- END GENERATED: intro-inventory -->
@@ -57,7 +57,7 @@ plugins:
         proactive: true
 ```
 
-Drift findings are then logged at session start/end â€” watch `hermes logs --follow`.
+Drift findings are then logged at session start/end — watch `hermes logs --follow`.
 
 ## Install the skills
 
@@ -69,7 +69,7 @@ hermes skills install iap/hermes-guide/skills/diagnosing-mcp
 ```
 
 > [!IMPORTANT]
-> The identifier must include the `skills/` prefix â€” it is the repo-relative path to the skill's `SKILL.md`. The shorter `iap/hermes-guide/<name>` form does not resolve.
+> The identifier must include the `skills/` prefix — it is the repo-relative path to the skill's `SKILL.md`. The shorter `iap/hermes-guide/<name>` form does not resolve.
 
 ### Install all skills at once
 
@@ -85,30 +85,30 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 
 | Skill | Purpose |
 |---|---|
-| `installing-hermes` | Install routes â€” install.sh/Desktop/Nix, what each creates on disk, config bootstrap, update/uninstall, and the gotchas (PM-era runtime layout, NixOS specifics) |
+| `installing-hermes` | Install routes — install.sh/Desktop/Nix, what each creates on disk, config bootstrap, update/uninstall, and the gotchas (PM-era runtime layout, NixOS specifics) |
 | `hermes-configuration-guide` | The map: resolving `$HERMES_HOME`, where each surface is configured, instruction files, orphaned/legacy settings, and routing to the diagnostic skills |
 | `diagnosing-mcp` | MCP servers that won't connect, expose no tools, fail OAuth, or ignore `mcp_servers:` config |
 | `diagnosing-skills` | Skills not discovered, shadowed, hidden by platform/toolset conditions, or stuck "user-modified" |
-| `diagnosing-commands` | Missing or overridden slash commands â€” skills-as-commands, bundles, plugin commands, per-platform permissions |
-| `diagnosing-hooks` | Hooks that don't fire â€” the four hook systems, shell-hook consent, `hermes hooks doctor` |
-| `diagnosing-plugins` | Plugins that don't load â€” the `plugins.enabled` gate, capability consent, discovery locations |
-| `diagnosing-path` | Path issues â€” the dual-venv layout on older checkouts, the PM-era no-in-tree-venv case, detection, canonical resolution order, cross-platform best practices |
+| `diagnosing-commands` | Missing or overridden slash commands — skills-as-commands, bundles, plugin commands, per-platform permissions |
+| `diagnosing-hooks` | Hooks that don't fire — the four hook systems, shell-hook consent, `hermes hooks doctor` |
+| `diagnosing-plugins` | Plugins that don't load — the `plugins.enabled` gate, capability consent, discovery locations |
+| `diagnosing-path` | Path issues — the dual-venv layout on older checkouts, the PM-era no-in-tree-venv case, detection, canonical resolution order, cross-platform best practices |
 | `diagnosing-triage` | Route vague user descriptions to the correct diagnostic skill — a triage layer that maps symptoms to the right `diagnosing-*` playbook |
-| `diagnosing-cli-tui` | CLI/TUI issues on native Windows â€” rendering artifacts, themes, busy indicators, mouse modes, encoding, launch/resume |
-| `diagnosing-auth` | Hub-install auth failures â€” dead/shadowing `GITHUB_TOKEN` in the profile `.env`, `gh-cli` fallback, 401 vs anonymous probes, rate-limit verdicts |
-| `diagnosing-memory` | Memory problems â€” built-in `MEMORY.md`/`USER.md` stores, external providers configured but silently unavailable, missing plugins/keys, char-limit and approval gates |
-| `diagnosing-desktop` | Desktop app build/launch failures â€” npm/Node issues, locked or torn builds, Electron download fallbacks, backend resolution, `desktop.*` config |
-| `diagnosing-providers` | Model provider issues â€” custom endpoints flooding the picker with hundreds of models, `discover_models` misbehaving, persisted catalogs bloating `config.yaml`, provider/auth failures |
-| `diagnosing-bot-mode` | Bot Mode issues â€” bots not appearing, profile conflicts, bot-to-bot messaging, model/memory/skill routing per bot |
-| `diagnosing-voice` | Voice mode issues â€” STT/TTS provider failures, audio device problems, latency, ffmpeg missing, voice transcription |
-| `diagnosing-browser` | Browser automation issues â€” CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating |
-| `diagnosing-cron` | Cron job issues â€” jobs not firing, scheduler dead, wedged fire-claim, timezone issues, delivery failures |
-| `diagnosing-gateway` | Gateway & messaging issues â€” bot not responding, platform allowlist, token validation, gateway connectivity |
-| `diagnosing-host-pressure` | Host resource exhaustion presenting as multiple Hermes faults â€” load-vs-CPU, plugin load-budget discards, resolution order |
+| `diagnosing-cli-tui` | CLI/TUI issues on native Windows — rendering artifacts, themes, busy indicators, mouse modes, encoding, launch/resume |
+| `diagnosing-auth` | Hub-install auth failures — dead/shadowing `GITHUB_TOKEN` in the profile `.env`, `gh-cli` fallback, 401 vs anonymous probes, rate-limit verdicts |
+| `diagnosing-memory` | Memory problems — built-in `MEMORY.md`/`USER.md` stores, external providers configured but silently unavailable, missing plugins/keys, char-limit and approval gates |
+| `diagnosing-desktop` | Desktop app build/launch failures — npm/Node issues, locked or torn builds, Electron download fallbacks, backend resolution, `desktop.*` config |
+| `diagnosing-providers` | Model provider issues — custom endpoints flooding the picker with hundreds of models, `discover_models` misbehaving, persisted catalogs bloating `config.yaml`, provider/auth failures |
+| `diagnosing-bot-mode` | Bot Mode issues — bots not appearing, profile conflicts, bot-to-bot messaging, model/memory/skill routing per bot |
+| `diagnosing-voice` | Voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, voice transcription |
+| `diagnosing-browser` | Browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating |
+| `diagnosing-cron` | Cron job issues — jobs not firing, scheduler dead, wedged fire-claim, timezone issues, delivery failures |
+| `diagnosing-gateway` | Gateway & messaging issues — bot not responding, platform allowlist, token validation, gateway connectivity |
+| `diagnosing-host-pressure` | Host resource exhaustion presenting as multiple Hermes faults — load-vs-CPU, plugin load-budget discards, resolution order |
 
 ## Design principle
 
-**Complement, don't duplicate.** When a built-in already answers the question, use it â€” hermes-guide exists for the gaps: deep per-surface playbooks, deterministic read-only health checks, and the routing map between surfaces. If a check here ever starts duplicating a built-in, the built-in wins and the check gets trimmed.
+**Complement, don't duplicate.** When a built-in already answers the question, use it — hermes-guide exists for the gaps: deep per-surface playbooks, deterministic read-only health checks, and the routing map between surfaces. If a check here ever starts duplicating a built-in, the built-in wins and the check gets trimmed.
 
 Every diagnosis resolves to a concrete action: a `hermes <subcommand>` command or a specific file + field edit, then a `/reload-*` or restart to apply.
 
@@ -118,4 +118,4 @@ Skills track the Hermes Agent source and its shipped documentation (`website/doc
 
 ## License
 
-MIT â€” see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
