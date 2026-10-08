@@ -8,6 +8,9 @@ metadata:
     related_skills: [hermes-configuration-guide, diagnosing-cli-tui, diagnosing-path, diagnosing-host-pressure, diagnosing-commands, diagnosing-mcp, diagnosing-skills, diagnosing-plugins, diagnosing-hooks, diagnosing-auth, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, installing-hermes]
 ---
 
+Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
+  resource exhaustion, multiple surfaces failing at once?
+  └─ YES → diagnosing-host-pressure
 # Diagnosing Triage
 
 Route vague user descriptions to the correct diagnostic skill. This is the **triage layer** — when the user says "something is wrong" without naming a subsystem, use the flowchart and mapping table below to pick the right `diagnosing-*` playbook.
@@ -34,6 +37,11 @@ Start at the top. Follow the first branch that matches the user's description.
 ```
 Is the problem about INSTALLING or UPGRADING Hermes itself?
   └─ YES → installing-hermes
+  └─ NO ↓
+
+Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
+  resource exhaustion, multiple surfaces failing at once?
+  └─ YES → diagnosing-host-pressure
   └─ NO ↓
 
 Is the problem about the DESKTOP APP (Electron) not launching,
@@ -74,10 +82,6 @@ Is the problem about VOICE — STT/TTS failures, audio device, latency, ffmpeg?
   └─ YES → diagnosing-voice
   └─ NO ↓
 
-Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
-  resource exhaustion, multiple surfaces failing at once?
-  └─ YES → diagnosing-host-pressure
-  └─ NO ↓
 
 Is the problem about AUTH — "Could not fetch from any source", GitHub 401,
   rate-limit 403, hub install fails?
