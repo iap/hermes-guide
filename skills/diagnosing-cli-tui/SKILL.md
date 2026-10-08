@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.6
+version: 1.1.7
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -147,6 +147,27 @@ hermes skills list                   # this skill should appear (hub or local, e
 Deep-dive reference: the original investigation with screenshot forensics,
 redundancy analysis, and full source evidence lives at
 `references/hermes-cli-tui-windows-investigation.md` in this skill's directory.
+
+## Report
+
+This skill diagnoses CLI/TUI issues on native Windows — rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your TUI shows unreadable tofu faces for the busy indicator because conhost has no font fallback for the default kaomoji style. Switching to ASCII indicator style fixes the readability.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| MEDIUM | Default kaomoji busy indicator renders as tofu on conhost | Screenshot shows `□□□` instead of animated faces; conhost has no font fallback |
+| LOW | Washed-out colors on Windows Terminal | `COLORTERM` is unset; chalk falls back to 256-color (issue #53301) |
+
+### Recommended Fix
+Run `/indicator ascii` in the TUI for an immediate fix, then persist by adding `display.tui_status_indicator: ascii` to `config.yaml`. For the color issue, set `COLORTERM=truecolor` in your environment.
+
+### References
+- `$HERMES_HOME/config.yaml` — the `display:` block
+- `hermes_cli/skin_engine.py` — skin loading logic
+- `hermes_cli/stdio.py` — `configure_windows_stdio()` UTF-8 handling
 
 ---
 

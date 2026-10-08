@@ -1,7 +1,7 @@
 ---
 name: diagnosing-bot-mode
 description: Diagnose Hermes Bot Mode issues — bots not appearing, profile conflicts, bot-to-bot messaging failures, model/memory/skill routing per bot, and gateway connectivity.
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, bot-mode, troubleshooting]
@@ -62,5 +62,26 @@ ui_meta:
 - `diagnosing-gateway` — for gateway connectivity and platform allowlist issues
 - `diagnosing-cron` — for routine/cron job scheduling problems
 - `diagnosing-memory` — for memory provider configuration
+
+## Report
+
+This skill diagnoses Bot Mode issues — bots not appearing, profile conflicts, bot-to-bot messaging failures, model/memory/skill routing per bot, and gateway connectivity. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your bot is not appearing in the Desktop Bots tab because `ui_meta.hermes-bots` is missing from the bot's profile config.yaml. Without this marker, the Desktop UI does not recognize the profile as a bot.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | `ui_meta.hermes-bots` marker missing from profile config.yaml | `hermes profile list` shows the profile but Desktop Bots tab is empty |
+| MEDIUM | Gateway not running | `hermes gateway status` shows `stopped` |
+
+### Recommended Fix
+Add `ui_meta.hermes-bots: {}` to `~/.hermes/profiles/<bot-name>/config.yaml`, then run `hermes gateway restart` and verify with `hermes profile list`.
+
+### References
+- `~/.hermes/profiles/<bot-name>/config.yaml` — the profile config missing the bot marker
+- `hermes_cli/bot_mode.py` — bot profile discovery logic
+- `hermes_cli/profiles.py` — profile listing
 
 *Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/bot_mode.py`, `hermes_cli/profiles.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/bot-mode). Re-verify before reuse.*

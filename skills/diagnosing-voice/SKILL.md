@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.4
+version: 1.0.5
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -77,5 +77,27 @@ tts:
 - `hermes-configuration-guide` — for $HERMES_HOME resolution and config.yaml structure
 - `diagnosing-cli-tui` — for Windows CLI/TUI rendering and encoding issues
 - `diagnosing-auth` — for provider API key and token issues
+
+## Report
+
+This skill diagnoses voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your voice messages on Telegram are showing as files instead of playable voice bubbles because ffmpeg is not installed. ffmpeg is required for audio format conversion and is a PM-managed runtime tool on PM-era installs.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | ffmpeg not installed | `hermes pm status` shows `ffmpeg: not installed`; Telegram voice messages appear as document files |
+| MEDIUM | TTS provider not configured | `/voice status` shows `tts.provider: (not set)`; agent responds in text only |
+
+### Recommended Fix
+Run `hermes pm install ffmpeg` (PM-era install) or `apt install ffmpeg` / `brew install ffmpeg` (older checkout), then restart the gateway with `hermes gateway restart`. For TTS, set `tts.provider: edge` in `config.yaml` for a no-key baseline.
+
+### References
+- `$HERMES_HOME/config.yaml` — `voice:`, `stt:`, `tts:` blocks
+- `hermes_cli/voice.py` — voice CLI commands
+- `hermes_cli/tts.py` — TTS provider logic
+- `hermes_cli/stt.py` — STT provider logic
 
 *Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/voice.py`, `hermes_cli/tts.py`, `hermes_cli/stt.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/voice-mode). Re-verify before reuse.*

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-skills
 description: Diagnose Hermes skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits.
-version: 1.1.4
+version: 1.1.5
 metadata:
   hermes:
     tags: [hermes, skills, troubleshooting]
@@ -76,6 +76,27 @@ When the same skill exists in several roots (local copy vs external dir vs plugi
 3. Present, correct, but the model ignores it? → description quality (2 §2): make the first ~60 characters state when to use it.
 4. Agent-side write issues? → gate (7).
 5. Apply the fix and verify with `skill_view(name)` or by invoking `/<name>`.
+
+## Report
+
+This skill diagnoses skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your skill edits have no effect because a same-named local skill in `$HERMES_HOME/skills/` is shadowing the external dir copy you are editing. The local copy wins on name collision, so your changes to the external copy are silently ignored.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Local skill shadows external dir copy | `hermes skills list --source all` shows the skill exists in both `local` and `external` sources; `skill_view(name)` returns the local copy's content, not your edits |
+| MEDIUM | Edits to external copy are unreliable | External dirs are documented as read-only (`agent/prompt_builder.py`: "External dirs are read-only and lose name collisions to local skills") |
+
+### Recommended Fix
+Edit the local copy at `$HERMES_HOME/skills/<category>/<name>/SKILL.md` directly, or remove the local shadow with `hermes skills reset <name>` if the external copy should be the source of truth. Then run `/reload-skills` and verify with `skill_view(name)`.
+
+### References
+- `$HERMES_HOME/skills/<category>/<name>/SKILL.md` — the local shadow
+- `agent/prompt_builder.py` — external-dir ownership and collision rules
+- `agent/skill_utils.py` — `_CONDITION_KEYS`, `ESSENTIAL_SKILLS`
 
 ---
 

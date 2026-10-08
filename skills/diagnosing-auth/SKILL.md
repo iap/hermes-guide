@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source', see #98725) — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.5
+version: 1.2.6
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -71,6 +71,27 @@ Second load-bearing fact: **`GitHubAuth().is_authenticated()` checks presence, n
 When probing the `.env` token, use Hermes's own loader — `agent.secret_scope.get_secret("GITHUB_TOKEN")` under the Hermes venv — and send the result to the §2 API probe. Ad-hoc text scans of `.env` can false-clear a token (a wrong grep pattern reads "token present" as "token absent" and sends you chasing the wrong layer).
 
 **Automate it:** the §1–§2 probes are cron-able — a monthly health check that reports the method and the env-token probe status catches a dying token before installs break.
+
+## Report
+
+This skill diagnoses hub-install authentication failures — dead or shadowing GITHUB_TOKEN, gh-cli fallback issues, 401-vs-anonymous probes, and rate-limit verdicts. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your `hermes skills install` fails with "No skill named 'foo' found in any source" because a dead GITHUB_TOKEN in your `.env` file is shadowing your working `gh` CLI token. The dead token's 401 error is silently swallowed, causing every GitHub-backed source to report "not found."
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Dead GITHUB_TOKEN in `.env` shadows working gh-cli token | `GitHubAuth().auth_method()` returns `pat`; API probe with the `.env` token returns 401 |
+| MEDIUM | All GitHub-backed sources degraded to "not found" | Install output: `No skill named 'foo' found in any source.` |
+
+### Recommended Fix
+Comment out or delete the `GITHUB_TOKEN` line in `$HERMES_HOME/.env`, then re-run `hermes skills install <name>`. The gh-cli fallback (priority 2) will take over immediately.
+
+### References
+- `$HERMES_HOME/.env` — the dead `GITHUB_TOKEN` line
+- `tools/skills_hub_github.py` — `_resolve_token` priority order (pat → gh-cli → github-app → anonymous)
+- `hermes_cli/skills_hub.py:219` — the "found in any source" error string
 
 ---
 

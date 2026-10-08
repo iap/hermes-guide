@@ -1,7 +1,7 @@
 ---
 name: diagnosing-browser
 description: Diagnose Hermes browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating, and browser tool errors.
-version: 1.0.3
+version: 1.0.4
 metadata:
   hermes:
     tags: [hermes, browser, cdp, playwright, troubleshooting]
@@ -63,5 +63,26 @@ browser:
 - `hermes-configuration-guide` — for $HERMES_HOME resolution and config.yaml structure
 - `diagnosing-plugins` — for plugin loading and capability issues
 - `diagnosing-cli-tui` — for Windows-specific browser issues
+
+## Report
+
+This skill diagnoses browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating, and browser tool errors. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your browser automation tools fail despite a successful CDP connection because Chrome 144+ broke the built-in Remote debugging protocol. The CDP endpoint accepts the connection but tool calls return errors.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Chrome 144+ CDP tools fail despite successful connect | `google-chrome --version` returns `144.x.x`; `/browser status` shows connected but `browser_snapshot` returns error |
+| MEDIUM | agent-browser gating blocks CDP | Log: `check_fn requires agent-browser even when CDP endpoint is configured` (issue #15952) |
+
+### Recommended Fix
+Downgrade Chrome to a version below 144, or install agent-browser with `hermes pm install agent-browser` (PM-era) or `pip install agent-browser` (older checkout). Then run `/browser connect` and verify with `/browser status`.
+
+### References
+- `~/.hermes/config.yaml` — the `browser:` block with backend and endpoint
+- `hermes_cli/browser_connect.py` — CDP endpoint normalization
+- `hermes_cli/browser_supervisor.py` — browser supervision logic
 
 *Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/browser_connect.py`, `hermes_cli/browser_supervisor.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/browser). Re-verify before reuse.*

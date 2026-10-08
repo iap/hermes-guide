@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent on Linux/WSL2 (NixOS included) — the four install routes, what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.5
+version: 1.0.6
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -133,6 +133,28 @@ from fighting:
   them with the home.
 - **Rollback:** back up `$HERMES_HOME` before upgrades; the code directory is
   disposable, the data directory is not.
+
+## Report
+
+This skill diagnoses installation and upgrade failures — broken installs, wrong venv layout, missing prerequisites, and config bootstrap issues. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your Hermes install is broken because the PM dependency environment is missing. The `hermes` shim exists but fails to launch because the PM-managed Python runtime is not installed. This happens when the install was interrupted or the PM store was corrupted.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | PM dependency environment missing | `hermes --version` fails with `RuntimeError: no committed environment`; `$HERMES_HOME/installs/` is empty |
+| MEDIUM | In-tree venv may be stale or missing | `ls -d venv .venv` shows neither directory exists on a PM-era install |
+
+### Recommended Fix
+Re-run the installer to rebuild the PM dependency environment: `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` (or the two-step reviewable version above). The installer reuses the existing checkout and re-syncs PM's runtime. Verify with `hermes --version` and `hermes doctor`.
+
+### References
+- `$HERMES_HOME/tools/` — PM's tool store
+- `$HERMES_HOME/installs/` — PM's dependency environments
+- `scripts/install.sh` — the standard installer
+- `hermes_cli/npm_engine.py` — PM npm resolution
 
 ---
 

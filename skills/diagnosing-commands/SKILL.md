@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.3
+version: 1.1.4
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -41,6 +41,27 @@ Multiple leading `/skill` tokens stack in one message — the cap is **`_MAX_STA
 2. Which source should provide it? skill → **`diagnosing-skills`** (pitfall 1/2); bundle → `hermes bundles show <name>` (3); plugin → **`diagnosing-plugins`** (4); expected built-in → check `/help` and your Hermes version (`hermes --version`; built-ins gain commands over releases).
 3. Surface-specific failure (CLI works, gateway doesn't) → pitfall 5.
 4. Apply the fix, `/reload-skills` or restart as appropriate, confirm via autocomplete or invocation.
+
+## Report
+
+This skill diagnoses missing or overridden slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your `/my-skill` command works in the CLI but not on Telegram because the platform's command gating is configured to restrict non-admin users. The command exists but is not in the Telegram allowlist for your user ID.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Command not in Telegram allowlist for non-admin users | Command works in CLI; Telegram returns "command not found"; `gateway.platforms.telegram.extra.user_allowed_commands` does not include `/my-skill` |
+| MEDIUM | `allow_admin_from` is set, enabling gating | Config has `allow_admin_from: [12345]` but your user ID is not listed |
+
+### Recommended Fix
+Add `/my-skill` to `user_allowed_commands` in the Telegram platform's `extra:` block in `config.yaml`, then run `hermes gateway restart`. Alternatively, add your user ID to `allow_admin_from` to get all commands.
+
+### References
+- `$HERMES_HOME/config.yaml` — `gateway.platforms.telegram.extra:` block
+- `gateway/config_loader.py` — the four gating keys (`allow_admin_from`, `group_allow_admin_from`, `user_allowed_commands`, `group_user_allowed_commands`)
+- `hermes_cli/commands.py` — command registry and dispatch
 
 ---
 
