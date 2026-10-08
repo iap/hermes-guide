@@ -18,6 +18,7 @@ body:
         - diagnosing-auth
         - diagnosing-memory
         - diagnosing-cli-tui
+        - diagnosing-triage
         - diagnosing-desktop
         - diagnosing-providers
         - diagnosing-bot-mode
