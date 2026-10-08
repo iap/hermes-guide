@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: Host resource exhaustion masquerading as Hermes faults.
-version: 1.2.4
+version: 1.3.0
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -11,12 +11,12 @@ metadata:
 # Diagnosing Host Pressure
 
 Several Hermes surfaces failing at once, oddly, or intermittently usually means
-the **host** is starved — not that Hermes is misconfigured. On a machine under
+the **host** is starved â€” not that Hermes is misconfigured. On a machine under
 resource pressure the load average is dominated by threads blocked in
 uninterruptible I/O wait, plugin imports miss their fixed budget, and adapters
 get discarded. The visible result looks like a cluster of unrelated Hermes bugs.
 
-> **Disambiguation**: if only one surface is failing (e.g. a single MCP server, a single provider, a single skill), see the specific diagnosing skill for that surface — host pressure is for **multiple** surfaces failing at once.
+> **Disambiguation**: if only one surface is failing (e.g. a single MCP server, a single provider, a single skill), see the specific diagnosing skill for that surface â€” host pressure is for **multiple** surfaces failing at once.
 
 > [!IMPORTANT]
 > Rule out the boring cause first. Before blaming the host, confirm the thing
@@ -27,7 +27,7 @@ get discarded. The visible result looks like a cluster of unrelated Hermes bugs.
 
 > [!NOTE]
 > Verified on macOS (darwin). The probe's Linux branch reads `/proc` and was
-> written for portability but **has not been executed** — treat its Linux
+> written for portability but **has not been executed** â€” treat its Linux
 > output as unverified. Native Windows is owned by the Windows-side session;
 > it uses different pressure signals entirely.
 
@@ -56,7 +56,7 @@ the wrong target. Compare the two figures before acting:
 > [!IMPORTANT]
 > **In a container, load and core count are different scopes.** `/proc/loadavg`
 > reports the **host** (unless lxcfs is mounted over it) while the core count is
-> the **container's** — a cgroup v2 quota, or `nproc` when there is none. Dividing
+> the **container's** â€” a cgroup v2 quota, or `nproc` when there is none. Dividing
 > one by the other compares two different machines: a 2-CPU container on a 32-core
 > host reads host load 20 against a threshold of 8 and looks saturated while the
 > host is at 6%. The probe detects a container and declines to apply the per-core
@@ -89,7 +89,7 @@ has no dependencies on the repository layout. It reads `$HERMES_HOME` (default `
 ## 3. How pressure becomes "Hermes is broken"
 
 Plugins import under a fixed per-plugin budget. A stalled disk makes imports
-miss it, and the failure is specific — read both lines of the pair:
+miss it, and the failure is specific â€” read both lines of the pair:
 
 ```
 WARNING hermes_cli.plugins: Failed to load plugin 'telegram-platform': load timed out after 10s
@@ -98,11 +98,11 @@ WARNING hermes_cli.plugins: Plugin 'telegram-platform' called register_platform(
 
 The second line means the adapter *did* load, just too late, and was discarded
 on purpose. When the budget is the cause, no credential, allowlist, or
-`hermes gateway setup` step will change the outcome — the fix is host-side.
+`hermes gateway setup` step will change the outcome â€” the fix is host-side.
 
 The sequence is self-reinforcing:
 
-1. Storage stalls → imports exceed budget → adapters discarded.
+1. Storage stalls â†’ imports exceed budget â†’ adapters discarded.
 2. The startup watchdog extends past its deadline
    (`Gateway startup exceeded 300s but is consuming CPU ... extending`).
 3. It then honours long leases (`phase 'state_db_auto_sweep' holds a progress
@@ -111,7 +111,7 @@ The sequence is self-reinforcing:
    an `exit_reason`, and only trivial platforms listed.
 5. Restarting repeats steps 1-4. **The restart loop is a symptom, not a fix.**
 
-Count offenders before theorising — repeated identical lines are one problem:
+Count offenders before theorising â€” repeated identical lines are one problem:
 
 ```bash
 grep -hoE "Failed to load plugin '[^']+'" ~/.hermes/logs/errors.log | sort | uniq -c | sort -rn
@@ -122,7 +122,7 @@ grep -hoE "Failed to load plugin '[^']+'" ~/.hermes/logs/errors.log | sort | uni
 > this morning is still in the file on a healthy box. Log text is *evidence*,
 > never a *verdict*: escalate on it only when current host state independently
 > agrees. Assert against the **live platform list** in `gateway_state.json`,
-> never against the `gateway_state` string alone — a restart can flip that
+> never against the `gateway_state` string alone â€” a restart can flip that
 > string to `running` while the platforms stay absent.
 
 ## 4. The dual-interpreter split
@@ -140,7 +140,7 @@ than the one serving traffic. Reproduce inside the gateway's own interpreter
 before blaming a dependency. See `diagnosing-path` for dual-venv detection.
 
 A native extension that imports fine standalone yet fails in the gateway points
-at a load-path or ABI difference rather than a broken package — compare the
+at a load-path or ABI difference rather than a broken package â€” compare the
 interpreters, and check the extension's undefined symbols (`nm -u <ext>.so`)
 against the interpreter that failed to load it.
 
@@ -151,23 +151,23 @@ against the interpreter that failed to load it.
    Otherwise you are about to "fix" something that was never present.
 3. Ask what is intentionally running before stopping anything. Another agent, a
    browser, a VM, or a dev workload may be load-bearing for the user's actual
-   task — name the trade-off and let the user choose; do not unilaterally
+   task â€” name the trade-off and let the user choose; do not unilaterally
    terminate a workload someone depends on.
 4. Reclaim only what is unambiguously stale: abandoned pre-update snapshots,
    orphaned `.partial` snapshot directories, superseded database backups. Rank
    candidates with `du -sh ~/.hermes/* | sort -rh | head`. Note that freeing
-   *disk* does not relieve *memory* pressure — do not present a cleanup as a
+   *disk* does not relieve *memory* pressure â€” do not present a cleanup as a
    fix for swapping.
 5. `hermes gateway restart`, then re-run the probe and confirm plugins load
    inside budget.
-6. Escalate to Hermes bugs only for what survives step 5 — at that point route
+6. Escalate to Hermes bugs only for what survives step 5 â€” at that point route
    to `diagnosing-plugins` or `diagnosing-gateway`.
 
 ## 6. Report shape
 
 State the host measurements that establish the cause; the subsystems down as a
 consequence, with the exact log line proving each; what you could **not**
-verify and why (a probe that hung, a command you killed — never paper over it);
+verify and why (a probe that hung, a command you killed â€” never paper over it);
 and one recommended next action with its reasoning. Do not present a load
 average as "the CPU is maxed out" when idle CPU says otherwise.
 
@@ -189,9 +189,9 @@ average as "the CPU is maxed out" when idle CPU says otherwise.
 
 ## Reference
 
-`references/cascade-transcript.md` — an annotated real session (host numbers,
+`references/cascade-transcript.md` â€” an annotated real session (host numbers,
 adapter-discard lines, watchdog overrides, the near-miss where absent
 platforms turned out never to have been configured) mapped against each rule
 above.
 
-*Facts re-verified 2026-09-29 against the upstream Hermes install this environment runs (local checkout at commit `962d453d`, macOS 12.7.6 darwin x86_64, 4 cores): host-pressure measurements, the plugin load-budget and late-register discard log lines, and the `gateway_state.json` fields, all read from that live install; the `scripts/host_pressure_probe.sh` exit contract was exercised against live host state. No file/symbol citations are made, so there is nothing to resolve against the upstream-drift baseline. The `/proc` branch runs on the Linux CI legs; its interval-idle delta, cgroup core-count/quota logic, and container guards are covered directly by `tools/test_host_pressure_probe.py`. Not verified on native Windows — the probe does not run there and that platform's pressure signals are owned by its own session. Re-verify before reuse.*
+*Facts re-verified 2026-09-29 against the upstream Hermes install this environment runs (local checkout at commit `962d453d`, macOS 12.7.6 darwin x86_64, 4 cores): host-pressure measurements, the plugin load-budget and late-register discard log lines, and the `gateway_state.json` fields, all read from that live install; the `scripts/host_pressure_probe.sh` exit contract was exercised against live host state. No file/symbol citations are made, so there is nothing to resolve against the upstream-drift baseline. The `/proc` branch runs on the Linux CI legs; its interval-idle delta, cgroup core-count/quota logic, and container guards are covered directly by `tools/test_host_pressure_probe.py`. Not verified on native Windows â€” the probe does not run there and that platform's pressure signals are owned by its own session. Re-verify before reuse.*

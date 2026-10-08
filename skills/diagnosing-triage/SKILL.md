@@ -1,4 +1,4 @@
-﻿---
+---
 name: diagnosing-triage
 description: "Route vague user descriptions to the correct diagnostic skill â€” a triage layer that maps symptoms to the right diagnosing-* playbook."
 version: 1.0.0
@@ -261,5 +261,16 @@ Some problems span multiple layers. In these case, load the higher-priority skil
 If the user is asking "where is X configured?" rather than "X is broken", load `hermes-configuration-guide` instead of a diagnostic skill. The configuration guide maps each extension surface to its config location and points to the right diagnostic skill if something is wrong.
 
 ---
+
+## 5. Report format
+
+When the triage skill routes to a diagnostic skill, the model reports findings using the standard format defined in `hermes-configuration-guide`. The triage skill itself reports only the routing decision:
+
+**Triage report example**:
+
+- **Summary**: "Your description matches a host resource pressure problem. Load average is high with idle CPU, indicating I/O bottleneck."
+- **Routed to**: `diagnosing-host-pressure`
+- **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
+- **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
 *Facts re-verified 2026-10-08 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` (the repo HEAD at the time of authoring); the triage mappings are derived from the skill descriptions in this repo's `skills/` directory. Re-verify before reuse.*
