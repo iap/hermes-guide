@@ -1,4 +1,4 @@
----
+﻿---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
 version: 1.3.4
