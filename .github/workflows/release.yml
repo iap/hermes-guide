@@ -69,8 +69,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
-          git commit -m "chore: update CHANGELOG.md for $GITHUB_REF_NAME" || echo "no changelog changes"
-          git push origin HEAD:master
+          # Check if there are staged changes before committing
+          if git diff --cached --quiet; then
+            echo "no changelog changes"
+          else
+            git commit -m "chore: update CHANGELOG.md for $GITHUB_REF_NAME"
+            # Push to a branch, not master (ruleset requires checks on master)
+            git push origin HEAD:refs/heads/changelog-update-$GITHUB_REF_NAME
+          fi
 
       - name: Create GitHub release
         env:

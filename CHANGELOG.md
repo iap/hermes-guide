@@ -1,13 +1,14 @@
 # Changelog
 
 All notable changes to hermes-guide are documented here.
+
 ## v0.6.0 (2026-10-07)
 
-### 🎉 Feat
+### Features
 
 - **skills**: add diagnosing-host-pressure
 
-### 🐛 Fix
+### Bug Fixes
 
 - **skills**: update 4 broken upstream citations ([#165](https://github.com/iap/hermes-guide/pull/165))
 - **ci**: use already-cloned Hermes install for citation check ([#164](https://github.com/iap/hermes-guide/pull/164))
@@ -43,11 +44,11 @@ All notable changes to hermes-guide are documented here.
 - **skills**: correct idle regex, core count, Linux load path, D-threshold, stale-log DOWN claim; add behavioral regression test
 - **skills,tests**: correct citation token; fix probe idle parser, linux path, core count, D-threshold, stale-log DOWN claim, README list; add behavioral regression test; wire into CI
 
-### ⚡ Perf
+### Performance
 
 - **checks**: derive $HERMES_HOME from hermes_constants, skip config path subprocess ([#153](https://github.com/iap/hermes-guide/pull/153))
 
-### 📝 Docs
+### Documentation
 
 - **skills**: add creation flows and duplicate-consolidation playbook ([#158](https://github.com/iap/hermes-guide/pull/158))
 - **skills**: add disambiguation boundaries across the diagnosing suite ([#157](https://github.com/iap/hermes-guide/pull/157))
@@ -56,7 +57,7 @@ All notable changes to hermes-guide are documented here.
 - keep PR environment lines OS-name-only
 - **skills**: fix the documented probe path; restore the plugins version
 
-### 🛠️ Ci
+### CI
 
 - **tools**: add read-only dogfood check against a live Hermes install ([#156](https://github.com/iap/hermes-guide/pull/156))
 - schedule Dependabot updates for the SHA-pinned actions ([#150](https://github.com/iap/hermes-guide/pull/150))
@@ -64,7 +65,7 @@ All notable changes to hermes-guide are documented here.
 - label OS and priority from the PR description ([#130](https://github.com/iap/hermes-guide/pull/130))
 - split CI into a reusable workflow and machine-check PR validation claims ([#128](https://github.com/iap/hermes-guide/pull/128))
 
-### 🧹 Chore
+### Chores
 
 - build(deps): bump actions/github-script (#151)
 - **release**: bump to 0.6.0; guard _plugin_skill_names against an unhashable name ([#135](https://github.com/iap/hermes-guide/pull/135))
@@ -75,24 +76,24 @@ All notable changes to hermes-guide are documented here.
 - Merge pull request #114 from iap/feat/skills-host-pressure
 - **repo**: add hermetic gate runner and pre-commit hook
 
-### 🔄 Refactor
+### Refactoring
 
 - **docs**: give each guide one job, and generate their counts ([#141](https://github.com/iap/hermes-guide/pull/141))
 
-### ✅ Test
+### Tests
 
 - **tools**: keep the flag tests independent of the shell environment
 - **skills**: pin the container CPU decisions with controlled inputs
 
 ## v0.5.1 (2026-09-23)
 
-### 🐛 Fix
+### Bug Fixes
 
 - **checks**: measure memory limits the way the runtime does
 - **ci**: bound the routing-coverage check to the Routing section
 - **skills**: route the map to the five v0.5.0 skills; guard routing coverage
 
-### 🧹 Chore
+### Chores
 
 - Merge pull request #113 from iap/chore/release-0.5.1
 - **release**: v0.5.1
@@ -101,11 +102,11 @@ All notable changes to hermes-guide are documented here.
 
 ## v0.5.0 (2026-09-23)
 
-### 🎉 Feat
+### Features
 
 - **skills**: add diagnosing skills for bot-mode, browser, cron, gateway, voice
 
-### 🐛 Fix
+### Bug Fixes
 
 - **skills**: describe providers probe in prose, not executable code
 - **skills**: replace curl|python probe in diagnosing-providers
@@ -114,11 +115,11 @@ All notable changes to hermes-guide are documented here.
 - **skills**: address Greptile review findings for bot-mode, voice, browser, gateway
 - **version**: align SECURITY.md and __version__ with plugin.yaml ([#102](https://github.com/iap/hermes-guide/pull/102))
 
-### 📝 Docs
+### Documentation
 
 - **agents**: align AGENTS.md with CI, layers, and publish surface ([#101](https://github.com/iap/hermes-guide/pull/101))
 
-### 🧹 Chore
+### Chores
 
 - Merge pull request #109 from iap/chore/release-bump-0.5.0
 - Merge pull request #110 from iap/drift/baseline-bump-v2026.9.21
@@ -128,13 +129,13 @@ All notable changes to hermes-guide are documented here.
 
 ## v0.4.0 (2026-09-16)
 
-### 🎉 Feat
+### Features
 
 - **ci**: tag-gated releases; audit doc fixes; mypy floor 3.11 ([#72](https://github.com/iap/hermes-guide/pull/72))
 - **skills**: add diagnosing-providers skill for custom model endpoints ([#69](https://github.com/iap/hermes-guide/pull/69))
 - **checks**: guide-skill adoption nudge; one-command install-all in README ([#65](https://github.com/iap/hermes-guide/pull/65))
 
-### 🐛 Fix
+### Bug Fixes
 
 - **ci**: reject malformed and empty provenance scans
 - **skills**: diagnosing-auth names the current not-found strings
@@ -147,7 +148,7 @@ All notable changes to hermes-guide are documented here.
 - harden upstream-drift history review and dedup ([#68](https://github.com/iap/hermes-guide/pull/68))
 - **doctor**: preserve subprocess exception detail in the unknown envelope
 
-### 📝 Docs
+### Documentation
 
 - **diagnosing-providers**: document key_cmd precedence and the api_key_env alias ([#92](https://github.com/iap/hermes-guide/pull/92))
 - corrective pass 2 for the review findings left on merged PRs #80-#84 ([#91](https://github.com/iap/hermes-guide/pull/91))
@@ -167,7 +168,7 @@ All notable changes to hermes-guide are documented here.
 - **installing-hermes**: two-step installer — avoids the curl|bash critical, adds review-before-run ([#63](https://github.com/iap/hermes-guide/pull/63))
 - **skills**: add installing-hermes — install routes, layouts, NixOS WSL gotchas ([#60](https://github.com/iap/hermes-guide/pull/60))
 
-### 🛠️ Ci
+### CI
 
 - **provenance**: require a dated upstream footer per skill
 - also trigger on `edited` so a retarget runs checks
@@ -175,7 +176,7 @@ All notable changes to hermes-guide are documented here.
 - verify skill citations against the upstream baseline on every push ([#95](https://github.com/iap/hermes-guide/pull/95))
 - test python 3.11 + 3.12 matrix (floor tracks upstream) ([#71](https://github.com/iap/hermes-guide/pull/71))
 
-### 🧹 Chore
+### Chores
 
 - Merge pull request #100 from iap/chore/release-bump-0.4.0
 - **release**: bump plugin.yaml to 0.4.0
@@ -192,14 +193,14 @@ All notable changes to hermes-guide are documented here.
 - drift: bump upstream baseline to 8aa219ef; CI pin to v2026.9.7 (#64)
 - drift: bump upstream baseline to 22c5684b (schema v41, delegation.compression_threshold_tokens, anthropic_wire auto, plugins memory-hook fallback registrations) (#61)
 
-### ✅ Test
+### Tests
 
 - **ci**: run the check-envelope regression in CI
 - lock the guide CLI exit contract (exit 1 iff broken/unknown) ([#67](https://github.com/iap/hermes-guide/pull/67))
 
 ## v0.3.1 (2026-09-07)
 
-### 🐛 Fix
+### Bug Fixes
 
 - **test**: isolate the fixture from global git config ([#54](https://github.com/iap/hermes-guide/pull/54))
 - **ci**: authenticate the tap smoke test (GH_TOKEN) ([#52](https://github.com/iap/hermes-guide/pull/52))
@@ -207,16 +208,16 @@ All notable changes to hermes-guide are documented here.
 - **skills**: scanner false-positive rewords + auth inspect/tap symptom
 - **skills**: clear scanner verdicts blocking tap installs of memory/desktop ([#48](https://github.com/iap/hermes-guide/pull/48))
 
-### 📝 Docs
+### Documentation
 
 - **agents**: record the multi-environment ownership split ([#57](https://github.com/iap/hermes-guide/pull/57))
 
-### 🛠️ Ci
+### CI
 
 - enforce the version-bump guard; skill fact fixes verified against the installed CLI ([#53](https://github.com/iap/hermes-guide/pull/53))
 - derive the tap smoke test's skill list from the checkout ([#50](https://github.com/iap/hermes-guide/pull/50))
 
-### 🧹 Chore
+### Chores
 
 - bump plugin to 0.3.1 ([#58](https://github.com/iap/hermes-guide/pull/58))
 - re-baseline upstream drift to 5106e939
@@ -225,7 +226,7 @@ All notable changes to hermes-guide are documented here.
 
 ## v0.3.0 (2026-09-06)
 
-### 🎉 Feat
+### Features
 
 - **skills**: add diagnosing-desktop skill
 - **memory**: read-only memory hygiene check (memories scope)
@@ -236,7 +237,7 @@ All notable changes to hermes-guide are documented here.
 - add upstream schema drift-detection CI ([#11](https://github.com/iap/hermes-guide/pull/11))
 - distinguish bundled skills, skip archive dirs, show versions in collisions ([#7](https://github.com/iap/hermes-guide/pull/7))
 
-### 🐛 Fix
+### Bug Fixes
 
 - **ci**: run the count guard in CI; exact scope-list comparison
 - **drift**: keep workflow WATCH_FILES in sync with checker default
@@ -248,7 +249,7 @@ All notable changes to hermes-guide are documented here.
 - watch official hermes-agent skill content in drift check ([#13](https://github.com/iap/hermes-guide/pull/13))
 - harden bundle slug, skip model-providers, drop observability ([#9](https://github.com/iap/hermes-guide/pull/9))
 
-### 📝 Docs
+### Documentation
 
 - **desktop**: scope the torn-bundle heuristic honestly
 - **config**: orphaned-settings reference + config-schema drift watch
@@ -265,14 +266,14 @@ All notable changes to hermes-guide are documented here.
 - fix CLI subcommand name in plugin docstring (hermes guide) ([#21](https://github.com/iap/hermes-guide/pull/21))
 - fix skills install identifier and plugin registration claim ([#14](https://github.com/iap/hermes-guide/pull/14))
 
-### 🛠️ Ci
+### CI
 
 - promote the windows leg to required ([#47](https://github.com/iap/hermes-guide/pull/47))
 - **drift**: cover the memory facts (delimiter, char limits) ([#43](https://github.com/iap/hermes-guide/pull/43))
 - coverage — tap-discovery smoke test + windows matrix (experimental) ([#39](https://github.com/iap/hermes-guide/pull/39))
 - issue/PR templates, PR auto-labeler, label drift issues at creation ([#33](https://github.com/iap/hermes-guide/pull/33))
 
-### 🧹 Chore
+### Chores
 
 - Merge pull request #46 from iap/feat/diagnosing-desktop
 - Merge pull request #45 from iap/test/skill-count-guard
@@ -301,10 +302,10 @@ All notable changes to hermes-guide are documented here.
 - Add hermes-guide plugin and skills tap
 - Initial commit
 
-### 🔄 Refactor
+### Refactoring
 
 - drop plugin-bundled skills, use skills tap install ([#10](https://github.com/iap/hermes-guide/pull/10))
 
-### ✅ Test
+### Tests
 
 - **skills**: enforce skill/check counts across README and AGENTS.md

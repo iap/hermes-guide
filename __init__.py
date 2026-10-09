@@ -87,12 +87,19 @@ def _version_check():
 
     Read-only: reads git tags from the installed clone, never writes.
     Fails silently when the plugin is not a git clone (e.g. copied).
+    Fails silently when git is unavailable.
     """
     try:
+        import re
         import subprocess
         from pathlib import Path
 
         plugin_dir = Path(__file__).resolve().parent
+        # Fetch latest tags from remote to see newer releases
+        subprocess.run(
+            ["git", "fetch", "--tags", "--quiet"],
+            capture_output=True, timeout=10, cwd=plugin_dir,
+        )
         proc = subprocess.run(
             ["git", "describe", "--tags", "--abbrev=0"],
             capture_output=True, text=True, timeout=5, cwd=plugin_dir,
@@ -100,7 +107,14 @@ def _version_check():
         if proc.returncode != 0:
             return
         latest = proc.stdout.strip().lstrip("v")
-        if latest and latest != __version__:
+        if not latest:
+            return
+        # Parse and compare versions properly
+        def parse_ver(v: str) -> tuple[int, ...]:
+            m = re.match(r"^(\d+)\.(\d+)\.(\d+)", v)
+            return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (0, 0, 0)
+
+        if parse_ver(latest) > parse_ver(__version__):
             logger.warning(
                 "hermes-guide: new version available (%s → %s). "
                 "Run: hermes plugins update hermes-guide",
