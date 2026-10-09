@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route vague user descriptions to the correct diagnostic skill — a triage layer that maps symptoms to the right diagnosing-* playbook."
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -34,6 +34,11 @@ Start at the top. Follow the first branch that matches the user's description.
 ```
 Is the problem about INSTALLING or UPGRADING Hermes itself?
   └─ YES → installing-hermes
+  └─ NO ↓
+
+Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
+  resource exhaustion, multiple surfaces failing at once?
+  └─ YES → diagnosing-host-pressure
   └─ NO ↓
 
 Is the problem about the DESKTOP APP (Electron) not launching,
@@ -72,11 +77,6 @@ Is the problem about SCHEDULED JOBS — cron not firing, scheduler dead,
 
 Is the problem about VOICE — STT/TTS failures, audio device, latency, ffmpeg?
   └─ YES → diagnosing-voice
-  └─ NO ↓
-
-Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
-  resource exhaustion, multiple surfaces failing at once?
-  └─ YES → diagnosing-host-pressure
   └─ NO ↓
 
 Is the problem about AUTH — "Could not fetch from any source", GitHub 401,
