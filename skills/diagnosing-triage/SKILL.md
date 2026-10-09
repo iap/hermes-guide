@@ -1,4 +1,4 @@
-﻿---
+---
 name: diagnosing-triage
 description: "Route vague user descriptions to the correct diagnostic skill — a triage layer that maps symptoms to the right diagnosing-* playbook."
 version: 1.0.0
@@ -8,9 +8,6 @@ metadata:
     related_skills: [hermes-configuration-guide, diagnosing-cli-tui, diagnosing-path, diagnosing-host-pressure, diagnosing-commands, diagnosing-mcp, diagnosing-skills, diagnosing-plugins, diagnosing-hooks, diagnosing-auth, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, installing-hermes]
 ---
 
-Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
-  resource exhaustion, multiple surfaces failing at once?
-  └─ YES → diagnosing-host-pressure
 # Diagnosing Triage
 
 Route vague user descriptions to the correct diagnostic skill. This is the **triage layer** — when the user says "something is wrong" without naming a subsystem, use the flowchart and mapping table below to pick the right `diagnosing-*` playbook.
@@ -37,11 +34,6 @@ Start at the top. Follow the first branch that matches the user's description.
 ```
 Is the problem about INSTALLING or UPGRADING Hermes itself?
   └─ YES → installing-hermes
-  └─ NO ↓
-
-Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
-  resource exhaustion, multiple surfaces failing at once?
-  └─ YES → diagnosing-host-pressure
   └─ NO ↓
 
 Is the problem about the DESKTOP APP (Electron) not launching,
@@ -82,6 +74,10 @@ Is the problem about VOICE — STT/TTS failures, audio device, latency, ffmpeg?
   └─ YES → diagnosing-voice
   └─ NO ↓
 
+Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
+  resource exhaustion, multiple surfaces failing at once?
+  └─ YES → diagnosing-host-pressure
+  └─ NO ↓
 
 Is the problem about AUTH — "Could not fetch from any source", GitHub 401,
   rate-limit 403, hub install fails?
@@ -266,5 +262,16 @@ Some problems span multiple layers. In these case, load the higher-priority skil
 If the user is asking "where is X configured?" rather than "X is broken", load `hermes-configuration-guide` instead of a diagnostic skill. The configuration guide maps each extension surface to its config location and points to the right diagnostic skill if something is wrong.
 
 ---
+
+## 5. Report format
+
+When the triage skill routes to a diagnostic skill, the model reports findings using the standard format defined in `hermes-configuration-guide`. The triage skill itself reports only the routing decision:
+
+**Triage report example**:
+
+- **Summary**: "Your description matches a host resource pressure problem. Load average is high with idle CPU, indicating I/O bottleneck."
+- **Routed to**: `diagnosing-host-pressure`
+- **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
+- **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
 *Facts re-verified 2026-10-08 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` (the repo HEAD at the time of authoring); the triage mappings are derived from the skill descriptions in this repo's `skills/` directory. Re-verify before reuse.*

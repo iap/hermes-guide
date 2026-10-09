@@ -98,6 +98,46 @@ Notes:
 - **Launch/UI failure vs command surface vs app build**: if the desktop app fails to launch or shows a blank window, see `diagnosing-desktop`; if the TUI misrenders or shows unreadable indicators on native Windows, see `diagnosing-cli-tui`; if a `/command` is missing or overridden, see `diagnosing-commands`.
 - **Which venv/home applies where**: if the wrong Python interpreter is active or the dual-venv layout is confusing, see `diagnosing-path`; if the desktop app's backend resolution is wrong, see `diagnosing-desktop`; if the install itself is broken, see `installing-hermes`.
 
+## Standard report format
+
+Every diagnostic skill reports findings in this format. The model uses this structure when presenting results to the user.
+
+### Summary
+
+One or two sentences in plain language. What is wrong, in terms the user understands. No jargon, no file paths, no command output.
+
+**Example**: "Your Hermes gateway is not responding because the Telegram plugin failed to load. The plugin timed out during startup, likely due to high disk latency."
+
+### Findings
+
+Severity-ordered list. Each finding has:
+- **Severity**: HIGH (blocks core functionality), MEDIUM (degraded but usable), LOW (cosmetic or informational)
+- **What**: The specific problem
+- **Evidence**: The command output, file content, or log line that proves it
+
+**Example**:
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Telegram plugin discarded after load timeout | `Plugin 'telegram-platform' called register_platform() after its load timed out; ignored` |
+| MEDIUM | Disk latency causing plugin load failures | `probe wall time: 47s` (threshold: 20s) |
+
+### Recommended Fix
+
+One concrete action the user can take. Include the exact command or file edit. If the fix is not obvious, explain why this action and not another.
+
+**Example**:
+1. Check disk health: `smartctl -a /dev/sda` (Linux) or `wmic diskdrive get status` (Windows)
+2. If disk is failing, replace it — no Hermes config change will fix this
+3. If disk is healthy, run `hermes gateway restart` and check if plugins load within budget
+
+### References
+
+File paths, line numbers, and command output that support the findings. This is for the user to verify, not for the model to re-run.
+
+**Example**:
+- `$HERMES_HOME/logs/errors.log` — plugin load timeout lines
+- `skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` — probe output
+
 Every diagnosis should end in a concrete action: a `hermes <subcommand>` command or a specific file + field edit, then a restart or `/reload-*` to apply.
 
 ---
