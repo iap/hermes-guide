@@ -75,7 +75,7 @@ jobs:
           else
             git commit -m "chore: update CHANGELOG.md for $GITHUB_REF_NAME"
             # Push to a branch, not master (ruleset requires checks on master)
-            git push origin HEAD:refs/heads/changelog-update-$GITHUB_REF_NAME
+            git push origin "HEAD:refs/heads/changelog-update-${GITHUB_REF_NAME}"
           fi
 
       - name: Create GitHub release
