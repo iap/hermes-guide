@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route vague user descriptions to the correct diagnostic skill — a triage layer that maps symptoms to the right diagnosing-* playbook."
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
