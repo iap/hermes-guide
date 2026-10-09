@@ -82,6 +82,9 @@ def _setup_cli(subparser):
     )
 
 
+_version_check_ran = False
+
+
 def _version_check():
     """Check if a newer version is available; log a warning if so.
 
@@ -90,9 +93,10 @@ def _version_check():
     (e.g. copied) or when git is unavailable.
     Rate-limited: runs at most once per process.
     """
-    if _version_check._ran:
+    global _version_check_ran
+    if _version_check_ran:
         return
-    _version_check._ran = True
+    _version_check_ran = True
     try:
         import re
         import subprocess
@@ -139,9 +143,6 @@ def _version_check():
             )
     except Exception:
         pass  # nosec B110 - version check is best-effort; never fail a session
-
-
-_version_check._ran = False
 
 
 def _proactive_check(**_kwargs):
