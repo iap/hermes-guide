@@ -110,8 +110,8 @@ def _version_check():
         )
         if top_proc.returncode != 0:
             return
-        toplevel = top_proc.stdout.strip()
-        if toplevel != str(plugin_dir):
+        toplevel = Path(top_proc.stdout.strip())
+        if toplevel != plugin_dir:
             return
         # Read remote tags without writing local refs
         proc = subprocess.run(
