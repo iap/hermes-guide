@@ -36,6 +36,11 @@ Is the problem about INSTALLING or UPGRADING Hermes itself?
   └─ YES → installing-hermes
   └─ NO ↓
 
+Is the problem about HOST RESOURCES — high load, OOM, plugin discards,
+  resource exhaustion, multiple surfaces failing at once?
+  └─ YES → diagnosing-host-pressure
+  └─ NO ↓
+
 Is the problem about the DESKTOP APP (Electron) not launching,
   showing a blank window, or npm/build errors?
   └─ YES → diagnosing-desktop
