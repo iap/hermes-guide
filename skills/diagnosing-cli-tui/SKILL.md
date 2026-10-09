@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.7
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -98,14 +98,14 @@ User env vars: `EDITOR=code --wait`, `HERMES_TUI_THEME=dark`.
 
 ## 5. Known upstream issues (check state before re-reporting)
 
-States verified 2026-10-08. `closed` means fixed upstream — if you still see it, your install or config is behind, not the bug. PR-linked issues are one review/merge away from resolution.
+States verified 2026-10-08. `closed` means fixed or declined upstream — check the issue before reinstalling. PR-linked issues are one review/merge away from resolution.
 
 | Issue | PR | State | Topic |
 |---|---|---|---|
-| #25418 | — | closed | Terminal resize corrupts TUI layout (Ghostty, iTerm2, ...) |
+| #25418 | — | closed (not planned) | Terminal resize corrupts TUI layout (Ghostty, iTerm2, ...) — tracked by #24164 |
 | #19216 | — | closed | TUI: resize causes infinite scroll/render loop (flicker, duplicated status bar) |
 | #12130 | — | open | TUI v2 feature-parity gaps vs the classic CLI (overlays, slash commands, @ refs) |
-| #53301 | — | open | TUI pet colors washed out on WSL/Windows Terminal — **cause is chalk falling back to 256-color when `COLORTERM` is unset** (not a Kitty-graphics issue; fix the env, e.g. `COLORTERM=truecolor`) |
+| #53301 | #53346 | open | TUI pet colors washed out on WSL/Windows Terminal — **cause is chalk falling back to 256-color when `COLORTERM` is unset** (not a Kitty-graphics issue; fix the env, e.g. `COLORTERM=truecolor`) |
 | #37637 | — | closed | `/usage` silent in CLI/TUI (worked via Telegram) |
 | #19214 | — | closed | `terminal.cwd` is a foot-gun: CLI/TUI should use the launch directory |
 | #14638 | — | closed | Windows: exit 126 with empty output on every command (Git Bash backend) |
@@ -182,4 +182,4 @@ Run `/indicator ascii` in the TUI for an immediate fix, then persist by adding `
 
 ---
 
-*Facts re-verified 2026-10-08 against upstream source at commit `f97608f178d1ffeca59860195ab7da295f7c8e5f` (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts, ui-tui/src/app/useMainApp.ts, hermes_cli/cli_tui_mixin.py, hermes_cli/update_cmd.py, hermes_cli/doctor_platform.py, hermes_cli/active_sessions.py, hermes_cli/cli_voice_mixin.py), upstream docs (installation.md), the issue tracker (18 citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.12741); Node resolution re-checked 2026-09-29 at `5000e2993` (TUI node resolves through PM; `pm/lock.json` pins Node 26.7.0). Re-verify before reuse.*
+*Facts re-verified 2026-10-08 against upstream source at commit `f97608f178d1ffeca59860195ab7da295f7c8e5f` (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts, ui-tui/src/app/useMainApp.ts, hermes_cli/cli_tui_mixin.py, hermes_cli/update_cmd.py, hermes_cli/doctor_platform.py, hermes_cli/active_sessions.py, hermes_cli/cli_voice_mixin.py), upstream docs (installation.md), the issue tracker (19 citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.12741); Node resolution re-checked 2026-09-29 at `5000e2993` (TUI node resolves through PM; `pm/lock.json` pins Node 26.7.0). Re-verify before reuse.*
