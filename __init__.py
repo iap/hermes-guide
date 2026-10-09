@@ -82,8 +82,37 @@ def _setup_cli(subparser):
     )
 
 
+def _version_check():
+    """Check if a newer version is available; log a warning if so.
+
+    Read-only: reads git tags from the installed clone, never writes.
+    Fails silently when the plugin is not a git clone (e.g. copied).
+    """
+    try:
+        import subprocess
+        from pathlib import Path
+
+        plugin_dir = Path(__file__).resolve().parent
+        proc = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            capture_output=True, text=True, timeout=5, cwd=plugin_dir,
+        )
+        if proc.returncode != 0:
+            return
+        latest = proc.stdout.strip().lstrip("v")
+        if latest and latest != __version__:
+            logger.warning(
+                "hermes-guide: new version available (%s → %s). "
+                "Run: hermes plugins update hermes-guide",
+                __version__, latest,
+            )
+    except Exception:
+        pass  # version check is best-effort; never fail a session
+
+
 def _proactive_check(**_kwargs):
     """Run drift checks at a session boundary; log findings (observer-only)."""
+    _version_check()
     for label, r in checks.run_all().items():
         status = r.get("status")
         if status == "broken":
