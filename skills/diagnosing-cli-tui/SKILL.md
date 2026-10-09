@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.9
+version: 1.1.10
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -98,7 +98,7 @@ User env vars: `EDITOR=code --wait`, `HERMES_TUI_THEME=dark`.
 
 ## 5. Known upstream issues (check state before re-reporting)
 
-States verified 2026-10-08. `closed` means fixed or declined upstream — check the issue before reinstalling. PR-linked issues are one review/merge away from resolution.
+States verified 2026-10-08. `closed` means fixed or declined upstream — check the issue before reinstalling. A linked PR proposes a fix; check its review and release status before relying on it.
 
 | Issue | PR | State | Topic |
 |---|---|---|---|
