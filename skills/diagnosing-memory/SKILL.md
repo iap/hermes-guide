@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.4
+version: 1.2.5
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -197,6 +197,28 @@ operate on the live database.
 > (`backups/` holds conditional full archives, `state-snapshots/` holds quick
 > snapshots). Create one explicitly with `hermes backup -q -l pre-prune` and
 > confirm the zip before pruning a database you have not trimmed before.
+
+## Report
+
+This skill diagnoses memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your external memory provider (honcho) is not available because the API key is missing from `.env`. The provider is selected in config but silently falls back to built-in memory, so your honcho memories appear "gone."
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | HONCHO_API_KEY missing from `.env` | `hermes memory status` shows `Status: not available ✗` with `Missing: ✗ HONCHO_API_KEY → https://app.honcho.dev` |
+| MEDIUM | External memory disabled for session | Log at session start: `honcho unavailable; external memory disabled for this session` |
+
+### Recommended Fix
+Add `HONCHO_API_KEY=<your-key>` to `$HERMES_HOME/.env`, then restart the session. Verify with `hermes memory status` — the provider should show `Status: available ✓`. If the provider plugin is also missing, run `hermes memory setup honcho` first.
+
+### References
+- `$HERMES_HOME/.env` — the missing API key
+- `$HERMES_HOME/config.yaml` — `memory.provider: honcho`
+- `agent/system_prompt.py` — external-provider gate
+- `tools/memory_tool_store.py` — memory store limits
 
 ---
 

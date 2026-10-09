@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and provider sub-categories.
-version: 1.2.2
+version: 1.2.3
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -62,6 +62,27 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 3. Enabled but broken → `hermes logs` for a `register()` failure (pitfall 4) or a capability gap (pitfall 2). A **load-timeout** message points at host pressure, not the plugin → `diagnosing-host-pressure`.
 4. Sub-category plugin (memory/context/model-provider/platform) → check its selection key in config, not `plugins.enabled`.
 5. Restart the session/gateway and verify: tools appear in `/tools list`, commands in `/` autocomplete, hooks via `hermes hooks list`.
+
+## Report
+
+This skill diagnoses plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and provider sub-categories. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your plugin is installed but its tools and commands are absent because it is not in the `plugins.enabled` allowlist. Hermes deliberately loads nothing from third-party code until you explicitly enable it.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Plugin not in `plugins.enabled` | `hermes plugins list` shows `my-plugin: not enabled`; no tools or commands from the plugin appear in the session |
+| MEDIUM | Plugin discovered but not enabled after install | `hermes plugins list` shows the plugin under "Installed" but not under "Enabled" |
+
+### Recommended Fix
+Run `hermes plugins enable my-plugin`, then restart the session. Verify with `hermes plugins list` (should show "Enabled") and check that the plugin's tools appear in `/tools list`.
+
+### References
+- `$HERMES_HOME/config.yaml` — `plugins.enabled` list
+- `hermes_cli/plugins.py` — `plugins.enabled` handling
+- `hermes_cli/plugins_discovery.py` — plugin discovery and "not enabled" message
 
 ---
 

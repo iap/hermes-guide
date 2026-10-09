@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths."
-version: 1.5.3
+version: 1.5.4
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -338,6 +338,27 @@ Windows venvs use `Scripts\python.exe`, not `bin/python`. Use `venv_bin_dir()` o
 - Hermes core `hermes_constants.py` — `project_venv_dir()` (the resolver), `venv_bin_dir()` (a thin delegate; the implementation lives in `pm/environments.py`), `venv_python_path()`
 - Bug **#79542** — `_venv_scripts_dir()` checked only `venv`, so Windows update protections silently skipped on `.venv` installs (the canonical harm of this split; triaged as a duplicate of **#43250**). The resolver-based fix landed in main (2026-09, both layouts); the issue was still open as of 2026-09-29
 - Related history: the venv-bin-dir consolidation — the layout open-coded in seven places using three different Windows predicates, the #76091 fix shipping an eighth copy first — is preserved in upstream's commit history; at head `venv_bin_dir()` delegates to `pm/environments.py`, which owns the implementation.
+
+## Report
+
+This skill diagnoses path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your script fails with "No module named hermes_agent" because it is using the wrong Python interpreter. The checkout has both `venv/` and `.venv/`, and your script hardcoded `venv/bin/python` which is stale — the active environment is `.venv/`.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Script uses stale `venv/bin/python` | `venv/bin/pip show hermes-agent` returns "not installed"; `.venv/bin/pip show hermes-agent` returns the package |
+| MEDIUM | Both `venv/` and `.venv/` exist, causing confusion | `ls -d venv .venv` shows both directories; `project_venv_dir()` resolves `venv/` first |
+
+### Recommended Fix
+Replace the hardcoded path in your script with a dynamic resolution: `from hermes_constants import project_venv_dir, venv_bin_dir` and use `venv_bin_dir(project_venv_dir(root)) / "python"`. Then delete the stale `venv/` directory to remove the ambiguity.
+
+### References
+- `hermes_constants.py` — `project_venv_dir()`, `venv_bin_dir()`
+- `pm/environments.py` — `committed_venv()`, `project_python()`
+- Bug #79542 — the canonical venv-layout issue
 
 ---
 

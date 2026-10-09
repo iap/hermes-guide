@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.7
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -132,6 +132,27 @@ Older configs use a top-level `custom_providers:` list with `base_url` instead o
 > debugging session happened to touch.
 
 Every diagnosis ends in a concrete action: a `providers:` field edit or a `hermes model` command, then `hermes gateway restart` to apply.
+
+## Report
+
+This skill diagnoses model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your model picker is flooded with hundreds of models because a persisted catalog from a previous `/v1/models` response is bloating `config.yaml`. The catalog is metadata (not a pin) and is not consulted at runtime — the endpoint is re-probed every time.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| MEDIUM | Persisted catalog bloating config.yaml | `wc -l "$(hermes config path)"` shows 500+ lines; `hermes config get providers` shows a `models:` dict with `models_discovered: true` |
+| LOW | Catalog is stale — live endpoint returns fewer models | Live probe of `/v1/models` returns 12 models; persisted catalog has 340 |
+
+### Recommended Fix
+Remove the `models:` dict and `models_discovered:` flag from the provider entry in `config.yaml`. Keep `discover_models: true` for a live probe. Verify with `hermes config get providers` — the entry should have no `models:` block.
+
+### References
+- `$HERMES_HOME/config.yaml` — `providers:` entry with persisted catalog
+- `hermes_cli/model_switch.py` — `_models_config_is_allowlist` (discovered catalog is never a pin)
+- `hermes_cli/model_switch_providers.py` — `_discover_flag`, `_entry_credentials`
 
 ---
 

@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, 'npm was not found', 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.6
+version: 1.1.7
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -89,7 +89,29 @@ Hermes configuration is **YAML** — edit `config.yaml`, never JSON syntax.
 After fixing: close any running desktop app, then `hermes desktop` (a source change triggers the stamp rebuild automatically; use `--force-build` after upstream updates or when in doubt, `--build-only` to validate a build without launching). Confirm via `hermes logs gui -f` that the backend announces its port and the window renders. There is no `/reload-desktop` — a running app must be closed and relaunched.
 
 > [!CAUTION]
-> `hermes uninstall --gui` removes build artifacts, desktop `node_modules`, the build stamp, and the Electron user-data dir (`%APPDATA%\Hermes` — connection settings, `connection.json`, Chromium cache). It never touches agent config or memory — but connection setup is not recoverable from the uninstall, so re-pairing is required afterwards.
+> `hermes uninstall --gui` removes build artifacts, desktop `node_modules`, the build stamp, and the electron user-data dir (`%APPDATA%\Hermes` — connection settings, `connection.json`, Chromium cache). It never touches agent config or memory — but connection setup is not recoverable from the uninstall, so re-pairing is required afterwards.
+
+## Report
+
+This skill diagnoses desktop app failures — launch or build fails, "Access is denied" on Hermes.exe, blank window or backend never ready, Electron download stuck. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+The desktop build fails with "Access is denied" because a running Hermes.exe process has locked the `release/win-unpacked/` directory. The build cannot swap in the new artifact while the old one is in use.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Running Hermes.exe locks `release/win-unpacked/` | Build error: `ERR_ELECTRON_BUILDER_CANNOT_EXECUTE` — `Access is denied` |
+| MEDIUM | Stale build stamp may cause unnecessary rebuilds | `$HERMES_HOME/desktop-build-stamp.json` contentHash does not match current source |
+
+### Recommended Fix
+Close the running desktop app, then run `hermes desktop --force-build`. If the build still fails, check `$HERMES_HOME/logs/desktop.log` for the full error output.
+
+### References
+- `$HERMES_HOME/logs/desktop.log` — build/launch log
+- `$HERMES_HOME/desktop-build-stamp.json` — content stamp file
+- `hermes_cli/main_desktop.py` — `cmd_gui` build pipeline
+- `apps/desktop/electron/main.ts` — backend resolution logic
 
 ---
 

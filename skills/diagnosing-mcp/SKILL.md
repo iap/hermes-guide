@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.3
+version: 1.1.4
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -56,6 +56,27 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 3. Match the failure: ENOENT → 2; timeout → 6; OAuth → 4/5.
 4. Check filters (pitfall 3) before blaming the connection.
 5. Apply the fix, then `/reload-mcp` (or restart), and confirm the `mcp__<server>__*` tools appear (`/context`).
+
+## Report
+
+This skill diagnoses MCP servers that will not connect, expose no tools, fail OAuth, or ignore config. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your MCP server is not listed because the `command` field is not on PATH. The server entry exists in config.yaml but the spawn fails with ENOENT, so the server is silently dropped.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | MCP server `command` not found on PATH | `hermes mcp` shows server as `failed`; error: `spawn npx ENOENT` |
+| MEDIUM | Server uses bare `npx` instead of absolute path | Config has `command: "npx"` but `npx` is not on the PATH the server is spawned with |
+
+### Recommended Fix
+Edit `$HERMES_HOME/config.yaml` and change the server's `command` to an absolute path (e.g., `/usr/local/bin/npx` on POSIX or `C:\path\to\npx.cmd` on Windows), then run `/reload-mcp` and verify with `hermes mcp`.
+
+### References
+- `$HERMES_HOME/config.yaml` — `mcp_servers:` entry
+- `hermes_cli/mcp_config.py` — MCP config loading
+- `tools/mcp_tool_common.py` — `_DEFAULT_TOOL_TIMEOUT`, `_DEFAULT_CONNECT_TIMEOUT`
 
 ---
 

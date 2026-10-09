@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.2
+version: 1.1.3
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -76,6 +76,27 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 3. `hermes hooks doctor` / `hermes hooks list` → consent, exec bit, drift (pitfalls 1, 2).
 4. `hermes hooks test <event>` → behavior under a synthetic payload (3, 5).
 5. Apply the fix, restart the session/gateway, re-test.
+
+## Report
+
+This skill diagnoses hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your shell hook is not firing because it is not on the consent allowlist. The hook was registered during a non-TTY start (gateway/cron), so the consent prompt was skipped and the hook silently stayed unregistered.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Shell hook not on consent allowlist | `hermes hooks list` shows `consent: not approved` for the hook's `(event, command)` pair |
+| MEDIUM | Hook registered during non-TTY start | `hermes logs` shows `hook registered during non-TTY run; consent required` |
+
+### Recommended Fix
+Run `hermes hooks test pre_tool_call --for-tool terminal` with `--accept-hooks` or `HERMES_ACCEPT_HOOKS=1` to approve the hook now. For a permanent fix, set `hooks_auto_accept: true` in `config.yaml` for non-TTY surfaces.
+
+### References
+- `$HERMES_HOME/shell-hooks-allowlist.json` — consent allowlist file
+- `agent/shell_hooks.py` — `BLOCK_EXIT_CODE = 2`, `ALLOWLIST_FILENAME`
+- `hermes_cli/plugins_dispatch.py` — hook callback timeout logic
 
 ---
 

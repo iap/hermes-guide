@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cron
 description: Diagnose Hermes cron job issues — jobs not firing, scheduler dead, wedged fire-claim, timezone issues, and delivery failures.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, cron, scheduling, troubleshooting]
@@ -66,5 +66,27 @@ hermes cron create "0 9 * * 1-5" \
 - `hermes-configuration-guide` — for $HERMES_HOME resolution and config.yaml structure
 - `diagnosing-gateway` — for gateway connectivity and platform issues
 - `diagnosing-bot-mode` — for bot routine/cron integration
+
+## Report
+
+This skill diagnoses cron job issues — jobs not firing, scheduler dead, wedged fire-claim, timezone issues, and delivery failures. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your cron job is not firing because the scheduler is not running — the gateway process is down. The cron ticker heartbeat is missing and `next_run_at` is parked in the past beyond the 15-minute grace window.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Gateway process is down — scheduler not running | `hermes cron status` shows `scheduler: stopped`; `hermes gateway status` shows `gateway: not running` |
+| MEDIUM | `next_run_at` parked in the past beyond grace window | `hermes cron list` shows `next_run_at: 2026-10-07T09:00:00Z` (yesterday) |
+
+### Recommended Fix
+Run `hermes gateway restart` to bring the gateway (and scheduler) back up, then verify with `hermes cron status` and `hermes cron list`. If the job still does not fire, run `hermes cron run <job_id>` to test it manually.
+
+### References
+- `~/.hermes/logs/agent.log` — scheduler messages
+- `~/.hermes/logs/errors.log` — warnings and errors
+- `hermes_cli/cron.py` — cron CLI commands
+- `cron/jobs.py` — job execution logic
 
 *Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/cron.py`, `cron/jobs.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/cron). Re-verify before reuse.*

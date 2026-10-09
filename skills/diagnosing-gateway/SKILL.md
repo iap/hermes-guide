@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -55,5 +55,26 @@ Platform config lives under `gateway.platforms.<name>` in `config.yaml`, but **e
 - `diagnosing-bot-mode` — for bot-specific gateway issues
 - `diagnosing-voice` — for voice message transcription issues
 - `diagnosing-host-pressure` — when several platforms fail at once or adapters are discarded after a load timeout; rule out host pressure before editing tokens or allowlists
+
+## Report
+
+This skill diagnoses gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup. When you run the diagnostic workflow, present findings in the standard format below.
+
+### Summary
+Your Telegram bot is not responding to messages because the gateway is not running. The bot token is valid, but the gateway process that polls Telegram for updates is stopped.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | Gateway process is not running | `hermes gateway status` shows `gateway: not running`; no platform connections listed |
+| MEDIUM | Bot token may be expired | `hermes gateway status --deep` shows `telegram: token validation failed` |
+
+### Recommended Fix
+Run `hermes gateway start` to start the gateway, then verify with `hermes gateway status`. If the token is expired, run `hermes gateway setup telegram` to re-authenticate, then `hermes gateway restart`.
+
+### References
+- `~/.hermes/logs/gateway.log` — gateway log file
+- `hermes_cli/gateway.py` — gateway CLI commands
+- `hermes_cli/platforms/` — platform-specific adapters
 
 *Facts re-verified 2026-09-28 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/gateway.py`, `hermes_cli/platforms/`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/messaging/). Re-verify before reuse.*
