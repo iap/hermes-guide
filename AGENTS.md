@@ -13,7 +13,7 @@ to work in the repo**.
 
 <!-- BEGIN GENERATED: inventory -->
 - **Plugin** — `plugin.yaml` + `__init__.py` / `checks.py` / `constants.py`. Registers `/hermes-doctor` and `hermes guide` (seven read-only health checks: config, mcp, skills, commands, hooks, plugins, memories).
-- **Skills** — `nineteen` `skills/<name>/SKILL.md` files: one install guide (`installing-hermes`), one configuration map (`hermes-configuration-guide`), seventeen `diagnosing-*` playbooks. They install separately, through the skills tap.
+- **Skills** — `twenty` `skills/<name>/SKILL.md` files: one install guide (`installing-hermes`), one configuration map (`hermes-configuration-guide`), eighteen `diagnosing-*` playbooks. They install separately, through the skills tap.
 <!-- END GENERATED: inventory -->
 
 Two install paths, both out of tree: the plugin (`hermes plugins install iap/hermes-guide --enable`) and the tap (`hermes skills tap add iap/hermes-guide`). `$HERMES_HOME` is `~/.hermes` on POSIX and `%LOCALAPPDATA%\hermes` on native Windows; `hermes config path` is the ground-truth command.

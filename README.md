@@ -10,7 +10,7 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
-**Nineteen troubleshooting skills** — one install guide, one configuration map, and seventeen per-surface `diagnosing-*` playbooks.
+**Twenty troubleshooting skills** — one install guide, one configuration map, and eighteen per-surface `diagnosing-*` playbooks.
 <!-- END GENERATED: intro-inventory -->
 
 ## Install the plugin
@@ -75,7 +75,7 @@ hermes skills install iap/hermes-guide/skills/diagnosing-mcp
 
 <!-- BEGIN GENERATED: install-all-loop -->
 ```bash
-for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-skills diagnosing-voice hermes-configuration-guide installing-hermes; do hermes skills install "iap/hermes-guide/skills/$s"; done
+for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-skills diagnosing-triage diagnosing-voice hermes-configuration-guide installing-hermes; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
 <!-- END GENERATED: install-all-loop -->
 
@@ -93,6 +93,7 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 | `diagnosing-hooks` | Hooks that don't fire — the four hook systems, shell-hook consent, `hermes hooks doctor` |
 | `diagnosing-plugins` | Plugins that don't load — the `plugins.enabled` gate, capability consent, discovery locations |
 | `diagnosing-path` | Path issues — the dual-venv layout on older checkouts, the PM-era no-in-tree-venv case, detection, canonical resolution order, cross-platform best practices |
+| `diagnosing-triage` | Route vague user descriptions to the correct diagnostic skill — a triage layer that maps symptoms to the right `diagnosing-*` playbook |
 | `diagnosing-cli-tui` | CLI/TUI issues on native Windows — rendering artifacts, themes, busy indicators, mouse modes, encoding, launch/resume |
 | `diagnosing-auth` | Hub-install auth failures — dead/shadowing `GITHUB_TOKEN` in the profile `.env`, `gh-cli` fallback, 401 vs anonymous probes, rate-limit verdicts |
 | `diagnosing-memory` | Memory problems — built-in `MEMORY.md`/`USER.md` stores, external providers configured but silently unavailable, missing plugins/keys, char-limit and approval gates |

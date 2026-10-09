@@ -1,7 +1,7 @@
----
+﻿---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.3.3
+version: 1.3.4
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -68,6 +68,7 @@ Notes:
 - When a diagnosis behaves as if part of `config.yaml` is invisible, audit for orphans before suspecting the model: inert keys produce exactly that symptom.
 
 ## Routing — when something is wrong
+- Vague description ("something is wrong", "it's slow", "it crashed") without naming a subsystem → **`diagnosing-triage`** (meta-skill that routes to the correct diagnostic skill)
 
 - MCP server not connecting, tools missing, OAuth failing → **`diagnosing-mcp`**
 - A skill not discovered, not triggering, shadowed, or stuck "user-modified" → **`diagnosing-skills`**
