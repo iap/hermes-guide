@@ -13,6 +13,12 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 **Twenty troubleshooting skills** — one install guide, one configuration map, and eighteen per-surface `diagnosing-*` playbooks.
 <!-- END GENERATED: intro-inventory -->
 
+> [!NOTE]
+> The `hooks` check runs `hermes hooks doctor`, which executes each approved
+> shell hook once with a synthetic payload — that is how it verifies a hook
+> actually runs. Proactive runs do not execute hooks: they inspect hook
+> configuration in-process (allowlist state, exec bit) instead.
+
 ## Install the plugin
 
 ```bash
