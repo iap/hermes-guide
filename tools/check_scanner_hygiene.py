@@ -91,7 +91,7 @@ def scan_repo(skills_dir: Path) -> tuple[list[str], list[str]]:
     for path in sorted(skills_dir.rglob("*")):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in (".md", ".sh", ".bash"):
+        if path.suffix.lower() not in (".md", ".sh", ".bash", ".py"):
             continue
         try:
             text = path.read_text(encoding="utf-8-sig")
@@ -213,9 +213,14 @@ def main(argv: list[str]) -> int:
             print(f"  {hit}", file=sys.stderr)
         print("Reword prose or gate the /proc read; do not split strings to evade.", file=sys.stderr)
         return 1
-    md_count = sum(1 for _ in SKILLS_DIR.rglob("*.md"))
-    sh_count = sum(1 for _ in SKILLS_DIR.rglob("*.sh")) + sum(1 for _ in SKILLS_DIR.rglob("*.bash"))
-    print(f"OK: scanner hygiene clean ({md_count} md, {sh_count} shell files)")
+    counts = {}
+    for ext in ("*.md", "*.sh", "*.bash", "*.py"):
+        counts[ext] = sum(1 for p in SKILLS_DIR.rglob(ext) if p.is_file())
+    print(
+        f"OK: scanner hygiene clean "
+        f"({counts['*.md']} md, {counts['*.sh'] + counts['*.bash']} shell, "
+        f"{counts['*.py']} py files)"
+    )
     return 0
 
 
