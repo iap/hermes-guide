@@ -857,11 +857,13 @@ def check_hooks_readonly():
         }
     config_path = os.path.join(home, "config.yaml")
     if not os.path.isfile(config_path):
-        return {
+        # Home is known, so a malformed allowlist is still resolvable: merge
+        # it in rather than letting `unknown` hide a real `broken`.
+        return _merge_allowlist_json({
             "status": "unknown",
             "reason": "config.yaml not found at library-derived home; hooks not inspected",
             "detail": None,
-        }
+        }, "in-process hooks inspection")
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
@@ -870,19 +872,19 @@ def check_hooks_readonly():
     except Exception:
         data = None
     if data is None:
-        return {
+        return _merge_allowlist_json({
             "status": "unknown",
             "reason": "config not readable; hooks not inspected",
             "detail": None,
-        }
+        }, "in-process hooks inspection")
     try:
         specs = shell_hooks.iter_configured_hooks(data)
     except Exception as exc:
-        return {
+        return _merge_allowlist_json({
             "status": "unknown",
             "reason": f"hooks config could not be inspected ({type(exc).__name__})",
             "detail": None,
-        }
+        }, "in-process hooks inspection")
     if not specs:
         # Annotated broadly: `detail` is a list in the findings branch below
         # and None here; mypy joins the branch assignments otherwise.

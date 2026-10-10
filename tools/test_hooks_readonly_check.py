@@ -126,6 +126,8 @@ def main(argv: list[str]) -> int:
         r = _call()
         if r.get("status") != "broken" or "not allowlisted" not in str(r.get("detail")):
             failures.append(f"not-allowlisted hook not reported: {r!r}")
+        if "echo hi" in str(r.get("detail")):
+            failures.append(f"hook command leaked into detail: {r!r}")
 
         # 5. not executable
         _install([spec], allowlisted={("pre_tool_call", "echo hi"): entry},
@@ -142,13 +144,25 @@ def main(argv: list[str]) -> int:
             failures.append(f"malformed allowlist not merged: {r!r}")
         allowlist.unlink()
 
+        # 6b. config missing + malformed allowlist: the allowlist `broken`
+        #     must survive the config `unknown`.
+        allowlist.write_text("{ not json", encoding="utf-8")
+        saved = config.read_text(encoding="utf-8")
+        config.unlink()
+        _install([spec])
+        r = _call()
+        if r.get("status") != "broken" or "allowlist" not in str(r.get("detail")):
+            failures.append(f"malformed allowlist lost without config: {r!r}")
+        config.write_text(saved, encoding="utf-8")
+        allowlist.unlink()
+
         # 7. config unreadable -> unknown (subprocess fallback stubbed to fail)
         checks._cache.clear()
         saved = config.read_text(encoding="utf-8")
         config.unlink()
         checks._load_shell_hooks = lambda: _FakeShellHooks([], {}, {})
         checks._run = _boom
-        checks._run_hermes = lambda args, timeout=20: (1, "", "")
+        checks._run_hermes = _boom
         r = checks.check_hooks_readonly()
         _expect("unreadable config", r.get("status"), "unknown", f" ({r.get('reason')})")
         config.write_text(saved, encoding="utf-8")
