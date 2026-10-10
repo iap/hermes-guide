@@ -45,6 +45,12 @@ PROJECT_VENV_ORDER = '"venv", ".venv"'
 # these; tools/check_upstream_drift.py (DRIFT_FACTS) asserts the delimiter and
 # limits against upstream main, where the delimiter lives in
 # tools/memory_tool_store.py (moved there by the 2026-09 refactor).
+# Canonical install source for the skills tap, derived from plugin.yaml
+# `homepage` (https://github.com/iap/hermes-guide). Used by check_skills'
+# install-nudge so a fork or rename does not silently break the suggested
+# command. Mirrors homepage; update both together.
+SKILLS_INSTALL_SOURCE = "iap/hermes-guide"
+
 BUILTIN_MEMORY_STORES = ("MEMORY.md", "USER.md")
 MEMORY_ENTRY_DELIMITER = "§"
 MEMORY_CHAR_LIMIT_DEFAULT = 2200
