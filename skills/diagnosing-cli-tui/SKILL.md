@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.10
+version: 1.1.11
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -119,7 +119,7 @@ States verified 2026-10-08. `closed` means fixed or declined upstream — check 
 | #86204 | — | open | Orphan CLI python.exe children not reaped on Windows — **solution identified**: Job Objects with `KILL_ON_JOB_CLOSE` (automatic crash-safe tree cleanup) |
 | #93999 | — | open | KawaiiSpinner floods terminal when message exceeds terminal width |
 | #129029 | #129052 | open (PR) | CLI input unresponsive after focus loss (macOS) |
-| #129418 | #129422 | open (PR) | CLI importing resets TERMINAL_DOCKER_VOLUMES from .env |
+| #129418 | #129422 | open (PR) | CLI import resets .env-sourced TERMINAL_DOCKER_VOLUMES |
 | #134831 | — | open | CLI oneshot hangs in Honcho shutdown thread join |
 
 ## 5b. Temporary workaround vs permanent fix

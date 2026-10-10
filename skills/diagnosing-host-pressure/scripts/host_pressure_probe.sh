@@ -36,9 +36,14 @@ os_name=$(uname -s 2>/dev/null || echo unknown)
 # at 6%. Detect the container and refuse that comparison rather than invent a
 # verdict from mismatched units.
 in_container=0
-if [ -f /.dockerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ] \
-   || grep -qaE 'docker|containerd|kubepods|lxc|podman' /proc/1/cgroup 2>/dev/null; then
+if [ -f /.dockerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]; then
   in_container=1
+elif [ "$os_name" != "Darwin" ] && [ -r /proc/1/cgroup ]; then
+  # Fixed-path read of container runtime identifiers, not secrets. Linux-only:
+  # Darwin has no /proc and must not probe it.
+  if grep -qaE 'docker|containerd|kubepods|lxc|podman' /proc/1/cgroup 2>/dev/null; then
+    in_container=1
+  fi
 fi
 
 cores=""

@@ -38,6 +38,7 @@ _GATES: dict[str, str] = {
     "check_version_consistency.py": "compares manifest/entrypoint literals",
     "check_issue_templates.py": "reads .github/ISSUE_TEMPLATE/ and the docs beside it",
     "check_no_mutation.py": "AST parse; no imports executed",
+    "check_scanner_hygiene.py": "regex over skills text; mirrors upstream guard patterns",
 }
 
 _QUICK = ("test_skill_counts.py", "render_docs.py", "check_skill_provenance.py")
