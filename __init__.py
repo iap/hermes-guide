@@ -46,7 +46,7 @@ def _format_result(results):
             if isinstance(detail, list):
                 for d in detail:
                     lines.append(f"    - {d}")
-            elif status != "healthy":
+            else:
                 lines.append(f"    - {detail}")
     return exit_ok, "\n".join(lines) if lines else "(no checks)"
 

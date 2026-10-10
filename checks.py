@@ -577,7 +577,7 @@ def check_skills():
         missing = sorted(guide_names - installed)
         if missing:
             loop = " ".join(missing)
-            cmd = f'for s in {loop}; do hermes skills install "iap/hermes-guide/skills/$s"; done'
+            cmd = f'for s in {loop}; do hermes skills install "{constants.SKILLS_INSTALL_SOURCE}/skills/$s"; done'
             return {
                 "status": "informational",
                 "reason": (
@@ -972,6 +972,11 @@ def check_memory_hygiene():
     with content-level findings: over-limit stores, exact/near-duplicate
     entries, user-preference entries mis-targeted into the agent-notes store,
     and an undated dynamic store. Never mutates anything.
+
+    Complexity note: near-duplicate detection is O(n^2) over entries. The
+    configured char limits (~2,200) do NOT bound this work — over-limit files
+    are reported as broken but still fully processed, so an over-limit store
+    can incur substantial comparison work.
     """
     home = _hermes_home()
     if not home:
