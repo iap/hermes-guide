@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.3
+version: 1.1.5
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -61,7 +61,7 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 
 ## 3. Pitfalls (symptom → cause → fix)
 
-1. **Hook never fires** — (a) gateway hook used in a CLI session (gateway-only); (b) shell hook not on the consent allowlist after a non-TTY start; (c) event name typo (config parse prints "Did you mean X?" and skips); (d) plugin providing it is disabled. → **Temporary:** for (b), run once with `--accept-hooks` / `HERMES_ACCEPT_HOOKS=1` (or from an interactive TTY) so the pair gets approved now. **Permanent:** set `hooks_auto_accept: true` for non-TTY surfaces. Then match system to surface; `hermes hooks doctor`; `hermes plugins list`.
+1. **Hook never fires** — (a) gateway hook used in a CLI session (gateway-only); (b) shell hook not on the consent allowlist after a non-TTY start; (c) event name typo (config parse prints "Did you mean X?" and skips); (d) plugin providing it is disabled. → **Temporary:** for (b), approve the pair at the interactive TTY prompt (approves only the specific hook being diagnosed). `--accept-hooks` / `HERMES_ACCEPT_HOOKS=1` also approves, but grants lasting consent to every unapproved hook — prefer the prompt. **Permanent:** the one-time approval persists in the allowlist. Prefer the interactive TTY prompt (approves only the specific hook being diagnosed) over `--accept-hooks` (approves every unapproved hook) or `hooks_auto_accept: true` (turns the consent gate off for every hook on non-TTY surfaces). Then match system to surface; `hermes hooks doctor`; `hermes plugins list`.
 2. **Hook ran once, then edits do nothing** — consent keys on the exact command string; script edits are silently trusted, but if you changed the command in config it's a **new** pair needing fresh consent. → `hermes hooks list`; re-approve.
 3. **Block not blocking** — exit code 2 or block JSON only works on `pre_tool_call`; a plugin-registered `pre_tool_call` may have blocked first (plugins register before shell hooks; first valid block wins); `fail_closed` on other events is ignored with a warning; a *timed-out* plugin `pre_tool_call` callback also blocks (policy hooks fail closed on timeout). → Scope the hook correctly.
 4. **Hook times out** — timeouts over 300s are clamped; a slow script needs to be async. → Lower the work or raise `timeout` within the cap.
@@ -91,7 +91,7 @@ Your shell hook is not firing because it is not on the consent allowlist. The ho
 | MEDIUM | Hook registered during non-TTY start | `hermes logs` shows `hook registered during non-TTY run; consent required` |
 
 ### Recommended Fix
-Run `hermes hooks test pre_tool_call --for-tool terminal` with `--accept-hooks` or `HERMES_ACCEPT_HOOKS=1` to approve the hook now. For a permanent fix, set `hooks_auto_accept: true` in `config.yaml` for non-TTY surfaces.
+Approve the hook by running the agent interactively and accepting the TTY prompt for this specific `(event, command)` pair — the approval persists in the allowlist. `hermes hooks test` fires the hook but does not record approval. Avoid `--accept-hooks` (approves every unapproved hook) and `hooks_auto_accept: true` (disables the consent gate for all hooks on non-TTY surfaces).
 
 ### References
 - `$HERMES_HOME/shell-hooks-allowlist.json` — consent allowlist file
@@ -100,4 +100,4 @@ Run `hermes hooks test pre_tool_call --for-tool terminal` with `--accept-hooks` 
 
 ---
 
-*Facts re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c` — no correction was needed: `VALID_HOOKS` (`hermes_cli/plugins.py`); `_HOOK_CALLBACK_TIMEOUT_SECS = 30.0`, `_MAX_HOOK_CALLBACK_TIMEOUT_SECS = 600.0`, `_HOOK_TIMEOUT_SUPPRESSION_SECONDS = 60.0` (`hermes_cli/plugins_dispatch.py`); `DEFAULT_TIMEOUT_SECONDS = 60`, `MAX_TIMEOUT_SECONDS = 300`, `BLOCK_EXIT_CODE = 2`, `ALLOWLIST_FILENAME` and the `{"approvals": [...]}` schema (`agent/shell_hooks.py`); the bypass trio `--accept-hooks` / `HERMES_ACCEPT_HOOKS=1` / `hooks_auto_accept` (`hermes_cli/config_defaults.py`, `hermes_cli/oneshot.py`); `X-Hermes-Signature-256: sha256=<hex>` over the raw body (`agent/outbound_webhooks.py`). Sources are now cited inline so the next reviewer can re-verify fast.*
+*Facts re-verified 2026-10-10 against upstream source at commit `b406d25f24462a61f01541069c90b78051c2c257` — correction: consent guidance now prefers interactive TTY approval of a specific hook over `--accept-hooks` (which approves all hooks) or `hooks_auto_accept: true`, which turns the consent gate off for every hook on non-TTY surfaces (`hermes_cli/config_defaults.py`, `hermes_cli/oneshot.py`). All other facts unchanged from the 2026-09-14 pass (`46a0daee58abbc1b07f84f505a5ba90f1958295c`); sources are cited inline so the next reviewer can re-verify fast.*

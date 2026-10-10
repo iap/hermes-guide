@@ -18,11 +18,14 @@ Please do not publicly disclose the vulnerability until it has been resolved.
 ## Read-only Guarantee
 
 This plugin never writes to Hermes configuration or the filesystem — in normal
-operation, or during install/uninstall. It only reads config (`hermes config
-path`), parses SKILL.md / bundle files, and runs read-only `hermes ... doctor`
-subcommands. The only plugin-scoped setting it declares is the opt-in
-`proactive` boolean (see `plugin.yaml` `config_schema`); it does not touch any
-other core Hermes config.
+operation, or during install/uninstall. It reads config (`hermes config path`),
+parses SKILL.md / bundle files, and inspects state. One subcommand has a side
+effect worth naming: `hermes hooks doctor` — run by the explicit
+`/hermes-doctor` and `hermes guide` paths — executes each approved shell hook
+once with a synthetic payload. Proactive runs never execute hooks: they inspect
+hook configuration in-process (allowlist state, exec bit) instead. The only
+plugin-scoped setting it declares is the opt-in `proactive` boolean (see
+`plugin.yaml` `config_schema`); it does not touch any other core Hermes config.
 
 This contract is enforced in CI by `tools/check_no_mutation.py`, which fails the
 build if any Python source introduces a write-mode `open()`, `yaml.dump()` /

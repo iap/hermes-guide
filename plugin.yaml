@@ -4,7 +4,9 @@ description: >-
   Executable, read-only diagnostics for Hermes configuration. Complements the
   built-in doctor/helpers: deterministic health checks across MCP servers,
   skills, commands, hooks, plugins, and memory + troubleshooting playbooks for
-  what they don't cover.
+  what they don't cover. The hooks check runs `hermes hooks doctor`, which
+  executes each approved hook once; proactive runs inspect hooks in-process
+  and execute nothing.
 manifest_version: 1
 api_version: 1
 license: MIT

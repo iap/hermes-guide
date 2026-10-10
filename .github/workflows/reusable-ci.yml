@@ -256,6 +256,12 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_reachable_allowlist_check.py
 
+      - name: Proactive hooks read-only regression
+        # check_hooks_readonly() is what proactive boundaries run; keep it
+        # strictly in-process (no hook execution, no subprocess) and wired.
+        if: inputs.run-full-gate
+        run: python tools/test_hooks_readonly_check.py
+
       - name: Plugin notes regression
         if: inputs.run-full-gate
         run: python tools/test_plugins_notes.py
