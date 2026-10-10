@@ -347,7 +347,17 @@ jobs:
     # `exit 1` by design -- so that gate would also suppress the comment for
     # every genuinely contradicted PR, which is exactly the case that needs it.
     # Test whether the judge actually ran, not whether the job passed.
-    if: always() && github.event_name == 'pull_request' && needs.verify.outputs.verdict != '' && needs.verify.outputs.verdict != 'skip'
+    #
+    # Fork gate: fork PRs receive a read-only GITHUB_TOKEN regardless of the
+    # declared `pull-requests: write`, so the comment calls below fail with
+    # 403 ("Resource not accessible by integration") and turn this job red on
+    # every fork PR. The header documents "forks get no comment, by design";
+    # this gate makes the code match it. The honesty check itself (verify +
+    # fail step) still runs for fork PRs -- only the sticky-comment
+    # decoration is skipped. `head.repo.full_name` is populated even for
+    # fork events (it is the fork's own full name), so the comparison is a
+    # reliable fork discriminator rather than an empty-payload gamble.
+    if: always() && github.event_name == 'pull_request' && needs.verify.outputs.verdict != '' && needs.verify.outputs.verdict != 'skip' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
