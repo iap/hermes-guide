@@ -37,10 +37,25 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 BASELINE_FILE = REPO / ".github" / "upstream-drift.baseline"
+
+
+def read_baseline(path: Path = BASELINE_FILE) -> str:
+    """Return the pinned revision from *path*, with any BOM removed.
+
+    Read as ``utf-8-sig``: the committed baseline is an editor-written text
+    file that carries a UTF-8 BOM, and plain ``utf-8`` leaves a ``\ufeff`` on
+    the front. ``.strip()`` clears the trailing newline but not the BOM, so the
+    default (no ``--rev``) path resolved to ``\ufeff<sha>`` and git rejected it
+    as a missing revision -- a failure invisible in CI, which passes ``--rev``
+    explicitly and never reads this file.
+    """
+    return path.read_text(encoding="utf-8-sig").strip()
+
 
 _EXT = r"(?:py|ts|tsx|js|mjs|json|ya?ml|toml)"
 SYM_RE = re.compile(r"`?([A-Za-z0-9_./-]+\.%s)`?::`?([A-Za-z_][A-Za-z0-9_]*)`?" % _EXT)
@@ -178,7 +193,18 @@ def selftest() -> int:
     exp_l = [("hermes_cli/config.py", "2574")]
     exp_p = [("hermes_cli/main_desktop.py", "1501")]
     ok = syms == exp_s and lins == exp_l and prose == exp_p
-    print("selftest:", "OK" if ok else "FAIL %r %r %r" % (syms, lins, prose))
+
+    # The baseline is committed with a UTF-8 BOM; read_baseline must strip it,
+    # or the default --rev path resolves to "\ufeff<sha>" and git rejects it.
+    with tempfile.TemporaryDirectory() as tmp:
+        baseline = Path(tmp) / "upstream-drift.baseline"
+        baseline.write_bytes(
+            b"\xef\xbb\xbf" + b"f97608f178d1ffeca59860195ab7da295f7c8e5f\n"
+        )
+        bom_ok = read_baseline(baseline) == "f97608f178d1ffeca59860195ab7da295f7c8e5f"
+    ok = ok and bom_ok
+
+    print("selftest:", "OK" if ok else "FAIL %r %r %r bom=%s" % (syms, lins, prose, bom_ok))
     return 0 if ok else 1
 
 
@@ -196,7 +222,7 @@ def main(argv: list[str]) -> int:
         return 2
     rev = argv[argv.index("--rev") + 1] if "--rev" in argv else None
     if rev is None:
-        rev = BASELINE_FILE.read_text(encoding="utf-8").strip()
+        rev = read_baseline()
     if not (src / ".git").exists():
         print("error: %s is not a git clone" % src, file=sys.stderr)
         return 2
