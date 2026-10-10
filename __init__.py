@@ -11,7 +11,8 @@ Checks: config, mcp, skills, commands, hooks, plugins, memories — seven
 read-only checks implemented in `checks.py`.
 
 Opt-in `proactive: true` runs drift checks on session start/end and logs
-findings (observer-only; nothing is injected or modified).
+findings (observer-only; nothing is injected or modified — hooks are inspected
+in-process at those boundaries, never executed).
 """
 
 __version__ = "0.7.0"
@@ -146,9 +147,14 @@ def _version_check():
 
 
 def _proactive_check(**_kwargs):
-    """Run drift checks at a session boundary; log findings (observer-only)."""
+    """Run drift checks at a session boundary; log findings (observer-only).
+
+    ``readonly_hooks`` keeps the hooks check in-process: `hermes hooks doctor`
+    executes every approved hook once with a synthetic payload, which is fine
+    when the user asked for it explicitly — not at a session boundary.
+    """
     _version_check()
-    for label, r in checks.run_all().items():
+    for label, r in checks.run_all(readonly_hooks=True).items():
         status = r.get("status")
         if status == "broken":
             logger.warning("hermes-guide [%s] broken: %s", label, r.get("reason"))

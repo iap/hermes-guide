@@ -12,8 +12,15 @@ Every check returns an envelope:
 - `unknown`       — could not determine (path/env unavailable).
 
 Checks are read-only by design: they resolve paths, read files, parse them, and
-shell out to `hermes ... doctor`-style read-only commands. They never mutate
-config, enable/disable anything, or auto-fix.
+shell out to `hermes ... doctor`-style commands. They never mutate config,
+enable/disable anything, or auto-fix.
+
+One shell-out is not side-effect free: `hermes hooks doctor` executes every
+approved shell hook once with a synthetic payload — that is what verifies a
+hook actually runs. It stays on the explicit `/hermes-doctor` and `hermes
+guide` paths; proactive runs (session start/end) use `check_hooks_readonly()`,
+an in-process inspection that registers nothing, runs no hooks, and starts no
+subprocess.
 """
 
 import importlib
@@ -738,6 +745,33 @@ def _check_allowlist_json():
     return None
 
 
+def _merge_allowlist_json(result, source_label):
+    """Merge a malformed-allowlist finding into a hooks verdict.
+
+    A malformed ``shell-hooks-allowlist.json`` is real breakage regardless of
+    the other verdict — but it must not *replace* that verdict's findings:
+    returning the allowlist envelope alone silently dropped them, hiding the
+    very problems the user is diagnosing. Shared by the doctor-backed and the
+    in-process hooks checks so the two cannot drift.
+    """
+    allowlist_result = _check_allowlist_json()
+    if allowlist_result is None:
+        return result
+    detail = [allowlist_result.get("detail")]
+    if result.get("status") in ("broken", "unknown"):
+        detail.append(f"{source_label}: {result.get('reason')}")
+        extra = result.get("detail")
+        if isinstance(extra, list):
+            detail.extend(extra)
+        elif extra:
+            detail.append(str(extra))
+    return {
+        "status": "broken",
+        "reason": allowlist_result.get("reason"),
+        "detail": detail,
+    }
+
+
 def check_hooks():
     # `hermes hooks doctor` exits 0 even with problems, so we parse its output
     # (rc is not a reliable signal — it is 0 in all cases). Count the U+2717 /
@@ -772,25 +806,94 @@ def check_hooks():
                 "detail": stdout.strip()[:2000],
             }
     # A malformed allowlist is real breakage regardless of the doctor's verdict —
-    # but it must not *replace* the doctor's findings. Returning the allowlist
-    # envelope alone silently dropped them, hiding the very problems the user is
-    # diagnosing. Merge both instead.
-    allowlist_result = _check_allowlist_json()
-    if allowlist_result is None:
-        return result
-    detail = [allowlist_result.get("detail")]
-    if result.get("status") in ("broken", "unknown"):
-        detail.append(f"`hermes hooks doctor`: {result.get('reason')}")
-        extra = result.get("detail")
-        if isinstance(extra, list):
-            detail.extend(extra)
-        elif extra:
-            detail.append(str(extra))
-    return {
-        "status": "broken",
-        "reason": allowlist_result.get("reason"),
-        "detail": detail,
-    }
+    # but it must not *replace* the doctor's findings. _merge_allowlist_json
+    # keeps both; see its docstring for why merging (not replacing) matters.
+    return _merge_allowlist_json(result, "`hermes hooks doctor`")
+
+
+def _load_shell_hooks():
+    """Import ``agent.shell_hooks`` lazily; None when unavailable.
+
+    The plugin runs inside Hermes, so this normally resolves — the same
+    fast-path pattern as ``_hermes_home_from_library``. Outside a live Hermes
+    process (the hermetic test tier, say) it returns None and callers degrade
+    to ``unknown`` instead of crashing.
+    """
+    try:
+        from agent import shell_hooks  # type: ignore[import-not-found]
+
+        return shell_hooks
+    except Exception:
+        return None
+
+
+def check_hooks_readonly():
+    """Inspect configured hooks in-process: no hook runs, no subprocess starts.
+
+    The variant proactive mode uses at session boundaries. `hermes hooks
+    doctor` executes every approved hook once with a synthetic payload —
+    correct when the user asked for it explicitly, wrong for a boundary they
+    did not. This reads the same sources the doctor reads — configured hooks
+    (`iter_configured_hooks`, which parses without registering), consent state
+    (`allowlist_entry_for`) and the exec bit (`script_is_executable`) — and
+    reports the static subset of findings. Deeper doctor checks (mtime drift,
+    live execution) stay on the manual path.
+    """
+    shell_hooks = _load_shell_hooks()
+    if shell_hooks is None:
+        return {
+            "status": "unknown",
+            "reason": "agent.shell_hooks unavailable; hooks not inspected",
+            "detail": None,
+        }
+    _, data = _read_config()
+    if data is None:
+        return {
+            "status": "unknown",
+            "reason": "config not readable; hooks not inspected",
+            "detail": None,
+        }
+    try:
+        specs = shell_hooks.iter_configured_hooks(data)
+    except Exception as exc:
+        return {
+            "status": "unknown",
+            "reason": f"hooks config could not be inspected ({type(exc).__name__})",
+            "detail": None,
+        }
+    if not specs:
+        result = {"status": "healthy", "reason": "no shell hooks configured", "detail": None}
+    else:
+        findings = []
+        for spec in specs:
+            try:
+                allowlisted = (
+                    shell_hooks.allowlist_entry_for(spec.event, spec.command) is not None
+                )
+                executable = shell_hooks.script_is_executable(spec.command)
+            except Exception as exc:
+                findings.append(f"{spec.event}: inspection failed ({type(exc).__name__}: {exc})")
+                continue
+            if not executable:
+                findings.append(f"{spec.event}: script not executable: {spec.command}")
+            if not allowlisted:
+                findings.append(
+                    f"{spec.event}: not allowlisted — will not fire until approved "
+                    f"(run once with `--accept-hooks` or at the TTY prompt): {spec.command}"
+                )
+        if findings:
+            result = {
+                "status": "broken",
+                "reason": f"{len(findings)} hook finding(s)",
+                "detail": findings,
+            }
+        else:
+            result = {
+                "status": "healthy",
+                "reason": f"{len(specs)} shell hook(s) allowlisted and executable",
+                "detail": None,
+            }
+    return _merge_allowlist_json(result, "in-process hooks inspection")
 
 
 # --- plugins --------------------------------------------------------------
@@ -1107,7 +1210,7 @@ def labels():
     return [label for label, _ in _CHECKS]
 
 
-def run_all(scope=None):
+def run_all(scope=None, readonly_hooks=False):
     """Run every check, or exactly the one named by ``scope``.
 
     Each check is isolated: a crash in one check surfaces as a `broken`
@@ -1117,6 +1220,11 @@ def run_all(scope=None):
     ``scope`` must equal one of the check labels. An unrecognized scope raises
     ``ValueError`` naming the valid ones — matching on a substring would let
     ``s`` silently run four checks and a typo report success.
+
+    ``readonly_hooks`` swaps the hooks check for its in-process variant
+    (``check_hooks_readonly``): no hook runs, no subprocess starts. Proactive
+    boundaries pass it; the explicit CLI and slash-command paths keep the
+    deeper ``hermes hooks doctor`` check.
     """
     _cache.clear()
     valid = labels()
@@ -1126,6 +1234,8 @@ def run_all(scope=None):
     for label, fn in _CHECKS:
         if scope is not None and scope != label:
             continue
+        if readonly_hooks and label == "hooks":
+            fn = check_hooks_readonly
         try:
             results[label] = fn()
         except Exception as exc:
