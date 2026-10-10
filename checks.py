@@ -846,7 +846,29 @@ def check_hooks_readonly():
             "reason": "agent.shell_hooks unavailable; hooks not inspected",
             "detail": None,
         }
-    _, data = _read_config()
+    # Resolve config from the library-derived home only — no CLI fallback.
+    # A proactive boundary must not start a subprocess.
+    home = _hermes_home_from_library()
+    if not home:
+        return {
+            "status": "unknown",
+            "reason": "hermes home not resolvable; hooks not inspected",
+            "detail": None,
+        }
+    config_path = os.path.join(home, "config.yaml")
+    if not os.path.isfile(config_path):
+        return {
+            "status": "unknown",
+            "reason": "config.yaml not found at library-derived home; hooks not inspected",
+            "detail": None,
+        }
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if not isinstance(data, dict):
+            data = None
+    except Exception:
+        data = None
     if data is None:
         return {
             "status": "unknown",
@@ -877,11 +899,12 @@ def check_hooks_readonly():
                 findings.append(f"{spec.event}: inspection failed ({type(exc).__name__}: {exc})")
                 continue
             if not executable:
-                findings.append(f"{spec.event}: script not executable: {spec.command}")
+                findings.append(f"{spec.event}: script not executable")
             if not allowlisted:
                 findings.append(
                     f"{spec.event}: not allowlisted — will not fire until approved "
-                    f"(run once with `--accept-hooks` or at the TTY prompt): {spec.command}"
+                    f"(run the agent interactively and approve at the TTY prompt, "
+                    f"or use `--accept-hooks` which approves all hooks)"
                 )
         if findings:
             result = {
