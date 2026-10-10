@@ -183,8 +183,9 @@ def _run_hermes(args, timeout=20):
     *timeout* is a deadline, not a per-attempt budget: the remaining time is
     divided among the remaining candidates so the total wall-clock never
     exceeds *timeout*. A candidate that hangs raises TimeoutExpired (not an
-    OSError), so it is NOT in _NOT_EXECUTABLE and does not fall through — the
-    first attempt always gets the full budget, keeping the fallback reachable.
+    OSError), so it is NOT in _NOT_EXECUTABLE and does not fall through. Each
+    attempt receives a fair share of the remaining time (minimum 1s), keeping
+    the fallback reachable without starving early candidates.
     """
     candidates = _hermes_candidates()
     if not candidates:
