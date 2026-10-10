@@ -150,6 +150,13 @@ jobs:
           python tools/check_no_mutation.py --selftest
           python tools/check_no_mutation.py
 
+      - name: Scanner-hygiene guard
+        # Mirrors upstream plugin_guard patterns (proc_access, dump_all_env,
+        # curl_pipe_shell) over skills text. Pure file reads, fast tier.
+        run: |
+          python tools/check_scanner_hygiene.py --selftest
+          python tools/check_scanner_hygiene.py
+
       - name: Tool coverage guard
         # Stdlib only, so it runs in the fast tier. Fails if a tools/ guard or
         # regression test is never referenced by a workflow -- unwired coverage

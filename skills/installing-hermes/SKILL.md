@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent on Linux/WSL2 (NixOS included) — the four install routes, what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.6
+version: 1.0.7
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -148,7 +148,7 @@ Your Hermes install is broken because the PM dependency environment is missing. 
 | MEDIUM | In-tree venv may be stale or missing | `ls -d venv .venv` shows neither directory exists on a PM-era install |
 
 ### Recommended Fix
-Re-run the installer to rebuild the PM dependency environment: `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` (or the two-step reviewable version above). The installer reuses the existing checkout and re-syncs PM's runtime. Verify with `hermes --version` and `hermes doctor`.
+Re-run the installer to rebuild the PM dependency environment using the two-step reviewable version above (download to a temp file, review, then execute). The installer reuses the existing checkout and re-syncs PM's runtime. Verify with `hermes --version` and `hermes doctor`.
 
 ### References
 - `$HERMES_HOME/tools/` — PM's tool store
