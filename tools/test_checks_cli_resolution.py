@@ -131,7 +131,7 @@ def test_sibling_outranks_path():
         original_exe, original_path = sys.executable, os.environ["PATH"]
         try:
             sys.executable = exe
-            os.environ["PATH"] = other + os.pathsep + original_path
+            os.environ["PATH"] = other
             rc, out, _ = checks._run_hermes(["config", "path"])
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
@@ -157,7 +157,7 @@ def test_falls_through_broken_shim():
             original_exe, original_path = sys.executable, os.environ["PATH"]
             try:
                 sys.executable = exe
-                os.environ["PATH"] = other + os.pathsep + original_path
+                os.environ["PATH"] = other
                 rc, out, _ = checks._run_hermes(["config", "path"])
             finally:
                 sys.executable, os.environ["PATH"] = original_exe, original_path
@@ -183,7 +183,7 @@ def test_non_executable_candidate_falls_through():
         original_exe, original_path = sys.executable, os.environ["PATH"]
         try:
             sys.executable = exe
-            os.environ["PATH"] = other + os.pathsep + original_path
+            os.environ["PATH"] = other
             rc, out, _ = checks._run_hermes(["config", "path"])
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
@@ -275,7 +275,7 @@ def test_real_failure_is_not_retried():
         original_exe, original_path = sys.executable, os.environ["PATH"]
         try:
             sys.executable = exe
-            os.environ["PATH"] = other + os.pathsep + original_path
+            os.environ["PATH"] = other
             rc, out, _ = checks._run_hermes(["config", "path"])
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
@@ -298,7 +298,7 @@ def test_path_only_still_resolves():
         original_exe, original_path = sys.executable, os.environ["PATH"]
         try:
             sys.executable = exe
-            os.environ["PATH"] = lonely + os.pathsep + original_path
+            os.environ["PATH"] = lonely
             rc, out, _ = checks._run_hermes(["config", "path"])
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
@@ -348,7 +348,7 @@ def test_every_path_entry_is_a_candidate():
         original_exe, original_path = sys.executable, os.environ["PATH"]
         try:
             sys.executable = exe
-            os.environ["PATH"] = broken_dir + os.pathsep + working_dir + os.pathsep + original_path
+            os.environ["PATH"] = os.pathsep.join([broken_dir, working_dir])
             rc, out, _ = checks._run_hermes(["config", "path"])
         finally:
             sys.executable, os.environ["PATH"] = original_exe, original_path
@@ -503,16 +503,22 @@ def test_non_file_path_entry_is_ignored():
     with tempfile.TemporaryDirectory() as tmp:
         decoy_dir = os.path.join(tmp, "decoy")
         os.makedirs(os.path.join(decoy_dir, HERMES_EXE))  # a DIRECTORY named hermes
+        # A real file alongside the decoy keeps the assertion non-vacuous: with
+        # PATH held to the decoy alone the walk returns [] and `not any(dir)`
+        # passes without proving anything about non-file entries.
+        good_dir = os.path.join(tmp, "good")
+        os.makedirs(good_dir)
+        _working(good_dir, HERMES_EXE, "REAL-ENTRY")
 
         original_path = os.environ["PATH"]
         try:
-            os.environ["PATH"] = decoy_dir + os.pathsep + original_path
+            os.environ["PATH"] = os.pathsep.join([decoy_dir, good_dir])
             found = checks._path_hermes_executables()
         finally:
             os.environ["PATH"] = original_path
 
         check("directory named hermes is not a candidate",
-              not any(os.path.isdir(p) for p in found), f"found={found!r}")
+              found and not any(os.path.isdir(p) for p in found), f"found={found!r}")
 
 
 def test_timeout_is_deadline_not_per_attempt():
