@@ -862,7 +862,9 @@ def check_hooks_readonly():
             "detail": None,
         }
     if not specs:
-        result = {"status": "healthy", "reason": "no shell hooks configured", "detail": None}
+        # Annotated broadly: `detail` is a list in the findings branch below
+        # and None here; mypy joins the branch assignments otherwise.
+        result: dict = {"status": "healthy", "reason": "no shell hooks configured", "detail": None}
     else:
         findings = []
         for spec in specs:
