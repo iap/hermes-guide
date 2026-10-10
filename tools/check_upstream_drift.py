@@ -105,7 +105,11 @@ DRIFT_FACTS = [
 
 
 def read_baseline() -> str:
-    return BASELINE_FILE.read_text(encoding="utf-8").strip()
+    # utf-8-sig: the committed baseline is an editor-written text file that
+    # can carry a UTF-8 BOM, and plain utf-8 leaves a `\ufeff` on the front
+    # that survives .strip() — main() then passes `\ufeff<sha>` to
+    # `git log` and git rejects it as an unknown revision.
+    return BASELINE_FILE.read_text(encoding="utf-8-sig").strip()
 
 
 def clone_upstream() -> str:
