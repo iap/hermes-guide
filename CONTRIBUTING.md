@@ -178,9 +178,9 @@ metadata:
 ```
 
 - **Naming.** `diagnosing-<surface>` for playbooks, lowercase kebab-case, ≤20
-  characters. `installing-hermes` is the install guide and `hermes-configuration-guide`
-  is the routing map — both predate the length limit and are exempt. Do not rename
-  either to fit it.
+  characters for new skills. `diagnosing-host-pressure` (24) and
+  `hermes-configuration-guide` (26) predate the length limit and are exempt.
+  Do not rename either to fit it.
 - **Description.** This is the only thing a router sees. Name the surface and the
   symptom; do not spend it on adjectives.
 - **Version.** Any change to a `SKILL.md` bumps `version`, and the bump must go

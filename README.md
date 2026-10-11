@@ -41,7 +41,9 @@ git clone --depth 1 https://github.com/iap/hermes-guide ~/.hermes/plugins/hermes
 hermes plugins enable hermes-guide
 ```
 
-A clone (rather than `cp -r .`) keeps VCS metadata and local caches out of the plugin directory.
+Prefer a fresh clone over `cp -r .`: it leaves working-tree caches and build
+artifacts (`__pycache__`, venvs) behind. Note the clone still carries `.git` —
+delete it if you want a pristine copy.
 
 > [!NOTE]
 > On native Windows `$HERMES_HOME` is `%LOCALAPPDATA%\hermes`, not `~/.hermes`. Run `hermes config path` to confirm where yours is.

@@ -63,7 +63,7 @@ at the root or under `skills/` that CI or agents are expected to run.
 ## Run this before you claim done
 
 ```bash
-python tools/check_gates.py          # the hermetic tier — 5 gates, no network/git/Hermes
+python tools/check_gates.py          # the hermetic tier — 9 gates, no network/Hermes (two read the git index)
 python -m py_compile __init__.py checks.py constants.py
 hermes plugins doctor . --ci         # needs a local Hermes
 ```
