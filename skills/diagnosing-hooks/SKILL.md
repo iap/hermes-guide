@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.5
+version: 1.1.6
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -61,7 +61,7 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 
 ## 3. Pitfalls (symptom → cause → fix)
 
-1. **Hook never fires** — (a) gateway hook used in a CLI session (gateway-only); (b) shell hook not on the consent allowlist after a non-TTY start; (c) event name typo (config parse prints "Did you mean X?" and skips); (d) plugin providing it is disabled. → **Temporary:** for (b), approve the pair at the interactive TTY prompt (approves only the specific hook being diagnosed). `--accept-hooks` / `HERMES_ACCEPT_HOOKS=1` also approves, but grants lasting consent to every unapproved hook — prefer the prompt. **Permanent:** the one-time approval persists in the allowlist. Prefer the interactive TTY prompt (approves only the specific hook being diagnosed) over `--accept-hooks` (approves every unapproved hook) or `hooks_auto_accept: true` (turns the consent gate off for every hook on non-TTY surfaces). Then match system to surface; `hermes hooks doctor`; `hermes plugins list`.
+1. **Hook never fires** — (a) gateway hook used in a CLI session (gateway-only); (b) shell hook not on the consent allowlist after a non-TTY start; (c) event name typo (config parse prints "Did you mean X?" and skips); (d) plugin providing it is disabled. → **Temporary:** for (b), approve the pair at the interactive TTY prompt — start `hermes --cli` (or bare `hermes` for the TUI) and accept the prompt for the specific hook (approves only the hook being diagnosed). `--accept-hooks` / `HERMES_ACCEPT_HOOKS=1` also approves, but grants lasting consent to every unapproved hook — prefer the prompt. **Permanent:** the one-time approval persists in the allowlist. Prefer the interactive TTY prompt (approves only the specific hook being diagnosed) over `--accept-hooks` (approves every unapproved hook) or `hooks_auto_accept: true` (turns the consent gate off for every hook on non-TTY surfaces). Then match system to surface; `hermes hooks doctor`; `hermes plugins list`.
 2. **Hook ran once, then edits do nothing** — consent keys on the exact command string; script edits are silently trusted, but if you changed the command in config it's a **new** pair needing fresh consent. → `hermes hooks list`; re-approve.
 3. **Block not blocking** — exit code 2 or block JSON only works on `pre_tool_call`; a plugin-registered `pre_tool_call` may have blocked first (plugins register before shell hooks; first valid block wins); `fail_closed` on other events is ignored with a warning; a *timed-out* plugin `pre_tool_call` callback also blocks (policy hooks fail closed on timeout). → Scope the hook correctly.
 4. **Hook times out** — timeouts over 300s are clamped; a slow script needs to be async. → Lower the work or raise `timeout` within the cap.
@@ -91,7 +91,7 @@ Your shell hook is not firing because it is not on the consent allowlist. The ho
 | MEDIUM | Hook registered during non-TTY start | `hermes logs` shows `hook registered during non-TTY run; consent required` |
 
 ### Recommended Fix
-Approve the hook by running the agent interactively and accepting the TTY prompt for this specific `(event, command)` pair — the approval persists in the allowlist. `hermes hooks test` fires the hook but does not record approval. Avoid `--accept-hooks` (approves every unapproved hook) and `hooks_auto_accept: true` (disables the consent gate for all hooks on non-TTY surfaces).
+Approve the hook by starting an interactive session (`hermes --cli`, or bare `hermes` for the TUI) and accepting the TTY prompt for this specific `(event, command)` pair — the approval persists in the allowlist. `hermes hooks test` fires the hook but does not record approval. Avoid `--accept-hooks` (approves every unapproved hook) and `hooks_auto_accept: true` (disables the consent gate for all hooks on non-TTY surfaces).
 
 ### References
 - `$HERMES_HOME/shell-hooks-allowlist.json` — consent allowlist file
