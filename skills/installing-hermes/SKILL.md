@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
-description: Install, reinstall, upgrade, and uninstall Hermes Agent on Linux/WSL2 (NixOS included) — the four install routes, what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.7
+description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
+version: 1.0.8
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]

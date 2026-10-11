@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
-description: Host resource exhaustion masquerading as Hermes faults.
-version: 1.3.0
+description: Host resource exhaustion masquerading as Hermes faults — load vs CPU, process states, memory/swap, probe verdicts, and container/interpreter scope traps.
+version: 1.3.1
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
