@@ -51,8 +51,9 @@ import sys
 # Label vocabulary. Values are lowercase because GitHub labels are
 # case-insensitive for matching but the repo's existing labels are lowercase
 # (`windows`, not `Windows`), and a label that differs only in case is a second
-# label in the UI.
-OS_LABELS = ("macos", "linux", "windows", "wsl")
+# label in the UI. `macos-legacy` is hyphenated, not colon-separated: it sorts
+# with the OS family and needs no quoting in shell or YAML.
+OS_LABELS = ("macos", "macos-legacy", "linux", "windows", "wsl")
 PRIORITY_LABELS = ("P1", "P2", "P3")
 
 # Word-boundary patterns, longest/most specific first. Ordering matters only in
@@ -64,6 +65,12 @@ _OS_PATTERNS = (
     ("macos", re.compile(r"\bmac\s?os\b|\bos\s?x\b|\bdarwin\b", re.I)),
     ("linux", re.compile(r"\blinux\b|\bubuntu\b|\bfedora\b|\bdebian\b", re.I)),
 )
+
+# Legacy-Intel qualifier. Only meaningful beside a macOS match: "Intel" on a
+# Linux or Windows value is just the CPU, not the legacy-mac surface this repo
+# tracks (GHA macos-15-intel leg, the 12.7 lineage). So the detector adds
+# `macos-legacy` only when the same value already matched `macos`.
+_LEGACY_PATTERN = re.compile(r"\blegacy\b|\bintel\b|\bx86_?64\b", re.I)
 
 # Built from PRIORITY_LABELS so the vocabulary lives in exactly one place. A
 # hand-written p[0-3] here would drift from the tuple above and silently accept
@@ -131,6 +138,10 @@ def os_labels(body: str) -> list[str]:
         for name, pattern in _OS_PATTERNS:
             if pattern.search(value):
                 found.add(name)
+                # Per-value, not cumulative: "macOS" on one line plus
+                # "Linux Intel" on the next must not yield macos-legacy.
+                if name == "macos" and _LEGACY_PATTERN.search(value):
+                    found.add("macos-legacy")
     return [label for label in OS_LABELS if label in found]
 
 
@@ -197,6 +208,18 @@ def _selftest() -> int:
          "value later in the body still counts"),
         ("- OS / shell: Darwin", ["macos"], "Darwin is macOS"),
         ("- OS / shell: OS X", ["macos"], "legacy spelling"),
+        ("- OS / shell: macOS Intel + zsh", ["macos", "macos-legacy"],
+         "Intel qualifier on macOS routes to the legacy leg"),
+        ("- OS / shell: macOS legacy (Intel x86_64)", ["macos", "macos-legacy"],
+         "all three qualifier spellings at once"),
+        ("- OS / shell: macOS + zsh (POSIX)", ["macos"],
+         "Apple Silicon default claims no legacy label"),
+        ("- OS / shell: Linux Intel + bash", ["linux"],
+         "Intel without macOS is just the CPU, not legacy-mac"),
+        ("- OS / shell: Windows Intel + PowerShell", ["windows"],
+         "same rule on Windows"),
+        ("- OS / shell: macOS\n- OS / shell: Linux Intel", ["macos", "linux"],
+         "legacy qualifier does not leak across lines"),
         ("- Priority: P0", [], "P0 is outside the vocabulary"),
         ("- Priority: P4", [], "P4 is outside the vocabulary"),
         ("- priority: p1", ["P1"], "case-insensitive key and value"),
