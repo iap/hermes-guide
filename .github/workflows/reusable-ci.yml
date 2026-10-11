@@ -382,3 +382,36 @@ jobs:
           # are informational noise: this plugin legitimately calls the `hermes`
           # CLI via subprocess.run (list args, no shell=True).
           bandit __init__.py checks.py constants.py --skip B404,B603
+
+  legacy-mac:
+    # Legacy-mac install leg: proves the pinned Hermes tag installs on the
+    # oldest GHA-hosted Intel macOS image (macos-13, Ventura). Closest hosted
+    # match to the repo's 12.7 lineage (checks.py macOS 12.7 note, the 12.7.6
+    # host-pressure baseline). Hermetic gates only -- no dogfood, tap smoke,
+    # or runtime suites. Hermes pin MUST match the plugin job's install tag.
+    runs-on: macos-13
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+          cache-dependency-path: '**/requirements*.txt'
+
+      - name: Install Hermes
+        shell: bash
+        run: |
+          # Same pin as the plugin job above. Editable install is the
+          # documented dev path; wheel/sdist builds are blocked outside Nix.
+          git clone --depth 1 --branch v2026.9.24 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
+          pip install -e "$RUNNER_TEMP/hermes-agent"
+
+      - name: Python syntax check
+        run: python -m py_compile __init__.py checks.py constants.py
+
+      - name: Hermetic gates
+        run: python tools/check_gates.py
