@@ -20,7 +20,7 @@ body:
     id: os
     attributes:
       label: OS / environment
-      description: Pick the platform. macOS Intel (legacy) routes to the legacy-mac owner.
+      description: Pick the platform you reproduced on.
       options:
         - macOS (Apple Silicon)
         - macOS Intel (legacy)

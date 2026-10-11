@@ -391,6 +391,9 @@ jobs:
     # (checks.py macOS 12.7 note, the 12.7.6 host-pressure baseline).
     # Hermetic gates only -- no dogfood, tap smoke, or runtime suites.
     # Hermes pin MUST match the plugin job's install tag.
+    # Full-gate only: the Hermes clone + pip install is a network leg, and
+    # direct pushes run the fast tier (same rule as the plugin job's legs).
+    if: inputs.run-full-gate
     runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
