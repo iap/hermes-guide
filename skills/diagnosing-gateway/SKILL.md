@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.1.2
+version: 1.1.3
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -32,7 +32,7 @@ Platform config lives under `gateway.platforms.<name>` in `config.yaml`, but **e
 
 1. **Bot not responding to messages** — (a) gateway not running; (b) bot not authorized; (c) user not in allowlist; (d) token expired. → Run `hermes gateway status`; start gateway (`hermes gateway start`); check allowlist in config.yaml; verify token with `hermes gateway setup`.
 2. **Messages not delivering** — (a) invalid bot token; (b) platform API down; (c) network issue. → Verify token with `hermes gateway setup`; check platform status page; test network connectivity.
-3. **Allowlist confusion — who can talk to the bot?** — (a) user not on platform-specific allowlist; (b) wrong access mode (pairing vs allowlist); (c) first DM already claimed by another user. → Run `hermes gateway setup <platform>` to see the actual access-mode options for that platform; check `gateway.platforms.<name>` in config.yaml for the platform-specific allowlist field.
+3. **Allowlist confusion — who can talk to the bot?** — (a) user not on platform-specific allowlist; (b) wrong access mode (pairing vs allowlist); (c) first DM already claimed by another user. → Run `hermes gateway setup` to see the actual access-mode options; check `gateway.platforms.<name>` in config.yaml for the platform-specific allowlist field.
 4. **Gateway crashes on start** — (a) invalid config.yaml; (b) port already in use; (c) missing dependencies. → Check `~/.hermes/logs/gateway.log`; verify config.yaml syntax; check for port conflicts (`lsof -i :<port>`).
 5. **Platform shows as disconnected** — (a) token expired or revoked; (b) platform API changed; (c) network/firewall blocking. → Re-authenticate via `hermes gateway setup`; check platform API status; verify network/firewall rules.
 6. **Bot responds twice** — (a) duplicate gateway processes; (b) platform retry on timeout. → Check `launchctl list | grep -i hermes` (macOS); kill duplicate processes; check platform retry settings.
@@ -70,7 +70,7 @@ Your Telegram bot is not responding to messages because the gateway is not runni
 | MEDIUM | Bot token may be expired | `hermes gateway status --deep` shows `telegram: token validation failed` |
 
 ### Recommended Fix
-Run `hermes gateway start` to start the gateway, then verify with `hermes gateway status`. If the token is expired, run `hermes gateway setup telegram` to re-authenticate, then `hermes gateway restart`.
+Run `hermes gateway start` to start the gateway, then verify with `hermes gateway status`. If the token is expired, run `hermes gateway setup` to re-authenticate, then `hermes gateway restart`.
 
 ### References
 - `~/.hermes/logs/gateway.log` — gateway log file

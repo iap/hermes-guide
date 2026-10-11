@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.8
+version: 1.0.9
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -120,7 +120,10 @@ from fighting:
 
 ## Update, uninstall, rollback
 
-- **Update (standard route):** re-run the installer — it reuses the existing checkout
+- **Update (standard route):** `hermes update` — pulls the latest changes and
+  reinstalls dependencies (`--check` previews availability, `--plan` shows the
+  per-service restart plan without changing anything). Re-run the installer only
+  as repair (broken shims, missing runtime) — it reuses the existing checkout
   (preserving `.git`) and re-syncs PM's dependency environment; data stays untouched.
 - **Uninstall:** `hermes uninstall` (modes: default keeps config/data; `--full` removes
   everything including `$HERMES_HOME`; `--data` erases only user data — the one mode

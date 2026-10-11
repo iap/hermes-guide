@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.5
+version: 1.2.6
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -73,7 +73,7 @@ Probe in this order — the first two are built-in helpers and answer most cases
 | `hermes memory status`: "Plugin: NOT installed ✗" | `memory.provider` names a provider with no plugin under `$HERMES_HOME/plugins/memory/` | Install the provider plugin (hub: `hermes plugins install …`), or `hermes memory off` to go built-in-only |
 | `hermes doctor`: "honcho-ai not installed" / "mem0ai not installed" | dependency-environment resync stripped provider pip deps (PM-era: `$HERMES_HOME/installs`; older checkouts: the in-tree venv) | Re-run `hermes memory setup <provider>` (force-reinstalls its deps) or `hermes update` |
 | Hindsight local mode fails to import | local mode needs `hindsight-all`, not `hindsight-client` | `hermes memory setup hindsight` after setting `mode: local` in `hindsight/config.json` |
-| Memory tool missing from the tool schema | Both stores disabled: `memory.memory_enabled: false` **and** `user_profile_enabled: false` | Re-enable one in `config.yaml`; both off removes the tool entirely |
+| Memory tool missing from the tool schema | Both stores disabled: `memory.memory_enabled: false` **and** `memory.user_profile_enabled: false` | Re-enable one in `config.yaml`; both off removes the tool entirely |
 | Writes rejected: "…would exceed the limit. Consolidate now…" | Char limits are hard caps (defaults 2200 / 1375 chars) — there is no auto-compaction | **Temporary:** consolidate/dedupe in the same turn. **Permanent:** raise `memory.memory_char_limit` deliberately, or keep entries dated (`[YYYY-MM-DD] …`) so consolidation stays cheap |
 | Writes silently staged, never saved | `memory.write_approval: true` stages writes for review | Approve via `/memory approve` in-session, or set `write_approval: false` |
 | Hygiene check flags "no entry has a [YYYY-MM-DD] date prefix" | Entries carry no dates, so staleness is uncheckable — the `memories` scope of `hermes guide` reports undated entries as notes | Date new entries `[YYYY-MM-DD] …` where staleness matters; undated entries are a note, not an error |
@@ -186,8 +186,8 @@ hermes sessions archive --help         # soft-hide instead of deleting, if prefe
 hermes sessions optimize               # VACUUM + merge FTS5 segments (no data change)
 ```
 
-`optimize-storage` migrates the search index to the compact v23 layout and
-reclaims disk on large DBs; `repair` fixes a malformed schema so hidden
+`hermes sessions optimize-storage` migrates the search index to the compact v23 layout and
+reclaims disk on large DBs; `hermes sessions repair` fixes a malformed schema so hidden
 sessions reappear. Run these on a session you are not currently in, since they
 operate on the live database.
 
