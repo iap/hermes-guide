@@ -1,0 +1,4 @@
+# Workflow and reporter-surface changes route to the maintainer for review.
+# Advisory only while master is unprotected: requests review, never blocks.
+
+.github/ @iap
