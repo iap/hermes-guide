@@ -21,7 +21,7 @@ config file. For the code location, check what the `hermes` shim execs, or run
 
 | Route | Command | Code lands in | Shims/PATH | Tracks |
 |---|---|---|---|---|
-| Standard (POSIX/WSL2) | two-step installer — download, review, then run (below) | `$HERMES_HOME/hermes-agent` (checkout; older installs carry an in-tree `venv/`, PM-era installs use `$HERMES_HOME/tools`) | `~/.local/bin/{hermes,hermes-agent,hermes-acp}` | `main` (installer re-run = update) |
+| Standard (POSIX/WSL2) | two-step installer — download, review, then run (below) | `$HERMES_HOME/hermes-agent` (checkout; older installs carry an in-tree `venv/`, PM-era installs use `$HERMES_HOME/tools`) | `~/.local/bin/{hermes,hermes-agent,hermes-acp}` | `main` (`hermes update`; installer re-run = repair) |
 | Desktop app (macOS/Win) | download from hermes-agent.nousresearch.com | `%LOCALAPPDATA%\hermes\hermes-agent` (Win; PM-era installs use `$HERMES_HOME/tools`) | app-managed | app releases |
 | Nix flake | `nix run` / `nix profile install`, or the NixOS module | `/nix/store/...-hermes-agent-<ver>` (immutable) | profile-managed | flake pin |
 | PyPI | `uv tool install hermes-agent` / `pip install hermes-agent` | uv/pip tool dir | tool bin dir | PyPI release |
