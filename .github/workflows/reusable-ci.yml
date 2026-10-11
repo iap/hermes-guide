@@ -385,11 +385,13 @@ jobs:
 
   legacy-mac:
     # Legacy-mac install leg: proves the pinned Hermes tag installs on the
-    # oldest GHA-hosted Intel macOS image (macos-13, Ventura). Closest hosted
-    # match to the repo's 12.7 lineage (checks.py macOS 12.7 note, the 12.7.6
-    # host-pressure baseline). Hermetic gates only -- no dogfood, tap smoke,
-    # or runtime suites. Hermes pin MUST match the plugin job's install tag.
-    runs-on: macos-13
+    # oldest supported GHA-hosted Intel macOS image (macos-15-intel).
+    # macos-13 was retired 2025-12-04 and queues forever; macos-14 retires
+    # 2026-11-02. Closest hosted match to the repo's 12.7 lineage
+    # (checks.py macOS 12.7 note, the 12.7.6 host-pressure baseline).
+    # Hermetic gates only -- no dogfood, tap smoke, or runtime suites.
+    # Hermes pin MUST match the plugin job's install tag.
+    runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
