@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cron
 description: Diagnose Hermes cron job issues — jobs not firing, scheduler dead, wedged fire-claim, timezone issues, and delivery failures.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, cron, scheduling, troubleshooting]
@@ -36,7 +36,7 @@ hermes cron create "0 9 * * 1-5" \
 - `hermes cron doctor` — grouped, per-job issues (exits 1 if any finding)
 - `hermes cron list` — all jobs, states, next_run times
 - `hermes cron runs <job_id> --limit 20` — execution ledger (not just the job row)
-- `hermes cron run <job_id>` — schedule for next tick (for testing)
+- `hermes cron run <job_id>` — trigger the job immediately (for testing)
 - `hermes logs` — view recent Hermes logs
 - `~/.hermes/logs/agent.log` — scheduler messages
 - `~/.hermes/logs/errors.log` — warnings and errors

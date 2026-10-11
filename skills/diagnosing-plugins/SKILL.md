@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and sub-category selection keys.
-version: 1.2.4
+version: 1.2.5
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -24,7 +24,7 @@ A Hermes plugin is a **Python package**: a directory with a `plugin.yaml` manife
 | pip | `hermes_agent.plugins` entry points | `plugins.enabled` |
 | Nix | `services.hermes-agent.extraPlugins` | Nix config |
 
-`hermes plugins install owner/repo [--ref <40-char SHA>] [--enable|--no-enable]` installs from Git (pinned commits only); `hermes plugins update` refuses to move a pinned plugin. Sub-category directories have their **own loaders and selection keys** — they do not obey `plugins.enabled`. Verified present at current main: `platforms/<name>/` (messaging channels, gated per messaging platform in config), `memory/<name>/` (one active, `memory.provider`), `context_engine/<name>/` (`context.engine`), `model-providers/<name>/` (picked via `--provider`/config), `image_gen/<name>/` (`image_gen.provider`), plus `browser/`, `video_gen/`, `cron_providers/`, `observability/`, `dashboard_auth/`, `google_meet/`, `spotify/`, `teams_pipeline/`, `web/`. **Not every bundled entry auto-loads:** upstream's discovery reports disabled bundled plugins as *"not enabled in config (run `hermes plugins enable <key>` to activate)"* (`hermes_cli/plugins_discovery.py`), and bundled Kanban is one of them — check `hermes plugins list` for the real state instead of assuming a bundled directory is live. **The set grows — list `plugins/` in the installed source instead of trusting this list.**
+`hermes plugins install owner/repo [--ref <40-char SHA>] [--enable|--no-enable]` installs from Git (pinned commits only); `hermes plugins update` refuses to move a pinned plugin. Sub-category directories have their **own loaders and selection keys** — they do not obey `plugins.enabled`. Verified present at current main: `platforms/<name>/` (messaging channels, gated per messaging platform in config), `memory/<name>/` (one active, `memory.provider`), `context_engine/<name>/` (`context.engine`), `model-providers/<name>/` (picked via `--provider`/config), `image_gen/<name>/` (`image_gen.provider`), plus `browser/`, `video_gen/`, `cron_providers/`, `observability/`, `dashboard_auth/`, `web/`. **Not every bundled entry auto-loads:** upstream's discovery reports disabled bundled plugins as *"not enabled in config (run `hermes plugins enable <key>` to activate)"* (`hermes_cli/plugins_discovery.py`), and bundled Kanban is one of them — check `hermes plugins list` for the real state instead of assuming a bundled directory is live. **The set grows — list `plugins/` in the installed source instead of trusting this list.**
 
 ## 2. The enable gate and capabilities
 

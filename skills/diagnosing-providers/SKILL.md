@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.8
+version: 1.1.9
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -107,7 +107,7 @@ def custom_endpoint_key_env(identity: str) -> str:
 | `api.example.com` | `HERMES_CUSTOM_API_EXAMPLE_COM_API_KEY` |
 | `localhost:8088` | `HERMES_CUSTOM_LOCALHOST_8088_API_KEY` |
 
-The fixed `HERMES_CUSTOM_` prefix is required — it keeps the name POSIX-valid when the slug starts with a digit, since `save_env_value` rejects those.
+The fixed `HERMES_CUSTOM_` prefix is required — it keeps the name POSIX-valid when the slug starts with a digit, since `save_env_value()` (`hermes_cli/config.py`) rejects those.
 
 **You do not need to adopt this convention.** `key_env` accepts any valid env var name; hand-named vars like `MY_GATEWAY_API_KEY` work identically. The generated form is only used by wizard-provisioned endpoints. Mixing the two is fine — what matters is that the var exists in `.env` and matches the `key_env` string.
 
