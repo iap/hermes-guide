@@ -14,7 +14,9 @@ static check; the capabilities model is what actually blocks it at runtime.
 
 AST parsing (rather than line-based regex) makes the guard multiline-aware, so a
 write call split across lines can't slip through. Scanned: ``*.py`` under the
-repo root, excluding ``tools/`` (CI-time utilities).
+repo root, excluding ``tools/`` and ``tests/`` (CI-time utilities — the
+scanner-hygiene guard lives under ``tests/`` because the upstream install
+scanner rates its fixture strings dangerous elsewhere).
 
 Style and CI wiring mirror tools/check_self_claim.py.
 
@@ -30,7 +32,7 @@ import sys
 from pathlib import Path
 
 # CI-time utilities excluded from the scan (not plugin runtime code).
-_EXCLUDE_DIRS = {"tools"}
+_EXCLUDE_DIRS = {"tools", "tests"}
 
 # A "mode" string is a write mode if it contains any of these flags.
 _WRITE_FLAGS = "wax+"

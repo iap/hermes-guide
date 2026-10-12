@@ -35,6 +35,7 @@ Two install paths, both out of tree: the plugin (`hermes plugins install iap/her
 | `tools/test_*.py` | Regression suites for the plugin and for `tools/` itself |
 | `tools/render_docs.py` | Renders the generated blocks in README.md and AGENTS.md from the repo |
 | `tools/pr_metadata_labels.py` | PR label/priority parser shared by the labelling workflows |
+| `tests/check_scanner_hygiene.py` | Scanner-hygiene guard — lives under `tests/` (not `tools/`) because the upstream install scanner rates its literal attack-string fixtures dangerous outside a tests directory |
 | `.github/workflows/reusable-ci.yml` | The CI body: ubuntu+windows × Python 3.11/3.12 matrix, all gates |
 | `.github/workflows/ci.yml` | Thin caller that triggers `reusable-ci.yml` and passes it `base-ref` / `run-full-gate` |
 | `.github/workflows/upstream-drift.yml` | Weekly watch; opens an issue when Hermes changes a watched file or drift-prone fact |
@@ -57,7 +58,10 @@ Two install paths, both out of tree: the plugin (`hermes plugins install iap/her
 | `.gitignore` | The durable control for what never enters the index |
 
 Keep the layout stable: plugin Python at the repo root, skills under
-`skills/<name>/`, harness scripts only under `tools/`. Do not add ad-hoc scripts
+`skills/<name>/`, harness scripts under `tools/` — with one exception:
+`tests/check_scanner_hygiene.py` lives under `tests/` because the upstream
+install scanner rates its literal attack-string fixtures dangerous anywhere
+else. Do not add ad-hoc scripts
 at the root or under `skills/` that CI or agents are expected to run.
 
 ## Run this before you claim done
@@ -101,7 +105,7 @@ Learn these from the guard, not from memory — each one names its own script.
 |---|---|---|
 | Hermes CLI | upstream `hermes …` | Whatever Hermes prints. Parse it inside a check; never rebrand or rewrite a Hermes message as ours |
 | Plugin UX | `__init__.py` + `checks.py` | Check **envelopes** (`status` / `reason` / `detail`); `+/x/~/?` marks; `hermes guide` exits `0` healthy, `1` broken/unknown, `2` bad scope |
-| Repo harness | `tools/` | Machine output — `OK:` / `FAIL` / `error:`, success on stdout, failures on stderr, non-zero exit. `--selftest` / `--warn` stay harness-only |
+| Repo harness | `tools/` (`tests/` for the scanner-hygiene guard only) | Machine output — `OK:` / `FAIL` / `error:`, success on stdout, failures on stderr, non-zero exit. `--selftest` / `--warn` stay harness-only |
 
 - **Checks return data; the plugin formats UX.** A check must not print a report
   or invent a second exit-code scheme. Return an envelope; `_format_result` and

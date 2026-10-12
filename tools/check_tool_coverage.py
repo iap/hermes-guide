@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Fail if a guard or regression test in tools/ is never run by CI.
+"""Fail if a guard or regression test in tools/ or tests/ is never run by CI.
 
 A `tools/test_*.py` or `tools/check_*.py` file that no workflow references is
 silent dead coverage: it passes or fails locally, nobody notices, and the bug
 it was written for can return unnoticed. This repo shipped exactly that --
 `test_skill_malformed_name.py` existed from #133 onward and no workflow ran it.
+
+The scanner-hygiene guard lives under `tests/` (upstream install-scanner
+verdict; see reusable-ci.yml), so both harness directories are scanned.
 
 Scope: reference by filename anywhere in `.github/workflows/*.yml`. A step may
 be gated, Linux-only, or matrix-conditional -- all still count as wired.
@@ -17,11 +20,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-# `tools/<name>.py` as written in a workflow `run:` block. The name allows
-# hyphens (scripts are not restricted to identifiers), and the trailing
-# negative lookahead rejects compound suffixes so a `.py.bak` or `.pyc` left in
-# the tree cannot stand in for a real invocation.
-_MENTION = re.compile(r"tools/([A-Za-z0-9_-]+)\.py(?![A-Za-z0-9_.])")
+# `tools/<name>.py` (or `tests/<name>.py`) as written in a workflow `run:`
+# block. The name allows hyphens (scripts are not restricted to identifiers),
+# and the trailing negative lookahead rejects compound suffixes so a `.py.bak`
+# or `.pyc` left in the tree cannot stand in for a real invocation.
+_MENTION = re.compile(r"(?:tools|tests)/([A-Za-z0-9_-]+)\.py(?![A-Za-z0-9_.])")
 
 # Prefixes that must be executed. `tools/pr_metadata_labels.py` and friends are
 # helpers invoked by their own step, so they are covered by the same rule.
@@ -43,9 +46,16 @@ def find_orphans(tools_dir: Path, workflow_dir: Path) -> list[str]:
 
     # `is_file()` first: a *directory* named `check_helpers.py` would otherwise
     # be globbed, counted as a script, and reported as unwired forever.
+    # Both harness directories are scanned: the scanner-hygiene guard lives
+    # under tests/ (upstream install-scanner verdict).
+    harness_dirs = [tools_dir]
+    tests_dir = tools_dir.parent / "tests"
+    if tests_dir.is_dir():
+        harness_dirs.append(tests_dir)
     on_disk = {
         p.stem
-        for p in tools_dir.glob("*.py")
+        for harness in harness_dirs
+        for p in harness.glob("*.py")
         if p.is_file() and not p.name.startswith("_")
     }
     required = {
@@ -75,6 +85,8 @@ def selftest() -> int:
         (["test_a.py"], "run: python tools/test_a.py --selftest", []),
         # A hyphen is a legal filename character, not a word boundary.
         (["test_cli-v2.py"], "run: python tools/test_cli-v2.py", []),
+        # Both harness directories count as wired references.
+        (["test_a.py", "check_b.py"], "run: python tests/check_b.py", ["test_a"]),
         # A compound suffix is not a real invocation of the script.
         (["test_a.py"], "run: python tools/test_a.py.bak", ["test_a"]),
         (["test_a.py"], "run: python tools/test_a.pyc", ["test_a"]),
@@ -125,7 +137,7 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 1
-    print("OK: every tools guard and regression test is wired into CI")
+    print("OK: every tools/tests guard and regression test is wired into CI")
     return 0
 
 
