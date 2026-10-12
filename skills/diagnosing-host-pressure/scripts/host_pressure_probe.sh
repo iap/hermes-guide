@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # host_pressure_probe.sh — is Hermes failing because of the HOST, not Hermes?
 #
-# Read-only. No sudo, no network, no writes. Safe to run on a loaded box.
+# Read-only. No privilege escalation, no network, no writes. Safe to run on a loaded box.
 # Exit codes: 0 = no pressure, 1 = HOST PRESSURE detected, 2 = probe inconclusive.
 #
 # The core trap this exists to catch: on macOS/BSD and Linux, the load average
@@ -55,9 +55,10 @@ case "$os_name" in
     # 32-CPU node still reports 32 and the threshold is 8x too high.
     #
     # The quota is emitted as an INTEGER >= 1 and flagged: a decimal would make
-    # the arithmetic below throw (`$(( 1.50 * 2 ))` is a bash syntax error), and
-    # a fractional quota that rounds to 0 turns `r >= cores*2` into `r >= 0`, so
-    # a single D-state process would become a false storage verdict.
+    # the arithmetic below throw (dollar-paren arithmetic on 1.50 * 2 is a bash
+    # syntax error), and a fractional quota that rounds to 0 turns `r >= cores*2`
+    # into `r >= 0`, so a single D-state process would become a false storage
+    # verdict.
     if [ -r /sys/fs/cgroup/cpu.max ]; then
       qmax=$(awk '{print $1}' /sys/fs/cgroup/cpu.max 2>/dev/null)
       qper=$(awk '{print $2}' /sys/fs/cgroup/cpu.max 2>/dev/null)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -348,13 +349,18 @@ def case_pin_reads_the_real_tree(mod):
         "no install pin found in the repository's real workflows - the lookup "
         "must scan .github/workflows/, not one hardcoded file"
     )
-    assert pinned.startswith("v") and pinned[1].isdigit(), (
-        f"unexpected pin shape: {pinned!r}"
-    )
     texts = "\n".join(p.read_text(encoding="utf-8") for p in workflows.glob("*.y*ml"))
-    assert f"--branch {pinned} " in texts, (
-        f"lookup returned {pinned!r}, which no workflow file actually clones"
-    )
+    is_tag = pinned.startswith("v") and pinned[1].isdigit()
+    is_sha = bool(re.fullmatch(r"[0-9a-f]{40}", pinned))
+    assert is_tag or is_sha, f"unexpected pin shape: {pinned!r}"
+    if is_tag:
+        assert f"--branch {pinned} " in texts, (
+            f"lookup returned {pinned!r}, which no workflow file actually clones"
+        )
+    else:
+        assert pinned in texts, (
+            f"lookup returned {pinned!r}, which no workflow file actually fetches"
+        )
     print(f"OK: pin lookup reads the real workflow tree (found {pinned})")
 
 
@@ -450,10 +456,71 @@ def case_pin_ignores_commented_clones(mod):
     print("OK: commented-out clone lines are ignored")
 
 
+_SHA = "53bc70c5ee8544040cd9f0708d25c0f55276a44b"
+
+
+def case_pin_reads_fetch_sha(mod):
+    """A `git fetch ... <sha>` pin for the Hermes remote is recognized."""
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "git -C d remote add origin "
+            "https://github.com/NousResearch/hermes-agent.git\n"
+            f"git -C d fetch -q --depth 1 origin {_SHA}\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() == _SHA, "fetch-SHA pin must be recognized"
+    finally:
+        shutil.rmtree(td)
+    print("OK: fetch-SHA pin is recognized")
+
+
+def case_pin_mixed_forms_conflict(mod):
+    """A tag pin in one file and a SHA pin in another -> None, never a pick."""
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "a.yml").write_text(
+            "git clone --depth 1 --branch v2026.9.24 "
+            "https://github.com/NousResearch/hermes-agent.git d\n",
+            encoding="utf-8")
+        (wf / "b.yml").write_text(
+            "git fetch origin https://github.com/NousResearch/hermes-agent.git\n"
+            f"git fetch -q --depth 1 origin {_SHA}\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() is None, "mixed pin forms must return None"
+    finally:
+        shutil.rmtree(td)
+    print("OK: mixed tag/SHA pins fail closed")
+
+
+def case_pin_sha_skips_tag_freshness(mod):
+    """A SHA pin short-circuits the tag-freshness comparison cleanly."""
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "git fetch origin https://github.com/NousResearch/hermes-agent.git\n"
+            f"git -C d fetch -q --depth 1 origin {_SHA}\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            mismatches, error = mod.verify_ci_pin()
+        assert mismatches == [] and error is None, (
+            f"SHA pin must pass clean: {mismatches!r} {error!r}")
+    finally:
+        shutil.rmtree(td)
+    print("OK: SHA pin skips tag freshness without error")
+
+
 def main() -> int:
     mod = _load_module()
     failures: list[str] = []
-    for case in (
+    cases = (
         case_upstream_drift_filed,
         case_exact_title_dedup,
         case_transport_failure_fails_run,
@@ -471,7 +538,11 @@ def main() -> int:
         case_pin_conflict_fails_closed,
         case_pin_ignores_unrelated_clones,
         case_pin_ignores_commented_clones,
-    ):
+        case_pin_reads_fetch_sha,
+        case_pin_mixed_forms_conflict,
+        case_pin_sha_skips_tag_freshness,
+    )
+    for case in cases:
         try:
             case(mod)
         except Exception as exc:
@@ -480,7 +551,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 17 upstream-drift hygiene case(s) passed")
+    print(f"\nOK: {len(cases)} upstream-drift hygiene case(s) passed")
     return 0
 
 

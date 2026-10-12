@@ -98,6 +98,11 @@ jobs:
           # editable install — wheel/sdist builds are blocked outside Nix, but
           # editable installs are the documented dev path. $RUNNER_TEMP keeps
           # the clone path valid on both Linux and Windows runners.
+          # NOTE: a post-PM main SHA pin was tried here and reverted: the
+          # PM-era install scanner (skills-guard-v10) blocks our own
+          # host-pressure probe's gated /proc reads, failing the tap step
+          # with no content-side fix available. Re-land the SHA pin together
+          # with upstream #136259 (proc exemption) — see issue #204.
           git clone --depth 1 --branch v2026.9.24 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
           pip install -e "$RUNNER_TEMP/hermes-agent"
 
@@ -280,7 +285,7 @@ jobs:
       - name: Citation integrity against the upstream baseline
         # The cited symbols/lines live in the Hermes tree, so this check resolves
         # them against the revision recorded in .github/upstream-drift.baseline —
-        # not the CI install tag. One leg is enough: the check is OS- and
+        # not the CI install pin. One leg is enough: the check is OS- and
         # interpreter-independent. Same blobless --no-checkout clone idiom as
         # check_upstream_drift.py; `git show <rev>:<path>` lazily fetches only the
         # blobs the checker reads. The revision is read by the script itself, never

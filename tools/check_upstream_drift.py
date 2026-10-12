@@ -251,26 +251,31 @@ def scan_upstream_history(repo_dir: str, base: str, head: str,
 
 
 def read_pinned_tag() -> str | None:
-    """The Hermes tag CI installs (the `git clone --branch <tag>` line), or None.
+    """The Hermes rev CI installs, or None.
 
-    The pin is not tied to one filename: CI has already moved the clone line
-    between workflow files once (#128), so the lookup scans the files under
-    `.github/workflows/` instead of reading a hardcoded path. Only the clone
-    of the Hermes source itself carries the pin; unrelated or commented-out
-    clones are ignored. Exactly one distinct tag wins; none found, or
-    conflicting tags, returns None so the caller fails the run closed.
+    Two pin forms are recognized, both scoped to the Hermes source remote:
+    a `git clone --depth 1 --branch <tag>` line, or a `git fetch ... <sha>`
+    line (post-PM main pins predate the next release tag, so no tag exists
+    to name). The pin is not tied to one filename: CI has already moved the
+    clone line between workflow files once (#128), so the lookup scans the
+    files under `.github/workflows/` instead of reading a hardcoded path.
+    Only the Hermes source remote carries the pin; unrelated or commented-out
+    clones are ignored. Exactly one distinct pin wins; none found, or
+    conflicting pins, returns None so the caller fails the run closed.
     """
     patterns = ("*.yml", "*.yaml")
     tags: set[str] = set()
+    shas: set[str] = set()
     for pattern in patterns:
         for path in sorted(WORKFLOWS_DIR.glob(pattern)):
             try:
                 text = path.read_text(encoding="utf-8")
             except OSError:
                 continue
+            hermes_remote = "hermes-agent" in text
             # Anchored to executable lines (optionally behind `- ` / `run: `):
             # a commented-out `# git clone ...` example is documentation, not an
-            # install, and must not join the tag set.
+            # install, and must not join the pin set.
             for m in re.finditer(
                 r"(?m)^[ \t]*(?:-\s*)?(?:run:\s*)?git clone --depth 1 --branch (\S+) (\S+)",
                 text,
@@ -281,7 +286,14 @@ def read_pinned_tag() -> str | None:
                 if not url.rstrip("/").endswith(("hermes-agent", "hermes-agent.git")):
                     continue
                 tags.add(tag)
-    return tags.pop() if len(tags) == 1 else None
+            if hermes_remote:
+                for m in re.finditer(
+                    r"(?m)^[ \t]*(?:-\s*)?(?:run:\s*)?git (?:-C \S+ )?fetch[^\n]*?\b([0-9a-f]{40})\b",
+                    text,
+                ):
+                    shas.add(m.group(1))
+    pins = tags | shas
+    return pins.pop() if len(pins) == 1 else None
 
 
 def _tag_key(tag: str) -> tuple[int, ...]:
@@ -341,6 +353,11 @@ def verify_ci_pin() -> tuple[list[str], str | None]:
     not run (unreadable pin, ls-remote failure). Infrastructure trouble must
     fail the run — never flow into a drift issue: the canonical title would
     then dedup away the next run's real alert.
+
+    A 40-hex SHA pin is deliberate (post-rework main predates the next tag)
+    and short-circuits clean: tag ordering cannot rank a SHA, so freshness
+    for SHA pins is a human decision recorded in the workflow comment, not
+    a weekly finding.
     """
     pinned = read_pinned_tag()
     if not pinned:
@@ -348,6 +365,8 @@ def verify_ci_pin() -> tuple[list[str], str | None]:
             "could not read the pinned tag from the .github/workflows/ files "
             "(expected exactly one clone pin)"
         )
+    if re.fullmatch(r"[0-9a-f]{40}", pinned):
+        return [], None
     latest = latest_upstream_tag()
     if latest is None:
         return [], "could not list upstream tags (git ls-remote failed)"

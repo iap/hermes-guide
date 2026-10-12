@@ -86,6 +86,9 @@ def case_hooks_merges_doctor_findings(checks):
         f"  {MARK_BAD} broken-hook   exit code 3\n"
         f"  {MARK_WARN} slow-hook     timeout\n"
     )
+    # No live `hermes` is required: a fake candidate keeps the resolver from
+    # short-circuiting to -127 (not found) on legs without the CLI installed.
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
     checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
     checks._check_allowlist_json = lambda home=None: {
         "status": "broken",
@@ -105,6 +108,9 @@ def case_hooks_merges_doctor_findings(checks):
 
 def case_hooks_allowlist_alone_when_doctor_healthy(checks):
     """When the doctor is healthy, only the allowlist finding is reported."""
+    # No live `hermes` is required: a fake candidate keeps the resolver from
+    # short-circuiting to -127 (not found) on legs without the CLI installed.
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
     checks._run = lambda cmd, timeout=20: (0, "All shell hooks look healthy", "")
     checks._check_allowlist_json = lambda home=None: {
         "status": "broken",
@@ -121,6 +127,9 @@ def case_hooks_allowlist_alone_when_doctor_healthy(checks):
 def case_hooks_unaffected_when_allowlist_fine(checks):
     """No allowlist problem -> the doctor envelope passes through unchanged."""
     doctor_out = f"  {MARK_BAD} broken-hook   exit code 3\n"
+    # No live `hermes` is required: a fake candidate keeps the resolver from
+    # short-circuiting to -127 (not found) on legs without the CLI installed.
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
     checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
     checks._check_allowlist_json = lambda home=None: None
 
