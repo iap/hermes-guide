@@ -62,12 +62,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        # Floor (3.11) is the bottom of upstream's supported range
-        # (`requires-python >=3.11,<3.15` at the pinned SHA); ceiling (3.12)
-        # is what this repo already ran. Upstream's own dev pin is 3.14
-        # (`.python-version`), so a single pin in either direction just
-        # moves the drift — the matrix covers the range instead.
-        python-version: ["3.11", "3.12"]
+        # Split coverage: 3.11 is the floor of our own supported range
+        # (pyproject: >=3.11) and of upstream's (`requires-python
+        # >=3.11,<3.15`); 3.14 is upstream's dev pin and the only version
+        # with full core dependencies (all direct pins carry
+        # `python_version >= '3.14'` markers — on 3.11 `pip install -e`
+        # installs almost nothing and the `hermes` CLI cannot import).
+        # Hermetic + stdlib steps run on both; anything executing the
+        # installed `hermes` CLI is additionally gated on 3.14 below.
+        # mypy statically targets the 3.11 floor (pyproject [tool.mypy]).
+        python-version: ["3.11", "3.14"]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     # Windows runs the same steps except mypy, the plugin doctor, the tap smoke
@@ -90,8 +94,16 @@ jobs:
           # tests assert on a freshly resolved interpreter, so a cached
           # site-packages would mask a real resolution bug.
 
+      - name: Install our declared dependency
+        # The checks-importing regression tests need PyYAML, which the
+        # Hermes editable install only provides on 3.14+ (upstream markers).
+        # Our own pyproject declares PyYAML>=6.0,<7 with no markers, so
+        # install it directly: small, pinned to our range, same on every leg.
+        # Hermetic gates stay stdlib-only and never touch it.
+        run: pip install "PyYAML>=6.0,<7"
+
       - name: Install Hermes
-        if: inputs.run-full-gate
+        if: inputs.run-full-gate && matrix.python-version == '3.14'
         shell: bash
         run: |
           # Post-PM main SHA pin (not the latest release tag): v2026.9.24
@@ -128,8 +140,9 @@ jobs:
 
       - name: Plugin doctor
         # Hermes-on-Windows CI is unexplored upstream; the runtime tests below
-        # already cover the plugin's own cross-platform paths.
-        if: runner.os == 'Linux' && inputs.run-full-gate
+        # already cover the plugin's own cross-platform paths. 3.14-only: the
+        # installed CLI cannot import below it (upstream core markers).
+        if: runner.os == 'Linux' && inputs.run-full-gate && matrix.python-version == '3.14'
         run: hermes plugins doctor . --ci
 
       - name: Docs self-claim guard
@@ -189,13 +202,13 @@ jobs:
         # Requires the `hermes` CLI on PATH, so it MUST stay behind the same gate
         # as the install above. It has no internal skip guard, so running it with
         # run-full-gate=false would fail on every direct push to master.
-        if: inputs.run-full-gate
+        if: inputs.run-full-gate && matrix.python-version == '3.14'
         run: python tools/test_readonly_runtime.py
 
       - name: Dogfood check (live install)
         # Read-only smoke test against the live Hermes install. Skips cleanly
         # when hermes is absent. Runs only in the full tier (needs the install).
-        if: inputs.run-full-gate
+        if: inputs.run-full-gate && matrix.python-version == '3.14'
         run: python tools/check_skill_dogfood.py
 
       - name: MCP shape regression test
@@ -338,7 +351,7 @@ jobs:
           python tools/render_docs.py
 
       - name: Tap discovery smoke test
-        if: runner.os == 'Linux' && inputs.run-full-gate && inputs.event-name == 'pull_request'
+        if: runner.os == 'Linux' && inputs.run-full-gate && inputs.event-name == 'pull_request' && matrix.python-version == '3.14'
         timeout-minutes: 10
         # Installs run authenticated: on CI there is no $HERMES_HOME/.env and
         # no gh login, so get_secret() falls through to os.environ and

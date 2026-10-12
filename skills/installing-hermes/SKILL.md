@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -58,9 +58,10 @@ a re-install or upgrade does not touch `config.yaml`, memories, sessions, or plu
 ```
 
 Prerequisites: `git` and `curl` on the PATH (`xz` is no longer needed — PM
-extracts archives with stdlib `tarfile`). On minimal glibc hosts the bootstrap
-may also need `libatomic.so.1`, on musl `libstdc++` — a Node/Python launch
-failure right after install points there, not at Hermes. The installer stages
+extracts archives with stdlib `tarfile`). On minimal glibc hosts the bundled
+Node.js may also need `libatomic.so.1`, on musl `libstdc++` — a Node.js launch
+failure right after install points there, not at Hermes (Python-side failures
+have other causes). The installer stages
 a pinned `uv`
 (from `pm/lock.json`, sha256-verified), bootstraps a tool-only Python, then hands the
 checkout to **pm**, which installs the locked runtime (Python **3.14.7**, Node.js
@@ -166,4 +167,4 @@ Re-run the installer to rebuild the PM dependency environment using the two-step
 
 ---
 
-*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `scripts/install.sh` (the four-route layout, `$HERMES_HOME` as data — re-install/upgrade preserves `config.yaml`/memories/sessions; `HERMES_HOME` default resolution; the piped one-liner the two-step mirrors; `xz` prerequisite — .tar.xz extraction requires it, #11197; `PYTHON_VERSION="3.11"`; `NODE_VERSION="26"` — corrected this pass: the skill previously said Node.js v22, the installer pins 26 with 22.22+/24.11+/26+ supported; managed uv into `$HERMES_HOME/bin`; git auto-provision attempt) and `scripts/install.ps1` (the native-Windows route); both describe the pre-pm installer. Re-checked 2026-09-29 at `5000e2993`: `PYTHON_VERSION`/`NODE_VERSION` no longer exist in `install.sh`; it stages pinned `uv` into the store slot (`${HERMES_RUNTIME_DIR:-$HERMES_HOME/tools}/uv-<version>-<target>/`, sha256-verified), bootstraps a tool-only Python, then `pm.cli install` owns the exact runtime pin — Python **3.14.7**, Node **26.7.0**, ripgrep **15.2.0**, ffmpeg **9.0.1**; PM-era layout (no in-tree venv — a legacy one is removed once a generation is committed; shims bind the store Python) and the pre-pm npm workspace step retired (`source_build_env` sets `CI=1`). Re-verify before reuse.*
+*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `scripts/install.sh` (the four-route layout, `$HERMES_HOME` as data — re-install/upgrade preserves `config.yaml`/memories/sessions; `HERMES_HOME` default resolution; the piped one-liner the two-step mirrors; `xz` prerequisite — .tar.xz extraction requires it, #11197; `PYTHON_VERSION="3.11"`; `NODE_VERSION="26"` — corrected this pass: the skill previously said Node.js v22, the installer pins 26 with 22.22+/24.11+/26+ supported; managed uv into `$HERMES_HOME/bin`; git auto-provision attempt) and `scripts/install.ps1` (the native-Windows route); both describe the pre-pm installer. Re-checked 2026-09-29 at `5000e2993`: `PYTHON_VERSION`/`NODE_VERSION` no longer exist in `install.sh`; it stages pinned `uv` into the store slot (`${HERMES_RUNTIME_DIR:-$HERMES_HOME/tools}/uv-<version>-<target>/`, sha256-verified), bootstraps a tool-only Python, then `pm.cli install` owns the exact runtime pin — Python **3.14.7**, Node **26.7.0**, ripgrep **15.2.0**, ffmpeg **9.0.1**; PM-era layout (no in-tree venv — a legacy one is removed once a generation is committed; shims bind the store Python) and the pre-pm npm workspace step retired (`source_build_env` sets `CI=1`). Re-checked 2026-10-12 against upstream main (`53bc70c5`): `tirith_security.py` gone (generic `Security` section + opt-in `lsp.trusted_workspaces` instead); prerequisites are `git` + `curl` only (`stage_prerequisites`, "prerequisites ok (git, curl)") with musl-`libstdc++` / glibc-`libatomic.so.1` gates for the bundled Node.js; `config.yaml` + `.env` (600) install-time bootstrap; `facts.json` under `installs/<key>/`; PyPI stale at 0.19.0. Re-verify before reuse.*

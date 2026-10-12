@@ -1,7 +1,7 @@
 ---
 name: diagnosing-browser
 description: Diagnose Hermes browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating, and browser tool errors.
-version: 1.0.7
+version: 1.0.8
 metadata:
   hermes:
     tags: [hermes, browser, cdp, playwright, troubleshooting]
@@ -52,10 +52,10 @@ browser:
 ## 4. Localization workflow
 
 1. `/browser status` — check current connection state.
-2. `google-chrome --version` — verify browser version (must be <144 for CDP).
-3. `curl http://127.0.0.1:9222/json/version` — verify CDP endpoint is reachable.
+2. `google-chrome --version` — verify browser version (historical gate was <144 for CDP; only constrain the build if a current failure reproduces — see pitfall 2).
+3. `curl http://127.0.0.1:9222/json/version` — verify CDP endpoint is reachable (CDP backend only; other backends verify their own runtime — see step 7).
 4. Check config.yaml `browser:` block — verify backend and endpoint.
-5. Match the failure: not connecting → pitfall 1; Chrome 144+ → pitfall 2; Playwright missing → pitfall 3.
+5. Match the failure: not connecting → pitfall 1; Chrome-version-gated tools → pitfall 2 (only if reproduced now); Playwright missing → pitfall 3; gated although configured → pitfall 4 (only if the current error names agent-browser).
 6. Apply the fix, `/browser connect`, and verify with `/browser status`.
 7. Headless: `/browser*` steps need a live session. Check the `browser:` block in `config.yaml`. If `browser.backend` is `cdp`, verify the configured endpoint and browser build. For other backends, verify their configured runtime.
 
@@ -70,16 +70,16 @@ browser:
 This skill diagnoses browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating, and browser tool errors. When you run the diagnostic workflow, present findings in the standard format below.
 
 ### Summary
-Your browser automation tools fail despite a successful CDP connection because Chrome 144+ broke the built-in Remote debugging protocol. The CDP endpoint accepts the connection but tool calls return errors.
+Your browser automation tools fail despite a successful CDP connection. Historically this was Chrome 144+ breaking built-in remote debugging (closed issue) or agent-browser gating (closed issue) — first reproduce against the current build, since both gates have since been reworked.
 
 ### Findings
 | Severity | What | Evidence |
 |---|---|---|
-| HIGH | Chrome 144+ CDP tools fail despite successful connect | `google-chrome --version` returns `144.x.x`; `/browser status` shows connected but `browser_snapshot` returns error |
-| MEDIUM | agent-browser gating blocks CDP | Log: `check_fn requires agent-browser even when CDP endpoint is configured` (issue #15952) |
+| HIGH | CDP tools fail despite successful connect | `/browser status` shows connected but `browser_snapshot` returns error; `google-chrome --version` for the build record |
+| MEDIUM | Backend gating blocks an otherwise configured setup | Log names the missing requirement; install only what the current error names |
 
 ### Recommended Fix
-Downgrade Chrome to a version below 144, or install agent-browser with `hermes pm install agent-browser` (PM-era) or `pip install agent-browser` (older checkout). Then run `/browser connect` and verify with `/browser status`.
+Reproduce first: confirm the failure on the current browser build and read the routed error. Only downgrade Chrome below 144 if a current failure implicates the build, and only install agent-browser (`hermes pm install agent-browser` on PM-era installs) if the current error names it. Then run `/browser connect` and verify with `/browser status`.
 
 ### References
 - `~/.hermes/config.yaml` — the `browser:` block with backend and endpoint
