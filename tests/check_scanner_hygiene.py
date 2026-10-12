@@ -9,13 +9,16 @@ positives (NousResearch/hermes-agent#132155): a fixed-path container read and
 a Markdown table cell.
 
 This guard mirrors those three patterns — same expressions, same
-`re.IGNORECASE` compile flag, same all-text-file scope — so the mistake
-surfaces here, not in CI's tap-install step. The one deliberate narrowing is
-per-line, not per-file: a fixed numeric-PID introspection of
-`cgroup`/`stat`/`loadavg` with no `$` and no `..`, in a file that gates the
-read off-Darwin behind a readability test, counts as the approved
-container-detection shape. Anything else (variable PIDs, `root`/`cwd`
-escapes, prose matches) still fails.
+`re.IGNORECASE` compile flag, same all-text-file scope (the upstream
+`SCANNABLE_EXTENSIONS` set, so `.txt`/`.yaml` notes are scanned too) — so the
+mistake surfaces here, not in CI's tap-install step. The one deliberate
+narrowing is per-read, not per-file: a fixed numeric-PID introspection of
+`cgroup`/`stat`/`loadavg` with no `$` and no `..`, on a line inside a
+Darwin-conditional shell region (a `*Darwin*` `if` block or a non-Darwin
+`case` branch) in a file that gates the read off-Darwin behind a readability
+test, counts as the approved container-detection shape. An approved-looking
+read anywhere else — after the closing `fi`, in a Darwin branch, in prose —
+still fails, as do variable PIDs and `root`/`cwd` escapes.
 
 Usage:
     python tests/check_scanner_hygiene.py            # enforce (exit 1 on a finding)
@@ -55,9 +58,16 @@ _CURL_PIPE_RE = re.compile(
 _PROC_TOKEN_RE = re.compile(r"/proc/\S*", re.IGNORECASE)
 _PROC_FIXED_TOKEN_RE = re.compile(r"/proc/\d+/(?:cgroup|stat|loadavg)", re.IGNORECASE)
 
-# A /proc read is gated when the same file probes it only off-Darwin behind a
-# readability test. Both literals must be present alongside the per-line
-# fixed-path shape above.
+# Text extensions to scan, mirrored from upstream `tools/skills_guard.py`
+# `SCANNABLE_EXTENSIONS` (v2026.9.24): every text form a skill may ship wins
+# a scan, so a pattern hiding in a `.txt`/`.yaml` note is caught here, not at
+# install time. `SKILL.md` itself is always in scope regardless of suffix.
+_SCANNABLE_EXTENSIONS = frozenset({
+    ".md", ".txt", ".py", ".sh", ".bash", ".js", ".ts", ".rb", ".yaml",
+    ".yml", ".json", ".toml", ".cfg", ".ini", ".conf", ".html", ".css",
+    ".xml", ".tex", ".r", ".jl", ".pl", ".php",
+})
+_SHELL_SUFFIXES = frozenset({".sh", ".bash"})
 _GATE_MARKERS = ('"$os_name" != "Darwin"', "[ -r /proc/1/cgroup ]")
 
 
@@ -66,10 +76,84 @@ def _file_is_gated(text: str) -> bool:
     return all(m in text for m in _GATE_MARKERS)
 
 
-def _proc_line_exempt(line: str, gated: bool) -> bool:
+_IF_OPEN_RE = re.compile(r"^\s*(?:if|elif)\b")
+_FI_RE = re.compile(r"^\s*fi\b")
+_CASE_OPEN_RE = re.compile(r"^\s*case\b")
+_ESAC_RE = re.compile(r"^\s*esac\b")
+_BRANCH_RE = re.compile(r"^\s*[^#\s].*\)\s*(?:;;)?\s*(?:#.*)?$")
+_DARWIN_RE = re.compile(r"Darwin")
+
+
+def _shell_guarded_lines(lines: list[str]) -> set[int]:
+    """0-based indexes of shell lines inside a Darwin-conditional region.
+
+    A /proc exemption must attach to the guarded read, not to the file: an
+    approved `cat /proc/1/cgroup` after the closing `fi` is unguarded and
+    must flag, while reads inside the gate (or inside a non-Darwin `case`
+    branch, e.g. the `*)` Linux path) stay exempt. Tracks `if/elif/else/fi`
+    depth and `case` branch labels; opener lines count as inside. This is an
+    approximation (no quote/heredoc awareness), documented as such: when in
+    doubt it under-exempts, and the selftest pins both directions.
+    """
+    guarded: set[int] = set()
+    # Stack frames: ("if", guarded_bool) or ("case", branch_guarded_or_None).
+    stack: list[tuple[str, bool | None]] = []
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if _ESAC_RE.match(line):
+            while stack and stack[-1][0] != "case":
+                stack.pop()
+            if stack:
+                stack.pop()
+            continue
+        if _CASE_OPEN_RE.match(line):
+            stack.append(("case", None))
+            continue
+        if stack and stack[-1][0] == "case" and _BRANCH_RE.match(line):
+            stack[-1] = ("case", _DARWIN_RE.search(line) is None)
+            if stack[-1][1]:
+                guarded.add(idx)
+            continue
+        if stripped == ";;" or stripped.endswith(";;"):
+            if stack and stack[-1][0] == "case":
+                stack[-1] = ("case", None)
+            continue
+        if _FI_RE.match(line):
+            while stack and stack[-1][0] != "if":
+                # Unbalanced closer inside a case body: drop the case frame
+                # rather than misattributing the lines that follow.
+                stack.pop()
+            if stack:
+                stack.pop()
+            continue
+        if _IF_OPEN_RE.match(line):
+            is_guarded = _DARWIN_RE.search(line) is not None
+            if stack and stack[-1][0] == "if":
+                # `elif` continues the chain: a Darwin test anywhere in it
+                # guards the whole block.
+                kind, was = stack[-1]
+                stack[-1] = (kind, was or is_guarded)
+            else:
+                stack.append(("if", is_guarded))
+            if stack[-1][1]:
+                guarded.add(idx)
+            # A one-line `if ...; then ...; fi` closes immediately.
+            if _FI_RE.search(line):
+                stack.pop()
+            continue
+        if any(frame[1] for frame in stack):
+            guarded.add(idx)
+    return guarded
+
+
+def _proc_line_exempt(line: str, gated: bool, line_guarded: bool) -> bool:
     """True only when every /proc token on the line is approved fixed-path
-    introspection and the file gates the read."""
-    if not gated:
+    introspection, the file gates the read, AND (for shell) the line sits
+    inside a Darwin-conditional region. Prose and unguarded reads never
+    exempt, even for approved-looking paths."""
+    if not gated or not line_guarded:
         return False
     tokens = _PROC_TOKEN_RE.findall(line)
     if not tokens:
@@ -91,7 +175,8 @@ def scan_repo(skills_dir: Path) -> tuple[list[str], list[str]]:
     for path in sorted(skills_dir.rglob("*")):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in (".md", ".sh", ".bash", ".py"):
+        suffix = path.suffix.lower()
+        if suffix not in _SCANNABLE_EXTENSIONS and path.name != "SKILL.md":
             continue
         try:
             text = path.read_text(encoding="utf-8-sig")
@@ -99,8 +184,14 @@ def scan_repo(skills_dir: Path) -> tuple[list[str], list[str]]:
             errors.append(f"{path}: unreadable ({exc.strerror or exc})")
             continue
         gated = _file_is_gated(text)
-        for lineno, line in enumerate(text.splitlines(), 1):
-            if _PROC_RE.search(line) and not _proc_line_exempt(line, gated):
+        lines = text.splitlines()
+        # Branch structure exists only in shell: prose and other text can
+        # never place a read "inside" a guard, so only shell lines qualify.
+        guarded = _shell_guarded_lines(lines) if suffix in _SHELL_SUFFIXES else set()
+        for lineno, line in enumerate(lines, 1):
+            if _PROC_RE.search(line) and not _proc_line_exempt(
+                line, gated, (lineno - 1) in guarded
+            ):
                 hits.append(f"{path}:{lineno}: proc_access: {line.strip()[:120]}")
             if _DUMP_ENV_RE.search(line):
                 hits.append(f"{path}:{lineno}: dump_all_env: {line.strip()[:120]}")
@@ -140,8 +231,21 @@ def selftest() -> int:
     check({"a.sh": "grep x /proc/1/cgroup\n"}, 1, "ungated proc")
     # Same read with the gate in the file is allowed.
     check({"a.sh": gated_sh}, 0, "gated proc")
-    # The gate exempts only the fixed-path line: an unrelated read flags.
-    check({"a.sh": gated_sh + "cat /proc/2/maps\n"}, 1, "gated file, unrelated proc")
+    # The gate exempts only the guarded read: an approved path after the
+    # closing fi is unguarded and flags.
+    check({"a.sh": gated_sh + "cat /proc/1/cgroup\n"}, 1, "ungated approved read")
+    # ...as does one inside a Darwin case branch.
+    check(
+        {"a.sh": "case \"$os\" in\nDarwin)\n  cat /proc/1/cgroup\n  ;;\n*) echo ok ;;\nesac\n"},
+        1,
+        "darwin branch proc",
+    )
+    # ...while a non-Darwin case branch stays exempt.
+    check(
+        {"a.sh": "case \"$os\" in\nDarwin) echo mac ;;\n*)\n  cat /proc/1/cgroup\n  ;;\nesac\n" + gated_sh},
+        0,
+        "linux branch proc",
+    )
     # Variable-PID and escape shapes flag even in a gated file.
     check({"a.sh": gated_sh + "cat /proc/$PID/cmdline\n"}, 1, "variable pid")
     check({"a.sh": gated_sh + "cat /proc/1/root/etc/shadow\n"}, 1, "root escape")
@@ -184,7 +288,7 @@ def selftest() -> int:
         finally:
             locked.chmod(0o644)
 
-    total = 15
+    total = 17
     if failures:
         print(f"error: {failures}/{total} selftest case(s) failed", file=sys.stderr)
         return 1

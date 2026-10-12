@@ -14,9 +14,12 @@ static check; the capabilities model is what actually blocks it at runtime.
 
 AST parsing (rather than line-based regex) makes the guard multiline-aware, so a
 write call split across lines can't slip through. Scanned: ``*.py`` under the
-repo root, excluding ``tools/`` and ``tests/`` (CI-time utilities — the
-scanner-hygiene guard lives under ``tests/`` because the upstream install
-scanner rates its fixture strings dangerous elsewhere).
+repo root, excluding ``tools/`` (CI-time utilities). ``tests/`` IS scanned —
+the scanner-hygiene guard lives there — but writes lexically inside a
+``selftest`` function are fixtures by convention (tempdir scaffolding for the
+regression table) and exempt; everything else in ``tests/`` enforces the same
+read-only guarantee as plugin sources. Keep fixture writes inside
+``selftest``; production writes there would be exempt too.
 
 Style and CI wiring mirror tools/check_self_claim.py.
 
@@ -32,7 +35,9 @@ import sys
 from pathlib import Path
 
 # CI-time utilities excluded from the scan (not plugin runtime code).
-_EXCLUDE_DIRS = {"tools", "tests"}
+# `tests/` is deliberately NOT excluded: the scanner-hygiene guard lives
+# there, and only its `selftest` fixtures may write (see detect_code).
+_EXCLUDE_DIRS = {"tools"}
 
 # A "mode" string is a write mode if it contains any of these flags.
 _WRITE_FLAGS = "wax+"
@@ -113,10 +118,20 @@ def _subprocess_mutates(call: ast.Call) -> bool:
     return False
 
 
-def _detect(tree: ast.AST) -> list[tuple[int, str]]:
+def _detect(tree: ast.AST, ignore_selftest: bool = False) -> list[tuple[int, str]]:
     """Return (lineno, label) for every mutation detected in `tree`."""
     hits: list[tuple[int, str]] = []
+    skipped: set[int] = set()
+    if ignore_selftest:
+        # Fixture scaffolding lives in selftest() by convention (tempdir
+        # setup for the regression table). Skip those subtrees; every other
+        # write in the file still fails the build.
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "selftest":
+                skipped.update(id(n) for n in ast.walk(node))
     for node in ast.walk(tree):
+        if id(node) in skipped:
+            continue
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -182,16 +197,16 @@ def _detect(tree: ast.AST) -> list[tuple[int, str]]:
     return hits
 
 
-def detect_code(source: str) -> list[str]:
+def detect_code(source: str, ignore_selftest: bool = False) -> list[str]:
     """Parse a source string and return the mutation labels it contains."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return []
-    return [label for _, label in _detect(tree)]
+    return [label for _, label in _detect(tree, ignore_selftest)]
 
 
-def scan(path: Path) -> list[str]:
+def scan(path: Path, ignore_selftest: bool = False) -> list[str]:
     """Return "path:lineno: [label] line" strings for every mutation in `path`."""
     try:
         source = path.read_text(encoding="utf-8-sig")
@@ -200,7 +215,7 @@ def scan(path: Path) -> list[str]:
         return []
     lines = source.splitlines()
     hits: list[str] = []
-    for lineno, label in _detect(tree):
+    for lineno, label in _detect(tree, ignore_selftest):
         line_text = lines[lineno - 1].strip() if 0 < lineno <= len(lines) else ""
         hits.append(f"{path}:{lineno}: [{label}] {line_text}")
     return hits
@@ -256,6 +271,18 @@ _SELFTEST_CASES: list[tuple[str, bool]] = [
 ]
 
 
+# Fixture-scoping table: (source, ignore_selftest, should_be_detected).
+# Writes inside selftest() are tempdir scaffolding; the same write at module
+# level or in any other function still fails the build.
+_FIXTURE_CASES: list[tuple[str, bool, bool]] = [
+    ("def selftest():\n    Path('t').write_text('x')\n", True, False),
+    ("def selftest():\n    Path('t').write_text('x')\n", False, True),
+    ("Path('t').write_text('x')\n", True, True),
+    ("def helper():\n    Path('t').write_text('x')\n", True, True),
+    ("def selftest():\n    def run():\n        Path('t').mkdir()\n", True, False),
+]
+
+
 def selftest() -> int:
     """Verify the detector against the regression table; exit non-zero on drift."""
     failures = 0
@@ -267,10 +294,22 @@ def selftest() -> int:
                 f"SELFTEST FAIL: expected detected={expect} got={detected} for: {snippet!r}",
                 file=sys.stderr,
             )
+    for source, ignore_selftest, expect in _FIXTURE_CASES:
+        detected = bool(detect_code(source, ignore_selftest))
+        if detected != expect:
+            failures += 1
+            print(
+                f"SELFTEST FAIL: expected detected={expect} got={detected} for: {source!r}",
+                file=sys.stderr,
+            )
+            print(
+                f"SELFTEST FAIL: expected detected={expect} got={detected} for: {snippet!r}",
+                file=sys.stderr,
+            )
     if failures:
         print(f"{failures} selftest case(s) failed", file=sys.stderr)
         return 1
-    print(f"selftest OK: {len(_SELFTEST_CASES)} cases")
+    print(f"selftest OK: {len(_SELFTEST_CASES) + len(_FIXTURE_CASES)} cases")
     return 0
 
 
@@ -290,7 +329,10 @@ def main(argv: list[str]) -> int:
 
     hits: list[str] = []
     for path in targets:
-        hits.extend(scan(path))
+        # tests/ harness scripts enforce the same guarantee, except their
+        # selftest() fixture scaffolding (tempdir setup).
+        fixture_ok = "tests" in path.relative_to(root).parts
+        hits.extend(scan(path, ignore_selftest=fixture_ok))
 
     if hits:
         print("Mutation found in plugin Python source:", file=sys.stderr)
