@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.6
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -76,6 +76,7 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 3. `hermes hooks doctor` / `hermes hooks list` → consent, exec bit, drift (pitfalls 1, 2).
 4. `hermes hooks test <event>` → behavior under a synthetic payload (3, 5).
 5. Apply the fix, restart the session/gateway, re-test.
+6. Re-run the detector: `hermes guide hooks` headless or `/hermes-doctor hooks` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
 
 ## Report
 

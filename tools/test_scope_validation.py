@@ -91,8 +91,8 @@ def main(argv: list[str]) -> int:
             guide._run_cli(Args())
             failures.append("_run_cli did not exit on an unknown scope")
         except SystemExit as exc:
-            if exc.code in (0, None):
-                failures.append(f"_run_cli exited {exc.code!r} on an unknown scope")
+            if exc.code != 2:
+                failures.append(f"_run_cli exited {exc.code!r} on an unknown scope; expected 2")
 
         text = guide._handle_doctor("bogus")
         if not text or "bogus" not in text:

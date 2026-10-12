@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.5
+version: 1.0.7
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -71,6 +71,7 @@ tts:
 4. Check `$HERMES_HOME/.env` — verify provider API keys.
 5. Match the failure: no output → pitfall 1; no input → pitfall 2; bad quality → pitfall 3.
 6. Apply the fix, restart gateway, and test with `/voice status`.
+7. Headless: `/voice*` steps need a live session — check `hermes logs --follow` for voice errors and inspect the `stt:`/`tts:` blocks in `config.yaml`. On PM-era installs, check ffmpeg with `hermes pm status`; on older checkouts, run `ffmpeg -version`.
 
 ## 5. Cross-references
 
@@ -96,8 +97,8 @@ Run `hermes pm install ffmpeg` (PM-era install) or `apt install ffmpeg` / `brew 
 
 ### References
 - `$HERMES_HOME/config.yaml` — `voice:`, `stt:`, `tts:` blocks
-- `hermes_cli/voice.py` — voice CLI commands
-- `hermes_cli/tts.py` — TTS provider logic
-- `hermes_cli/stt.py` — STT provider logic
+- `hermes_cli/voice.py` — STT/TTS provider dispatch and playback pipeline
+- `hermes_cli/cli_voice_mixin.py`, `hermes_cli/setup_tts.py` — voice wiring and TTS setup
+- `tools/tts_streaming.py` — streaming provider resolution (`resolve_streaming_provider`)
 
-*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/voice.py`, `hermes_cli/tts.py`, `hermes_cli/stt.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/voice-mode). Re-verify before reuse.*
+*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/voice.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/voice-mode). Re-checked 2026-10-12 against the live install (upstream `e0734a66`): `hermes_cli/tts.py` and `hermes_cli/stt.py` do not exist — provider logic lives in `hermes_cli/voice.py` (+ `cli_voice_mixin.py`, `setup_tts.py`, `tools/tts_streaming.py`). Re-verify before reuse.*

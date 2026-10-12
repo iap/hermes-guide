@@ -75,3 +75,41 @@ PLUGIN_SUBCATEGORY_DIRS = (
     "dashboard_auth",
     "observability",
 )
+
+# Filesystem names owned by the Hermes layout (rename upstream -> edit here).
+CONFIG_FILENAME = "config.yaml"
+HOOKS_ALLOWLIST_FILENAME = "shell-hooks-allowlist.json"
+BUNDLED_SKILLS_MANIFEST = ".bundled_manifest"
+SKILL_BUNDLES_DIRNAME = "skill-bundles"
+
+# `hermes hooks doctor` output wording this check parses (reword upstream ->
+# edit here, not a regex in checks.py).
+HOOKS_DOCTOR_NONE_CONFIGURED = "No shell hooks configured"
+HOOKS_DOCTOR_HEALTHY_SUMMARY = "All shell hooks look healthy"
+HOOKS_DOCTOR_MARKER_RE = r"\s+[✗⚠]"
+
+# Hermes CLI argv vectors (subcommand rename upstream -> edit here).
+CLI_CONFIG_PATH_ARGV = ("config", "path")
+CLI_HOOKS_DOCTOR_ARGV = ("hooks", "doctor")
+
+# plugins.* config keys (symmetric with CONFIG_MCP_SERVERS above).
+CONFIG_PLUGINS_SECTION = "plugins"
+CONFIG_PLUGINS_ENABLED = "enabled"
+CONFIG_PLUGINS_DISABLED = "disabled"
+
+# Check-scope -> diagnosing skill: rendered in proactive boundary logs so a
+# drift finding names what to load next (read-only string, no behavior).
+SKILL_FOR_SCOPE = {
+    "config": "hermes-configuration-guide",
+    "mcp": "diagnosing-mcp",
+    "skills": "diagnosing-skills",
+    "commands": "diagnosing-commands",
+    "hooks": "diagnosing-hooks",
+    "plugins": "diagnosing-plugins",
+    "memories": "diagnosing-memory",
+}
+
+# Near-duplicate detection budget: entries beyond this count skip the pairwise
+# pass (reported as truncated) so an over-limit store cannot stall a session
+# boundary with O(n^2) comparisons.
+MEMORY_NEAR_DUP_ENTRY_CAP = 400

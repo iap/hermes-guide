@@ -52,24 +52,45 @@ def _changed_files(ref: str) -> list[str]:
     return [ln.strip() for ln in out.splitlines() if ln.strip()]
 
 
+def _frontmatter_block(text: str) -> str | None:
+    """The raw frontmatter block of a SKILL.md document, or None.
+
+    Delimiters match whole lines only: a `---` substring inside a value must
+    not truncate the block (and a missing closing delimiter means there is no
+    frontmatter to read).
+    """
+    match = re.match(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", text, re.DOTALL)
+    return match.group(1) if match else None
+
+
+# The guard needs exactly one frontmatter field (`version`), so it reads that
+# line with a regex instead of importing PyYAML. A YAML import here made the
+# guard fail OPEN when PyYAML was absent (the except branch returned None =
+# "no finding", exit 0), which forced this step and its regression test
+# behind the network tier. The regex keeps the guard stdlib-only and
+# fail-closed: only a genuinely missing/unreadable file yields None.
+_VERSION_RE = re.compile(
+    r"^version:[ \t]*[\"']?([0-9][0-9A-Za-z.\-]*)[\"']?[ \t]*(?:#.*)?$",
+    re.MULTILINE,
+)
+
+
+def _version_of(block: str | None) -> dict | None:
+    if block is None:
+        return None
+    match = _VERSION_RE.search(block)
+    if not match:
+        return {}
+    return {"version": match.group(1)}
+
+
 def _frontmatter_at(path: str, ref: str) -> dict | None:
-    """Read the YAML frontmatter of `path` as it exists at `ref`, or None."""
+    """Read the `version` of `path` as it exists at `ref`, or None."""
     try:
         blob = _git(["show", f"{ref}:{path}"])
     except Exception:
         return None
-    if not blob.startswith("---"):
-        return None
-    parts = blob.split("---", 2)
-    if len(parts) < 3:
-        return None
-    try:
-        import yaml
-
-        fm = yaml.safe_load(parts[1])
-    except Exception:
-        return None
-    return fm if isinstance(fm, dict) else None
+    return _version_of(_frontmatter_block(blob))
 
 
 def _frontmatter_here(path: str) -> dict | None:
@@ -78,18 +99,7 @@ def _frontmatter_here(path: str) -> dict | None:
             text = f.read()
     except Exception:
         return None
-    if not text.startswith("---"):
-        return None
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None
-    try:
-        import yaml
-
-        fm = yaml.safe_load(parts[1])
-    except Exception:
-        return None
-    return fm if isinstance(fm, dict) else None
+    return _version_of(_frontmatter_block(text))
 
 
 def main(argv: list[str]) -> int:

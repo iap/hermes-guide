@@ -27,6 +27,13 @@ _MENTION = re.compile(r"tools/([A-Za-z0-9_-]+)\.py(?![A-Za-z0-9_.])")
 # helpers invoked by their own step, so they are covered by the same rule.
 _PREFIXES = ("test_", "check_")
 
+# Executable helpers that are CI dependencies without being guards or tests.
+# Each must be referenced by a workflow like the prefixed scripts above:
+# `render_docs.py` renders the generated doc blocks CI enforces,
+# `gen_changelog.py` runs in the release workflow, and `pr_metadata_labels.py`
+# drives auto-labelling. An unreferenced helper is the same silent death.
+_WIRED_HELPERS = ("render_docs", "gen_changelog", "pr_metadata_labels")
+
 
 def find_orphans(tools_dir: Path, workflow_dir: Path) -> list[str]:
     """Return sorted names of tools/ scripts that no workflow references."""
@@ -41,7 +48,11 @@ def find_orphans(tools_dir: Path, workflow_dir: Path) -> list[str]:
         for p in tools_dir.glob("*.py")
         if p.is_file() and not p.name.startswith("_")
     }
-    return sorted(n for n in on_disk if n.startswith(_PREFIXES) and n not in referenced)
+    required = {
+        n for n in on_disk
+        if n.startswith(_PREFIXES) or n in _WIRED_HELPERS
+    }
+    return sorted(n for n in required if n not in referenced)
 
 
 def selftest() -> int:
@@ -52,8 +63,12 @@ def selftest() -> int:
         (["test_a.py", "check_b.py"],
          "run: python tools/test_a.py && python tools/check_b.py", []),
         ([], "run: python tools/test_a.py", []),
-        # Not a guard or test: helpers are not required to be wired directly.
-        (["pr_metadata_labels.py"], "", []),
+        # Helpers in the wired list must be referenced too.
+        (["render_docs.py"], "", ["render_docs"]),
+        (["render_docs.py", "gen_changelog.py"],
+         "run: python tools/render_docs.py", ["gen_changelog"]),
+        # A helper outside the wired list stays exempt.
+        (["some_helper.py"], "", []),
         # A leading underscore marks a shared module, not an entry point.
         (["_shared.py"], "", []),
         # Flags and args in the invocation still count as wired.

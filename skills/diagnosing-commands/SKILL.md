@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.4
+version: 1.1.6
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -33,14 +33,17 @@ Multiple leading `/skill` tokens stack in one message — the cap is **`_MAX_STA
 4. **A plugin's command is missing** — the plugin is installed but not in `plugins.enabled`. → `hermes plugins enable <name>`; restart. Follow **`diagnosing-plugins`**.
 5. **Command works in the CLI but not on Telegram/Discord/Slack** — each messaging platform can gate slash commands by role, **scoped separately for DMs and groups**: when `allow_admin_from` (DMs) or `group_allow_admin_from` (groups) lists user IDs, admins get every command and non-admins get only the scope's allowlist — `user_allowed_commands` for DMs, `group_user_allowed_commands` for groups (plus `/help`, `/whoami`); if **no** admin list is set for a scope, gating is **off** for that scope and every allowed user can run everything. → **Permanent:** set the keys in the platform's `extra:` block in the active config file — resolve it first with `hermes config path` (`$HERMES_HOME` or a named profile redirects the default), then restart the gateway. **Temporary:** run the command from the CLI (no gating there) while you fix the platform config. (All four keys verified in `gateway/config_loader.py`.)
 6. **Command exists but arguments vanish** — stacking parsing consumed what looked like a flag, or the command takes no args (e.g. `/plan` treats trailing text as its request). → Check the command's entry in `/help`; avoid leading `/` in arguments you want passed through.
-7. **Aliases behave oddly** — many commands have aliases (`/reset`→`/new`, `/ctx`→`/context` — both verified in `hermes_cli/commands.py`); both dispatch identically. → Not a bug; check the canonical name in the reference.
+7. **A skill slug matching a built-in silently runs the built-in** — the reverse of pitfall 3: bundle-over-skill does not apply here, the **built-in wins** (e.g. installed skill `skills/software-development/plan` (`/plan`) never fires — `/plan` runs the built-in planner). → Detector: `hermes guide commands` (headless) or `/hermes-doctor commands` (in-session) flags `shadows a built-in command (builtin wins)`; rename the skill or expect built-in behavior.
+8. **Aliases behave oddly** — many commands have aliases (`/reset`→`/new`, `/ctx`→`/context` — both verified in `hermes_cli/commands.py`); both dispatch identically. → Not a bug; check the canonical name in the reference.
 
 ## 3. Localization workflow
 
-1. Type `/` and search the autocomplete — found? It's a dispatch/args issue (6/7). Not found? → step 2.
+1. In-session: type `/` and search the autocomplete — found? It's a dispatch/args issue (6/8). Not found? → step 2. Headless: skip autocomplete, run the detector at step 4, then continue at step 2.
 2. Which source should provide it? skill → **`diagnosing-skills`** (pitfall 1/2); bundle → `hermes bundles show <name>` (3); plugin → **`diagnosing-plugins`** (4); expected built-in → check `/help` and your Hermes version (`hermes --version`; built-ins gain commands over releases).
 3. Surface-specific failure (CLI works, gateway doesn't) → pitfall 5.
-4. Apply the fix, `/reload-skills` or restart as appropriate, confirm via autocomplete or invocation.
+4. Skill slug matching a built-in (silent builtin-wins) → pitfall 7; detector first: `hermes guide commands` (headless) or `/hermes-doctor commands` (in-session).
+5. Apply the fix, `/reload-skills` or restart as appropriate, confirm via autocomplete or invocation.
+6. Re-run the detector: `hermes guide commands` headless or `/hermes-doctor commands` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
 
 ## Report
 
@@ -65,4 +68,4 @@ Add `/my-skill` to `user_allowed_commands` in the Telegram platform's `extra:` b
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: no standalone command files (no `commands/` tree); bundle path `<HERMES_HOME>/skill-bundles/` and bundle-over-skill precedence (`agent/skill_bundles.py`); the stacking cap `_MAX_STACKED_SKILLS = 5` (`agent/skill_commands.py`); `ctx.register_command(name, handler, description=..., args_hint=...)` (`plugins/context_engine/__init__.py`); all four platform gating keys (`gateway/config_loader.py`); alias pairs `new`←`reset` and `context`←`ctx` (`hermes_cli/commands.py`). No claim required correction in this pass — comments were added so each load-bearing fact is traceable. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: no standalone command files (no `commands/` tree); bundle path `<HERMES_HOME>/skill-bundles/` and bundle-over-skill precedence (`agent/skill_bundles.py`); the stacking cap `_MAX_STACKED_SKILLS = 5` (`agent/skill_commands.py`); `ctx.register_command(name, handler, description=..., args_hint=...)` (`plugins/context_engine/__init__.py`); all four platform gating keys (`gateway/config_loader.py`); alias pairs `new`←`reset` and `context`←`ctx` (`hermes_cli/commands.py`). Re-checked 2026-10-12 against the live install (upstream `e0734a66`): skill-slug-vs-builtin builtin-wins verdict via `hermes guide commands` (installed `skills/software-development/plan` shadows builtin `/plan`). Re-verify before reuse.*

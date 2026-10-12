@@ -83,6 +83,20 @@ def main(argv: list[str]) -> int:
         if checks._read_plugin_manifest(str(d3)) is not None:
             failures.append("malformed plugin.json was treated as a plugin")
 
+        # (3b) malformed plugin.yaml -> None (not a plugin). A corrupt YAML
+        # manifest must not fall back to the basename and report a broken
+        # plugin as discovered/healthy.
+        d3b = Path(td) / "bad-yaml"
+        _write(d3b / "plugin.yaml", "name: [unclosed\n  bad: : :\n")
+        if checks._read_plugin_manifest(str(d3b)) is not None:
+            failures.append("malformed plugin.yaml was treated as a plugin")
+
+        # (3c) list-root plugin.yaml -> None (no name mapping to read)
+        d3c = Path(td) / "list-yaml"
+        _write(d3c / "plugin.yaml", "- just\n- a\n- list\n")
+        if checks._read_plugin_manifest(str(d3c)) is not None:
+            failures.append("list-root plugin.yaml was treated as a plugin")
+
         # (4) plugin.yaml wins over plugin.json when both present
         d4 = Path(td) / "both"
         _write(d4 / "plugin.yaml", "name: yaml-wins\nversion: 1.0.0\n")
