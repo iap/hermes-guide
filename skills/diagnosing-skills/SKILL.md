@@ -1,7 +1,7 @@
 ---
 name: diagnosing-skills
 description: Diagnose Hermes skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits.
-version: 1.1.5
+version: 1.1.6
 metadata:
   hermes:
     tags: [hermes, skills, troubleshooting]
@@ -76,6 +76,7 @@ When the same skill exists in several roots (local copy vs external dir vs plugi
 3. Present, correct, but the model ignores it? → description quality (2 §2): make the first ~60 characters state when to use it.
 4. Agent-side write issues? → gate (7).
 5. Apply the fix and verify with `skill_view(name)` or by invoking `/<name>`.
+6. Re-run the detector: `hermes guide skills` headless (expect `+`) or `/hermes-doctor skills` in-session; `x`/`?` means not fixed.
 
 ## Report
 

@@ -87,7 +87,7 @@ def case_hooks_merges_doctor_findings(checks):
         f"  {MARK_WARN} slow-hook     timeout\n"
     )
     checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
-    checks._check_allowlist_json = lambda: {
+    checks._check_allowlist_json = lambda home=None: {
         "status": "broken",
         "reason": "shell-hooks-allowlist.json is not valid JSON",
         "detail": "/fake/home/shell-hooks-allowlist.json",
@@ -106,7 +106,7 @@ def case_hooks_merges_doctor_findings(checks):
 def case_hooks_allowlist_alone_when_doctor_healthy(checks):
     """When the doctor is healthy, only the allowlist finding is reported."""
     checks._run = lambda cmd, timeout=20: (0, "All shell hooks look healthy", "")
-    checks._check_allowlist_json = lambda: {
+    checks._check_allowlist_json = lambda home=None: {
         "status": "broken",
         "reason": "shell-hooks-allowlist.json is not valid JSON",
         "detail": "/fake/home/shell-hooks-allowlist.json",
@@ -122,13 +122,27 @@ def case_hooks_unaffected_when_allowlist_fine(checks):
     """No allowlist problem -> the doctor envelope passes through unchanged."""
     doctor_out = f"  {MARK_BAD} broken-hook   exit code 3\n"
     checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
-    checks._check_allowlist_json = lambda: None
+    checks._check_allowlist_json = lambda home=None: None
 
     env = checks.check_hooks()
     assert env["status"] == "broken", env
     assert "hooks doctor" in env["reason"], env
     assert isinstance(env["detail"], str), env
     print("OK: doctor envelope unchanged when the allowlist is fine")
+
+
+def case_allowlist_reuses_caller_home(checks):
+    """The merge passes a resolved home through instead of re-resolving."""
+    seen = []
+
+    def fake_allowlist(home=None):
+        seen.append(home)
+        return None
+
+    checks._check_allowlist_json = fake_allowlist
+    checks._merge_allowlist_json({"status": "healthy", "reason": "ok", "detail": None}, "probe", "/fake/home")
+    assert seen == ["/fake/home"], seen
+    print("OK: allowlist check reuses the caller-resolved home")
 
 
 def main() -> int:
@@ -140,6 +154,7 @@ def main() -> int:
         case_hooks_merges_doctor_findings,
         case_hooks_allowlist_alone_when_doctor_healthy,
         case_hooks_unaffected_when_allowlist_fine,
+        case_allowlist_reuses_caller_home,
     ):
         try:
             case(checks)
@@ -149,7 +164,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 5 check-envelope case(s) passed")
+    print("\nOK: 6 check-envelope case(s) passed")
     return 0
 
 

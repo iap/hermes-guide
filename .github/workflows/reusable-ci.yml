@@ -83,11 +83,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-          # Cache the pip download cache, never an installed environment: several
-          # tests assert on a freshly resolved interpreter and on `hermes` being
-          # present, so a cached site-packages would mask a real resolution bug.
-          cache: 'pip'
-          cache-dependency-path: '**/requirements*.txt'
+          # No `cache:` here on purpose. The repo has no requirements files,
+          # so a cache-dependency-path glob matches nothing and the cache key
+          # carries no file hash (every run re-downloads anyway); and several
+          # tests assert on a freshly resolved interpreter, so a cached
+          # site-packages would mask a real resolution bug.
 
       - name: Install Hermes
         if: inputs.run-full-gate
@@ -225,15 +225,12 @@ jobs:
         run: python tools/test_checks_cli_resolution.py
 
       - name: Skill version bump guard
-        if: inputs.run-full-gate
+        # Stdlib-only (git + regex frontmatter read, no PyYAML, no Hermes), so
+        # it belongs in the fast tier: direct pushes to master must also bump.
         run: python tools/check_skill_version_bump.py ${{ inputs.base-ref }}
 
       - name: Version bump guard regression
-        # Needs PyYAML: its negative controls expect the guard to reject an
-        # unbumped change, but check_skill_version_bump.py swallows the missing
-        # import and returns "no finding" (exit 0), so the test passes vacuously
-        # instead of failing.
-        if: inputs.run-full-gate
+        # Stdlib-only like the guard itself; fast tier.
         run: python tools/test_skill_version_bump.py
 
       - name: Version consistency guard
@@ -313,7 +310,7 @@ jobs:
         run: python tools/pr_metadata_labels.py --selftest
 
       - name: Doc skill/check count consistency
-        if: inputs.run-full-gate
+        # Pure file reads + git ls-files (also in the hermetic tier); fast tier.
         run: python tools/test_skill_counts.py
 
       - name: Generated doc blocks
@@ -338,7 +335,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -e
+          set -euo pipefail
           hermes skills tap add iap/hermes-guide
           # Derive the list from the checkout, never hardcode it: a stale
           # hardcoded list is how the scanner verdicts on diagnosing-memory
@@ -346,6 +343,15 @@ jobs:
           # nine skills while the repo had eleven).
           SKILLS=$(for d in skills/*/; do basename "$d"; done | sort | tr '\n' ' ')
           echo "skills under test: $SKILLS"
+          # Capture the installed list once up front: if `hermes skills list`
+          # itself errors, an empty pipe would make every `grep -q` miss look
+          # like a "new skill added by this PR" and pass vacuously with only
+          # a warning. Fail closed instead.
+          if ! INSTALLED=$(hermes skills list 2>&1); then
+            printf '%s\n' "$INSTALLED"
+            echo "install failed: could not list installed skills"
+            exit 1
+          fi
           pr_added=""
           failed=0
           for s in $SKILLS; do
@@ -361,7 +367,7 @@ jobs:
               # and on post-merge master pushes alike.
               if [ "${{ inputs.event-name }}" = "pull_request" ] \
                  && printf '%s' "$out" | grep -q 'Could not fetch' \
-                 && ! hermes skills list | grep -q "$s"; then
+                 && ! printf '%s' "$INSTALLED" | grep -q "$s"; then
                 echo "::warning::$s is added by this PR - not installable from the tap until merge"
                 pr_added="$pr_added $s"
                 continue
@@ -370,6 +376,13 @@ jobs:
               failed=1
             else
               echo "::endgroup::"
+            fi
+            # Refresh the installed list after each success so a later skill's
+            # tolerance check reads current state, not the pre-loop snapshot.
+            if ! INSTALLED=$(hermes skills list 2>&1); then
+              printf '%s\n' "$INSTALLED"
+              echo "install failed: could not list installed skills"
+              exit 1
             fi
           done
           if [ "$failed" -ne 0 ]; then exit 1; fi
@@ -384,15 +397,17 @@ jobs:
           bandit __init__.py checks.py constants.py --skip B404,B603
 
   legacy-mac:
-    # Legacy-mac install leg: proves the pinned Hermes tag installs on the
-    # oldest supported GHA-hosted Intel macOS image (macos-15-intel).
+    # Legacy-mac hermetic leg: proves the hermetic gates pass on the oldest
+    # supported GHA-hosted Intel macOS image (macos-15-intel).
     # macos-13 was retired 2025-12-04 and queues forever; macos-14 retires
     # 2026-11-02. Closest hosted match to the repo's 12.7 lineage
     # (checks.py macOS 12.7 note, the 12.7.6 host-pressure baseline).
-    # Hermetic gates only -- no dogfood, tap smoke, or runtime suites.
-    # Hermes pin MUST match the plugin job's install tag.
-    # Full-gate only: the Hermes clone + pip install is a network leg, and
-    # direct pushes run the fast tier (same rule as the plugin job's legs).
+    # Hermetic gates only -- py_compile + check_gates.py are pure file reads
+    # with no network and no Hermes install, so there is deliberately no
+    # clone/pip-install step here. The Hermes install itself is covered by
+    # the plugin job above (same v2026.9.24 pin).
+    # Full-gate only, matching the network-leg rule (this job exists to
+    # shadow the full tier on Intel mac, not to gate fast pushes).
     if: inputs.run-full-gate
     runs-on: macos-15-intel
     timeout-minutes: 30
@@ -404,16 +419,6 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
-          cache: 'pip'
-          cache-dependency-path: '**/requirements*.txt'
-
-      - name: Install Hermes
-        shell: bash
-        run: |
-          # Same pin as the plugin job above. Editable install is the
-          # documented dev path; wheel/sdist builds are blocked outside Nix.
-          git clone --depth 1 --branch v2026.9.24 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
-          pip install -e "$RUNNER_TEMP/hermes-agent"
 
       - name: Python syntax check
         run: python -m py_compile __init__.py checks.py constants.py

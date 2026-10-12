@@ -153,17 +153,34 @@ def _proactive_check(**_kwargs):
     executes every approved hook once with a synthetic payload, which is fine
     when the user asked for it explicitly — not at a session boundary.
     """
-    _version_check()
     for label, r in checks.run_all(readonly_hooks=True).items():
         status = r.get("status")
+        skill = checks.constants.SKILL_FOR_SCOPE.get(label, "diagnosing-triage")
         if status == "broken":
             logger.warning("hermes-guide [%s] broken: %s", label, r.get("reason"))
             detail = r.get("detail")
             if isinstance(detail, list):
                 for d in detail:
                     logger.warning("    - %s", d)
+            logger.warning("    -> load %s; confirm with `hermes guide %s`", skill, label)
         elif status == "informational":
             logger.info("hermes-guide [%s] note: %s", label, r.get("reason"))
+            logger.info("    -> load %s; confirm with `hermes guide %s`", skill, label)
+        elif status == "unknown":
+            # Unknown is not healthy: the check determined nothing (home
+            # unresolvable, doctor output unrecognized). Log it so a silent
+            # boundary is distinguishable from an all-healthy one.
+            logger.warning("hermes-guide [%s] unknown: %s", label, r.get("reason"))
+
+
+def _proactive_check_start(**kwargs):
+    """Session-start boundary: drift checks plus the update check.
+
+    The update check (`git ls-remote`, up to ~15 s on first run) runs here
+    only — not on session end — so closing a session never stalls on network.
+    """
+    _version_check()
+    _proactive_check(**kwargs)
 
 
 def register(ctx):
@@ -180,5 +197,5 @@ def register(ctx):
     )
 
     if ctx.get_config("proactive", False):
-        ctx.register_hook("on_session_start", _proactive_check)
+        ctx.register_hook("on_session_start", _proactive_check_start)
         ctx.register_hook("on_session_end", _proactive_check)

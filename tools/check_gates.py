@@ -63,9 +63,13 @@ def _run(script: str) -> tuple[int, str]:
     path = REPO / "tools" / script
     if not path.is_file():
         return 127, f"error: missing gate script tools/{script}"
-    proc = subprocess.run(
-        [sys.executable, str(path)], capture_output=True, text=True, cwd=REPO
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(path)], capture_output=True, text=True,
+            cwd=REPO, timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        return 124, f"error: gate tools/{script} timed out after 300 s"
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 

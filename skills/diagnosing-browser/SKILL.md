@@ -1,7 +1,7 @@
 ---
 name: diagnosing-browser
 description: Diagnose Hermes browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating, and browser tool errors.
-version: 1.0.4
+version: 1.0.5
 metadata:
   hermes:
     tags: [hermes, browser, cdp, playwright, troubleshooting]
@@ -57,6 +57,7 @@ browser:
 4. Check config.yaml `browser:` block — verify backend and endpoint.
 5. Match the failure: not connecting → pitfall 1; Chrome 144+ → pitfall 2; Playwright missing → pitfall 3.
 6. Apply the fix, `/browser connect`, and verify with `/browser status`.
+7. Headless: `/browser*` steps need a live session — verify headless via `curl http://127.0.0.1:9222/json/version` (CDP reachable), `google-chrome --version` (CDP-compatible build), and the `browser:` block in `config.yaml`.
 
 ## 5. Cross-references
 

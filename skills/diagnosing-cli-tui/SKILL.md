@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.11
+version: 1.1.12
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -21,7 +21,7 @@ to launch, or when asked how to theme/skin Hermes on Windows.
 > [!CAUTION]
 > This baseline records **one specific Windows machine** — the box this skill was written on. It is **not** a description of your machine. Before applying anything below, confirm the local environment with `hermes config path`, `hermes --version`, and `hermes doctor`; paths, `HERMES_HOME`, shell, and OS differ per machine (on macOS/Linux the **default** home is `~/.hermes` — overridable via `HERMES_HOME` or a named profile; `hermes config path` always prints the active one).
 
-- Hermes Agent **v0.21.1** on the Windows desktop install (v0.20.4 when this skill was first written); git install: `%LOCALAPPDATA%\hermes\hermes-agent` (on the box this baseline was recorded the in-tree venv was a `.venv/`, not `venv/`; a PM-era install has no in-tree venv at all — see `diagnosing-path` for why that matters)
+- Hermes Agent **v2026.9.24** on the Windows desktop install (v0.20.4 when this skill was first written, v0.21.1 at the 2026-09-14 re-check); git install: `%LOCALAPPDATA%\hermes\hermes-agent` (on the box this baseline was recorded the in-tree venv was a `.venv/`, not `venv/`; a PM-era install has no in-tree venv at all — see `diagnosing-path` for why that matters)
 - `HERMES_HOME = %LOCALAPPDATA%\hermes` (native Windows; `~/.hermes` is NOT the active home)
 - OS: Windows 10 Home 22H2 (build 19045.7663)
 - Shell: Windows PowerShell 5.1; console host: conhost (classic window) or Windows Terminal 1.24.11911 (present on the reference box; a bare Windows 10 box has **only conhost**)
