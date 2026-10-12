@@ -125,6 +125,45 @@ Examples:
 - `docs(skills): document the PM-era no-in-tree-venv case`
 - `feat(guide): add the diagnosing-cron skill`
 
+## Commit signing
+
+Sign commits so GitHub can mark them `Verified` and the history keeps a
+cryptographic origin. Two supported setups:
+
+- **SSH** (simplest to generate; Git 2.34+) — recommended for automated
+  contributors, one dedicated key per tool so it can be rotated or revoked
+  without touching the account's authentication keys:
+
+  ```bash
+  ssh-keygen -t ed25519 -N '' -C 'hermes-guide signing' -f ~/.ssh/hermes-guide-signing
+  git config --global gpg.format ssh
+  git config --global user.signingkey ~/.ssh/hermes-guide-signing.pub
+  git config --global commit.gpgsign true
+  git config --global tag.gpgSign true
+  ```
+
+  Register the public key under Settings → SSH and GPG keys → New SSH key,
+  key type **Signing Key**. GitHub accepts any number of signing keys.
+
+- **GPG** — generate or reuse a key, add it under Settings → SSH and GPG keys
+  → GPG keys, and set `git config --global user.signingkey <key-id>` (leave
+  `gpg.format` unset).
+
+Either way the committer email must be a verified email on the account; the
+account's `noreply` address also counts. Sign release tags as well
+(`git tag -s`; `tag.gpgSign true` signs tags by default).
+
+Behavior to know:
+
+- A pull request merged via squash lands on `master` as a **GitHub-signed
+  commit** (web-flow key), so `master` stays signed even when the head
+  commits are not.
+- Issue bodies, pull request descriptions, and comments have no signature
+  mechanism — their provenance is the account or App that posted them.
+- The `Master` ruleset does not require signed commits today. If it ever
+  does, unsigned commits on a pull request head block the merge, so set up
+  signing before that applies.
+
 ## Tone
 
 Rules for everything a contribution carries: commit messages, PR bodies, issue
