@@ -2,6 +2,33 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.7.1 (2026-10-12)
+
+### Bug Fixes
+
+- **hooks**: name the interactive session command for TTY approval ([#199](https://github.com/iap/hermes-guide/pull/199))
+- **scanner**: cover skills python files in hygiene scope ([#198](https://github.com/iap/hermes-guide/pull/198))
+- **hooks**: inspect hooks in-process at session boundaries; disclose `hermes hooks doctor` behavior ([#197](https://github.com/iap/hermes-guide/pull/197))
+- **scanner**: gate /proc probe off-Darwin, reword prose scanner hits ([#195](https://github.com/iap/hermes-guide/pull/195))
+- **citation**: strip BOM when reading the upstream baseline ([#192](https://github.com/iap/hermes-guide/pull/192))
+- address diagnostic review findings ([#185](https://github.com/iap/hermes-guide/pull/185))
+
+### Documentation
+
+- **gateway**: defer ffmpeg restore to diagnosing-voice, cover Windows persistence ([#203](https://github.com/iap/hermes-guide/pull/203))
+- fix live-verified CLI claims across seven skills ([#202](https://github.com/iap/hermes-guide/pull/202))
+- fix verified stale facts across root docs and skill fronts ([#200](https://github.com/iap/hermes-guide/pull/200))
+- **checks**: fix _run_hermes docstring — first attempt gets fair share, not full budget ([#194](https://github.com/iap/hermes-guide/pull/194))
+
+### Chores
+
+- **release**: bump to 0.7.1 ([#205](https://github.com/iap/hermes-guide/pull/205))
+- update CHANGELOG.md for v0.7.0 ([#183](https://github.com/iap/hermes-guide/pull/183))
+
+### Tests
+
+- **cli**: contain test PATH to fix flakiness and vacuous assertion ([#193](https://github.com/iap/hermes-guide/pull/193))
+
 ## v0.7.0 (2026-10-10)
 
 ### Features

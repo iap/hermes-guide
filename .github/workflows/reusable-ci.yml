@@ -248,6 +248,13 @@ jobs:
           python tools/check_version_consistency.py --selftest
           python tools/check_version_consistency.py
 
+      - name: Changelog release-section guard
+        # release.yml runs `gen_changelog.py --check` at tag time and fails
+        # closed on a missing section. That guard is only worth having if it can
+        # fail, so this runs its behavioral cases (plus --upcoming idempotence)
+        # on every PR. Stdlib-only git fixtures — no Hermes, no network.
+        run: python tools/test_gen_changelog.py
+
       - name: Malformed skill-name regression
         # Imports hermes_guide.checks, so it needs the full tier.
         if: inputs.run-full-gate
