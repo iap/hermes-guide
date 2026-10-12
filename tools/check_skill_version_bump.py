@@ -53,13 +53,14 @@ def _changed_files(ref: str) -> list[str]:
 
 
 def _frontmatter_block(text: str) -> str | None:
-    """The raw frontmatter block of a SKILL.md document, or None."""
-    if not text.startswith("---"):
-        return None
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None
-    return parts[1]
+    """The raw frontmatter block of a SKILL.md document, or None.
+
+    Delimiters match whole lines only: a `---` substring inside a value must
+    not truncate the block (and a missing closing delimiter means there is no
+    frontmatter to read).
+    """
+    match = re.match(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", text, re.DOTALL)
+    return match.group(1) if match else None
 
 
 # The guard needs exactly one frontmatter field (`version`), so it reads that

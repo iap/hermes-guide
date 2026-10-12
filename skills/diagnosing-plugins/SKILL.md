@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and sub-category selection keys.
-version: 1.2.6
+version: 1.2.7
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -62,7 +62,7 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 3. Enabled but broken → `hermes logs` for a `register()` failure (pitfall 4) or a capability gap (pitfall 2). A **load-timeout** message alone does not tell you which side was slow — check pitfall 4 and run `diagnosing-host-pressure` to rule the host in or out; only treat it as host pressure once the probe says so.
 4. Sub-category plugin (memory/context/model-provider/platform) → check its selection key in config, not `plugins.enabled`.
 5. Restart the session/gateway and verify: tools appear in `/tools list`, commands in `/` autocomplete, hooks via `hermes hooks list`.
-6. Re-run the detector: `hermes guide plugins` headless (expect `+`) or `/hermes-doctor plugins` in-session; `x`/`?` means not fixed.
+6. Re-run the detector: `hermes guide plugins` headless or `/hermes-doctor plugins` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
 
 ## Report
 

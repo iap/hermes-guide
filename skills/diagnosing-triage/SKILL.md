@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -31,18 +31,24 @@ Do **not** load this skill when the user has already named a specific subsystem 
 
 ## 0b. Baseline first: run the health check before routing
 
-Before walking the flowchart, capture the machine-readable baseline — it routes two whole branches by itself and exposes findings no symptom description mentions:
+Before walking the flowchart, capture the machine-readable baseline — it routes whole branches by itself and exposes findings no symptom description mentions:
 
 - Headless / one-shot: `hermes guide` (all scopes) or `hermes guide <scope>`.
 - In-session: `/hermes-doctor` or `/hermes-doctor <scope>`.
 
-Route its `~`/`x` lines first:
+Route its `~`/`x`/`?` lines first:
 
 | Baseline line | Load |
 |---|---|
 | `~ commands` (e.g. a skill slug shadowing a builtin) | diagnosing-commands |
 | `~ memories` (store near/over limit, undated entries) | diagnosing-memory |
-| `x` on any scope | that scope's skill from the mapping table (§2) |
+| `x config` | hermes-configuration-guide Step 0, then re-run the scope |
+| `x mcp` | diagnosing-mcp |
+| `x skills` | diagnosing-skills |
+| `x commands` | diagnosing-commands |
+| `x hooks` | diagnosing-hooks |
+| `x plugins` | diagnosing-plugins |
+| `x memories` | diagnosing-memory |
 | `?` (unknown — home unresolvable, doctor output unrecognized) | hermes-configuration-guide Step 0 (resolve home/config), then re-run the scope; unknown means unmeasured, never healthy |
 
 Then continue with symptom routing below for whatever the baseline did not explain.

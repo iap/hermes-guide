@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.5
+version: 1.1.6
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -38,12 +38,12 @@ Multiple leading `/skill` tokens stack in one message — the cap is **`_MAX_STA
 
 ## 3. Localization workflow
 
-1. In-session: type `/` and search the autocomplete — found? It's a dispatch/args issue (6/8). Not found? → step 2. Headless: skip to step 4's detector, then return here.
+1. In-session: type `/` and search the autocomplete — found? It's a dispatch/args issue (6/8). Not found? → step 2. Headless: skip autocomplete, run the detector at step 4, then continue at step 2.
 2. Which source should provide it? skill → **`diagnosing-skills`** (pitfall 1/2); bundle → `hermes bundles show <name>` (3); plugin → **`diagnosing-plugins`** (4); expected built-in → check `/help` and your Hermes version (`hermes --version`; built-ins gain commands over releases).
 3. Surface-specific failure (CLI works, gateway doesn't) → pitfall 5.
 4. Skill slug matching a built-in (silent builtin-wins) → pitfall 7; detector first: `hermes guide commands` (headless) or `/hermes-doctor commands` (in-session).
 5. Apply the fix, `/reload-skills` or restart as appropriate, confirm via autocomplete or invocation.
-6. Re-run the detector: `hermes guide commands` headless (exit `0` + no collision lines) or `/hermes-doctor commands` in-session; a remaining `x`/`?` means not fixed.
+6. Re-run the detector: `hermes guide commands` headless or `/hermes-doctor commands` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
 
 ## Report
 

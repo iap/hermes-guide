@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.1.5
+version: 1.1.6
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -15,6 +15,8 @@ Goal: reduce any messaging problem to one concrete fix — a gateway restart, a 
 ## 1. Configuration shape
 
 Platform config lives under `gateway.platforms.<name>` in `config.yaml`, but **each platform has its own schema** — there is no universal `token`/`allowlist`/`enabled` shape. Telegram uses polling/webhook with `token`; Discord uses `bot_token` and intents; Matrix uses `homeserver` + `access_token`; WhatsApp uses QR pairing. Always run `hermes gateway setup` for the target platform to see the actual fields.
+
+> Every `$HERMES_HOME/...` path below means the resolved home (`hermes config path`; see config-guide Step 0) — the variable is an override and may be unset, in which case a bare `$HERMES_HOME/logs/...` expands to `/logs/...`.
 
 > [!WARNING]
 > Do not copy-paste a `gateway.platforms.<name>` block from one platform to another. Applying a Telegram-shaped block to Discord (or vice versa) silently ignores credentials and the platform will not connect.
@@ -43,7 +45,7 @@ Platform config lives under `gateway.platforms.<name>` in `config.yaml`, but **e
 
 1. `hermes gateway status` — verify gateway is running and platforms connected.
 2. `hermes gateway status --deep --full` — detailed diagnostics.
-3. Check `$HERMES_HOME/logs/gateway.log | tail -50` — recent errors.
+3. Check `tail -50 "$HERMES_HOME/logs/gateway.log"` — recent errors.
 4. Check config.yaml `gateway.platforms.<name>` — verify token, allowlist, enabled.
 5. Match the failure: not responding → pitfall 1; not delivering → pitfall 2; allowlist → pitfall 3.
 6. Apply the fix, `hermes gateway restart`, and verify with `hermes gateway status`.

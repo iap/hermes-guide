@@ -1220,11 +1220,16 @@ def check_memory_hygiene():
         # Near-duplicates: normalized token-set overlap on entries >20 chars.
         # Capped: the pairwise pass is O(n^2) and char limits do not bound
         # entry counts, so an over-limit store could stall a session boundary.
-        tokenized = [(i, _mem_tokens(e)) for i, e in enumerate(entries) if len(e) > 20]
+        # Built incrementally so entries past the cap are never tokenized.
+        tokenized = []
         truncated = False
-        if len(tokenized) > constants.MEMORY_NEAR_DUP_ENTRY_CAP:
-            truncated = True
-            tokenized = tokenized[: constants.MEMORY_NEAR_DUP_ENTRY_CAP]
+        for i, e in enumerate(entries):
+            if len(e) <= 20:
+                continue
+            if len(tokenized) >= constants.MEMORY_NEAR_DUP_ENTRY_CAP:
+                truncated = True
+                break
+            tokenized.append((i, _mem_tokens(e)))
         reported_pairs = set()
         near_dups = 0
         for a in range(len(tokenized)):

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.6
+version: 1.0.7
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -71,7 +71,7 @@ tts:
 4. Check `$HERMES_HOME/.env` — verify provider API keys.
 5. Match the failure: no output → pitfall 1; no input → pitfall 2; bad quality → pitfall 3.
 6. Apply the fix, restart gateway, and test with `/voice status`.
-7. Headless: `/voice*` steps need a live session — verify headless via `hermes logs --follow` (voice errors), `hermes pm status` (ffmpeg), and the `stt:`/`tts:` blocks in `config.yaml`.
+7. Headless: `/voice*` steps need a live session — check `hermes logs --follow` for voice errors and inspect the `stt:`/`tts:` blocks in `config.yaml`. On PM-era installs, check ffmpeg with `hermes pm status`; on older checkouts, run `ffmpeg -version`.
 
 ## 5. Cross-references
 

@@ -365,9 +365,14 @@ jobs:
               # signature) on pull_request events only; scanner verdicts, auth
               # failures, and every other failure still fail the step - on PRs
               # and on post-merge master pushes alike.
+              # Names are lowercase alnum+hyphen, so hyphen-aware boundaries keep
+              # `diagnosing-mcp` from matching `diagnosing-mcp-extra` (or a
+              # longer name containing it). Deliberately format-agnostic: the
+              # list renders as a Rich table on a TTY and plain text off it,
+              # so cell/column parsing would couple this step to one layout.
               if [ "${{ inputs.event-name }}" = "pull_request" ] \
-                 && printf '%s' "$out" | grep -q 'Could not fetch' \
-                 && ! printf '%s' "$INSTALLED" | grep -q "$s"; then
+                 && printf '%s' "$out" | grep -qF -- 'Could not fetch' \
+                 && ! printf '%s' "$INSTALLED" | grep -qE "(^|[^a-z0-9-])$s([^a-z0-9-]|$)"; then
                 echo "::warning::$s is added by this PR - not installable from the tap until merge"
                 pr_added="$pr_added $s"
                 continue
