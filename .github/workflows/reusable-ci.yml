@@ -62,16 +62,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        # Split coverage: 3.11 is the floor of our own supported range
-        # (pyproject: >=3.11) and of upstream's (`requires-python
-        # >=3.11,<3.15`); 3.14 is upstream's dev pin and the only version
-        # with full core dependencies (all direct pins carry
-        # `python_version >= '3.14'` markers — on 3.11 `pip install -e`
-        # installs almost nothing and the `hermes` CLI cannot import).
-        # Hermetic + stdlib steps run on both; anything executing the
-        # installed `hermes` CLI is additionally gated on 3.14 below.
-        # mypy statically targets the 3.11 floor (pyproject [tool.mypy]).
-        python-version: ["3.11", "3.14"]
+        # Floor (3.11) tracks upstream's .python-version; ceiling (3.12) is
+        # what this repo already ran. Upstream declares >=3.11,<3.15 (verified
+        # against tag v2026.9.24), so a single pin in either direction just
+        # moves the drift.
+        python-version: ["3.11", "3.12"]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     # Windows runs the same steps except mypy, the plugin doctor, the tap smoke
@@ -94,33 +89,21 @@ jobs:
           # tests assert on a freshly resolved interpreter, so a cached
           # site-packages would mask a real resolution bug.
 
-      - name: Install our declared dependency
-        # The checks-importing regression tests need PyYAML, which the
-        # Hermes editable install only provides on 3.14+ (upstream markers).
-        # Our own pyproject declares PyYAML>=6.0,<7 with no markers, so
-        # install it directly: small, pinned to our range, same on every leg.
-        # Hermetic gates stay stdlib-only and never touch it.
-        run: pip install "PyYAML>=6.0,<7"
-
       - name: Install Hermes
-        if: inputs.run-full-gate && matrix.python-version == '3.14'
+        if: inputs.run-full-gate
         shell: bash
         run: |
-          # Post-PM main SHA pin (not the latest release tag): v2026.9.24
-          # predates the PM rework (no pm/, Python 3.11 installer), while the
-          # skills and the user base describe and run PM-era Hermes (Python
-          # 3.14.7, $HERMES_HOME/tools + installs/). Pinning the tag would
-          # test an era nobody runs. Revert to a tag pin when upstream cuts
-          # a release past the rework. Verified 2026-10-12: pins, limits,
-          # delimiter, venv order, MCP prefix/timeouts all match constants.py.
-          # Editable install is the documented dev path — wheel/sdist builds
-          # are blocked outside Nix. $RUNNER_TEMP keeps the clone path valid
-          # on both Linux and Windows runners. A SHA needs fetch+checkout
-          # (no --branch), and stays shallow: one commit, no history.
-          git init -q "$RUNNER_TEMP/hermes-agent"
-          git -C "$RUNNER_TEMP/hermes-agent" remote add origin https://github.com/NousResearch/hermes-agent.git
-          git -C "$RUNNER_TEMP/hermes-agent" fetch -q --depth 1 origin 53bc70c5ee8544040cd9f0708d25c0f55276a44b
-          git -C "$RUNNER_TEMP/hermes-agent" checkout -q FETCH_HEAD
+          # pip/PyPI is no longer a supported Hermes distribution method
+          # (PyPI is stale at 0.19.0). Install from the upstream git tag as an
+          # editable install — wheel/sdist builds are blocked outside Nix, but
+          # editable installs are the documented dev path. $RUNNER_TEMP keeps
+          # the clone path valid on both Linux and Windows runners.
+          # NOTE: a post-PM main SHA pin was tried here and reverted: the
+          # PM-era install scanner (skills-guard-v10) blocks our own
+          # host-pressure probe's gated /proc reads, failing the tap step
+          # with no content-side fix available. Re-land the SHA pin together
+          # with upstream #136259 (proc exemption) — see issue #204.
+          git clone --depth 1 --branch v2026.9.24 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
           pip install -e "$RUNNER_TEMP/hermes-agent"
 
       - name: Python syntax check
@@ -140,9 +123,8 @@ jobs:
 
       - name: Plugin doctor
         # Hermes-on-Windows CI is unexplored upstream; the runtime tests below
-        # already cover the plugin's own cross-platform paths. 3.14-only: the
-        # installed CLI cannot import below it (upstream core markers).
-        if: runner.os == 'Linux' && inputs.run-full-gate && matrix.python-version == '3.14'
+        # already cover the plugin's own cross-platform paths.
+        if: runner.os == 'Linux' && inputs.run-full-gate
         run: hermes plugins doctor . --ci
 
       - name: Docs self-claim guard
@@ -202,13 +184,13 @@ jobs:
         # Requires the `hermes` CLI on PATH, so it MUST stay behind the same gate
         # as the install above. It has no internal skip guard, so running it with
         # run-full-gate=false would fail on every direct push to master.
-        if: inputs.run-full-gate && matrix.python-version == '3.14'
+        if: inputs.run-full-gate
         run: python tools/test_readonly_runtime.py
 
       - name: Dogfood check (live install)
         # Read-only smoke test against the live Hermes install. Skips cleanly
         # when hermes is absent. Runs only in the full tier (needs the install).
-        if: inputs.run-full-gate && matrix.python-version == '3.14'
+        if: inputs.run-full-gate
         run: python tools/check_skill_dogfood.py
 
       - name: MCP shape regression test
@@ -313,10 +295,9 @@ jobs:
         run: |
           # Offline parser regression first (no clone needed), then the real check.
           python3 tools/check_citation_integrity.py --selftest
-          # Use the already-cloned Hermes install (post-PM main SHA pin) as
-          # the citation source. No separate clone needed -- the install step
-          # already has it. Use --rev HEAD since the shallow fetch doesn't
-          # have commit objects.
+          # Use the already-cloned Hermes install (v2026.9.24) as the citation
+          # source. No separate clone needed -- the install step already has it.
+          # Use --rev HEAD since the shallow clone doesn't have commit objects.
           python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent" --rev HEAD
 
       - name: Skill provenance footer guard
@@ -351,7 +332,7 @@ jobs:
           python tools/render_docs.py
 
       - name: Tap discovery smoke test
-        if: runner.os == 'Linux' && inputs.run-full-gate && inputs.event-name == 'pull_request' && matrix.python-version == '3.14'
+        if: runner.os == 'Linux' && inputs.run-full-gate && inputs.event-name == 'pull_request'
         timeout-minutes: 10
         # Installs run authenticated: on CI there is no $HERMES_HOME/.env and
         # no gh login, so get_secret() falls through to os.environ and
@@ -437,7 +418,7 @@ jobs:
     # Hermetic gates only -- py_compile + check_gates.py are pure file reads
     # with no network and no Hermes install, so there is deliberately no
     # clone/pip-install step here. The Hermes install itself is covered by
-    # the plugin job above (same post-PM SHA pin).
+    # the plugin job above (same v2026.9.24 pin).
     # Full-gate only, matching the network-leg rule (this job exists to
     # shadow the full tier on Intel mac, not to gate fast pushes).
     if: inputs.run-full-gate
