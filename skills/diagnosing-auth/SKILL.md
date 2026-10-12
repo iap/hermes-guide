@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
-description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source', see #98725) — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.6
+description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source') — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
+version: 1.2.7
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -12,7 +12,7 @@ metadata:
 
 Goal: reduce any "… found in any source" / GitHub 401 / rate-limit failure on `hermes skills install` or `hermes plugins install` to one concrete fix — remove or refresh a token, or add one.
 
-**Which string you will actually see (verified 2026-09-14).** Upstream now emits two messages, and neither is the historic `Could not fetch from any source` (that phrasing survives only in the issue title #98725, which is still open):
+**Which string you will actually see (verified 2026-09-14).** Upstream now emits two messages, and neither is the historic `Could not fetch from any source` (that phrasing survives only in the closed issue #98725's title):
 
 | Where | Current message | Source |
 |---|---|---|
@@ -32,7 +32,7 @@ These strings are **what the adapter prints when a lookup finds nothing** — au
 | 3 | GitHub App JWT + installation token | `github-app` | only when app credentials are configured |
 | 4 | unauthenticated | `anonymous` | GitHub's anonymous limit (60 req/hr per GitHub docs), public repos only |
 
-The load-bearing fact: **a stale token at priority 1 shadows everything below it.** Its 401 is swallowed, and every GitHub-backed source surfaces the same generic *not-found* message — `No skill named '<name>' found in any source.` or `Could not find '<identifier>' in any source.` (historic phrasing, still in issue #98725's title: `Could not fetch from any source`) — on public repos too. (On versions without the exit-code fix, the failed install also exits **0** — do not trust the exit code alone; read the output.)
+The load-bearing fact: **a stale token at priority 1 is tried first, and its 401 costs a failed attempt.** Current upstream rejects the dead token and falls through to `gh-cli` and anonymous (`tools/skills_hub_github.py:reject()`, fixed via #98725, closed) — installs recover without intervention. On older checkouts the 401 was swallowed and every GitHub-backed source surfaced the same generic *not-found* message — `No skill named '<name>' found in any source.` or `Could not find '<identifier>' in any source.` — on public repos too, which is when removing the token is the fix. (On versions without the exit-code fix, the failed install also exits **0** — do not trust the exit code alone; read the output.)
 
 Second load-bearing fact: **`GitHubAuth().is_authenticated()` checks presence, not validity.** A dead fine-grained PAT (`github_pat_…`) reports `auth_method='pat'` / `authenticated=True` while every API call returns 401 (verified live: the auth probe passed and `_github_get` returned 401 in the same process). Trust only the §2 API probe, never the `is_authenticated()` flag.
 
@@ -54,7 +54,7 @@ Second load-bearing fact: **`GitHubAuth().is_authenticated()` checks presence, n
 
 ## 3. Pitfalls (symptom → cause → fix)
 
-1. **`… found in any source` / `Could not find … in any source` on a public repo with `gh` logged in** (historic phrasing: `Could not fetch from any source`) — a dead `GITHUB_TOKEN` in the profile `.env` shadows the working gh token (priority 1 wins, 401 swallowed; `_resolve_token` never validates). **Temporary:** comment out or delete the `.env` line — installs resume via `gh-cli` immediately. **Permanent:** replace the token with a live one and record its expiry beside it, or drop `.env` tokens entirely and rely on `gh auth login`. Upstream still swallows the 401, so this workaround stays necessary until **#98725** (open) is fixed. (Verified end-to-end; see NousResearch/hermes-agent#98725.)
+1. **`… found in any source` / `Could not find … in any source` on a public repo with `gh` logged in** (historic phrasing: `Could not fetch from any source`) — a dead `GITHUB_TOKEN` in the profile `.env` costs a failed first attempt (priority 1 is tried first). **Temporary:** comment out or delete the `.env` line — installs skip the dead attempt entirely. **Permanent:** replace the token with a live one and record its expiry beside it, or drop `.env` tokens entirely and rely on `gh auth login`. Current upstream rejects the dead token on 401 and falls through (`tools/skills_hub_github.py:reject()`, #98725 closed), so installs recover even with the token present; on older checkouts the 401 was swallowed and removing the token was the only fix. (Verified end-to-end; see NousResearch/hermes-agent#98725.)
 2. **`hermes skills inspect` / tap resolution fails with `Could not find '<owner/repo/path>' in any source` on a correctly-formed identifier, while the tap is listed and `gh` works** — the same dead `.env` token, on a different surface: inspect/tap resolution hits the GitHub API too, and the 401 degrades every source adapter to "not found" (verified: `_github_get` → 401 inside the CLI; the same identifier resolved fine with the token removed). → Same fix as pitfall 1: remove or refresh the `.env` token.
 3. **Anonymous rate-limit 403s during installs** — no token anywhere (method `anonymous`): 60 req/hr exhausts quickly with multi-file skills. → `gh auth login` once (method `gh-cli`, 5,000 req/hr).
 4. **Fine-grained PAT stopped working** — they always carry an expiry (max 1 year) and can be revoked; a 401 gives no reason. `github_pat_…` tokens are in the dead-token class of pitfalls 1–2. → Refresh it, or drop it in favor of `gh auth login`. If you keep one, write its expiry date next to the line.
@@ -95,4 +95,4 @@ Comment out or delete the `GITHUB_TOKEN` line in `$HERMES_HOME/.env`, then re-ru
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/skills_hub_github.py` (`_resolve_token`, `_try_pat`, `_try_gh_cli`, `is_authenticated`), `hermes_cli/skills_hub.py` (error strings), `agent/secret_scope.py`; plus the issue tracker (#98725 open). Module paths and error strings changed since the previous revision — the mechanism did not. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/skills_hub_github.py` (`_resolve_token`, `_try_pat`, `_try_gh_cli`, `is_authenticated`), `hermes_cli/skills_hub.py` (error strings), `agent/secret_scope.py`; plus the issue tracker (#98725 open). Module paths and error strings changed since the previous revision — the mechanism did not. Re-checked 2026-10-12 against upstream main (`53bc70c5`): #98725 closed, dead tokens are rejected with fall-through (`tools/skills_hub_github.py:reject()`); error strings re-anchored. Re-verify before reuse.*

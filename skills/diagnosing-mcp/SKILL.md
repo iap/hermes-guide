@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.7
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -26,7 +26,7 @@ mcp_servers:
     auth: oauth
 ```
 
-Key fields: stdio → `command`, `args`, `env` (only these plus a safe baseline reach the subprocess); http → `url`, `headers`; mTLS → `client_cert` (PEM path or `[cert, key(, password)]`), `client_key`; timing → `timeout` (tool call; `_DEFAULT_TOOL_TIMEOUT = 300` in `tools/mcp_tool_common.py`), `connect_timeout` (resolved from `_DEFAULT_CONNECT_TIMEOUT` in the same module — read the constant rather than trusting a remembered number), `keepalive_interval`; recycling → `idle_timeout_seconds`, `max_lifetime_seconds` (`tools/mcp_tool.py`, `tools/mcp_tool_health.py`); `enabled` (default true — `hermes_cli/mcp_config.py`); `supports_parallel_tool_calls`; `sampling`. **Verify any default against the installed source:** the defaults live in constants, and a doc that quotes a stale number sends you chasing a non-bug. (`elicitation` is referenced in discovery code; treat its default as version-dependent unless you have checked it.) `${VAR}` in command/args/url/headers is expanded at connect time from the environment including `$HERMES_HOME/.env`.
+Key fields: stdio → `command`, `args`, `env` (only these plus a safe baseline reach the subprocess); http → `url`, `headers`; mTLS → `client_cert` (PEM path or `[cert, key(, password)]`), `client_key`; timing → `timeout` (tool call; `_DEFAULT_TOOL_TIMEOUT = 300` in `tools/mcp_tool_common.py`), `connect_timeout` (`_DEFAULT_CONNECT_TIMEOUT = 60` in `tools/mcp_tool.py`, consumed via discovery — read the constant rather than trusting a remembered number), `keepalive_interval`; recycling → `idle_timeout_seconds`, `max_lifetime_seconds` (`tools/mcp_tool.py`, `tools/mcp_tool_health.py`); `enabled` (default true — `hermes_cli/mcp_config.py`); `supports_parallel_tool_calls`; `sampling`. **Verify any default against the installed source:** the defaults live in constants, and a doc that quotes a stale number sends you chasing a non-bug. (`elicitation` is referenced in discovery code; treat its default as version-dependent unless you have checked it.) `${VAR}` in command/args/url/headers is expanded at connect time from the environment including `$HERMES_HOME/.env`.
 
 Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blacklist, fnmatch globs allowed) — **`include` wins when both are set** (`tools/mcp_tool_registration.py`, verified); an empty `tools.include: []` registers **nothing**; `tools.prompts: false` / `tools.resources: false` disable utility wrappers. If everything callable and all utilities are filtered out, Hermes creates no toolset for that server — by design.
 
@@ -77,8 +77,8 @@ Edit `$HERMES_HOME/config.yaml` and change the server's `command` to an absolute
 ### References
 - `$HERMES_HOME/config.yaml` — `mcp_servers:` entry
 - `hermes_cli/mcp_config.py` — MCP config loading
-- `tools/mcp_tool_common.py` — `_DEFAULT_TOOL_TIMEOUT`, `_DEFAULT_CONNECT_TIMEOUT`
+- `tools/mcp_tool_common.py` — `_DEFAULT_TOOL_TIMEOUT`; `tools/mcp_tool.py` — `_DEFAULT_CONNECT_TIMEOUT`
 
 ---
 
-*Facts re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `mcp__<server>__<tool>` naming and the per-server `mcp-<server>` toolset alias (`tools/mcp_tool_schema.py`, `tools/mcp_tool_registration.py`); the server field set and defaults (`tools/mcp_tool_common.py`, `tools/mcp_tool_discovery.py`, `hermes_cli/mcp_config.py`); `include`-wins filtering with fnmatch and the empty-list semantics (`tools/mcp_tool_registration.py`); recycling fields (`tools/mcp_tool.py`); `redirect_uri` (`tools/mcp_oauth.py`); the `install`/`configure`/`login` subcommands. Four previously asserted specifics could **not** be confirmed at current main and are now marked version-dependent instead of quoted as fact: the 30s reload window, `oauth.redirect_host`, the `elicitation` default, and the exact `connect_timeout` value. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `mcp__<server>__<tool>` naming and the per-server `mcp-<server>` toolset alias (`tools/mcp_tool_schema.py`, `tools/mcp_tool_registration.py`); the server field set and defaults (`tools/mcp_tool_common.py`, `tools/mcp_tool_discovery.py`, `hermes_cli/mcp_config.py`); `include`-wins filtering with fnmatch and the empty-list semantics (`tools/mcp_tool_registration.py`); recycling fields (`tools/mcp_tool.py`); `redirect_uri` (`tools/mcp_oauth.py`); the `install`/`configure`/`login` subcommands. Four previously asserted specifics could **not** be confirmed at current main and are now marked version-dependent instead of quoted as fact: the 30s reload window, `oauth.redirect_host`, the `elicitation` default, and the exact `connect_timeout` value. Re-checked 2026-10-12 against upstream main (`53bc70c5`): `_DEFAULT_CONNECT_TIMEOUT = 60` lives in `tools/mcp_tool.py:233` (consumed via discovery). Re-verify before reuse.*

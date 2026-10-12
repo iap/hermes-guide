@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.0.9
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -24,7 +24,7 @@ config file. For the code location, check what the `hermes` shim execs, or run
 | Standard (POSIX/WSL2) | two-step installer — download, review, then run (below) | `$HERMES_HOME/hermes-agent` (checkout; older installs carry an in-tree `venv/`, PM-era installs use `$HERMES_HOME/tools`) | `~/.local/bin/{hermes,hermes-agent,hermes-acp}` | `main` (`hermes update`; installer re-run = repair) |
 | Desktop app (macOS/Win) | download from hermes-agent.nousresearch.com | `%LOCALAPPDATA%\hermes\hermes-agent` (Win; PM-era installs use `$HERMES_HOME/tools`) | app-managed | app releases |
 | Nix flake | `nix run` / `nix profile install`, or the NixOS module | `/nix/store/...-hermes-agent-<ver>` (immutable) | profile-managed | flake pin |
-| PyPI | `uv tool install hermes-agent` / `pip install hermes-agent` | uv/pip tool dir | tool bin dir | PyPI release |
+| PyPI | `uv tool install hermes-agent` / `pip install hermes-agent` | uv/pip tool dir | tool bin dir | PyPI release (stale at 0.19.0 — not a supported distribution route; use Standard) |
 
 The Standard route as a reviewable two-step — same installer, but you read the script before it executes:
 
@@ -47,9 +47,9 @@ a re-install or upgrade does not touch `config.yaml`, memories, sessions, or plu
 ~/.hermes/
 ├── hermes-agent/          # git checkout of the source (tracks main); PM removes a
 │                          # legacy in-tree venv/ once a generation is committed
-├── tools/                 # PM's tool store: python-*/node-*/uv-* slots + facts.json
-├── installs/              # PM's dependency environments (one per checkout)
-├── config.yaml            # default template on first run (see config bootstrap)
+├── tools/                 # PM's tool store: python-*/node-*/uv-* slots
+├── installs/              # PM's dependency environments (one per checkout) + facts.json
+├── config.yaml            # default template at install time (see config bootstrap)
 ├── plugins/  skills/  hooks/  cron/  memories/  sessions/  logs/
 └── gateway_state.json     # appears once a gateway has run
 ~/.local/bin/{hermes,hermes-agent,hermes-acp}   # shims → the durable launcher in
@@ -57,19 +57,26 @@ a re-install or upgrade does not touch `config.yaml`, memories, sessions, or plu
                                                 # the PM-store Python
 ```
 
-Prerequisites: `git`, `curl`, `xz` on the PATH — the installer stages a pinned `uv`
+Prerequisites: `git` and `curl` on the PATH (`xz` is no longer needed — PM
+extracts archives with stdlib `tarfile`). On minimal glibc hosts the bootstrap
+may also need `libatomic.so.1`, on musl `libstdc++` — a Node/Python launch
+failure right after install points there, not at Hermes. The installer stages
+a pinned `uv`
 (from `pm/lock.json`, sha256-verified), bootstraps a tool-only Python, then hands the
 checkout to **pm**, which installs the locked runtime (Python **3.14.7**, Node.js
 **26.7.0**, ripgrep, ffmpeg; browsers and the computer-use driver are opt-out at
 install, re-enabled with `hermes pm install <name>`). Native Windows uses
 `install.ps1` instead; the Desktop installer bundles the CLI and is the recommended
-route on macOS/Windows.
+route on macOS/Windows. `${HERMES_RUNTIME_DIR}`, when set, redirects the tool
+store away from `$HERMES_HOME/tools` — resolve it before assuming paths.
 
 ## Config bootstrap — and how the tree diverges
 
-First run writes `config.yaml` as a **default template** (schema marker
-`_config_version`, most sections present as commented documentation) and lays out
-runtime directories lazily. From there the tree diverges per user action:
+The installer writes `config.yaml` as a **default template** (schema marker
+`_config_version`, most sections present as commented documentation) at install
+time, and lays out runtime directories (`cron/`, `sessions/`, `logs/`,
+`pairing/`, `hooks/`, `image_cache/`, `audio_cache/`, `memories/`, `skills/`)
+plus `.env` (mode 600) then — not on first run. From there the tree diverges per user action:
 
 | User action | What it creates/mutates |
 |---|---|
@@ -100,9 +107,7 @@ path` before trusting it.
    (or Docker) for supported setups and offer a dedicated flake with default and
    smaller package outputs. A Nix-built bundle is an excellent *fallback* binary
    (immutable, independent of the venv), not the primary install path.
-4. **tirith is optional.** The pre-exec security scanner is enabled by default in
-   config but needs its binary on the PATH; when its install fails the agent records
-   the miss (`.tirith-install-failed`) and runs without pre-exec scanning.
+4. **tirith is gone.** The pre-exec security scanner (`tools/tirith_security.py`) was removed upstream in 2026-10; its config block is replaced by a generic `Security` section plus opt-in LSP post-write lint (`lsp.trusted_workspaces`). A `tirith`-era install may still carry `.tirith-install-failed` and stale `tirith_*` keys — harmless leftovers, not active config.
 
 ## Dual-install coexistence
 

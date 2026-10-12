@@ -1,7 +1,7 @@
 ---
 name: diagnosing-browser
 description: Diagnose Hermes browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating, and browser tool errors.
-version: 1.0.6
+version: 1.0.7
 metadata:
   hermes:
     tags: [hermes, browser, cdp, playwright, troubleshooting]
@@ -41,9 +41,9 @@ browser:
 ## 3. Pitfalls (symptom → cause → fix)
 
 1. **Browser not connecting** — (a) browser not started with `--remote-debugging-port=9222`; (b) port 9222 not open; (c) wrong endpoint URL. → Launch browser with `--remote-debugging-port=9222 --user-data-dir=$HOME/.hermes/chrome-debug`; verify port is open (`curl http://127.0.0.1:9222/json/version`); check endpoint in config.yaml.
-2. **Chrome 144+ CDP tools fail despite successful connect** — known issue (#12912): Chrome 144+ built-in Remote debugging reports success but CDP tools fail. → Downgrade Chrome to <144 or use `--remote-debugging-port` flag explicitly; check `hermes_cli/browser_connect.py` for endpoint normalization.
+2. **Chrome 144+ CDP tools fail despite successful connect** — historically #12912 (now closed): Chrome 144+ built-in remote debugging reported success but CDP tools failed. → First re-check current behavior before downgrading — the upstream gate has since been reworked; only downgrade to <144 if a current failure reproduces, and check `hermes_cli/browser_connect.py` for endpoint normalization.
 3. **Playwright not found** — (a) Playwright not installed; (b) browser binaries not downloaded. → On a PM-era install run `hermes pm install playwright` (these components are PM-managed opt-outs; a bare `pip install` targets your shell's Python, not Hermes's); on an older checkout `pip install playwright && playwright install chromium`; verify through Hermes's own interpreter, not the shell's — `python -c "import playwright"` can report the module missing even after `hermes pm install playwright` succeeded, sending you back to a repair you already did (there is no `python` shim on a PM-era install). Use `hermes doctor` or check the committed environment directly.
-4. **agent-browser gating blocks CDP** — known issue (#15952): `check_fn` requires agent-browser even when CDP endpoint is configured. → Install agent-browser — `hermes pm install agent-browser` on a PM-era install, `pip install agent-browser` on an older checkout or use `/browser connect` directly.
+4. **agent-browser gating blocks CDP** — historically #15952 (now closed): `check_fn` required agent-browser even with a CDP endpoint configured. The gate is now a routed requirements check (`tools/browser_tool.py:_routed_check_fn`), so install agent-browser only if the current error names it. → Try `/browser connect` directly first; check the routed error before installing anything.
 5. **Browser tools return empty or timeout** — (a) browser crashed or closed; (b) page not loaded; (c) selector not found. → Check `/browser status`; verify page loaded; use `browser_snapshot` to inspect DOM.
 6. **Camofox backend unsupported** — Camofox is REST-only, no CDP surface. → Switch to CDP or Playwright backend.
 7. **Browser profile conflicts** — multiple Hermes instances using same user-data-dir. → Use separate `user_data_dir` per profile; close other browser instances.
@@ -84,6 +84,6 @@ Downgrade Chrome to a version below 144, or install agent-browser with `hermes p
 ### References
 - `~/.hermes/config.yaml` — the `browser:` block with backend and endpoint
 - `hermes_cli/browser_connect.py` — CDP endpoint normalization
-- `hermes_cli/browser_supervisor.py` — browser supervision logic
+- `tools/browser_supervisor.py` (+ `_capture`/`_dialogs`/`_frames` splits) — browser supervision logic
 
-*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/browser_connect.py`, `hermes_cli/browser_supervisor.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/browser). Re-verify before reuse.*
+*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/browser_connect.py`, `hermes_cli/browser_supervisor.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/browser). Re-checked 2026-10-12 against upstream main (`53bc70c5`): supervision logic lives under `tools/browser_supervisor*.py` (split into capture/dialogs/frames); #12912 and #15952 closed, downgrade/agent-browser directives reframed as historical. Re-verify before reuse.*

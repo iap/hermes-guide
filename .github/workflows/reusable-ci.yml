@@ -62,10 +62,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        # Floor (3.11) tracks upstream's .python-version; ceiling (3.12) is
-        # what this repo already ran. Upstream declares >=3.11,<3.15 (verified
-        # against tag v2026.9.24), so a single pin in either direction just
-        # moves the drift.
+        # Floor (3.11) is the bottom of upstream's supported range
+        # (`requires-python >=3.11,<3.15` at the pinned SHA); ceiling (3.12)
+        # is what this repo already ran. Upstream's own dev pin is 3.14
+        # (`.python-version`), so a single pin in either direction just
+        # moves the drift — the matrix covers the range instead.
         python-version: ["3.11", "3.12"]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -93,12 +94,21 @@ jobs:
         if: inputs.run-full-gate
         shell: bash
         run: |
-          # pip/PyPI is no longer a supported Hermes distribution method
-          # (PyPI is stale at 0.19.0). Install from the upstream git tag as an
-          # editable install — wheel/sdist builds are blocked outside Nix, but
-          # editable installs are the documented dev path. $RUNNER_TEMP keeps
-          # the clone path valid on both Linux and Windows runners.
-          git clone --depth 1 --branch v2026.9.24 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
+          # Post-PM main SHA pin (not the latest release tag): v2026.9.24
+          # predates the PM rework (no pm/, Python 3.11 installer), while the
+          # skills and the user base describe and run PM-era Hermes (Python
+          # 3.14.7, $HERMES_HOME/tools + installs/). Pinning the tag would
+          # test an era nobody runs. Revert to a tag pin when upstream cuts
+          # a release past the rework. Verified 2026-10-12: pins, limits,
+          # delimiter, venv order, MCP prefix/timeouts all match constants.py.
+          # Editable install is the documented dev path — wheel/sdist builds
+          # are blocked outside Nix. $RUNNER_TEMP keeps the clone path valid
+          # on both Linux and Windows runners. A SHA needs fetch+checkout
+          # (no --branch), and stays shallow: one commit, no history.
+          git init -q "$RUNNER_TEMP/hermes-agent"
+          git -C "$RUNNER_TEMP/hermes-agent" remote add origin https://github.com/NousResearch/hermes-agent.git
+          git -C "$RUNNER_TEMP/hermes-agent" fetch -q --depth 1 origin 53bc70c5ee8544040cd9f0708d25c0f55276a44b
+          git -C "$RUNNER_TEMP/hermes-agent" checkout -q FETCH_HEAD
           pip install -e "$RUNNER_TEMP/hermes-agent"
 
       - name: Python syntax check
@@ -280,7 +290,7 @@ jobs:
       - name: Citation integrity against the upstream baseline
         # The cited symbols/lines live in the Hermes tree, so this check resolves
         # them against the revision recorded in .github/upstream-drift.baseline —
-        # not the CI install tag. One leg is enough: the check is OS- and
+        # not the CI install pin. One leg is enough: the check is OS- and
         # interpreter-independent. Same blobless --no-checkout clone idiom as
         # check_upstream_drift.py; `git show <rev>:<path>` lazily fetches only the
         # blobs the checker reads. The revision is read by the script itself, never
@@ -290,9 +300,10 @@ jobs:
         run: |
           # Offline parser regression first (no clone needed), then the real check.
           python3 tools/check_citation_integrity.py --selftest
-          # Use the already-cloned Hermes install (v2026.9.24) as the citation
-          # source. No separate clone needed -- the install step already has it.
-          # Use --rev HEAD since the shallow clone doesn't have commit objects.
+          # Use the already-cloned Hermes install (post-PM main SHA pin) as
+          # the citation source. No separate clone needed -- the install step
+          # already has it. Use --rev HEAD since the shallow fetch doesn't
+          # have commit objects.
           python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent" --rev HEAD
 
       - name: Skill provenance footer guard
@@ -413,7 +424,7 @@ jobs:
     # Hermetic gates only -- py_compile + check_gates.py are pure file reads
     # with no network and no Hermes install, so there is deliberately no
     # clone/pip-install step here. The Hermes install itself is covered by
-    # the plugin job above (same v2026.9.24 pin).
+    # the plugin job above (same post-PM SHA pin).
     # Full-gate only, matching the network-leg rule (this job exists to
     # shadow the full tier on Intel mac, not to gate fast pushes).
     if: inputs.run-full-gate
