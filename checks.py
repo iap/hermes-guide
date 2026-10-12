@@ -1221,7 +1221,7 @@ def check_memory_hygiene():
         # Capped: the pairwise pass is O(n^2) and char limits do not bound
         # entry counts, so an over-limit store could stall a session boundary.
         # Built incrementally so entries past the cap are never tokenized.
-        tokenized = []
+        tokenized: list[tuple[int, frozenset]] = []
         truncated = False
         for i, e in enumerate(entries):
             if len(e) <= 20:
