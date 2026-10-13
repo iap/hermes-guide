@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.0.3
+version: 1.0.4
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -307,6 +307,8 @@ If the user is asking "where is X configured?" rather than "X is broken", load `
 ## 5. Report format
 
 When the triage skill routes to a diagnostic skill, the model reports findings using the standard format defined in `hermes-configuration-guide`. The triage skill itself reports only the routing decision:
+
+**Golden prompts:** `skills/diagnosing-triage/goldens.md` is a manual regression set — run it after any flowchart or mapping-table edit to verify routing still matches expectations.
 
 **Triage report example**:
 
