@@ -250,7 +250,20 @@ def write_upcoming() -> int:
 
 
 def check() -> int:
-    """Fail when a tag or plugin.yaml's version has no changelog section."""
+    """Fail when a tag or plugin.yaml's version has no changelog section.
+
+    The two halves have different reach, and the difference is worth stating
+    because it decides what this guard can and cannot promise:
+
+    * the ``plugin.yaml`` half works on ANY checkout — it compares the version
+      against the file's own sections, no tags needed. This is the half that
+      catches the real failure (a version bumped without its section) in a
+      shallow CI clone, which sees zero tags.
+    * the tag half only sees tags that were fetched. ``actions/checkout``
+      defaults to no tags, so on a tag-blind checkout it silently checks
+      nothing. That is reported rather than passed over: an under-covered run
+      must not read as full coverage.
+    """
     out = REPO / "CHANGELOG.md"
     try:
         text = out.read_text(encoding="utf-8")
@@ -259,8 +272,9 @@ def check() -> int:
         return 2
 
     present = {m.group(1) for m in SECTION_RE.finditer(text)}
-    expected = set(git(["tag", "--list"]).split())
+    tags = set(git(["tag", "--list"]).split())
     version = plugin_version()
+    expected = set(tags)
     if version:
         expected.add(f"v{version}")
 
@@ -276,8 +290,16 @@ def check() -> int:
         )
         return 1
 
-    print(f"OK: every tag and the current version have a section "
-          f"({len(expected)} release(s) covered)")
+    # Say which halves actually ran. "every tag ... covered" is a lie on a
+    # tag-blind checkout, and a guard that overstates its own reach is worse
+    # than one that admits a gap.
+    if tags:
+        print(f"OK: every tag and the current version have a section "
+              f"({len(expected)} release(s) covered)")
+    else:
+        print(f"OK: the current version has a section ({version or 'unknown'}); "
+              f"no tags visible in this checkout, so the tag half did not run "
+              f"(fetch tags with `git fetch --tags` for full coverage)")
     return 0
 
 

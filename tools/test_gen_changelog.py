@@ -175,6 +175,49 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 return f"--check without CHANGELOG.md expected 2, got {code}: {out}"
         return None
 
+    def check_admits_tag_blind_coverage() -> str | None:
+        """With no tags fetched, --check must say so, not claim full coverage.
+
+        actions/checkout defaults to no tags, so the tag half silently checks
+        nothing in a shallow CI clone. The version half still catches the real
+        failure, but the success line must not overstate what ran — a guard that
+        reads as full coverage while checking one release is the bug this
+        guards against.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)                      # no tags created
+            _commit(root, "feat: thing (#1)")
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- thing (#1)\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 0:
+                return f"--check on a tag-blind tree expected 0, got {code}: {out}"
+            if "no tags visible" not in out:
+                return f"--check hid the tag-blind gap: {out}"
+            if "every tag" in out:
+                return f"--check claimed full tag coverage with no tags: {out}"
+        return None
+
+    def check_still_catches_bumped_version_without_tags() -> str | None:
+        """The version half must work with zero tags — that is the CI shape."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v0.9.0 (2026-01-01)\n\n### Features\n\n- old\n",
+                encoding="utf-8",
+            )
+            # plugin.yaml says 1.0.0, which has no section; no tags exist.
+            code, out = _run(root, "--check")
+            if code != 1:
+                return f"tag-blind bumped version expected 1, got {code}: {out}"
+            if "v1.0.0" not in out:
+                return f"did not name the uncovered version: {out}"
+        return None
+
     def upcoming_fails_without_version() -> str | None:
         """No version in plugin.yaml is an error, not a silent empty write."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,6 +235,8 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         ("--check fails on an untagged plugin.yaml version", check_fails_on_untagged_version),
         ("--upcoming is idempotent and newest-first", upcoming_is_idempotent),
         ("--check reports an unreadable CHANGELOG.md as unusable", check_reports_unreadable_changelog),
+        ("--check admits tag-blind coverage", check_admits_tag_blind_coverage),
+        ("--check catches a bumped version with no tags", check_still_catches_bumped_version_without_tags),
         ("--upcoming fails without a plugin.yaml version", upcoming_fails_without_version),
     ]
 
