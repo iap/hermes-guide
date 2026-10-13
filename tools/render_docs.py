@@ -131,10 +131,16 @@ def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
 def _readme_inventory(ctx: dict) -> list[str]:
     total = len(ctx["skills"])
     diags = len(ctx["diagnostics"])
+    others = total - diags - 2  # subtract install guide + config map
+    parts = [f"one install guide", f"one configuration map"]
+    if diags:
+        parts.append(f"{_word_num(diags)} per-surface `diagnosing-*` playbooks")
+    if others:
+        parts.append(f"{_word_num(others)} other skill{'s' if others != 1 else ''}")
     return [
-        f"**{_word_num(total).capitalize()} troubleshooting skills** — one install "
-        f"guide, one configuration map, and {_word_num(diags)} per-surface "
-        f"`diagnosing-*` playbooks."
+        f"**{_word_num(total).capitalize()} troubleshooting skills** — "
+        + ", ".join(parts)
+        + "."
     ]
 
 
@@ -156,16 +162,22 @@ def _agents_inventory(ctx: dict) -> list[str]:
     total = len(ctx["skills"])
     diags = len(ctx["diagnostics"])
     checks = ctx["labels"]
+    others = total - diags - 2  # subtract install guide + config map
+    parts = [f"one install guide (`installing-hermes`)",
+             f"one configuration map (`hermes-configuration-guide`)"]
+    if diags:
+        parts.append(f"{_word_num(diags)} `diagnosing-*` playbooks")
+    if others:
+        parts.append(f"{_word_num(others)} other skill{'s' if others != 1 else ''}")
     return [
         f"- **Plugin** — `plugin.yaml` + `__init__.py` / `checks.py` / "
         f"`constants.py`. Registers `/hermes-doctor` and `hermes guide` "
         f"({_word_num(len(checks))} read-only health checks: "
         + ", ".join(checks)
         + ").",
-        f"- **Skills** — `{_word_num(total)}` `skills/<name>/SKILL.md` files: one install "
-        f"guide (`installing-hermes`), one configuration map "
-        f"(`hermes-configuration-guide`), {_word_num(diags)} `diagnosing-*` "
-        f"playbooks. They install separately, through the skills tap.",
+        f"- **Skills** — `{_word_num(total)}` `skills/<name>/SKILL.md` files: "
+        + ", ".join(parts)
+        + ". They install separately, through the skills tap.",
     ]
 
 
@@ -398,18 +410,18 @@ def _selftest() -> int:
             fails += 1
 
     # Word numbers, including the deliberate ceiling.
-    for n, word in ((2, "two"), (7, "seven"), (19, "nineteen"), (20, "twenty")):
+    for n, word in ((2, "two"), (7, "seven"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one")):
         if _word_num(n) != word:
             print(
                 f"selftest FAIL: _word_num({n}) == {_word_num(n)!r}, expected {word!r}"
             )
             fails += 1
     try:
-        _word_num(21)
+        _word_num(22)
     except SystemExit:
         pass
     else:
-        print("selftest FAIL: _word_num(21) should refuse rather than invent a word")
+        print("selftest FAIL: _word_num(22) should refuse rather than invent a word")
         fails += 1
 
     total = len(_SELFTEST_CASES) + len(_SELFTEST_ERRORS) + 5

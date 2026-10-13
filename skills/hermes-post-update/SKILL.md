@@ -12,8 +12,9 @@ metadata:
 
 Run after `hermes update` to verify the update landed correctly, catch silent
 migrations, and surface cleanup opportunities. The updater handles code and
-dependencies but does not restart gateways, review config changes, or report
-what moved.
+dependencies and attempts a gateway-fleet restart, but it does not review config
+changes or report what moved. This skill verifies the automatic restart result
+and handles any restart still owed.
 
 ## When to use
 
@@ -134,11 +135,18 @@ Categorize the output:
 The updater stashes local changes before pulling. Old entries accumulate:
 
 ```bash
+HERMES_HOME=$(hermes config path | xargs dirname)
 git -C "$HERMES_HOME/hermes-agent" stash list
 ```
 
-Entries older than 7 days with `hermes-update-autostash-` prefix are safe to
-drop:
+Entries with `hermes-update-autostash-` prefix may contain local changes that
+were never restored. Inspect each entry before dropping:
+
+```bash
+git -C "$HERMES_HOME/hermes-agent" stash show -p stash@{N}
+```
+
+Only drop entries whose changes are confirmed unneeded:
 
 ```bash
 git -C "$HERMES_HOME/hermes-agent" stash drop stash@{N}
@@ -157,6 +165,7 @@ This reclaims ~60% of `state.db` and is safe to interrupt/re-run.
 #### Disk headroom
 
 ```bash
+HERMES_HOME=$(hermes config path | xargs dirname)
 df -h "$HERMES_HOME"
 ```
 
