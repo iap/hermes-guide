@@ -77,6 +77,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | D2 | Multi-surface failures + one blank desktop window | `diagnosing-host-pressure` **before** `diagnosing-desktop` |
 | D3 | User already said "MCP won't connect" | **do not** load triage — go straight to `diagnosing-mcp` |
 | D4 | Headless `hermes -z` without naming a skill | skill auto-discovery may not fire — goldens must name triage explicitly |
+| D5 | Vague triage answer needs a fix command | use only subcommands from `hermes --help`, skill playbooks, or `hermes guide <scope>` — never invent `hermes python …` / `hermes db …` / `hermes channels` / unlisted `hermes plugins install <name>`; verify every cited subcommand exists before reporting |
 
 ---
 
@@ -84,6 +85,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 
 | Date | Hermes | OS | Pass / Fail | Notes |
 |------|--------|-----|-------------|-------|
-| | | | | |
+| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | B1 unnamed headless ×2: triage not auto-loaded (D4 holds); free-style diagnosis, 8 invented subcommands run 1, 0 run 2 | D5 added for invented-command anti-pattern |
+| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | P1 providers prompt → model_catalog answer, missed discover_models contract; P2 hook prompt timed out once (transient), B on 112s retry | — |
 
 Failed rows → fix `SKILL.md` flowchart/table (and bump skill version), or document an intentional Expected change in the same PR.
