@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source') — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.8
+version: 1.2.9
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -86,7 +86,7 @@ Your `hermes skills install` fails with "No skill named 'foo' found in any sourc
 | MEDIUM | Older checkouts degrade all GitHub-backed sources to "not found" | Install output: `No skill named 'foo' found in any source.` (current upstream recovers via fall-through instead) |
 
 ### Recommended Fix
-Comment out or delete the `GITHUB_TOKEN` line in `$HERMES_HOME/.env`, then re-run `hermes skills install <name>`. The gh-cli fallback (priority 2) will take over immediately.
+Comment out or delete the `GITHUB_TOKEN` line in `$HERMES_HOME/.env`, then re-run `hermes skills install <name>`. On older checkouts the gh-cli fallback (priority 2) takes over immediately; on current upstream the install already recovered via fall-through, so if it still fails after removing the token, the token was not the cause — look elsewhere (identifier form, scanner verdict).
 
 ### References
 - `$HERMES_HOME/.env` — the dead `GITHUB_TOKEN` line

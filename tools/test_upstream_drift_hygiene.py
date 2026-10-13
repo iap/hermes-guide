@@ -456,6 +456,32 @@ def case_pin_ignores_commented_clones(mod):
     print("OK: commented-out clone lines are ignored")
 
 
+_SHA2 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+def case_pin_prose_mention_blesses_nothing(mod):
+    """A prose mention of hermes-agent must not bless an unrelated SHA fetch.
+
+    Qodo review on PR #211: the file-level `hermes-agent in text` check let
+    any SHA fetch in a mentioning file join the pin set. Only an executable
+    remote-add/clone line counts.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "# the hermes-agent checkout lives elsewhere\n"
+            f"git fetch -q --depth 1 origin {_SHA2}\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() is None, (
+                "prose mention + unrelated SHA must not form a pin")
+    finally:
+        shutil.rmtree(td)
+    print("OK: prose mentions do not bless SHA fetches")
+
+
 _SHA = "53bc70c5ee8544040cd9f0708d25c0f55276a44b"
 
 
@@ -488,7 +514,7 @@ def case_pin_mixed_forms_conflict(mod):
             "https://github.com/NousResearch/hermes-agent.git d\n",
             encoding="utf-8")
         (wf / "b.yml").write_text(
-            "git fetch origin https://github.com/NousResearch/hermes-agent.git\n"
+            "git remote add origin https://github.com/NousResearch/hermes-agent.git\n"
             f"git fetch -q --depth 1 origin {_SHA}\n",
             encoding="utf-8")
         with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
@@ -506,6 +532,7 @@ def case_pin_sha_skips_tag_freshness(mod):
         wf.mkdir()
         (wf / "reusable-ci.yml").write_text(
             "git fetch origin https://github.com/NousResearch/hermes-agent.git\n"
+            f"git -C d remote add origin https://github.com/NousResearch/hermes-agent.git\n"
             f"git -C d fetch -q --depth 1 origin {_SHA}\n",
             encoding="utf-8")
         with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
@@ -538,6 +565,7 @@ def main() -> int:
         case_pin_conflict_fails_closed,
         case_pin_ignores_unrelated_clones,
         case_pin_ignores_commented_clones,
+        case_pin_prose_mention_blesses_nothing,
         case_pin_reads_fetch_sha,
         case_pin_mixed_forms_conflict,
         case_pin_sha_skips_tag_freshness,

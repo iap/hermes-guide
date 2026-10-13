@@ -272,7 +272,19 @@ def read_pinned_tag() -> str | None:
                 text = path.read_text(encoding="utf-8")
             except OSError:
                 continue
-            hermes_remote = "hermes-agent" in text
+            # A Hermes remote counts only on executable lines (optionally
+            # behind `- ` / `run: `): a commented-out `# remote add ...`
+            # example is documentation, not an install, and a bare prose
+            # mention of hermes-agent must not bless an unrelated SHA fetch
+            # in the same file.
+            hermes_remote = any(
+                re.search(
+                    r"(?:remote\s+(?:add|set-url)|clone)\b[^\n]*hermes-agent(?:\.git)?(?:\s|$|\"|')",
+                    line,
+                )
+                for line in text.splitlines()
+                if line.strip() and not line.strip().startswith("#")
+            )
             # Anchored to executable lines (optionally behind `- ` / `run: `):
             # a commented-out `# git clone ...` example is documentation, not an
             # install, and must not join the pin set.
