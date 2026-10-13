@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
-description: "Route vague user descriptions to the correct diagnostic skill — a triage layer that maps symptoms to the right diagnosing-* playbook."
-version: 1.0.1
+description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -27,11 +27,47 @@ Load this skill when the user's description is **non-specific** — they know so
 
 Do **not** load this skill when the user has already named a specific subsystem ("MCP won't connect", "a hook isn't firing", "the TUI looks garbled") — go directly to the relevant `diagnosing-*` skill.
 
+> **Headless / one-shot mode.** Skill auto-discovery does not fire in `hermes -z` one-shot runs: name the target skill explicitly (`hermes -z "Use the diagnosing-path skill: …"`). Slash commands (`/hermes-doctor`) and `/reload-*` steps work only in a live session — headless, use `hermes guide <scope>` (exits `0` healthy, `1` broken/unknown, `2` bad scope) for every check and verify step below.
+
+## 0b. Baseline first: run the health check before routing
+
+Before walking the flowchart, capture the machine-readable baseline — it routes whole branches by itself and exposes findings no symptom description mentions:
+
+- Headless / one-shot: `hermes guide` (all scopes) or `hermes guide <scope>`.
+- In-session: `/hermes-doctor` or `/hermes-doctor <scope>`.
+
+Route its `~`/`x`/`?` lines first:
+
+| Baseline line | Load |
+|---|---|
+| `~ commands` (e.g. a skill slug shadowing a builtin) | diagnosing-commands |
+| `~ memories` (store near/over limit, undated entries) | diagnosing-memory |
+| `x config` | hermes-configuration-guide Step 0, then re-run the scope |
+| `x mcp` | diagnosing-mcp |
+| `x skills` | diagnosing-skills |
+| `x commands` | diagnosing-commands |
+| `x hooks` | diagnosing-hooks |
+| `x plugins` | diagnosing-plugins |
+| `x memories` | diagnosing-memory |
+| `?` (unknown — home unresolvable, doctor output unrecognized) | hermes-configuration-guide Step 0 (resolve home/config), then re-run the scope; unknown means unmeasured, never healthy |
+
+Then continue with symptom routing below for whatever the baseline did not explain.
+
 ## 1. Triage flowchart
 
 Start at the top. Follow the first branch that matches the user's description.
 
 ```
+Is `config.yaml` missing, unparsable, or did a guide scope return unknown?
+  └─ YES → hermes-configuration-guide Step 0 (resolve home/config), then
+           diagnosing-path if the venv/interpreter is suspect; re-run the scope
+  └─ NO ↓
+
+Is a `hermes skills` / `hermes plugins install` failing with not-found/401/403?
+  └─ YES → diagnosing-auth first (a dead token degrades every hub adapter to
+           "not found"), then installing-hermes only if Hermes itself is broken
+  └─ NO ↓
+
 Is the problem about INSTALLING or UPGRADING Hermes itself?
   └─ YES → installing-hermes
   └─ NO ↓
@@ -48,7 +84,10 @@ Is the problem about the DESKTOP APP (Electron) not launching,
 
 Is the problem about the CLI/TUI — rendering, themes, busy indicators,
   mouse modes, encoding, garbled output, launch/resume?
-  └─ YES (native Windows; POSIX/WSL: `hermes doctor`) → diagnosing-cli-tui
+  └─ YES on native Windows → diagnosing-cli-tui
+  └─ YES on POSIX/WSL → `hermes doctor` + the `display:` block of `config.yaml`
+     (no dedicated skill covers POSIX CLI/TUI — do NOT load diagnosing-cli-tui,
+     it documents the Windows console stack only)
   └─ NO ↓
 
 Is the problem about PATHS, VENVS, or the wrong Python interpreter?
@@ -57,11 +96,13 @@ Is the problem about PATHS, VENVS, or the wrong Python interpreter?
 
 Is the problem about a MESSAGING PLATFORM — bot not responding,
   platform allowlist, token validation, gateway connectivity?
-  └─ YES → diagnosing-gateway
+  └─ YES → diagnosing-gateway first (`hermes gateway status`); only if the
+           gateway is healthy and the fault is bot profiles/conflicts/DMs
+           → diagnosing-bot-mode
   └─ NO ↓
 
-Is the problem about a BOT PROFILE — bots not appearing, profile conflicts,
-  bot-to-bot messaging?
+Is the problem about BOT PROFILES specifically — bots not appearing,
+  profile conflicts, bot-to-bot messaging (gateway itself already healthy)?
   └─ YES → diagnosing-bot-mode
   └─ NO ↓
 
@@ -138,12 +179,12 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | Chrome 144+ compatibility | diagnosing-browser |
 | Playwright errors | diagnosing-browser |
 | agent-browser not working | diagnosing-browser |
-| CLI glitches / rendering artifacts | diagnosing-cli-tui |
-| Themes / skins not applying | diagnosing-cli-tui |
-| Busy indicators unreadable | diagnosing-cli-tui |
-| Mouse modes not working | diagnosing-cli-tui |
-| Encoding / mojibake issues | diagnosing-cli-tui |
-| CLI/TUI issues on POSIX/WSL | `hermes doctor` + the `display:` block of `config.yaml` (no dedicated skill yet) |
+| CLI glitches / rendering artifacts (native Windows) | diagnosing-cli-tui |
+| Themes / skins not applying (native Windows) | diagnosing-cli-tui |
+| Busy indicators unreadable (native Windows) | diagnosing-cli-tui |
+| Mouse modes not working (native Windows) | diagnosing-cli-tui |
+| Encoding / mojibake issues (native Windows) | diagnosing-cli-tui |
+| CLI/TUI issues on POSIX/WSL | `hermes doctor` + the `display:` block of `config.yaml` (no dedicated skill yet — do not load diagnosing-cli-tui) |
 | Missing slash commands | diagnosing-commands |
 | Overridden slash commands | diagnosing-commands |
 | Skills-as-commands not appearing | diagnosing-commands |
@@ -156,7 +197,7 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | npm errors on desktop | diagnosing-desktop |
 | Blank window on launch | diagnosing-desktop |
 | Electron crash | diagnosing-desktop |
-| Bot not responding on platform | diagnosing-gateway |
+| Bot not responding on platform | diagnosing-gateway first (`hermes gateway status`); diagnosing-bot-mode only if the gateway is healthy |
 | Platform allowlist issues | diagnosing-gateway |
 | Token validation failures | diagnosing-gateway |
 | Hooks not firing | diagnosing-hooks |

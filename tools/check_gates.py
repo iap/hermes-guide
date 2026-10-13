@@ -60,12 +60,21 @@ _SLOW: dict[str, str] = {
 
 def _run(script: str) -> tuple[int, str]:
     """Return (returncode, combined output) for one gate."""
+    # Gates live under tools/, except the scanner-hygiene guard: its literal
+    # attack-string fixtures must sit under tests/ or the upstream install
+    # scanner rates the tree dangerous (see reusable-ci.yml). Resolve both.
     path = REPO / "tools" / script
     if not path.is_file():
-        return 127, f"error: missing gate script tools/{script}"
-    proc = subprocess.run(
-        [sys.executable, str(path)], capture_output=True, text=True, cwd=REPO
-    )
+        path = REPO / "tests" / script
+    if not path.is_file():
+        return 127, f"error: missing gate script tools/{script} (or tests/{script})"
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(path)], capture_output=True, text=True,
+            cwd=REPO, timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        return 124, f"error: gate tools/{script} timed out after 300 s"
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 

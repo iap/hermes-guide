@@ -148,6 +148,7 @@ jobs:
               echo "Add one of these to \`## Environment\` in the PR description:"
               echo
               echo "- \`- OS / shell: macOS + zsh (POSIX)\` -> \`macos\`"
+              echo "- \`- OS / shell: macOS Intel (legacy)\` -> \`macos\` + \`macos-legacy\`"
               echo "- \`- OS / shell: Windows native + PowerShell\` -> \`windows\`"
               echo "- \`- OS / shell: Linux + bash\` -> \`linux\`"
               echo "- \`- OS / shell: WSL\` -> \`wsl\`"

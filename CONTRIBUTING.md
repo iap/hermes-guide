@@ -271,3 +271,26 @@ version, your platform (native Windows or POSIX), and the output of
 
 Because this repo is maintained from several platforms in parallel, a claim
 verified on one host is not verified on the others. Name the platform in the PR.
+
+## Cutting a release
+
+The changelog section ships **inside the version-bump PR**, not on the tag.
+`release.yml` only *checks* for it and fails closed when it is missing.
+
+1. Bump the version in all five sites in one commit (the
+   `check_version_consistency.py` guard lists them: `plugin.yaml`,
+   `__init__.py`, `SECURITY.md` policy sentence + supported table,
+   `pyproject.toml`).
+2. Generate the section for that version:
+   `python tools/gen_changelog.py --upcoming`. It reads the commits since the
+   newest tag, so the entry covers the work being released and is reviewed and
+   CI-validated before any tag exists.
+3. Merge the PR. Then push the tag `v<plugin.yaml version>` to master;
+   `release.yml` verifies the tag matches `plugin.yaml`, that the tagged commit
+   is on master, and that every tag has a section.
+
+Do not regenerate the changelog on the tag push. The section generated there
+cannot reach master — master takes no direct push, a `GITHUB_TOKEN`-created PR
+triggers no workflows (so its required CodeQL check never reports), and this repo
+has no PAT or App token. That is how v0.7.1 shipped with its section stranded on
+an unmerged `changelog-update-v0.7.1` branch.

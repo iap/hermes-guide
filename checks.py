@@ -23,10 +23,12 @@ an in-process inspection that registers nothing, runs no hooks, and starts no
 subprocess.
 """
 
+import collections
 import importlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -174,9 +176,23 @@ def _hermes_candidates():
     keep that promise if a working install is reachable after a broken one.
     """
     bindir = os.path.dirname(os.path.abspath(sys.executable))
-    ordered = [os.path.join(bindir, HERMES_EXE) if bindir else None]
+    sibling = os.path.join(bindir, HERMES_EXE) if bindir else None
+    ordered = [sibling]
     ordered.extend(_path_hermes_executables())
-    return [path for path in dict.fromkeys(ordered) if path and os.path.exists(path)]
+    # Dedupe on the resolved target (mirroring _path_hermes_executables):
+    # the sibling spelling bypasses that dedup, so a symlinked sibling
+    # would otherwise survive beside its PATH twin and boot twice.
+    seen = set()
+    unique = []
+    for path in ordered:
+        if not path or not os.path.exists(path):
+            continue
+        resolved = os.path.realpath(path)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(path)
+    return unique
 
 
 def _run_hermes(args, timeout=20):
@@ -242,12 +258,12 @@ def _hermes_config_path():
         # Fast path: construct from library-derived home (no subprocess)
         home = _hermes_home_from_library()
         if home:
-            config = os.path.join(home, "config.yaml")
+            config = os.path.join(home, constants.CONFIG_FILENAME)
             if os.path.isfile(config):
                 _cache["config_path"] = config
                 return _cache["config_path"]
         # Slow path: fall back to `hermes config path` subprocess
-        rc, stdout, _ = _run_hermes(["config", "path"], timeout=_CONFIG_PATH_TIMEOUT)
+        rc, stdout, _ = _run_hermes(list(constants.CLI_CONFIG_PATH_ARGV), timeout=_CONFIG_PATH_TIMEOUT)
         lines = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
         # Use stdout only (never stderr) — the path is printed to stdout.
         _cache["config_path"] = lines[-1] if rc == 0 and lines else None
@@ -371,7 +387,7 @@ def _bundled_skill_names():
         home = _hermes_home()
         names = set()
         if home:
-            manifest = os.path.join(home, "skills", ".bundled_manifest")
+            manifest = os.path.join(home, "skills", constants.BUNDLED_SKILLS_MANIFEST)
             if os.path.isfile(manifest):
                 try:
                     with open(manifest, "r", encoding="utf-8") as f:
@@ -584,7 +600,9 @@ def check_skills():
             installed.add((fm or {}).get("name") or os.path.basename(dirpath.rstrip(os.sep)))
         missing = sorted(guide_names - installed)
         if missing:
-            loop = " ".join(missing)
+            # Quote each name: a legal frontmatter name may contain spaces,
+            # which would word-split the loop into broken install targets.
+            loop = " ".join(shlex.quote(s) for s in missing)
             cmd = f'for s in {loop}; do hermes skills install "{constants.SKILLS_INSTALL_SOURCE}/skills/$s"; done'
             return {
                 "status": "informational",
@@ -663,7 +681,7 @@ def check_commands():
 
     malformed = []
     bundle_slugs: dict[str, str] = {}  # slug -> first bundle stem (bundle-vs-bundle first-wins)
-    bundles_root = os.path.join(home, "skill-bundles")
+    bundles_root = os.path.join(home, constants.SKILL_BUNDLES_DIRNAME)
     if os.path.isdir(bundles_root):
         for fn in sorted(os.listdir(bundles_root)):
             if not fn.endswith((".yaml", ".yml")):
@@ -719,18 +737,23 @@ def check_commands():
 
 # --- hooks ----------------------------------------------------------------
 
-def _check_allowlist_json():
+def _check_allowlist_json(home=None):
     """Return a broken envelope if ``shell-hooks-allowlist.json`` is present but
     not valid JSON; otherwise ``None`` (no finding).
 
     Independent of the ``hermes hooks doctor`` summary wording: a malformed
     allowlist is broken even when doctor reports healthy or an unrecognized
     summary.
+
+    Pass an already-resolved *home* when the caller has one (the read-only
+    path does) so this does not re-resolve ``$HERMES_HOME`` — outside a live
+    Hermes process that resolution stacks a slow ``config path`` subprocess.
     """
-    home = _hermes_home()
+    if home is None:
+        home = _hermes_home()
     if not home:
         return None
-    allowlist = os.path.join(home, "shell-hooks-allowlist.json")
+    allowlist = os.path.join(home, constants.HOOKS_ALLOWLIST_FILENAME)
     if not os.path.exists(allowlist):
         return None
     try:
@@ -745,7 +768,7 @@ def _check_allowlist_json():
     return None
 
 
-def _merge_allowlist_json(result, source_label):
+def _merge_allowlist_json(result, source_label, home=None):
     """Merge a malformed-allowlist finding into a hooks verdict.
 
     A malformed ``shell-hooks-allowlist.json`` is real breakage regardless of
@@ -754,7 +777,7 @@ def _merge_allowlist_json(result, source_label):
     very problems the user is diagnosing. Shared by the doctor-backed and the
     in-process hooks checks so the two cannot drift.
     """
-    allowlist_result = _check_allowlist_json()
+    allowlist_result = _check_allowlist_json(home)
     if allowlist_result is None:
         return result
     detail = [allowlist_result.get("detail")]
@@ -777,25 +800,29 @@ def check_hooks():
     # (rc is not a reliable signal — it is 0 in all cases). Count the U+2717 /
     # U+26A0 markers emitted per hook rather than matching the summary line's
     # exact wording.
-    rc, stdout, _ = _run_hermes(["hooks", "doctor"], timeout=_HOOKS_DOCTOR_TIMEOUT)
+    rc, stdout, stderr = _run_hermes(
+        list(constants.CLI_HOOKS_DOCTOR_ARGV), timeout=_HOOKS_DOCTOR_TIMEOUT
+    )
     if rc != 0 or not stdout.strip():
         return {
             "status": "unknown",
             "reason": f"`hermes hooks doctor` unavailable or failed (rc={rc})",
-            "detail": None,
+            # Keep Hermes stderr as evidence: a timeout surfaces here as
+            # rc=-1 with the TimeoutExpired repr, which is the only cause.
+            "detail": (stderr.strip()[:2000] or stdout.strip()[:2000]) or None,
         }
-    if "No shell hooks configured" in stdout:
+    if constants.HOOKS_DOCTOR_NONE_CONFIGURED in stdout:
         result = {"status": "healthy", "reason": "no shell hooks configured", "detail": None}
     else:
         # U+2717 and U+26A0 are the only stable per-hook markers in the output.
-        markers = re.findall(r"\s+[✗⚠]", stdout)
+        markers = re.findall(constants.HOOKS_DOCTOR_MARKER_RE, stdout)
         if markers:
             result = {
                 "status": "broken",
                 "reason": f"`hermes hooks doctor` reported {len(markers)} finding(s)",
                 "detail": stdout.strip()[:2000],
             }
-        elif "All shell hooks look healthy" in stdout:
+        elif constants.HOOKS_DOCTOR_HEALTHY_SUMMARY in stdout:
             result = {"status": "healthy", "reason": "hooks doctor passed", "detail": None}
         else:
             # Output ran but matched no known summary pattern — treat as unknown
@@ -855,7 +882,7 @@ def check_hooks_readonly():
             "reason": "hermes home not resolvable; hooks not inspected",
             "detail": None,
         }
-    config_path = os.path.join(home, "config.yaml")
+    config_path = os.path.join(home, constants.CONFIG_FILENAME)
     if not os.path.isfile(config_path):
         # Home is known, so a malformed allowlist is still resolvable: merge
         # it in rather than letting `unknown` hide a real `broken`.
@@ -863,7 +890,7 @@ def check_hooks_readonly():
             "status": "unknown",
             "reason": "config.yaml not found at library-derived home; hooks not inspected",
             "detail": None,
-        }, "in-process hooks inspection")
+        }, "in-process hooks inspection", home)
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
@@ -876,7 +903,7 @@ def check_hooks_readonly():
             "status": "unknown",
             "reason": "config not readable; hooks not inspected",
             "detail": None,
-        }, "in-process hooks inspection")
+        }, "in-process hooks inspection", home)
     try:
         specs = shell_hooks.iter_configured_hooks(data)
     except Exception as exc:
@@ -884,7 +911,7 @@ def check_hooks_readonly():
             "status": "unknown",
             "reason": f"hooks config could not be inspected ({type(exc).__name__})",
             "detail": None,
-        }, "in-process hooks inspection")
+        }, "in-process hooks inspection", home)
     if not specs:
         # Annotated broadly: `detail` is a list in the findings branch below
         # and None here; mypy joins the branch assignments otherwise.
@@ -920,7 +947,7 @@ def check_hooks_readonly():
                 "reason": f"{len(specs)} shell hook(s) allowlisted and executable",
                 "detail": None,
             }
-    return _merge_allowlist_json(result, "in-process hooks inspection")
+    return _merge_allowlist_json(result, "in-process hooks inspection", home)
 
 
 # --- plugins --------------------------------------------------------------
@@ -955,10 +982,19 @@ def _read_plugin_manifest(d):
         if os.path.isfile(manifest_file):
             try:
                 with open(manifest_file, "r", encoding="utf-8") as f:
-                    manifest = yaml.safe_load(f) or {}
-                name = manifest.get("name")
+                    manifest = yaml.safe_load(f)
             except Exception:
-                name = None
+                # Unparseable manifest: not a usable plugin (mirrors the
+                # plugin.json path below, which returns None on corrupt JSON).
+                # A corrupt manifest must not fall back to the basename and
+                # report a broken plugin as healthy/discovered.
+                return None
+            if manifest is None:
+                manifest = {}
+            if not isinstance(manifest, dict):
+                # List/scalar root has no `name` mapping: unusable as a manifest.
+                return None
+            name = manifest.get("name")
             if not name:
                 name = os.path.basename(d)
             return name
@@ -978,11 +1014,16 @@ def _read_plugin_manifest(d):
     return None
 
 
-def _collect_plugin_ids(root, prefix, depth, skip_names, seen):
+def _collect_plugin_ids(root, prefix, depth, skip_names, seen, by_dir=None):
     """Recursively collect discoverable plugin identifiers, mirroring
     ``plugins_cmd._scan_level``: a plugin resolves by its manifest ``name`` or
     its path-derived ``key`` (``<category>/<dirname>``). Both are added to
-    *seen* so ``plugins.enabled`` matches by name or key alike."""
+    *seen* so ``plugins.enabled`` matches by name or key alike.
+
+    When *by_dir* is given, each resolved ``dirpath -> manifest name`` is also
+    recorded there so callers needing per-directory names (the opt-in notes
+    loop) do not re-walk and re-parse every manifest.
+    """
     if not root or not os.path.isdir(root):
         return
     for d in sorted(os.listdir(root)):
@@ -996,11 +1037,13 @@ def _collect_plugin_ids(root, prefix, depth, skip_names, seen):
             key = f"{prefix}/{d}" if prefix else name
             seen.add(name)
             seen.add(key)
+            if by_dir is not None:
+                by_dir[dpath] = name
             continue
         if depth >= 1:
             continue
         sub_prefix = f"{prefix}/{d}" if prefix else d
-        _collect_plugin_ids(dpath, sub_prefix, depth + 1, set(), seen)
+        _collect_plugin_ids(dpath, sub_prefix, depth + 1, set(), seen, by_dir)
 
 
 def check_plugins():
@@ -1009,10 +1052,21 @@ def check_plugins():
     if not path or data is None or not home:
         return {"status": "unknown", "reason": "cannot read config", "detail": path}
 
-    plugins_cfg = data.get("plugins")
-    plugins_cfg = plugins_cfg if isinstance(plugins_cfg, dict) else {}
-    enabled = _as_name_set(plugins_cfg.get("enabled"))
-    disabled = _as_name_set(plugins_cfg.get("disabled"))
+    plugins_cfg = data.get(constants.CONFIG_PLUGINS_SECTION)
+    if plugins_cfg is None:
+        plugins_cfg = {}
+    if not isinstance(plugins_cfg, dict):
+        # Mirror the MCP check: a present-but-not-a-mapping section is
+        # broken, not silently healthy. A string/list here means the loader
+        # reads nothing while the user believes plugins are configured.
+        return {
+            "status": "broken",
+            "reason": f"`{constants.CONFIG_PLUGINS_SECTION}` must be a mapping, "
+            f"got {type(plugins_cfg).__name__}",
+            "detail": path,
+        }
+    enabled = _as_name_set(plugins_cfg.get(constants.CONFIG_PLUGINS_ENABLED))
+    disabled = _as_name_set(plugins_cfg.get(constants.CONFIG_PLUGINS_DISABLED))
 
     plugins_root = os.path.join(home, "plugins")
     skip = set(constants.PLUGIN_SUBCATEGORY_DIRS)
@@ -1022,7 +1076,8 @@ def check_plugins():
     # is what makes enabled bundled plugins (e.g. `disk-cleanup`,
     # `kilocode-provider`) resolvable instead of being falsely flagged missing.
     known: set[str] = set()
-    _collect_plugin_ids(plugins_root, "", 0, set(), known)
+    user_manifests: dict[str, str] = {}
+    _collect_plugin_ids(plugins_root, "", 0, set(), known, user_manifests)
     # Subcategory dirs resolve by their own selection keys (memory.provider,
     # context.engine, image_gen.provider, --provider), never plugins.enabled, so
     # their contents are not discoverable ids. Names come from constants.py,
@@ -1046,7 +1101,9 @@ def check_plugins():
             dpath = os.path.join(plugins_root, entry)
             if not os.path.isdir(dpath):
                 continue
-            manifest_name = _read_plugin_manifest(dpath)
+            # Reuse the single walk above: re-parsing every manifest here
+            # doubled the I/O per run.
+            manifest_name = user_manifests.get(dpath)
             if manifest_name is None:
                 # No manifest — not a plugin. Hermes does not load it either, so
                 # reporting a stray state/vendor directory would be noise.
@@ -1104,10 +1161,11 @@ def check_memory_hygiene():
     entries, user-preference entries mis-targeted into the agent-notes store,
     and an undated dynamic store. Never mutates anything.
 
-    Complexity note: near-duplicate detection is O(n^2) over entries. The
-    configured char limits (~2,200) do NOT bound this work — over-limit files
-    are reported as broken but still fully processed, so an over-limit store
-    can incur substantial comparison work.
+    Complexity note: near-duplicate detection is O(n^2) over entries, capped
+    at MEMORY_NEAR_DUP_ENTRY_CAP tokenized entries; exact duplicates use a
+    Counter. The configured char limits (~2,200) do NOT bound entry counts —
+    over-limit files are reported as broken and scanned only up to the cap, so
+    an over-limit store cannot stall a session boundary.
     """
     home = _hermes_home()
     if not home:
@@ -1152,12 +1210,26 @@ def check_memory_hygiene():
 
         # Exact duplicates (the tool's own rejection is exact-match, so these
         # can only appear via replace/manual edits — still worth flagging).
-        exact_dups = sorted({e for e in entries if entries.count(e) > 1})
+        # Counter, not list.count per element: the latter is O(n^2) full-string
+        # compares on every proactive session boundary.
+        counts = collections.Counter(entries)
+        exact_dups = sorted(e for e, n in counts.items() if n > 1)
         for e in exact_dups[:3]:
             broken.append(f"{store}: exact duplicate entry ({e[:60]}…) — remove one copy")
 
         # Near-duplicates: normalized token-set overlap on entries >20 chars.
-        tokenized = [(i, _mem_tokens(e)) for i, e in enumerate(entries) if len(e) > 20]
+        # Capped: the pairwise pass is O(n^2) and char limits do not bound
+        # entry counts, so an over-limit store could stall a session boundary.
+        # Built incrementally so entries past the cap are never tokenized.
+        tokenized: list[tuple[int, frozenset]] = []
+        truncated = False
+        for i, e in enumerate(entries):
+            if len(e) <= 20:
+                continue
+            if len(tokenized) >= constants.MEMORY_NEAR_DUP_ENTRY_CAP:
+                truncated = True
+                break
+            tokenized.append((i, _mem_tokens(e)))
         reported_pairs = set()
         near_dups = 0
         for a in range(len(tokenized)):
@@ -1177,6 +1249,11 @@ def check_memory_hygiene():
                         )
         if near_dups > 3:
             notes.append(f"{store}: {near_dups} near-duplicate pair(s) total")
+        if truncated:
+            notes.append(
+                f"{store}: near-duplicate scan capped at "
+                f"{constants.MEMORY_NEAR_DUP_ENTRY_CAP} entries (store over limit?)"
+            )
 
         # Mis-target: user-profile facts in the agent-notes store. Only checked
         # on MEMORY.md — USER.md leading with "User" is correct, not a finding.

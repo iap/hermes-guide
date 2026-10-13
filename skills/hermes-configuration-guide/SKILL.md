@@ -1,7 +1,7 @@
 ﻿---
 name: hermes-configuration-guide
-description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live, and which diagnostic skill to load when something does not work.
-version: 1.3.4
+description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live on disk. For breakage routing ("something is wrong"), prefer diagnosing-triage.
+version: 1.3.5
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -21,6 +21,7 @@ Never guess where Hermes reads its files. The home directory differs by platform
 - **Named profiles**: each profile has its own home; `hermes -p <profile> ...` and `HERMES_HOME=<dir>` override it
 - **Two different things are called "platform" in this guide set**: the **operating system** (POSIX vs Windows — as above, and the `platforms:` frontmatter field in skills) and the **chat/messaging platform** (Telegram, Discord, Slack — in slash-command permissions and plugin `platforms/` sub-categories). Check which one a sentence means before acting.
 - **Ground truth**: run `hermes config path` — it prints the active config file's full path. `hermes config show` dumps the merged config; `hermes config set <section.key> <value>` edits it safely.
+- **Headless / one-shot mode**: skill auto-discovery does not fire in `hermes -z` runs — name the skill explicitly (`hermes -z "Use the diagnosing-path skill: …"`). Slash commands (`/hermes-doctor`) and `/reload-*` steps work only in a live session; headless, use `hermes guide <scope>` for every check and verify step.
 
 ## The five surfaces at a glance
 

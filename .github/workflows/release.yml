@@ -41,10 +41,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # The ruleset blocks push to master unless required checks pass
-          # ("Greptile Review"). Requiring the tagged commit to be an ancestor
-          # of origin/master therefore guarantees it was merged and validated —
-          # a broken/unmerged commit cannot be tagged and published.
+          # The ruleset requires a pull request plus a passing CodeQL check
+          # before anything reaches master (ruleset 20960311; it grants no
+          # bypass actor, so this holds for admins too). Requiring the tagged
+          # commit to be an ancestor of origin/master therefore guarantees it
+          # was merged and validated — a broken/unmerged commit cannot be
+          # tagged and published.
           git fetch origin master
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
             echo "::error::tagged commit $GITHUB_SHA is not on origin/master"
@@ -63,20 +65,18 @@ jobs:
           python tools/test_skill_counts.py
           python tools/check_version_consistency.py
 
-      - name: Generate changelog
-        run: |
-          python tools/gen_changelog.py
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          # Check if there are staged changes before committing
-          if git diff --cached --quiet; then
-            echo "no changelog changes"
-          else
-            git commit -m "chore: update CHANGELOG.md for $GITHUB_REF_NAME"
-            # Push to a branch, not master (ruleset requires checks on master)
-            git push origin "HEAD:refs/heads/changelog-update-${GITHUB_REF_NAME}"
-          fi
+      - name: Every tag has a changelog section
+        # Read-only guard, deliberately NOT a generator. The section is written
+        # by `gen_changelog.py --upcoming` in the version-bump PR, so it is
+        # reviewed and CI-validated before the tag exists. Generating here
+        # instead (the previous behaviour) produced a commit that could only be
+        # pushed to a side branch: master takes no direct push, a
+        # GITHUB_TOKEN-created PR triggers no workflows so its required CodeQL
+        # check never reports, and this repo has no PAT or App token to open one
+        # that would. Every release therefore stranded its section and
+        # CHANGELOG.md fell one version behind — v0.7.1 shipped that way. This
+        # step fails the release closed if a section is missing.
+        run: python tools/gen_changelog.py --check
 
       - name: Create GitHub release
         env:
