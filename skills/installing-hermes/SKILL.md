@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -131,6 +131,13 @@ from fighting:
   per-service restart plan without changing anything). Re-run the installer only
   as repair (broken shims, missing runtime) — it reuses the existing checkout
   (preserving `.git`) and re-syncs PM's dependency environment; data stays untouched.
+  If every launch replays the update tail without clearing, the completion
+  marker (`$HERMES_HOME/installs/<key>/source-completion-pending`) is still owed —
+  retries are capped with backoff, then it waits for an explicit `hermes update`.
+  `HERMES_DISABLE_LAZY_INSTALLS=1` skips the tail for diagnosis. Never repair a
+  broken dependency by `pip install` into the PM store or a committed environment:
+  versions drift from the resolved `uv.lock` and PM reports the environment
+  not-current. Resync through PM (`hermes pm install`).
 - **Uninstall:** `hermes uninstall` (modes: default keeps config/data; `--full` removes
   everything including `$HERMES_HOME`; `--data` erases only user data — the one mode
   that works on Nix / bundled-app / Docker installs; `--dry-run` previews). Code-side
