@@ -278,6 +278,17 @@ Details live in the skills. These are the one-liners worth keeping in your head.
 > `diagnosing-hooks`.
 
 > [!WARNING]
+> **Don't confuse hermes-guide with hermes-agent.** `hermes-agent`
+> (NousResearch) is the assistant itself — CLI, runtime, doctor, skills
+> engine; its bugs go upstream. `hermes-guide` (this repo) is a diagnostics
+> plugin + skills tap that only inspects Hermes; it contains zero Hermes
+> source and is not a fork. Never edit `~/.hermes/hermes-agent` source to fix
+> a guide finding, and never file guide bugs upstream (or Hermes bugs here)
+> — check which side the symptom lives on first: use `hermes --version`, the
+> install directory, and `hermes guide` output to narrow the affected
+> component; confirm which component's behavior is defective before filing.
+
+> [!WARNING]
 > **Don't hardcode a venv path.** Older checkouts carry `venv/` and `.venv/` side
 > by side and `project_venv_dir()` resolves `venv` first; PM-era installs have no
 > in-tree venv at all and `project_venv_dir()` returns `None` even when a

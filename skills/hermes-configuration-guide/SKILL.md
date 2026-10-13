@@ -1,7 +1,7 @@
 ﻿---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live on disk. For breakage routing ("something is wrong"), prefer diagnosing-triage.
-version: 1.3.5
+version: 1.3.6
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -22,6 +22,7 @@ Never guess where Hermes reads its files. The home directory differs by platform
 - **Two different things are called "platform" in this guide set**: the **operating system** (POSIX vs Windows — as above, and the `platforms:` frontmatter field in skills) and the **chat/messaging platform** (Telegram, Discord, Slack — in slash-command permissions and plugin `platforms/` sub-categories). Check which one a sentence means before acting.
 - **Ground truth**: run `hermes config path` — it prints the active config file's full path. `hermes config show` dumps the merged config; `hermes config set <section.key> <value>` edits it safely.
 - **Headless / one-shot mode**: skill auto-discovery does not fire in `hermes -z` runs — name the skill explicitly (`hermes -z "Use the diagnosing-path skill: …"`). Slash commands (`/hermes-doctor`) and `/reload-*` steps work only in a live session; headless, use `hermes guide <scope>` for every check and verify step.
+- **Guide or agent?** This repo (`hermes-guide`) only *inspects* Hermes — it ships no Hermes source and is not a fork of `hermes-agent`. A failure that reproduces with the plugin disabled does not by itself identify the owner; confirm that `hermes-agent` is responsible before filing upstream. The plugin can also surface results from Hermes commands, and disabling it can hide failures that require the integration. File defects in `hermes-guide`'s own behavior to `iap/hermes-guide`.
 
 ## The five surfaces at a glance
 
