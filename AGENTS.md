@@ -255,8 +255,9 @@ Details live in the skills. These are the one-liners worth keeping in your head.
 > plugin + skills tap that only inspects Hermes; it contains zero Hermes
 > source and is not a fork. Never edit `~/.hermes/hermes-agent` source to fix
 > a guide finding, and never file guide bugs upstream (or Hermes bugs here)
-> — check which side the symptom lives on first (`hermes --version` + install
-> dir vs `hermes guide` output).
+> — check which side the symptom lives on first: use `hermes --version`, the
+> install directory, and `hermes guide` output to narrow the affected
+> component; confirm which component's behavior is defective before filing.
 
 > [!WARNING]
 > **Don't hardcode a venv path.** Older checkouts carry `venv/` and `.venv/` side
