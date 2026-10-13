@@ -250,9 +250,19 @@ jobs:
 
       - name: Changelog release-section guard
         # release.yml runs `gen_changelog.py --check` at tag time and fails
-        # closed on a missing section. That guard is only worth having if it can
-        # fail, so this runs its behavioral cases (plus --upcoming idempotence)
-        # on every PR. Stdlib-only git fixtures — no Hermes, no network.
+        # closed on a missing section. That is too late to be useful: the
+        # version-bump PR has already merged by then, so the release is blocked
+        # and the fix needs a second PR. Running it here moves the failure onto
+        # the bump PR, where the section is supposed to be added — the same
+        # shape as the version-consistency guard above. Also part of the
+        # hermetic tier (tools/check_gates.py), which runs in the legacy-mac
+        # and validate-claim jobs.
+        run: python tools/gen_changelog.py --check
+
+      - name: Changelog guard regression
+        # The guard is only worth having if it can fail, so this runs its
+        # behavioral cases (plus --upcoming idempotence) on every PR.
+        # Stdlib-only git fixtures — no Hermes, no network.
         run: python tools/test_gen_changelog.py
 
       - name: Malformed skill-name regression

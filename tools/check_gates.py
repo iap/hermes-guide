@@ -3,11 +3,11 @@
 
 Every gate below is a pure function of the working tree: no network, no ``git``
 merge-base, no ``hermes`` CLI. That is what makes them safe on every commit,
-which is the point — the five things that break when you add or edit a
-``SKILL.md`` (documented counts, the install loop, the configuration map's
-routing table, the provenance footer, the self-claim deny-list) are all
-mechanical, and all of them are what CI rejects a PR for. This moves them from
-"discovered in CI" to "refused locally".
+which is the point — the things that break when you add or edit a ``SKILL.md``
+(documented counts, the install loop, the configuration map's routing table, the
+provenance footer, the self-claim deny-list) are all mechanical, and all of them
+are what CI rejects a PR for. This moves them from "discovered in CI" to
+"refused locally".
 
 Scope note: a convenience *runner*, not a new gate. It contains no checking
 logic — every verdict comes from the neighbor script it invokes. Rename or drop
@@ -36,16 +36,25 @@ _GATES: dict[str, str] = {
     "check_self_claim.py": "deny-list scan over docs",
     "check_doc_style.py": "tone scan; `git ls-files` plus a tokenizer pass",
     "check_version_consistency.py": "compares manifest/entrypoint literals",
+    "gen_changelog.py": "reads CHANGELOG.md, plugin.yaml and `git tag --list`; no writes",
     "check_issue_templates.py": "reads .github/ISSUE_TEMPLATE/ and the docs beside it",
     "check_no_mutation.py": "AST parse; no imports executed",
     "check_scanner_hygiene.py": "regex over skills text; mirrors upstream guard patterns",
+}
+
+# Flags a gate needs to stay read-only. Bare `gen_changelog.py` REWRITES
+# CHANGELOG.md (that is its job), so the verdict mode has to be requested
+# explicitly: a gate that mutates the tree it checks is not a gate. The other
+# scripts default to their bare invocation, which is already read-only.
+_GATE_ARGS: dict[str, tuple[str, ...]] = {
+    "gen_changelog.py": ("--check",),
 }
 
 _QUICK = ("test_skill_counts.py", "render_docs.py", "check_skill_provenance.py")
 
 _USAGE = (
     "run the hermetic gate tier (generated docs, counts, routing, provenance, "
-    "self-claim, tone, read-only)"
+    "self-claim, tone, changelog, read-only)"
 )
 
 # Gates CI runs that this tier leaves out, and the constraint that excludes it.
@@ -68,9 +77,10 @@ def _run(script: str) -> tuple[int, str]:
         path = REPO / "tests" / script
     if not path.is_file():
         return 127, f"error: missing gate script tools/{script} (or tests/{script})"
+    args = _GATE_ARGS.get(script, ())
     try:
         proc = subprocess.run(
-            [sys.executable, str(path)], capture_output=True, text=True,
+            [sys.executable, str(path), *args], capture_output=True, text=True,
             cwd=REPO, timeout=300,
         )
     except subprocess.TimeoutExpired:

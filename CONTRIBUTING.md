@@ -289,6 +289,11 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    `release.yml` verifies the tag matches `plugin.yaml`, that the tagged commit
    is on master, and that every tag has a section.
 
+CI runs `gen_changelog.py --check` on the PR, and it is part of the hermetic
+tier (`tools/check_gates.py`), so a forgotten section fails locally and in CI
+rather than at release time. `release.yml` keeps the same check as a
+fail-closed backstop.
+
 Do not regenerate the changelog on the tag push. The section generated there
 cannot reach master — master takes no direct push, a `GITHUB_TOKEN`-created PR
 triggers no workflows (so its required CodeQL check never reports), and this repo
