@@ -85,7 +85,8 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 
 | Date | Hermes | OS | Pass / Fail | Notes |
 |------|--------|-----|-------------|-------|
-| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | B1 unnamed headless ×2: triage not auto-loaded (D4 holds); free-style diagnosis, 8 invented subcommands run 1, 0 run 2 | D5 added for invented-command anti-pattern |
-| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | P1 providers prompt → model_catalog answer, missed discover_models contract; P2 hook prompt timed out once (transient), B on 112s retry | — |
+| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — D4 holds | B1-general ×2, P1, P2-attempt-1, all unnamed headless: triage not auto-loaded; free-style answers (8 invented subcommands once, 0 once; P1 answered model_catalog, missed discover_models contract; P2 attempt timed out with no output) |
+| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — B1 | named invocation: §0b baseline drove `x plugins` routing; 0 invented subcommands; grade A, docked from S only for missing explicit triage citation |
+| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — C16 with latency note | P2 hook-prompt retry (unnamed): enumerated all 4 hook systems, correct empty-hooks diagnosis, read-only close; 112s first-byte latency, first attempt's timeout was transient |
 
 Failed rows → fix `SKILL.md` flowchart/table (and bump skill version), or document an intentional Expected change in the same PR.
