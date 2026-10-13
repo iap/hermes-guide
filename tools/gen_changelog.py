@@ -165,7 +165,24 @@ def plugin_version() -> str | None:
     return found.group(1) if found else None
 
 
-SECTION_RE = re.compile(r"^## (\S+) \((\d{4}-\d{2}-\d{2})\)\s*$", re.MULTILINE)
+# `[ \t]*$` rather than `\s*$`: `\s` also matches newlines, so it would swallow
+# the blank line after the heading. Harmless while the pattern was only used for
+# matching, but `write_upcoming` SUBSTITUTES on it to preserve a section's date,
+# and a match spanning the newline deleted it on every regeneration.
+SECTION_RE = re.compile(r"^## (\S+) \((\d{4}-\d{2}-\d{2})\)[ \t]*$", re.MULTILINE)
+
+# Release tags are `v<semver>`, which is what release.yml's `tags: ["v*"]`
+# trigger and the plugin.yaml version bump both produce. Filtering on the shape
+# matters because the guard treats EVERY tag as requiring a section: an
+# unrelated marker tag (`docs-snapshot`, `pre-refactor`) would otherwise fail
+# the guard forever with no way to satisfy it — a false positive on a state that
+# is perfectly legitimate. Only v<digits.digits.digits> counts as a release.
+RELEASE_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
+
+
+def release_tags() -> list[str]:
+    """Return the release tags (``v<semver>``) sorted newest-first by date."""
+    return [tag for tag, _ in get_tags() if RELEASE_TAG_RE.match(tag)]
 
 
 def split_sections(text: str) -> tuple[str, dict[str, str]]:
@@ -200,17 +217,19 @@ def write_upcoming() -> int:
         return 1
     tag = f"v{version}"
 
+    # Release tags only: a marker tag must not be treated as the previous
+    # release, or the commit range would start from the wrong point.
     tags = get_tags()
-    known = {t for t, _ in tags}
-    if tag in known:
+    rel = [t for t, _ in tags if RELEASE_TAG_RE.match(t)]
+    if tag in rel:
         # Already released: build the section from its own tag range so a
         # re-run is a no-op rather than an empty section.
-        index = [t for t, _ in tags].index(tag)
-        prev_tag = tags[index + 1][0] if index + 1 < len(tags) else None
+        index = rel.index(tag)
+        prev_tag = rel[index + 1] if index + 1 < len(rel) else None
+        release_date = dict(tags)[tag]
         commits = get_commits(prev_tag, tag)
-        release_date = tags[index][1]
     else:
-        prev_tag = tags[0][0] if tags else None
+        prev_tag = rel[0] if rel else None
         commits = get_commits(prev_tag)
         release_date = date.today().isoformat()
 
@@ -231,6 +250,15 @@ def write_upcoming() -> int:
         header = "# Changelog\n\nAll notable changes to hermes-guide are documented here.\n\n"
     if not header.endswith("\n\n"):
         header = header.rstrip("\n") + "\n\n"
+
+    # Keep an existing section's date. An untagged version is stamped with
+    # today's date, so regenerating the same section on a later day would
+    # otherwise rewrite the heading and make the file churn for no content
+    # reason. The date records when the release was cut, not when the generator
+    # last ran.
+    prior = SECTION_RE.search(sections.get(tag, ""))
+    if prior:
+        section = SECTION_RE.sub(f"## {tag} ({prior.group(2)})", section, count=1)
 
     # Replace in place when the section already exists, else newest-first.
     merged: dict[str, str] = {tag: section}
@@ -272,15 +300,24 @@ def check() -> int:
         return 2
 
     present = {m.group(1) for m in SECTION_RE.finditer(text)}
-    tags = set(git(["tag", "--list"]).split())
+    tags = release_tags()
     version = plugin_version()
+
+    # Fail closed on a missing version. Without it, a tag-blind checkout has an
+    # EMPTY `expected` set, so the comparison below finds nothing missing and
+    # reports success while checking no release at all. The version is the one
+    # half that works without tags, so losing it must not read as "clean".
+    if not version:
+        print("error: no `version:` line in plugin.yaml — cannot verify coverage",
+              file=sys.stderr)
+        return 2
+
     expected = set(tags)
-    if version:
-        expected.add(f"v{version}")
+    expected.add(f"v{version}")
 
     missing = sorted(expected - present)
     if missing:
-        print("FAIL: tag(s) with no CHANGELOG.md section:", file=sys.stderr)
+        print("FAIL: release tag(s) with no CHANGELOG.md section:", file=sys.stderr)
         for name in missing:
             print(f"  {name}", file=sys.stderr)
         print(
@@ -294,12 +331,12 @@ def check() -> int:
     # tag-blind checkout, and a guard that overstates its own reach is worse
     # than one that admits a gap.
     if tags:
-        print(f"OK: every tag and the current version have a section "
+        print(f"OK: every release tag and the current version have a section "
               f"({len(expected)} release(s) covered)")
     else:
-        print(f"OK: the current version has a section ({version or 'unknown'}); "
-              f"no tags visible in this checkout, so the tag half did not run "
-              f"(fetch tags with `git fetch --tags` for full coverage)")
+        print(f"OK: the current version has a section ({version}); "
+              f"no release tags visible in this checkout, so the tag half did not "
+              f"run (fetch tags with `git fetch --tags` for full coverage)")
     return 0
 
 
