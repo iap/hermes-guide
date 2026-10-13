@@ -10,7 +10,7 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
-**Twenty troubleshooting skills** — one install guide, one configuration map, and eighteen per-surface `diagnosing-*` playbooks.
+**Twenty-one troubleshooting skills** — one install guide, one configuration map, eighteen per-surface `diagnosing-*` playbooks, one other skill.
 <!-- END GENERATED: intro-inventory -->
 
 > [!NOTE]
@@ -83,7 +83,7 @@ hermes skills install iap/hermes-guide/skills/diagnosing-mcp
 
 <!-- BEGIN GENERATED: install-all-loop -->
 ```bash
-for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-skills diagnosing-triage diagnosing-voice hermes-configuration-guide installing-hermes; do hermes skills install "iap/hermes-guide/skills/$s"; done
+for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-skills diagnosing-triage diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
 <!-- END GENERATED: install-all-loop -->
 
@@ -95,6 +95,7 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 |---|---|
 | `installing-hermes` | Install routes — install.sh/Desktop/Nix, what each creates on disk, config bootstrap, update/uninstall, and the gotchas (PM-era runtime layout, NixOS specifics) |
 | `hermes-configuration-guide` | The map: resolving `$HERMES_HOME`, where each surface is configured, instruction files, orphaned/legacy settings, and routing to the diagnostic skills |
+| `hermes-post-update` | Verify and clean up after a Hermes update — gateway restart, plugin migrations, config changes, health checks, cleanup opportunities |
 | `diagnosing-mcp` | MCP servers that won't connect, expose no tools, fail OAuth, or ignore `mcp_servers:` config |
 | `diagnosing-skills` | Skills not discovered, shadowed, hidden by platform/toolset conditions, or stuck "user-modified" |
 | `diagnosing-commands` | Missing or overridden slash commands — skills-as-commands, bundles, plugin commands, per-platform permissions |
