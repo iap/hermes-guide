@@ -1,8 +1,0 @@
-fix(skills): address CodeRabbit review findings on hermes-post-update
-
-- Rename skill.md to SKILL.md (case-sensitive systems)
-- Reword gateway restart description to match updater behavior
-- Resolve HERMES_HOME before git stash and df commands
-- Mark autostash entries as requiring inspection before drop
-- Include non-diagnosing skills in generated inventories (README + AGENTS)
-- Update render_docs.py selftest for twenty-one upper bound
