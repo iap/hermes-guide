@@ -5,7 +5,7 @@ version: 1.0.0
 metadata:
   hermes:
     tags: [hermes, update, verification, maintenance]
-    related_skills: [installing-hermes, diagnosing-gateway, diagnosing-plugins]
+    related_skills: [installing-hermes, diagnosing-gateway, diagnosing-plugins, diagnosing-skills, diagnosing-memory, diagnosing-path]
 ---
 
 # Hermes Post-Update
@@ -32,7 +32,8 @@ hermes --version
 ```
 
 Check the version string. If it still shows the old version, the update may not
-have completed — check `logs/update.log` for errors.
+have completed — check `$HERMES_HOME/logs/update.log` for errors (resolve
+`$HERMES_HOME` via `hermes config path`).
 
 ### 2. Verify the gateway restarted on new code
 
@@ -40,7 +41,7 @@ have completed — check `logs/update.log` for errors.
 hermes gateway status
 ```
 
-If the output contains:
+Note the reported PID before restarting. If the output contains:
 
 > ⚠ A previous `hermes update` pulled new code but did not restart running gateways.
 
@@ -56,9 +57,12 @@ Then confirm the new PID:
 hermes gateway status
 ```
 
-The PID should differ from the pre-restart value. If the gateway process is
-still running old code (check `Get-CimInstance Win32_Process` on Windows or
-`ps aux | grep hermes` on POSIX), a restart is required.
+The PID should differ from the pre-restart value you noted (a changed PID alone
+is not proof — PIDs recycle — so the warning line above is the authoritative
+signal). If the gateway process is still running old code, a restart is
+required. To check the process directly, on Windows run
+`Get-CimInstance Win32_Process -Filter "Name LIKE '%hermes%'" | Select-Object ProcessId,CommandLine`,
+on POSIX run `pgrep -af hermes` (or `ps aux | grep '[h]ermes'`).
 
 ### 3. Check for plugin migrations
 
@@ -67,7 +71,7 @@ Recent updates have moved functionality out of core into plugins:
 | Plugin | What it replaces | Install command |
 |---|---|---|
 | `honcho` | Memory provider (built into core pre-0.21.5) | `hermes plugins install honcho` |
-| `homeassistant` | Home Assistant integration (built into core pre-0.21.5) | `hermes plugins install hermes-homeassistant` |
+| `homeassistant` | Home Assistant integration (built into core pre-0.21.5) | `hermes plugins install homeassistant` |
 | `hermes-session-reset-policy` | `session_reset.mode: both` behavior | `hermes plugins install hermes-session-reset-policy` |
 
 Check which are installed:
@@ -94,8 +98,11 @@ If the update log shows `config format updated (v46 → v50)` or similar, review
 the new schema:
 
 ```bash
-hermes config migrate --dry-run
+hermes config migrate
 ```
+
+(`migrate` takes no preview flag — read its output before confirming anything
+it proposes to change.)
 
 ### 5. Review skills sync
 
@@ -108,10 +115,12 @@ hermes skills list-modified
 
 For each user-modified skill, decide:
 - **Keep** — your local changes are intentional
-- **Reset** — discard local changes and accept the upstream version:
+- **Reset** — discard local changes and accept the upstream version. Back up
+  your copy first (a plain `reset` only clears the sync-manifest entry and keeps
+  your copy — pass `--restore` to also replace it with the bundled version):
 
 ```bash
-hermes skills reset <skill-name>
+hermes skills reset <skill-name> --restore
 ```
 
 ### 6. Run health check
@@ -124,7 +133,7 @@ Categorize the output:
 
 | Category | Action |
 |---|---|
-| Auto-fixable | Run `hermes doctor --fix` |
+| Auto-fixable | Run `hermes doctor --fix`, but only for items the report marks auto-fixable — it mutates config/state |
 | Manual (API keys, tokens) | User must provide credentials |
 | Informational | No action needed |
 
@@ -132,10 +141,22 @@ Categorize the output:
 
 #### Stale autoshash entries
 
-The updater stashes local changes before pulling. Old entries accumulate:
+The updater stashes local changes before pulling. Old entries accumulate.
+Resolve `$HERMES_HOME` via `hermes config path` (POSIX: `%LOCALAPPDATA%\hermes`
+equivalent on native Windows is `Split-Path (hermes config path) -Parent`):
+
+POSIX:
 
 ```bash
-HERMES_HOME=$(hermes config path | xargs dirname)
+HERMES_HOME=$(dirname "$(hermes config path)")
+git -C "$HERMES_HOME/hermes-agent" stash list
+```
+
+PowerShell:
+
+```powershell
+$cfg = hermes config path
+$HERMES_HOME = Split-Path $cfg -Parent
 git -C "$HERMES_HOME/hermes-agent" stash list
 ```
 
@@ -146,7 +167,10 @@ were never restored. Inspect each entry before dropping:
 git -C "$HERMES_HOME/hermes-agent" stash show -p stash@{N}
 ```
 
-Only drop entries whose changes are confirmed unneeded:
+> [!CAUTION]
+> Only drop entries whose changes are confirmed unneeded, and export them first
+> (`stash show -p` saved to a file) — a drop cannot be undone. Note that
+> `stash@{N}` indices renumber after each drop, so re-list before each one:
 
 ```bash
 git -C "$HERMES_HOME/hermes-agent" stash drop stash@{N}
@@ -154,27 +178,50 @@ git -C "$HERMES_HOME/hermes-agent" stash drop stash@{N}
 
 #### Large WAL file
 
-If `hermes doctor` reports a large WAL file:
+If `hermes doctor` reports a large WAL file (above 50 MB — missed checkpoints),
+stop the profile's gateway, then checkpoint:
+
+```bash
+hermes doctor --fix
+```
+
+#### Oversized state database
+
+If `hermes doctor` reports an oversized `state.db` (full-text index on the old
+layout), compact it offline with the gateway stopped:
 
 ```bash
 hermes sessions optimize-storage
 ```
 
-This reclaims ~60% of `state.db` and is safe to interrupt/re-run.
+This rebuilds the search index in the compact layout, reclaiming a large
+fraction of `state.db` on big databases. It prompts for disk-space
+confirmation, is safe to interrupt and re-run (it resumes), and must not be
+forced under a live writer (no `--force` while a gateway holds `state.db`).
 
 #### Disk headroom
 
+POSIX:
+
 ```bash
-HERMES_HOME=$(hermes config path | xargs dirname)
+HERMES_HOME=$(dirname "$(hermes config path)")
 df -h "$HERMES_HOME"
 ```
 
-If free space drops below 10 GB, investigate large directories before the
-next update (the updater needs several GB for dependencies and backups).
+PowerShell:
+
+```powershell
+Get-PSDrive C | Select-Object Used, Free
+```
+
+If free space is low (as a rule of thumb, below 10 GB), investigate large
+directories before the next update (the updater needs several GB for
+dependencies and backups).
 
 ### 8. Report
 
-Present findings in the standard format:
+Present findings in the standard format (numbers below are an example from one
+host, not thresholds — use the actual command output as evidence):
 
 #### Summary
 Update to v0.21.5+9802 completed. Gateway restarted (PID 29780). Two plugin
@@ -194,10 +241,10 @@ migrations applied (honcho, homeassistant). Three items need attention.
 3. Drop stale autoshash entries (optional, cosmetic)
 
 #### References
-- `logs/update.log` — full update output
-- `logs/gateway.log` — gateway restart confirmation
+- `$HERMES_HOME/logs/update.log` — full update output
+- `$HERMES_HOME/logs/gateway.log` — gateway restart confirmation
 - `hermes doctor` — health check results
 
 ---
 
-*Facts re-verified 2026-10-12 against upstream source at commit `a082d1e180be1e603a6a307fce4d098e30f54eb7`: `hermes_cli/update_cmd.py` (update workflow, gateway restart detection, plugin migration logic, skills sync, autoshash handling); `hermes_cli/main.py` (doctor --fix, config migrate, plugins list/enable, skills list-modified/reset, sessions optimize-storage). Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at commit `a082d1e180be1e603a6a307fce4d098e30f54eb7`: `hermes_cli/update_cmd_fleet.py:498` (gateway restart warning), `hermes_cli/update_cmd_stash.py:21` (autostash prefix), `hermes_cli/update_cmd_config.py:247` (config format message), `hermes_cli/config.py` (`_cmd_config_migrate`, no preview flag), `hermes_cli/skills_hub.py:1143` (`do_reset`, `restore` flag), `hermes_cli/doctor_state.py` (WAL finding and optimize-storage trigger), `hermes_cli/session_reset_retirement.py:46` (reset-mode retirement notice); CLI behavior cross-checked against the local install (v0.21.6). Re-verify before reuse.*

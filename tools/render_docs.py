@@ -53,8 +53,8 @@ CHECKS_PY = REPO / "checks.py"
 BEGIN = "<!-- BEGIN GENERATED: {name} -->"
 END = "<!-- END GENERATED: {name} -->"
 
-# Two..twenty. Extending this is a deliberate edit: a twenty-first skill should
-# make someone look at the prose, not silently produce "21".
+# Two..twenty-one. Extending this is a deliberate edit: a twenty-second skill should
+# make someone look at the prose, not silently produce "22".
 _WORDS = [
     "two",
     "three",
@@ -81,6 +81,9 @@ _WORDS = [
 
 def _word_num(n: int) -> str:
     """Spell `n` as a word. The prose style is word-numbers, not digits."""
+    if n in (0, 1):
+        # _WORDS starts at "two"; without this, n=1 hits _WORDS[-1].
+        return ("zero", "one")[n]
     try:
         return _WORDS[n - 2]
     except IndexError:
@@ -410,7 +413,7 @@ def _selftest() -> int:
             fails += 1
 
     # Word numbers, including the deliberate ceiling.
-    for n, word in ((2, "two"), (7, "seven"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one")):
+    for n, word in ((0, "zero"), (1, "one"), (2, "two"), (7, "seven"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one")):
         if _word_num(n) != word:
             print(
                 f"selftest FAIL: _word_num({n}) == {_word_num(n)!r}, expected {word!r}"
@@ -424,7 +427,7 @@ def _selftest() -> int:
         print("selftest FAIL: _word_num(22) should refuse rather than invent a word")
         fails += 1
 
-    total = len(_SELFTEST_CASES) + len(_SELFTEST_ERRORS) + 5
+    total = len(_SELFTEST_CASES) + len(_SELFTEST_ERRORS) + 7
     if fails:
         return 1
     print(f"selftest OK ({total} cases)")

@@ -10,7 +10,7 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
-**Twenty-one troubleshooting skills** — one install guide, one configuration map, eighteen per-surface `diagnosing-*` playbooks, twenty-one other skill.
+**Twenty-one troubleshooting skills** — one install guide, one configuration map, eighteen per-surface `diagnosing-*` playbooks, one other skill.
 <!-- END GENERATED: intro-inventory -->
 
 > [!NOTE]
