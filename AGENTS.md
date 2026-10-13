@@ -148,6 +148,35 @@ literal in `checks.py`. `tools/check_upstream_drift.py` watches these upstream.
   the revision in `.github/upstream-drift.baseline`
   (`check_citation_integrity.py --src <checkout>`).
 
+### Security Guidelines
+
+Before any commit:
+
+- **No hardcoded secrets.** API keys, passwords, tokens, and credentials stay out of source files. Use environment variables or a secrets manager; never embed them in `checks.py`, skill text, or test code.
+- **Scan the staged diff.** Run `git diff --cached` and inspect it for secret-shaped strings before committing. If a token pattern appears, unstage the file and remove the value.
+- **Test fixtures are not an exception.** Literal attack strings and fake credentials used by guards belong under `tests/` — this is why `tests/check_scanner_hygiene.py` lives there instead of `tools/` (see Layout). Do not place fixture files containing secret-shaped values outside `tests/`.
+- **Never stage `.env`.** `.gitignore` is the durable control — verify `.env` is listed there. If you need to commit an env template, use `.env.example` with no real values.
+
+These rules complement the "What belongs in git" table below. That table defines what enters the index; this section defines how to prevent secrets from reaching it.
+
+## Testing Requirements
+
+Guards read text; tests execute behavior. Both are required, neither substitutes for the other.
+
+Most `check_*.py` scripts are static linters that read files or parse AST — they cannot catch a script that works on its own inputs but misparses Hermes output. Exceptions like `check_skill_dogfood.py` shell out to a live `hermes` and are runtime checks. Every `test_*.py` runs code against stubbed fixtures to close the gap. A green guard suite is not evidence a behavioral script is correct.
+
+### Authority
+
+CI (`reusable-ci.yml`, ubuntu+windows × Python 3.11/3.12) is authoritative. The pre-commit hook (`.pre-commit-config.yaml`) and `check_gates.py` run the hermetic subset locally so mistakes fail at commit time rather than in CI. `validate-claim.yml` independently re-runs the hermetic tier against PR heads to verify self-reported pass claims. If a test needs network or a live Hermes install, it runs only in CI — declare it skipped in your PR validation table rather than leaving it blank.
+
+### Inventory
+
+- `python tools/check_gates.py --list` — the hermetic tier (10 gates, no network/Hermes)
+- `tools/check_tool_coverage.py` — enforces that every `tools/*.py` and `tests/*.py` is wired into a workflow `run:` block; fails if a test is dead
+- `tools/test_*.py` — behavioral regression suites, CI only (not in `check_gates.py`)
+
+If you add a test file, wire it into `reusable-ci.yml` or `check_tool_coverage.py` will fail.
+
 ## Working conventions
 
 ### What belongs in git
