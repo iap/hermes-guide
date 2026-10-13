@@ -211,7 +211,9 @@ df -h "$HERMES_HOME"
 PowerShell:
 
 ```powershell
-Get-PSDrive C | Select-Object Used, Free
+$cfg = hermes config path
+$HERMES_HOME = Split-Path $cfg -Parent
+(Get-Item $HERMES_HOME).PSDrive | Select-Object Name, Used, Free
 ```
 
 If free space is low (as a rule of thumb, below 10 GB), investigate large
@@ -247,4 +249,4 @@ migrations applied (honcho, homeassistant). Three items need attention.
 
 ---
 
-*Facts re-verified 2026-10-13 against upstream source at commit `a082d1e180be1e603a6a307fce4d098e30f54eb7`: `hermes_cli/update_cmd_fleet.py:498` (gateway restart warning), `hermes_cli/update_cmd_stash.py:21` (autostash prefix), `hermes_cli/update_cmd_config.py:247` (config format message), `hermes_cli/config.py` (`_cmd_config_migrate`, no preview flag), `hermes_cli/skills_hub.py:1143` (`do_reset`, `restore` flag), `hermes_cli/doctor_state.py` (WAL finding and optimize-storage trigger), `hermes_cli/session_reset_retirement.py:46` (reset-mode retirement notice); CLI behavior cross-checked against the local install (v0.21.6). Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at commit `a082d1e180be1e603a6a307fce4d098e30f54eb7`: `hermes_cli/update_cmd_fleet.py::_warn_pending_fleet_restart` (gateway restart warning), `hermes_cli/update_cmd_stash.py::_AUTOSTASH_NAME_PREFIX` (autostash prefix), `hermes_cli/update_cmd_config.py` (config format message), `hermes_cli/config.py::_cmd_config_migrate` (migrate takes no preview flag), `hermes_cli/skills_hub.py::do_reset` (`restore` flag), `hermes_cli/doctor_state.py::_state_db_wal` (WAL finding and optimize-storage trigger), `hermes_cli/session_reset_retirement.py` (reset-mode retirement notice; file postdates the repo baseline so it stays a bare path, not a machine-checked anchor); CLI behavior cross-checked against the local install (v0.21.6). Re-verify before reuse.*
