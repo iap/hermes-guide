@@ -1,7 +1,7 @@
 ﻿---
 name: hermes-configuration-guide
-description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, and plugins live on disk. For breakage routing ("something is wrong"), prefer diagnosing-triage.
-version: 1.3.6
+description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, plugins, and credential pools live on disk. For breakage routing ("something is wrong"), prefer diagnosing-triage.
+version: 1.4.0
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -33,6 +33,7 @@ Never guess where Hermes reads its files. The home directory differs by platform
 | **Slash commands** | No standalone command files. Built-in registry + every installed skill (`/<skill-name>`) + skill bundles (`$HERMES_HOME/skill-bundles/*.yaml`) + plugin commands | Type `/` for autocomplete, `hermes bundles list` |
 | **Hooks** | Four systems: gateway hooks (`$HERMES_HOME/hooks/<name>/HOOK.yaml` + `handler.py`, gateway-only); plugin hooks (`ctx.register_hook()`); shell hooks (`hooks:` block in config.yaml); outbound webhooks (`hooks.outbound:`) | `hermes hooks list / test / doctor` |
 | **Plugins** | `$HERMES_HOME/plugins/<name>/` with `plugin.yaml` + `register(ctx)`; **opt-in** via `plugins.enabled` | `hermes plugins`, `/plugins` |
+| **Credential pool** | `$HERMES_HOME/auth.json` (persisted pool entries); env vars from `.env` / process env; `$HERMES_HOME/.env` for API keys | `hermes auth list`, `hermes auth add`, `hermes auth status` |
 
 ## Instruction files (a separate system)
 
@@ -52,6 +53,37 @@ The practical consequence: `CLAUDE.md`/`.cursorrules` at a repository root are *
 ## Key $HERMES_HOME inventory
 
 `config.yaml` (main config + `platforms:`/`gateway:` messaging settings) · `.env` (secrets; documented vars override config) · `gateway.json` (legacy gateway fallback) · `skills/` · `skill-bundles/` · `hooks/` (gateway hooks) · `agent-hooks/` (shell-hook script convention) · `plugins/` · `shell-hooks-allowlist.json` (shell-hook consent) · `mcp-tokens/` (OAuth caches) · `logs/` · `state.db` (sessions).
+
+## Credential pool
+
+The credential pool is Hermes's multi-credential failover system for model providers. Each provider can hold multiple credentials; when one fails (rate limit, auth error, cooldown), the pool tries the next.
+
+**Where it lives:** `$HERMES_HOME/auth.json` (persisted entries) + environment variables from `.env` and the process environment.
+
+**How to inspect:**
+```bash
+hermes auth list              # all providers and their pooled credentials
+hermes auth status <provider> # detailed status for one provider
+```
+
+**How to add a credential:**
+```bash
+hermes auth add <provider> --type api-key --label "name"  # prompts securely
+hermes auth add <provider> --type api-key --api-key sk-... # inline
+```
+
+**Env var discovery:** for API-key providers, the pool reads the provider's declared env vars plus numbered siblings. Setting `OPENAI_API_KEY`, `OPENAI_API_KEY_2`, `OPENAI_API_KEY_3` in `.env` gives you a three-key rotation pool with no config changes. The env scanner (`agent/credential_pool.py::_env_key_var_candidates`) auto-discovers `_2`, `_3`, etc.
+
+**Provider IDs for API-key auth:** `openai-api`, `anthropic`, `openrouter`, `gemini`, `copilot`, `lmstudio`, `ollama-cloud`, and others. Run `hermes auth list` to see which are configured.
+
+**Custom provider pools:** a custom endpoint in `providers:` gets its own pool key. `hermes auth add <custom-provider-id>` adds credentials to that pool.
+
+**Common operations:**
+- `hermes auth priority <provider> <index> --priority 0` — move a credential to the front of the rotation
+- `hermes auth reset <provider>` — clear exhaustion/cooldown for all of a provider's credentials
+- `hermes auth remove <provider> <index>` — remove a credential from the pool
+
+For pool credential failures (auth errors, exhaustion, cooldown), see `diagnosing-providers` Step 5.
 
 ## Orphaned & legacy settings
 
@@ -77,7 +109,7 @@ Notes:
 - A `/command` missing, wrong, or overridden → **`diagnosing-commands`**
 - A hook not firing, blocked consent, or behaving unexpectedly → **`diagnosing-hooks`**
 - A plugin not loading, not enabled, or missing capabilities → **`diagnosing-plugins`**
-- Auth/API failures on hub installs (`Could not fetch from any source`, GitHub 401, rate-limit 403) → **`diagnosing-auth`**
+- Auth/API failures on hub installs (`Could not fetch from any source`, GitHub 401, rate-limit 403) → **`diagnosing-auth`**; model-provider credential pool issues (OpenAI/Anthropic/OpenRouter key failures, exhaustion, cooldown) → **`diagnosing-providers`** Step 5
 - Memory not persisting ("it forgot"), an external memory provider silently unavailable, or `MEMORY.md`/`USER.md` errors → **`diagnosing-memory`**
 - Desktop app build/launch failures, wrong backend, or blank window → **`diagnosing-desktop`**; terminal/TUI rendering issues are `diagnosing-cli-tui`, not desktop
 - Model provider issues — custom endpoints flooding the picker with hundreds of models, `discover_models` misbehaving, persisted catalogs bloating `config.yaml`, or provider/auth failures → **`diagnosing-providers`**
@@ -144,4 +176,4 @@ Every diagnosis should end in a concrete action: a `hermes <subcommand>` command
 
 ---
 
-*Facts re-verified 2026-09-15 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/prompt_builder.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py::discover_context_files`, `_hermes_md_candidates`/`_find_hermes_md`); the former bare line citation for project-context discovery was re-pointed to those symbols at `2f6170bf` (2026-09-22, drift #103); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/prompt_builder.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py::discover_context_files`, `_hermes_md_candidates`/`_find_hermes_md`); the former bare line citation for project-context discovery was re-pointed to those symbols at `2f6170bf` (2026-09-22, drift #103); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. **Credential pool** (`agent/credential_pool.py`, 3083 lines): `_env_key_var_candidates` discovers numbered env var siblings (`VAR_2`, `_3`, ...); `_seed_from_env` ingests API-key providers from env vars into the pool; pool entries persist in `auth.json` as `env:`-sourced references re-hydrated on load. Provider registry (`hermes_cli/auth.py:180`): `openai-api` is an API-key provider keyed on `OPENAI_API_KEY` with optional `OPENAI_BASE_URL` override. `hermes auth list`/`add`/`status`/`reset`/`priority`/`remove` are the CLI surface. Re-verify before reuse.*

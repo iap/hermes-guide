@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
-description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, and provider/auth failures.
-version: 1.1.9
+description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, provider/auth failures, and credential pool exhaustion.
+version: 1.2.0
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -120,6 +120,26 @@ The fixed `HERMES_CUSTOM_` prefix is required — it keeps the name POSIX-valid 
 - `gh` / hub 401 on install → see `diagnosing-auth`.
 - A model listed in `models:` but absent from the endpoint stays listed and **fails at request time** — there is no validation against the endpoint.
 
+### Pool credential failures
+
+When a provider is configured with a credential pool (`hermes auth list` shows multiple entries for the provider), the pool rotates through credentials on failure. Symptoms differ from single-key auth:
+
+| Symptom | Likely cause | Action |
+|---|---|---|
+| 401/403 after working earlier | The active key expired or was revoked; pool should rotate to the next credential | `hermes auth list <provider>` — check if the failed key is still listed and whether the next key is present |
+| 429 rate limit on every request | All pool keys exhausted their quota | `hermes auth reset <provider>` to clear cooldowns, or add a new key with `hermes auth add` |
+| Pool stops rotating | Only one credential in the pool, or all others are in cooldown | `hermes auth list <provider>` — verify multiple entries exist and check cooldown status |
+| Wrong credential used | Priority order is wrong — an exhausted key sits at priority 0 | `hermes auth priority <provider> <index> --priority 0` to reorder |
+| `hermes auth list` shows no entries for a provider | Env vars not set, or provider ID mismatch | Check `.env` for the provider's declared env var (e.g. `OPENAI_API_KEY` for `openai-api`); verify with `hermes auth status <provider>` |
+
+**Env var rotation:** setting `OPENAI_API_KEY`, `OPENAI_API_KEY_2`, `OPENAI_API_KEY_3` in `.env` creates a three-key pool. The env scanner (`agent/credential_pool.py::_env_key_var_candidates`) auto-discovers numbered siblings. If a new key isn't picked up, verify it is in `.env` (not just the shell environment) and that the variable name matches the expected pattern.
+
+**Custom provider pools:** a custom endpoint in `providers:` gets its own pool key. Use `hermes auth list` to find the custom provider's pool ID, then `hermes auth add <custom-pool-id>` to add credentials.
+
+**Cooldown behavior:** when a key fails with a rate limit or auth error, Hermes marks it cooldown and tries the next key. Cooldowns clear on `hermes auth reset` or after the cooldown period expires. A provider with all keys in cooldown appears "logged out" until one clears.
+
+For hub-install auth (GitHub tokens, `Could not fetch from any source`), see `diagnosing-auth`.
+
 ## Step 6 — Legacy format
 
 Older configs use a top-level `custom_providers:` list with `base_url` instead of `api`. Still supported and auto-migrated to the `providers:` dict on `hermes update` (config v12).
@@ -156,4 +176,4 @@ Remove the `models:` dict and `models_discovered:` flag from the provider entry 
 
 ---
 
-*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/model_switch_providers.py::_entry_credentials` (key_cmd resolved first and returned early; `key_env` read for the identity tuple but not used as the credential when key_cmd wins; inline `api_key` next) and `::_discover_flag` (`discover_models` defaults True; `"false"`/`"no"`/`"0"` strings coerce to False); `hermes_cli/model_switch.py::_models_config_is_allowlist` (a `discovered` catalog is never a pin; dict shape is per-model metadata, list shape is an allowlist); `hermes_cli/config.py:2739` (`custom_endpoint_key_env` — `HERMES_CUSTOM_<SLUG>_API_KEY` derivation). The Step 2.5 probe was rewritten 2026-09-21 (prose form) after the skills scanner rated the scripted curl|python and urllib forms as supply-chain/exfiltration shapes. **Re-pointed 2026-09-29 (drift #123):** `config.py` citations updated to `2739` at `5000e2993`. Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/model_switch_providers.py::_entry_credentials` (key_cmd resolved first and returned early; `key_env` read for the identity tuple but not used as the credential when key_cmd wins; inline `api_key` next) and `::_discover_flag` (`discover_models` defaults True; `"false"`/`"no"`/`"0"` strings coerce to False); `hermes_cli/model_switch.py::_models_config_is_allowlist` (a `discovered` catalog is never a pin; dict shape is per-model metadata, list shape is an allowlist); `hermes_cli/config.py:2739` (`custom_endpoint_key_env` — `HERMES_CUSTOM_<SLUG>_API_KEY` derivation). The Step 2.5 probe was rewritten 2026-09-21 (prose form) after the skills scanner rated the scripted curl|python and urllib forms as supply-chain/exfiltration shapes. **Re-pointed 2026-09-29 (drift #123):** `config.py` citations updated to `2739` at `5000e2993`. **Credential pool** (`agent/credential_pool.py`, 3083 lines): `_env_key_var_candidates` discovers numbered env var siblings (`VAR_2`, `_3`, ...); `_seed_from_env` ingests API-key providers from env vars into the pool; pool entries persist in `auth.json` as `env:`-sourced references re-hydrated on load. Provider registry (`hermes_cli/auth.py:180`): `openai-api` is an API-key provider keyed on `OPENAI_API_KEY` with optional `OPENAI_BASE_URL` override. `hermes auth list`/`add`/`status`/`reset`/`priority`/`remove` are the CLI surface. Re-verify before reuse.*
