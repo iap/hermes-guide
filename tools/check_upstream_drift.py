@@ -41,7 +41,11 @@ WATCH_FILES = os.environ.get(
     "hermes_cli/plugins.py tools/skills_tool.py agent/skill_utils.py "
     "agent/skill_bundles.py agent/skill_commands.py tools/skills_hub.py "
     "hermes_constants.py tools/memory_tool.py tools/memory_tool_store.py "
-    "hermes_cli/config_defaults.py skills/autonomous-ai-agents/hermes-agent",
+    "hermes_cli/config_defaults.py skills/autonomous-ai-agents/hermes-agent "
+    # File-level history watch for the credential-pool mapping: the value
+    # assertion was dropped (a secret-named expected value trips the
+    # clear-text-logging gate), so history review carries the coverage.
+    "agent/credential_pool.py hermes_cli/auth.py",
 ).split()
 BASELINE_FILE = Path(".github/upstream-drift.baseline")
 WORKFLOWS_DIR = Path(".github/workflows")
