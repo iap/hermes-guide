@@ -308,10 +308,14 @@ def read_pinned_tag() -> str | None:
             # hermes-agent URL in the same file, or the fetch line itself
             # carries the URL. A bare prose mention of hermes-agent — or an
             # unrelated SHA fetch sharing the file — never joins the set.
+            # Only the executable portion of each line counts: a trailing
+            # inline comment (e.g. `# git remote add ...`) is not executable
+            # and must neither declare a remote nor bless a SHA.
             hermes_remotes = set()
             for line in lines:
+                code = line.split("#", 1)[0]
                 m = re.search(
-                    r"\bremote\s+(?:add|set-url)\s+(\S+)\s+(\S+)", line
+                    r"\bremote\s+(?:add|set-url)\s+(\S+)\s+(\S+)", code
                 )
                 if m and m.group(2).rstrip("/").endswith(
                     ("hermes-agent", "hermes-agent.git")
@@ -321,7 +325,7 @@ def read_pinned_tag() -> str | None:
                 m = re.search(
                     r"\bgit\s+(?:-C\s+\S+\s+)?fetch\s+(?:-q\s+|(?:--depth\s+\S+\s+))*"
                     r"(?P<remote>\S+)\s+(?P<sha>[0-9a-f]{40})\b",
-                    line,
+                    line.split("#", 1)[0],
                 )
                 if not m:
                     continue

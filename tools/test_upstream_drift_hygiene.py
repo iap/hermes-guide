@@ -507,6 +507,30 @@ def case_pin_unrelated_sha_fetch_ignored(mod):
     print("OK: unrelated SHA fetches are ignored per-remote")
 
 
+def case_pin_inline_comment_blesses_nothing(mod):
+    """A trailing inline comment must not declare a remote or bless a SHA.
+
+    CodeRabbit review on PR #220: only full-line `#` comments were
+    excluded, so `git fetch origin <sha> # git remote add origin
+    ...hermes-agent.git` blessed an unrelated SHA and skipped tag
+    freshness. Only the executable portion of each line counts.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            f"git fetch origin {_SHA2} # git remote add origin "
+            "https://github.com/NousResearch/hermes-agent.git\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() is None, (
+                "inline-commented remote must not bless an unrelated SHA")
+    finally:
+        shutil.rmtree(td)
+    print("OK: inline comments bless neither remotes nor SHAs")
+
+
 _SHA = "53bc70c5ee8544040cd9f0708d25c0f55276a44b"
 
 
@@ -592,6 +616,7 @@ def main() -> int:
         case_pin_ignores_commented_clones,
         case_pin_prose_mention_blesses_nothing,
         case_pin_unrelated_sha_fetch_ignored,
+        case_pin_inline_comment_blesses_nothing,
         case_pin_reads_fetch_sha,
         case_pin_mixed_forms_conflict,
         case_pin_sha_skips_tag_freshness,

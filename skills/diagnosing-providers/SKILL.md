@@ -127,7 +127,7 @@ When a provider is configured with a credential pool (`hermes auth list` shows m
 | Symptom | Likely cause | Action |
 |---|---|---|
 | 401/403 after working earlier | The active key expired or was revoked; pool should rotate to the next credential | `hermes auth list <provider>` — check if the failed key is still listed and whether the next key is present |
-| 429 rate limit on every request | All pool keys exhausted their quota | `hermes auth reset <provider>` to clear cooldowns, or add a new key with `hermes auth add <provider>` |
+| 429 rate limit on every request | Genuine quota exhaustion (all pool keys capped) | Wait for the provider's reset window or add a key with `hermes auth add <provider>`; use `hermes auth reset <provider>` only to clear stale local cooldown/exhaustion state once capacity is back |
 | Pool stops rotating | Only one credential in the pool, or all others are in cooldown | `hermes auth list <provider>` — verify multiple entries exist and check cooldown status |
 | Wrong credential used | Priority order is wrong — an exhausted key sits at priority 0 | `hermes auth priority <provider> <index> 0` to reorder (positional: provider, target, priority — `--priority` is an `auth add` flag, not valid here) |
 | `hermes auth list` shows no entries for a provider | Env vars not set, or provider ID mismatch | Check `.env` for the provider's declared env var (e.g. `OPENAI_API_KEY` for `openai-api`); verify with `hermes auth status <provider>` |
@@ -136,7 +136,7 @@ When a provider is configured with a credential pool (`hermes auth list` shows m
 
 **Custom provider pools:** a custom endpoint in `providers:` gets its own pool key. Use `hermes auth list` to find the custom provider's pool ID, then `hermes auth add <custom-pool-id>` to add credentials.
 
-**Cooldown behavior:** when a key fails with a rate limit or auth error, Hermes marks it cooldown and tries the next key. Cooldowns clear on `hermes auth reset` or after the cooldown period expires. A provider with all keys in cooldown appears "logged out" until one clears.
+**Cooldown behavior:** when a key fails with a rate limit or auth error, Hermes marks it cooldown and tries the next key. Cooldowns clear on `hermes auth reset` or after the cooldown period expires. A provider with all keys in cooldown appears "logged out" until one clears. A transient 429 is retried once on the same key before rotation (cap-shaped 429s rotate immediately); OAuth 401s refresh the token before rotating. `hermes auth reset` clears local cooldown/exhaustion state only — it does not restore provider quota.
 
 For hub-install auth (GitHub tokens, `Could not fetch from any source`), see `diagnosing-auth`.
 

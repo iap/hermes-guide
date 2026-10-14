@@ -86,7 +86,7 @@ Your `hermes skills install` fails with "No skill named 'foo' found in any sourc
 | MEDIUM | Older checkouts degrade all GitHub-backed sources to "not found" | Install output: `No skill named 'foo' found in any source.` (current upstream recovers via fall-through instead) |
 
 ### Recommended Fix
-Comment out or delete the `GITHUB_TOKEN` line in `$HERMES_HOME/.env`, then re-run `hermes skills install <name>`. On older checkouts the gh-cli fallback (priority 2) takes over immediately; on current upstream the install already recovered via fall-through, so if it still fails after removing the token, the token was not the sole cause — look elsewhere (identifier form, scanner verdict).
+Comment out or delete both the `GITHUB_TOKEN` and `GH_TOKEN` lines in `$HERMES_HOME/.env`, then re-run `hermes skills install <name>`. On older checkouts the gh-cli fallback (priority 2) takes over immediately; on current upstream the install already recovered via fall-through, so if it still fails after removing the token, the token was not the sole cause — look elsewhere (identifier form, scanner verdict).
 
 ### References
 - `$HERMES_HOME/.env` — the dead `GITHUB_TOKEN` line
