@@ -18,6 +18,7 @@ Run: python3 tools/test_resolve_venv.py
 from __future__ import annotations
 
 import importlib.util
+import contextlib
 import os
 import shutil
 import sys
@@ -38,16 +39,35 @@ def _load():
 
 
 def _clean_env(extra=None):
-    """Ambient env minus VIRTUAL_ENV (tempfile still needs TEMP), plus extras."""
+    """Ambient env minus VIRTUAL_ENV (tempfile still needs TEMP), plus extras.
+
+    Callers must pass ``clear=True`` to mock.patch.dict: without it the
+    replacement mapping only updates os.environ and an inherited
+    VIRTUAL_ENV survives the omission.
+    """
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     if extra:
         env.update(extra)
     return env
 
 
+@contextlib.contextmanager
 def _pin_to_base():
-    """Force the sys.prefix branch off regardless of the test runner."""
-    return mock.patch.object(sys, "base_prefix", sys.prefix)
+    """Force the sys.prefix branch off regardless of the test runner.
+
+    Neutralizes both modern (base_prefix) and legacy-virtualenv
+    (real_prefix) markers; restores everything afterwards.
+    """
+    had_real = hasattr(sys, "real_prefix")
+    saved = getattr(sys, "real_prefix", None)
+    if had_real:
+        delattr(sys, "real_prefix")
+    try:
+        with mock.patch.object(sys, "base_prefix", sys.prefix):
+            yield
+    finally:
+        if had_real:
+            sys.real_prefix = saved
 
 
 def _mkroot(*dirs, with_cfg=()):
@@ -66,7 +86,7 @@ def case_virtual_env_wins(mod):
     venv = _mkroot("real")
     (venv / "pyvenv.cfg").write_text("home = x\n", encoding="utf-8")
     try:
-        with mock.patch.dict(os.environ, _clean_env({"VIRTUAL_ENV": str(venv)})):
+        with mock.patch.dict(os.environ, _clean_env({"VIRTUAL_ENV": str(venv)}), clear=True):
             with _pin_to_base():
                 assert mod(td) == venv, "explicit VIRTUAL_ENV must win"
     finally:
@@ -79,7 +99,7 @@ def case_invalid_virtual_env_falls_through(mod):
     td = _mkroot("venv")
     try:
         with mock.patch.dict(
-            os.environ, _clean_env({"VIRTUAL_ENV": str(td / "nope")})
+            os.environ, _clean_env({"VIRTUAL_ENV": str(td / "nope")}), clear=True
         ):
             with _pin_to_base():
                 assert mod(td) == td / "venv", "bogus VIRTUAL_ENV must fall through"
@@ -91,7 +111,7 @@ def case_invalid_virtual_env_falls_through(mod):
 def case_venv_only_empty_dir_wins(mod):
     td = _mkroot("venv")
     try:
-        with mock.patch.dict(os.environ, _clean_env()):
+        with mock.patch.dict(os.environ, _clean_env(), clear=True):
             with _pin_to_base():
                 assert mod(td) == td / "venv", "empty venv/ wins by is_dir alone"
     finally:
@@ -102,7 +122,7 @@ def case_venv_only_empty_dir_wins(mod):
 def case_dotvenv_only(mod):
     td = _mkroot(".venv")
     try:
-        with mock.patch.dict(os.environ, _clean_env()):
+        with mock.patch.dict(os.environ, _clean_env(), clear=True):
             with _pin_to_base():
                 assert mod(td) == td / ".venv"
     finally:
@@ -113,7 +133,7 @@ def case_dotvenv_only(mod):
 def case_venv_beats_dotvenv(mod):
     td = _mkroot("venv", ".venv")
     try:
-        with mock.patch.dict(os.environ, _clean_env()):
+        with mock.patch.dict(os.environ, _clean_env(), clear=True):
             with _pin_to_base():
                 assert mod(td) == td / "venv", "venv/ must beat .venv/"
     finally:
@@ -124,7 +144,7 @@ def case_venv_beats_dotvenv(mod):
 def case_nothing_resolves_none(mod):
     td = _mkroot()
     try:
-        with mock.patch.dict(os.environ, _clean_env()):
+        with mock.patch.dict(os.environ, _clean_env(), clear=True):
             with _pin_to_base():
                 assert mod(td) is None, "bare dir must resolve None"
     finally:
@@ -137,7 +157,7 @@ def case_sys_prefix_venv(mod):
     fake = _mkroot("fake")
     (fake / "pyvenv.cfg").write_text("home = x\n", encoding="utf-8")
     try:
-        with mock.patch.dict(os.environ, _clean_env()):
+        with mock.patch.dict(os.environ, _clean_env(), clear=True):
             with mock.patch.object(sys, "prefix", str(fake)):
                 with mock.patch.object(sys, "base_prefix", "/nonexistent-base"):
                     assert mod(td) == Path(str(fake)), "in-venv prefix must win"
