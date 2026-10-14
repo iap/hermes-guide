@@ -79,7 +79,7 @@ hermes auth add <provider> --type api-key --api-key sk-... # inline
 **Custom provider pools:** a custom endpoint in `providers:` gets its own pool key. `hermes auth add <custom-provider-id>` adds credentials to that pool.
 
 **Common operations:**
-- `hermes auth priority <provider> <index> --priority 0` — move a credential to the front of the rotation
+- `hermes auth priority <provider> <index> 0` — move a credential to the front of the rotation (positional args; `--priority` is not a flag here)
 - `hermes auth reset <provider>` — clear exhaustion/cooldown for all of a provider's credentials
 - `hermes auth remove <provider> <index>` — remove a credential from the pool
 
