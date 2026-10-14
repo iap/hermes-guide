@@ -151,7 +151,7 @@ Fix path, narrowest first:
 
 1. `hermes model --refresh` — clears per-provider `/v1/models` probe caches and re-fetches. It does not clear the remote curated-manifest cache: delete `$HERMES_HOME/cache/openrouter_curated_catalog.json` to force that refetch (or wait out `ttl_minutes`), then `hermes gateway restart` to apply.
 2. `model_catalog.excluded_providers: [<slug>, ...]` in `config.yaml` — drops whole providers from the catalog (slug or alias, case-insensitive), then `hermes gateway restart` to apply.
-3. `model_catalog.enabled: false` in `config.yaml` — disables the remote catalog entirely, then `hermes gateway restart` to apply.
+3. `model_catalog.enabled: false` in `config.yaml` — disables remote fetching and falls back to the in-repo snapshot (use `excluded_providers` above to hide providers instead of disabling everything), then `hermes gateway restart` to apply.
 
 ## Step 6 — Legacy format
 
