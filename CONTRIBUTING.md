@@ -8,13 +8,27 @@ use, then run `python tools/check_gates.py` — the gate list is under
 **This file is the authoring standard.** It owns *what gets written* — skill
 naming, frontmatter, content rules, voice, and the PR workflow. It does not
 duplicate how the repo's gates work or how to run them; that is
-[AGENTS.md](AGENTS.md), and the two files split on that line deliberately. If you
-find the same rule in both, one of them is wrong — fix the copy that drifted.
+[AGENTS.md](AGENTS.md) (always-on) and [docs/agent/](docs/agent/README.md)
+(on demand). The split is deliberate. If you find the same rule in two places,
+one of them is wrong — fix the copy that drifted. **Tone lives only here**;
+AGENTS.md links to [#tone](#tone) rather than restating it.
+
+## Audiences
+
+| Audience | Document |
+|---|---|
+| End users / catalog consumers | [README.md](README.md) |
+| Human contributors (this file) | Skill naming, content rules, voice, PR/release |
+| Agents in this repo | [AGENTS.md](AGENTS.md) → [docs/agent/](docs/agent/README.md) |
+| Security / trust | [SECURITY.md](SECURITY.md) |
 
 ## What this project is
 
 hermes-guide is a [Hermes Agent](https://github.com/NousResearch/hermes-agent)
-plugin **plus** a skills tap, and they are installed separately.
+plugin **plus** a skills tap. The plugin is listed in the **curated Hermes
+plugin catalog** as `hermes-guide` (community tier); install with
+`hermes plugins install hermes-guide`. Plugin and skills are still installed
+separately.
 
 - The **plugin** (`plugin.yaml` + `__init__.py` / `checks.py` / `constants.py`)
   ships read-only diagnostics: `/hermes-doctor` in a session and `hermes guide` in
@@ -126,6 +140,9 @@ Examples:
 - `feat(guide): add the diagnosing-cron skill`
 
 ## Tone
+
+**Single owner of conversational and artifact tone for this repo.** Agents and
+docs link here; do not duplicate this section into AGENTS.md.
 
 Rules for everything a contribution carries: commit messages, PR bodies, issue
 comments, source, and documentation.
@@ -261,7 +278,8 @@ version, your platform (native Windows or POSIX), and the output of
 2. Make the change.
 3. Run the gates. `python tools/check_gates.py` is the fast tier;
    `python tools/render_docs.py --write` refreshes generated blocks; see
-   [AGENTS.md](AGENTS.md) for the full list and what CI adds on top.
+   [AGENTS.md](AGENTS.md) and [docs/agent/ops.md](docs/agent/ops.md) for the
+   full list and what CI adds on top.
 4. Fill in the PR template — **Environment** and **Validation Results** are read
    by workflows, not just by reviewers. The validation table is machine-checked:
    `validate-claim.yml` re-runs the hermetic gates against your head and fails the

@@ -19,9 +19,11 @@ guard covers what generation cannot — the three hand-written inventories:
      ghost option for a deleted one.
   3. Every `diagnosing-*` skill is reachable from the configuration map's Routing
      section. An unrouted skill is unreachable, and no count catches that.
-  4. The AGENTS.md layout table mentions every tracked top-level path and every
-     CI workflow. It went stale for six files before this check existed, and a
-     structure table that omits a file is worse than no table.
+  4. The docs/agent/layout.md layout table mentions every tracked top-level path
+     and every CI workflow. It went stale for six files before this check
+     existed, and a structure table that omits a file is worse than no table.
+     (Moved out of always-on AGENTS.md so agents do not pay the encyclopedia
+     cost every turn; coverage still gates.)
 
 Checks 1-3 are set equality — an extra entry is a ghost that sends readers (and
 issue reporters) to something that no longer exists. Check 4 is coverage only:
@@ -73,8 +75,11 @@ def git_ls_files() -> list[str]:
     return [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
 
 
+LAYOUT_DOC = REPO / "docs" / "agent" / "layout.md"
+
+
 def expected_paths(tracked: list[str]) -> list[str]:
-    """Tracked paths the AGENTS.md layout table must mention.
+    """Tracked paths the docs/agent/layout.md table must mention.
 
     Every top-level entry (a file, or a directory) plus every file under
     `.github/`. Skills and tools children are not enumerated: the table covers
@@ -149,7 +154,6 @@ def main() -> int:
         return 2
 
     readme = (REPO / "README.md").read_text(encoding="utf-8")
-    agents = (REPO / "AGENTS.md").read_text(encoding="utf-8")
     expected_ids = set(ids)
 
     failures: list[str] = []
@@ -179,14 +183,20 @@ def main() -> int:
     if unrouted:
         failures.append("configuration map routing omits: " + ", ".join(unrouted))
 
-    # 4. AGENTS.md layout table: coverage of the tracked tree.
-    layout = section(agents, "## Layout")
-    if not layout:
-        failures.append("AGENTS.md has no `## Layout` section")
+    # 4. docs/agent/layout.md: coverage of the tracked tree.
+    if not LAYOUT_DOC.is_file():
+        failures.append(f"missing layout doc: {LAYOUT_DOC.relative_to(REPO)}")
+        layout = ""
+    else:
+        layout = section(LAYOUT_DOC.read_text(encoding="utf-8"), "## Layout")
+        if not layout:
+            failures.append("docs/agent/layout.md has no `## Layout` section")
     expected = expected_paths(tracked)
-    gaps = _uncovered(expected, layout)
+    gaps = _uncovered(expected, layout) if layout else []
     if gaps:
-        failures.append("AGENTS.md layout table never mentions: " + ", ".join(gaps))
+        failures.append(
+            "docs/agent/layout.md never mentions: " + ", ".join(gaps)
+        )
 
     if failures:
         for f in failures:
@@ -200,8 +210,8 @@ def main() -> int:
 
     print(
         f"OK: {len(ids)} skills consistent across README table, issue template and "
-        f"config-map routing; {len(expected)} tracked paths covered by the "
-        f"AGENTS.md layout table"
+        f"config-map routing; {len(expected)} tracked paths covered by "
+        f"docs/agent/layout.md"
     )
     return 0
 

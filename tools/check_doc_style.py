@@ -3,11 +3,12 @@
 
 Why this exists
 ---------------
-CONTRIBUTING.md states the tone standard (no filler, no emoji in prose) and
-AGENTS.md states it for agents. A rule nothing checks decays — this repo has
-already paid that cost once, when hand-maintained counts in three prose files
-drifted apart (see tools/render_docs.py for the fix). So the two halves that
-CAN be decided from the working tree are decided here.
+CONTRIBUTING.md owns the tone standard (no filler, no emoji in prose);
+AGENTS.md points agents there rather than duplicating the essay. A rule
+nothing checks decays — this repo has already paid that cost once, when
+hand-maintained counts in three prose files drifted apart (see
+tools/render_docs.py for the fix). So the two halves that CAN be decided from
+the working tree are decided here.
 
 What is gated
 -------------
