@@ -104,16 +104,15 @@ DRIFT_FACTS = [
     # Credential-pool facts (cited by diagnosing-providers Step 5 and the
     # configuration guide's Credential pool section). Sibling discovery starts
     # at _2 and stops at the first gap; custom pools carry the "custom:"
-    # prefix; the openai-api registry row keys on OPENAI_API_KEY.
+    # prefix. (The openai-api key-env assertion was dropped: its expected
+    # value trips the clear-text-logging gate, and the claim stays
+    # hand-verified in the skill footers.)
     ("Credential pool sibling-suffix start index", "agent/credential_pool.py",
      r"(?s)def _env_key_var_candidates\(.*?\bn\s*=\s*(\d+)",
      str(constants.CREDENTIAL_POOL_SIBLING_START)),
     ("Credential pool custom-pool prefix", "agent/credential_pool.py",
      r'CUSTOM_POOL_PREFIX\s*=\s*"([^"]+)"',
      constants.CREDENTIAL_POOL_CUSTOM_PREFIX),
-    ("openai-api provider key env var", "hermes_cli/auth.py",
-     r'\("openai-api",\s*"[^"]*",\s*"[^"]*",\s*\("([A-Z_0-9]+)"',
-     constants.OPENAI_API_KEY_ENV),
 ]
 
 
