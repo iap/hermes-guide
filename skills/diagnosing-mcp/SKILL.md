@@ -48,7 +48,7 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 6. **Tool call times out** — slow server startup. → Raise `timeout` / `connect_timeout` on that entry.
 7. **Catalog entry stale after Hermes update** — catalog MCPs never auto-update. → Re-run `hermes mcp install <name>`.
 8. **Claude-Code-style config pasted in** — `mcpServers` JSON or nested `mcp.servers` is not read. → Use top-level `mcp_servers:` in YAML (or `hermes import-agent claude-code`).
-9. **Server works without a key but you want identified/limited use** — some servers (e.g. context7) run free anonymously and also accept an API key. → Set the key in `.env` (`CONTEXT7_API_KEY`) and reference it as `${CONTEXT7_API_KEY}` in the entry's `env:`; `hermes mcp test <name>` reports OAuth and HTTP-header auth modes (stdio `env:` keys show as `Auth: none` even when set — verify those from the entry instead).
+9. **Server works without a key but you want identified/limited use** — some servers (e.g. context7) run free anonymously and also accept an API key. → Set the key in the active `.env` (resolve it first: `hermes config path` prints the config file, `.env` sits beside it — never assume `~/.hermes`) as `CONTEXT7_API_KEY` and reference it as `${CONTEXT7_API_KEY}` in the entry's `env:`; `hermes mcp test <name>` reports OAuth and HTTP-header auth modes (stdio `env:` keys show as `Auth: none` even when set — verify those from the entry instead).
 
 ## 4. Localization workflow
 
