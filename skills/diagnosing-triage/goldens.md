@@ -77,6 +77,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | D2 | Multi-surface failures + one blank desktop window | `diagnosing-host-pressure` **before** `diagnosing-desktop` |
 | D3 | User already said "MCP won't connect" | **do not** load triage — go straight to `diagnosing-mcp` |
 | D4 | Headless `hermes -z` without naming a skill | skill auto-discovery may not fire — goldens must name triage explicitly |
+| D5 | Vague triage answer needs a fix command | use only subcommands from `hermes --help`, skill playbooks, or `hermes guide <scope>` — never invent `hermes python …` / `hermes db …` / `hermes channels` / unlisted `hermes plugins install <name>`; verify every cited subcommand exists before reporting |
 
 ---
 
@@ -84,6 +85,8 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 
 | Date | Hermes | OS | Pass / Fail | Notes |
 |------|--------|-----|-------------|-------|
-| | | | | |
+| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — D4 holds | B1-general ×2, P1, P2-attempt-1, all unnamed headless: triage not auto-loaded; free-style answers (8 invented subcommands once, 0 once; P1 answered model_catalog, missed discover_models contract; P2 attempt timed out with no output) |
+| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — B1 | named invocation: §0b baseline drove `x plugins` routing; 0 invented subcommands; grade A, docked from S only for missing explicit triage citation |
+| 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — C16 with latency note | P2 hook-prompt retry (unnamed): enumerated all 4 hook systems, correct empty-hooks diagnosis, read-only close; 112s first-byte latency, first attempt's timeout was transient |
 
 Failed rows → fix `SKILL.md` flowchart/table (and bump skill version), or document an intentional Expected change in the same PR.
