@@ -1073,8 +1073,8 @@ def check_plugins():
 
     # Collect every plugin the loader can see — the user dir *and* the bundled
     # dir (with its category sub-layouts) — by both manifest name and key. This
-    # is what makes enabled bundled plugins (e.g. `disk-cleanup`,
-    # `kilocode-provider`) resolvable instead of being falsely flagged missing.
+    # is what makes enabled bundled plugins (e.g. `disk-cleanup`)
+    # resolvable instead of being falsely flagged missing.
     known: set[str] = set()
     user_manifests: dict[str, str] = {}
     _collect_plugin_ids(plugins_root, "", 0, set(), known, user_manifests)
@@ -1087,11 +1087,18 @@ def check_plugins():
     )
 
     broken = []
+    user_ids = set(user_manifests.values())
+    bundled_only = []
     for name in sorted(enabled):
         if name in skip:
             continue  # sub-category dirs use their own selection keys, not plugins.enabled
         if name not in known:
             broken.append(f"`{name}` is enabled but no matching plugin manifest was found")
+        elif name not in user_ids:
+            # Resolves via the bundled dir only: absent from the user plugins
+            # dir by design. Named explicitly so neither users nor models
+            # misdiagnose it as missing.
+            bundled_only.append(name)
 
     notes = []
     if os.path.isdir(plugins_root):
@@ -1113,10 +1120,21 @@ def check_plugins():
             if manifest_name not in enabled and manifest_name not in disabled:
                 notes.append(f"`{manifest_name}` discovered but not enabled (opt-in)")
 
+    if bundled_only:
+        names = ", ".join(f"`{n}`" for n in bundled_only)
+        verb = "resolves" if len(bundled_only) == 1 else "resolve"
+        bundled_note = [
+            f"{names} {verb} via the bundled plugins dir "
+            "(absent from the user plugins dir — expected)"
+        ]
+    else:
+        bundled_note = []
     if broken:
-        return {"status": "broken", "reason": f"{len(broken)} enabled plugin(s) missing or broken", "detail": broken + notes}
+        return {"status": "broken", "reason": f"{len(broken)} enabled plugin(s) missing or broken", "detail": broken + notes + bundled_note}
     if notes:
-        return {"status": "informational", "reason": f"{len(notes)} plugin(s) not enabled", "detail": notes}
+        return {"status": "informational", "reason": f"{len(notes)} plugin(s) not enabled", "detail": notes + bundled_note}
+    if bundled_note:
+        return {"status": "informational", "reason": "enabled plugins resolve via the bundled dir", "detail": bundled_note}
     return {"status": "healthy", "reason": "plugins consistent with enable list", "detail": sorted(enabled)}
 
 
