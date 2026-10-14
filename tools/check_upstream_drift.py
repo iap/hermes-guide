@@ -272,25 +272,17 @@ def read_pinned_tag() -> str | None:
                 text = path.read_text(encoding="utf-8")
             except OSError:
                 continue
-            # A Hermes remote counts only on executable lines (optionally
-            # behind `- ` / `run: `): a commented-out `# remote add ...`
-            # example is documentation, not an install, and a bare prose
-            # mention of hermes-agent must not bless an unrelated SHA fetch
-            # in the same file.
-            hermes_remote = any(
-                re.search(
-                    r"(?:remote\s+(?:add|set-url)|clone)\b[^\n]*hermes-agent(?:\.git)?(?:\s|$|\"|')",
-                    line,
-                )
-                for line in text.splitlines()
+            # Executable lines only (optionally behind `- ` / `run: `).
+            lines = [
+                line for line in text.splitlines()
                 if line.strip() and not line.strip().startswith("#")
-            )
+            ]
             # Anchored to executable lines (optionally behind `- ` / `run: `):
             # a commented-out `# git clone ...` example is documentation, not an
             # install, and must not join the pin set.
             for m in re.finditer(
                 r"(?m)^[ \t]*(?:-\s*)?(?:run:\s*)?git clone --depth 1 --branch (\S+) (\S+)",
-                text,
+                "\n".join(lines),
             ):
                 tag, url = m.group(1), m.group(2)
                 # Only the Hermes source clone carries the pin; an unrelated
@@ -298,12 +290,33 @@ def read_pinned_tag() -> str | None:
                 if not url.rstrip("/").endswith(("hermes-agent", "hermes-agent.git")):
                     continue
                 tags.add(tag)
-            if hermes_remote:
-                for m in re.finditer(
-                    r"(?m)^[ \t]*(?:-\s*)?(?:run:\s*)?git (?:-C \S+ )?fetch[^\n]*?\b([0-9a-f]{40})\b",
-                    text,
+            # A fetch SHA counts only when attributable to the Hermes remote:
+            # either the fetch names a remote previously added for a
+            # hermes-agent URL in the same file, or the fetch line itself
+            # carries the URL. A bare prose mention of hermes-agent — or an
+            # unrelated SHA fetch sharing the file — never joins the set.
+            hermes_remotes = set()
+            for line in lines:
+                m = re.search(
+                    r"\bremote\s+(?:add|set-url)\s+(\S+)\s+(\S+)", line
+                )
+                if m and m.group(2).rstrip("/").endswith(
+                    ("hermes-agent", "hermes-agent.git")
                 ):
-                    shas.add(m.group(1))
+                    hermes_remotes.add(m.group(1))
+            for line in lines:
+                m = re.search(
+                    r"\bgit\s+(?:-C\s+\S+\s+)?fetch\s+(?:-q\s+|(?:--depth\s+\S+\s+))*"
+                    r"(?P<remote>\S+)\s+(?P<sha>[0-9a-f]{40})\b",
+                    line,
+                )
+                if not m:
+                    continue
+                remote = m.group("remote")
+                if remote in hermes_remotes or remote.rstrip("/").endswith(
+                    ("hermes-agent", "hermes-agent.git")
+                ):
+                    shas.add(m.group("sha"))
     pins = tags | shas
     return pins.pop() if len(pins) == 1 else None
 
