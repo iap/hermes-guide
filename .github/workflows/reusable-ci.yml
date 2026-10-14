@@ -302,6 +302,12 @@ jobs:
       - name: Drift watch parity regression
         run: python tools/test_drift_watch_parity.py
 
+      - name: Venv resolver behavioral test
+        # Executes skills/diagnosing-path/references/resolve_venv.py against
+        # fixture trees (guards only scan it). Hermetic: tempdirs, stdlib,
+        # ambient interpreter neutralized via mock.
+        run: python tools/test_resolve_venv.py
+
       - name: Citation integrity against the upstream baseline
         # The cited symbols/lines live in the Hermes tree, so this check resolves
         # them against the revision recorded in .github/upstream-drift.baseline —
