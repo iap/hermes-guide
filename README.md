@@ -25,7 +25,12 @@ From the curated catalog (preferred):
 
 ```bash
 hermes plugins install hermes-guide
+hermes plugins enable hermes-guide
 ```
+
+Catalog installs land disabled — the `enable` step is what registers
+`/hermes-doctor` and `hermes guide`. (Owner/repo installs pass `--enable`
+inline instead.)
 
 From GitHub by owner/repo (same package; useful to pin a SHA):
 
