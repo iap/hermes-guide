@@ -1,15 +1,14 @@
-# `resolve_venv()` — best-available-answer replica for scripts
+# `resolve_venv()` — best-available-answer replica for scripts.
+#
+# Active venv first (§A of the skill), then the project's candidate dirs (§B).
+# This is a **superset** of upstream, not a mirror: steps 1–2 are the replica's
+# own additions for script use — `project_venv_dir()` never reads `VIRTUAL_ENV`,
+# and it consults `sys.prefix` only for its out-of-tree fallback (gated by a
+# `direct_url.json` ownership check). Steps 3–4 mirror upstream's candidate scan
+# exactly: `is_dir()` alone, so a stray empty directory wins the same way it
+# does upstream. Prefer importing `project_venv_dir()` when Hermes core is
+# importable; use this replica outside the checkout.
 
-Active venv first (§A of the skill), then the project's candidate dirs (§B).
-This is a **superset** of upstream, not a mirror: steps 1–2 are the replica's
-own additions for script use — `project_venv_dir()` never reads `VIRTUAL_ENV`,
-and it consults `sys.prefix` only for its out-of-tree fallback (gated by a
-`direct_url.json` ownership check). Steps 3–4 mirror upstream's candidate scan
-exactly: `is_dir()` alone, so a stray empty directory wins the same way it
-does upstream. Prefer importing `project_venv_dir()` when Hermes core is
-importable; use this replica outside the checkout.
-
-```python
 import os
 import sys
 from pathlib import Path
@@ -57,4 +56,3 @@ def resolve_venv(project_root: Path | None = None) -> Path | None:
 
     # 5. No venv found
     return None
-```

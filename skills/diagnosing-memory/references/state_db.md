@@ -1,7 +1,8 @@
 # Session database (`state.db`) — size and compaction
 
 Built-in memory and the external provider are the *content* stores. The session
-*log* lives separately in `$HERMES_HOME/state.db` (SQLite), and its growth has
+*log* lives separately in `$HERMES_HOME/state.db` (SQLite — resolve the home
+first with `hermes config path`, never assume `~/.hermes`), and its growth has
 nothing to do with either store. A 900+ MB `state.db` is not a memory problem
 and trimming `MEMORY.md` will not shrink it.
 

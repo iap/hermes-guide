@@ -186,7 +186,8 @@ hermes doctor --fix
 ```
 
 For the general database-care procedure (compaction canary, integrity queries,
-prune/archive/optimize): `skills/diagnosing-memory/references/state_db.md`.
+prune/archive/optimize), load the `diagnosing-memory` skill and follow its
+session-database reference therein.
 
 #### Oversized state database
 
