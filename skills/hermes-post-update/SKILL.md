@@ -1,7 +1,7 @@
 ---
 name: hermes-post-update
 description: Verify and clean up after a Hermes update — confirm the gateway restarted on new code, check plugin migrations, review config changes, run health checks, and surface cleanup opportunities.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, update, verification, maintenance]
@@ -184,6 +184,10 @@ stop the profile's gateway, then checkpoint:
 ```bash
 hermes doctor --fix
 ```
+
+For the general database-care procedure (compaction canary, integrity queries,
+prune/archive/optimize), load the `diagnosing-memory` skill and follow its
+session-database reference therein.
 
 #### Oversized state database
 
