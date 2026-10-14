@@ -154,6 +154,105 @@ def case_allowlist_reuses_caller_home(checks):
     print("OK: allowlist check reuses the caller-resolved home")
 
 
+def _plugins_fixture(checks, config_data, user_tree, bundled_tree):
+    """Fake home/plugins/bundled trees for check_plugins; returns restore data.
+
+    user_tree/bundled_tree are [(relpath, manifest-name-or-None)] entries.
+    Boundaries patched: _hermes_home, _bundled_plugins_dir, _read_config.
+    Caller must restore via the returned triple in a finally block.
+    """
+    import tempfile
+
+    home = Path(tempfile.mkdtemp())
+    (home / "plugins").mkdir()
+    for rel, name in user_tree:
+        d = home / "plugins" / rel
+        d.mkdir(parents=True, exist_ok=True)
+        if name is not None:
+            (d / "plugin.yaml").write_text(f"name: {name}\n", encoding="utf-8")
+    broot = Path(tempfile.mkdtemp())
+    for rel, name in bundled_tree:
+        d = broot / rel
+        d.mkdir(parents=True, exist_ok=True)
+        if name is not None:
+            (d / "plugin.yaml").write_text(f"name: {name}\n", encoding="utf-8")
+    saved = (checks._hermes_home, checks._bundled_plugins_dir, checks._read_config)
+    checks._hermes_home = lambda: str(home)
+    checks._bundled_plugins_dir = lambda: str(broot)
+    checks._read_config = lambda: (str(home / "config.yaml"), config_data)
+    return home, broot, saved
+
+
+def _restore_plugins(checks, home, broot, saved):
+    import shutil
+
+    checks._hermes_home, checks._bundled_plugins_dir, checks._read_config = saved
+    shutil.rmtree(str(home), ignore_errors=True)
+    shutil.rmtree(str(broot), ignore_errors=True)
+
+
+def _plugins_text(env):
+    detail = env.get("detail") or []
+    if isinstance(detail, str):
+        return detail
+    return " ".join(str(d) for d in detail)
+
+
+def case_plugins_disabled_wins_over_bundled(checks):
+    """A both-enabled-and-disabled plugin is skipped, never bundled-noted."""
+    home, broot, saved = _plugins_fixture(
+        checks,
+        {"plugins": {"enabled": ["x"], "disabled": ["x"]}},
+        [],
+        [("x", "x")],
+    )
+    try:
+        env = checks.check_plugins()
+        text = _plugins_text(env)
+        assert env["status"] != "broken", env
+        assert "is enabled but no matching" not in text, text
+        assert "bundled plugins dir" not in text, text
+    finally:
+        _restore_plugins(checks, home, broot, saved)
+    print("OK: disabled deny-list wins over enabled for bundled plugins")
+
+
+def case_plugins_nested_user_key_not_bundled(checks):
+    """A nested user plugin enabled by path key is not called bundled-only."""
+    home, broot, saved = _plugins_fixture(
+        checks,
+        {"plugins": {"enabled": ["nested/mine"]}},
+        [("nested/mine", "other-name")],
+        [("nested/mine", "bundled-name")],
+    )
+    try:
+        env = checks.check_plugins()
+        text = _plugins_text(env)
+        assert "is enabled but no matching" not in text, text
+        assert "bundled plugins dir" not in text, text
+    finally:
+        _restore_plugins(checks, home, broot, saved)
+    print("OK: nested user plugin enabled by key is not bundled-only")
+
+
+def case_plugins_bundled_only_noted(checks):
+    """An enabled plugin resolving only via bundled gets the info note."""
+    home, broot, saved = _plugins_fixture(
+        checks,
+        {"plugins": {"enabled": ["solo"]}},
+        [],
+        [("solo", "solo")],
+    )
+    try:
+        env = checks.check_plugins()
+        assert env["status"] == "informational", env
+        text = _plugins_text(env)
+        assert "`solo` resolves via the bundled plugins dir" in text, text
+    finally:
+        _restore_plugins(checks, home, broot, saved)
+    print("OK: bundled-only resolution is named, not silent")
+
+
 def main() -> int:
     checks = _load_checks()
     failures: list[str] = []
@@ -164,6 +263,9 @@ def main() -> int:
         case_hooks_allowlist_alone_when_doctor_healthy,
         case_hooks_unaffected_when_allowlist_fine,
         case_allowlist_reuses_caller_home,
+        case_plugins_disabled_wins_over_bundled,
+        case_plugins_nested_user_key_not_bundled,
+        case_plugins_bundled_only_noted,
     ):
         try:
             case(checks)
@@ -173,7 +275,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 6 check-envelope case(s) passed")
+    print("\nOK: 9 check-envelope case(s) passed")
     return 0
 
 

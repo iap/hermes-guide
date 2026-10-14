@@ -1075,26 +1075,32 @@ def check_plugins():
     # dir (with its category sub-layouts) — by both manifest name and key. This
     # is what makes enabled bundled plugins (e.g. `disk-cleanup`)
     # resolvable instead of being falsely flagged missing.
-    known: set[str] = set()
+    # User and bundled ids stay segregated: the bundled-only note must not
+    # claim a plugin the user dir already provides (by name or by nested
+    # path-derived key), and Hermes' disabled deny-list wins over enabled.
+    user_known: set[str] = set()
     user_manifests: dict[str, str] = {}
-    _collect_plugin_ids(plugins_root, "", 0, set(), known, user_manifests)
+    _collect_plugin_ids(plugins_root, "", 0, set(), user_known, user_manifests)
     # Subcategory dirs resolve by their own selection keys (memory.provider,
     # context.engine, image_gen.provider, --provider), never plugins.enabled, so
     # their contents are not discoverable ids. Names come from constants.py,
     # which is the single source of truth for values that drift upstream.
+    bundled_known: set[str] = set()
     _collect_plugin_ids(
-        _bundled_plugins_dir(), "", 0, set(constants.PLUGIN_SUBCATEGORY_DIRS), known
+        _bundled_plugins_dir(), "", 0, set(constants.PLUGIN_SUBCATEGORY_DIRS), bundled_known
     )
+    known = user_known | bundled_known
 
     broken = []
-    user_ids = set(user_manifests.values())
     bundled_only = []
     for name in sorted(enabled):
         if name in skip:
             continue  # sub-category dirs use their own selection keys, not plugins.enabled
+        if name in disabled:
+            continue  # Hermes' disabled deny-list wins over enabled
         if name not in known:
             broken.append(f"`{name}` is enabled but no matching plugin manifest was found")
-        elif name not in user_ids:
+        elif name not in user_known:
             # Resolves via the bundled dir only: absent from the user plugins
             # dir by design. Named explicitly so neither users nor models
             # misdiagnose it as missing.
