@@ -113,3 +113,9 @@ SKILL_FOR_SCOPE = {
 # pass (reported as truncated) so an over-limit store cannot stall a session
 # boundary with O(n^2) comparisons.
 MEMORY_NEAR_DUP_ENTRY_CAP = 400
+
+# Credential-pool facts (drift-watched against upstream main; asserted by
+# diagnosing-providers Step 5 and the configuration guide's Credential pool
+# section).
+CREDENTIAL_POOL_SIBLING_START = 2
+CREDENTIAL_POOL_CUSTOM_PREFIX = "custom:"

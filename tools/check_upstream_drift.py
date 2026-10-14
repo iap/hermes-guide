@@ -41,7 +41,11 @@ WATCH_FILES = os.environ.get(
     "hermes_cli/plugins.py tools/skills_tool.py agent/skill_utils.py "
     "agent/skill_bundles.py agent/skill_commands.py tools/skills_hub.py "
     "hermes_constants.py tools/memory_tool.py tools/memory_tool_store.py "
-    "hermes_cli/config_defaults.py skills/autonomous-ai-agents/hermes-agent",
+    "hermes_cli/config_defaults.py skills/autonomous-ai-agents/hermes-agent "
+    # File-level history watch for the credential-pool mapping: the value
+    # assertion was dropped (a secret-named expected value trips the
+    # clear-text-logging gate), so history review carries the coverage.
+    "agent/credential_pool.py hermes_cli/auth.py",
 ).split()
 BASELINE_FILE = Path(".github/upstream-drift.baseline")
 WORKFLOWS_DIR = Path(".github/workflows")
@@ -101,6 +105,18 @@ DRIFT_FACTS = [
      r'"memory_char_limit":\s*(\d+)', str(constants.MEMORY_CHAR_LIMIT_DEFAULT)),
     ("USER.md char limit default", "hermes_cli/config_defaults.py",
      r'"user_char_limit":\s*(\d+)', str(constants.USER_CHAR_LIMIT_DEFAULT)),
+    # Credential-pool facts (cited by diagnosing-providers Step 5 and the
+    # configuration guide's Credential pool section). Sibling discovery starts
+    # at _2 and stops at the first gap; custom pools carry the "custom:"
+    # prefix. (The openai-api key-env assertion was dropped: its expected
+    # value trips the clear-text-logging gate, and the claim stays
+    # hand-verified in the skill footers.)
+    ("Credential pool sibling-suffix start index", "agent/credential_pool.py",
+     r"(?s)def _env_key_var_candidates\(.*?\bn\s*=\s*(\d+)",
+     str(constants.CREDENTIAL_POOL_SIBLING_START)),
+    ("Credential pool custom-pool prefix", "agent/credential_pool.py",
+     r'CUSTOM_POOL_PREFIX\s*=\s*"([^"]+)"',
+     constants.CREDENTIAL_POOL_CUSTOM_PREFIX),
 ]
 
 
@@ -272,13 +288,17 @@ def read_pinned_tag() -> str | None:
                 text = path.read_text(encoding="utf-8")
             except OSError:
                 continue
-            hermes_remote = "hermes-agent" in text
+            # Executable lines only (optionally behind `- ` / `run: `).
+            lines = [
+                line for line in text.splitlines()
+                if line.strip() and not line.strip().startswith("#")
+            ]
             # Anchored to executable lines (optionally behind `- ` / `run: `):
             # a commented-out `# git clone ...` example is documentation, not an
             # install, and must not join the pin set.
             for m in re.finditer(
                 r"(?m)^[ \t]*(?:-\s*)?(?:run:\s*)?git clone --depth 1 --branch (\S+) (\S+)",
-                text,
+                "\n".join(lines),
             ):
                 tag, url = m.group(1), m.group(2)
                 # Only the Hermes source clone carries the pin; an unrelated
@@ -286,12 +306,43 @@ def read_pinned_tag() -> str | None:
                 if not url.rstrip("/").endswith(("hermes-agent", "hermes-agent.git")):
                     continue
                 tags.add(tag)
-            if hermes_remote:
-                for m in re.finditer(
-                    r"(?m)^[ \t]*(?:-\s*)?(?:run:\s*)?git (?:-C \S+ )?fetch[^\n]*?\b([0-9a-f]{40})\b",
-                    text,
+            # A fetch SHA counts only when attributable to the Hermes remote:
+            # either the fetch names a remote previously added for a
+            # hermes-agent URL in the same file, or the fetch line itself
+            # carries the URL. A bare prose mention of hermes-agent — or an
+            # unrelated SHA fetch sharing the file — never joins the set.
+            # Only the executable portion of each line counts: a trailing
+            # inline comment (e.g. `# git remote add ...`) is not executable
+            # and must neither declare a remote nor bless a SHA.
+            # Remotes are keyed by checkout: an optional `git -C <dir>`
+            # prefix scopes the declaration, and a fetch matches only a
+            # remote declared for the same checkout (bare lines share the
+            # implicit checkout). A URL-direct fetch names its repo
+            # absolutely and needs no declaration.
+            hermes_remotes: set[tuple[str | None, str]] = set()
+            for line in lines:
+                code = line.split("#", 1)[0]
+                m = re.search(
+                    r"\bgit\s+(?:-C\s+(?P<dir>\S+)\s+)?remote\s+(?:add|set-url)"
+                    r"\s+(\S+)\s+(\S+)", code,
+                )
+                if m and m.group(3).rstrip("/").endswith(
+                    ("hermes-agent", "hermes-agent.git")
                 ):
-                    shas.add(m.group(1))
+                    hermes_remotes.add((m.group("dir"), m.group(2)))
+            for line in lines:
+                m = re.search(
+                    r"\bgit\s+(?:-C\s+(?P<dir>\S+)\s+)?fetch\s+(?:-q\s+|(?:--depth\s+\S+\s+))*"
+                    r"(?P<remote>\S+)\s+(?P<sha>[0-9a-f]{40})\b",
+                    line.split("#", 1)[0],
+                )
+                if not m:
+                    continue
+                remote = m.group("remote")
+                if (m.group("dir"), remote) in hermes_remotes or remote.rstrip("/").endswith(
+                    ("hermes-agent", "hermes-agent.git")
+                ):
+                    shas.add(m.group("sha"))
     pins = tags | shas
     return pins.pop() if len(pins) == 1 else None
 

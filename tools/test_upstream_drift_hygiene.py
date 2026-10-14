@@ -456,6 +456,108 @@ def case_pin_ignores_commented_clones(mod):
     print("OK: commented-out clone lines are ignored")
 
 
+_SHA2 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+def case_pin_prose_mention_blesses_nothing(mod):
+    """A prose mention of hermes-agent must not bless an unrelated SHA fetch.
+
+    Qodo review on PR #211: the file-level `hermes-agent in text` check let
+    any SHA fetch in a mentioning file join the pin set. Only an executable
+    remote-add/clone line counts.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "# the hermes-agent checkout lives elsewhere\n"
+            f"git fetch -q --depth 1 origin {_SHA2}\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() is None, (
+                "prose mention + unrelated SHA must not form a pin")
+    finally:
+        shutil.rmtree(td)
+    print("OK: prose mentions do not bless SHA fetches")
+
+
+def case_pin_unrelated_sha_fetch_ignored(mod):
+    """An unrelated SHA fetch sharing the file must not join the pin set.
+
+    CodeRabbit review on PR #211: file-level Hermes attribution let any
+    fetch SHA in a mentioning file poison the lookup. Each fetch resolves
+    against its own remote instead.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "git -C d remote add origin "
+            "https://github.com/NousResearch/hermes-agent.git\n"
+            f"git -C d fetch -q --depth 1 origin {_SHA}\n"
+            f"git fetch -q --depth 1 other {_SHA2}\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() == _SHA, (
+                "unrelated SHA fetch must not hide the Hermes pin")
+    finally:
+        shutil.rmtree(td)
+    print("OK: unrelated SHA fetches are ignored per-remote")
+
+
+def case_pin_inline_comment_blesses_nothing(mod):
+    """A trailing inline comment must not declare a remote or bless a SHA.
+
+    CodeRabbit review on PR #220: only full-line `#` comments were
+    excluded, so `git fetch origin <sha> # git remote add origin
+    ...hermes-agent.git` blessed an unrelated SHA and skipped tag
+    freshness. Only the executable portion of each line counts.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            f"git fetch origin {_SHA2} # git remote add origin "
+            "https://github.com/NousResearch/hermes-agent.git\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() is None, (
+                "inline-commented remote must not bless an unrelated SHA")
+    finally:
+        shutil.rmtree(td)
+    print("OK: inline comments bless neither remotes nor SHAs")
+
+
+def case_pin_checkout_scoped_remotes(mod):
+    """A remote declared for one checkout must not bless another's fetch.
+
+    CodeRabbit review on PR #220: `git -C hermes remote add origin
+    <hermes-URL>` plus `git -C other fetch origin <sha>` shared the bare
+    remote name, so the unrelated SHA joined the pin set (and a second pin
+    fails the lookup closed instead of checking freshness). Remotes match
+    only within the same `-C` checkout; bare lines share the implicit one.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "git -C hermes remote add origin "
+            "https://github.com/NousResearch/hermes-agent.git\n"
+            f"git -C hermes fetch -q --depth 1 origin {_SHA}\n"
+            f"git -C other fetch -q --depth 1 origin {_SHA2}\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() == _SHA, (
+                "cross-checkout fetch must not hide the Hermes pin")
+    finally:
+        shutil.rmtree(td)
+    print("OK: remotes match only within the same checkout")
+
+
 _SHA = "53bc70c5ee8544040cd9f0708d25c0f55276a44b"
 
 
@@ -488,7 +590,7 @@ def case_pin_mixed_forms_conflict(mod):
             "https://github.com/NousResearch/hermes-agent.git d\n",
             encoding="utf-8")
         (wf / "b.yml").write_text(
-            "git fetch origin https://github.com/NousResearch/hermes-agent.git\n"
+            "git remote add origin https://github.com/NousResearch/hermes-agent.git\n"
             f"git fetch -q --depth 1 origin {_SHA}\n",
             encoding="utf-8")
         with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
@@ -506,6 +608,7 @@ def case_pin_sha_skips_tag_freshness(mod):
         wf.mkdir()
         (wf / "reusable-ci.yml").write_text(
             "git fetch origin https://github.com/NousResearch/hermes-agent.git\n"
+            f"git -C d remote add origin https://github.com/NousResearch/hermes-agent.git\n"
             f"git -C d fetch -q --depth 1 origin {_SHA}\n",
             encoding="utf-8")
         with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
@@ -538,6 +641,10 @@ def main() -> int:
         case_pin_conflict_fails_closed,
         case_pin_ignores_unrelated_clones,
         case_pin_ignores_commented_clones,
+        case_pin_prose_mention_blesses_nothing,
+        case_pin_unrelated_sha_fetch_ignored,
+        case_pin_inline_comment_blesses_nothing,
+        case_pin_checkout_scoped_remotes,
         case_pin_reads_fetch_sha,
         case_pin_mixed_forms_conflict,
         case_pin_sha_skips_tag_freshness,
