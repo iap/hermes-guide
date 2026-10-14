@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.8
+version: 1.1.9
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -41,13 +41,14 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 ## 3. Pitfalls (symptom → cause → fix)
 
 1. **Server not listed at all** — YAML syntax error in `config.yaml` drops servers (or the whole file), `enabled: false` skips the server entirely, or the entry was **simply never added**. → **Permanent:** validate YAML, check the entry exists under `mcp_servers:`, set `enabled: true` or remove the field. **Temporary:** `/reload-mcp` picks up a corrected config without restarting the session.
-2. **`command not found` / spawn ENOENT** — `command` is not on PATH. On Windows point at the `.cmd`/`.exe` or use an absolute path; check the PATH the server will actually be spawned with — run `hermes mcp test <name>` to surface the spawn error, and read `hermes logs errors` for details. Note that Hermes's own JS runs on the PM-managed Node, not a system Node, so `node --version` in your shell does not describe the interpreter Hermes uses — it only tells you what a server you launch with a bare `node` would get.
+2. **`command not found` / spawn ENOENT** — `command` is not on PATH. On Windows point at the `.cmd`/`.exe` or use an absolute path; check the PATH the server will actually be spawned with — run `hermes mcp test <name>` to surface the spawn error, and read `hermes logs errors` for details. Note that Hermes's own JS runs on the PM-managed Node, not a system Node, so `node --version` in your shell does not describe the interpreter Hermes uses — it only tells you what a server you launch with a bare `node` would get. When PM reports node missing (or the managed Node cannot execute on the host), point `command` at a working Node directly, e.g. `$HERMES_HOME/tools/node-<ver>-<target>/bin/npx` — verify it runs (`<path> --version`) before trusting it.
 3. **Tools missing** — a `tools.include`/`exclude` filter removed them (include wins), or the server session lacks the capability (resource/prompt wrappers only register when the server supports them), or the server failed to connect so nothing registered. → Run `hermes mcp configure <name>`; check status in `hermes mcp`.
 4. **OAuth never completes** — (a) config edited inside a running session: the version-dependent auto-reload window can interrupt the browser flow → run `hermes mcp login <name>` from a fresh terminal; (b) headless/remote host → use paste-back of the redirect URL, SSH port-forward, or `oauth.redirect_uri` (`tools/mcp_oauth.py`, verified); (c) WAF 403s loopback redirects → check the redirect-host knob **in your version** — verify with `grep -rn redirect_host tools/mcp_oauth*.py` in the installed source before relying on it).
 5. **OAuth login "works" but tool calls time out** — the provider rejects dynamic client registration (Google Drive, Atlassian): `tools/list` succeeds unauthenticated, so login looks fine but no token lands. → Create an OAuth client in the provider console and set `oauth.client_id` / `oauth.client_secret`, then `hermes mcp login <name>`.
 6. **Tool call times out** — slow server startup. → Raise `timeout` / `connect_timeout` on that entry.
 7. **Catalog entry stale after Hermes update** — catalog MCPs never auto-update. → Re-run `hermes mcp install <name>`.
 8. **Claude-Code-style config pasted in** — `mcpServers` JSON or nested `mcp.servers` is not read. → Use top-level `mcp_servers:` in YAML (or `hermes import-agent claude-code`).
+9. **Server works without a key but you want identified/limited use** — some servers (e.g. context7) run free anonymously and also accept an API key. → Set the key in `.env` (`CONTEXT7_API_KEY`) and reference it as `${CONTEXT7_API_KEY}` in the entry's `env:`; `hermes mcp test <name>` reports which auth mode is active.
 
 ## 4. Localization workflow
 
