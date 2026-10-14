@@ -1,10 +1,10 @@
 # Hermes Guide
 
-> **Package / slug:** `hermes-guide`
+> **Package / slug:** `hermes-guide` · **Catalog:** curated Hermes plugin catalog (community tier)
 
 Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
-It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. It ships two independent things:
+It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. The plugin is **read-only** (no config writes; empty `capabilities:`). It ships two independent things:
 
 1. **A plugin.** `/hermes-doctor` in a session, `hermes guide` in a terminal. Read-only health checks across <!-- BEGIN GENERATED: intro-scopes -->
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`
@@ -21,15 +21,21 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 
 ## Install the plugin
 
+From the curated catalog (preferred):
+
+```bash
+hermes plugins install hermes-guide
+```
+
+From GitHub by owner/repo (same package; useful to pin a SHA):
+
 ```bash
 hermes plugins install iap/hermes-guide --enable
-```
-
-This clones the repo from GitHub and enables it. To pin an immutable commit:
-
-```bash
 hermes plugins install iap/hermes-guide --ref <40-char-SHA> --enable
 ```
+
+Requires Hermes `>=0.21`. See `hermes plugins info hermes-guide` for the
+catalog pin and disclosure text.
 
 ### Manual install
 
@@ -124,6 +130,13 @@ Every diagnosis resolves to a concrete action: a `hermes <subcommand>` command o
 ## Contributing
 
 Skills track the Hermes Agent source and its shipped documentation (`website/docs/` in `hermes-agent`). When Hermes changes behavior, update the affected skill and bump its `version`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+| Audience | Start here |
+|---|---|
+| End users / catalog install | This README |
+| Human contributors (skills, PRs, voice) | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Agents working in this repo | [AGENTS.md](AGENTS.md) (always-on) → [docs/agent/](docs/agent/README.md) (on demand) |
+| Security / read-only contract | [SECURITY.md](SECURITY.md) |
 
 ## License
 
