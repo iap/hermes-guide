@@ -231,6 +231,27 @@ metadata:
 - **Cite the behavior, not the plan.** Do not describe a feature that upstream has
   not shipped; if the upstream change is behind a release, say which.
 
+### Growth policy
+
+Where new diagnostic coverage goes, so checks, skills, and references do not
+duplicate each other:
+
+- **New machine-decidable detector → `checks.py`** (+ name/value in
+  `constants.py`). Skills cite `hermes guide <scope>` and add the fix — never
+  re-quote verdict strings or drift-watched numbers.
+- **New fix workflow → one `diagnosing-*` pitfall row** (symptom → cause → fix
+  ending in `hermes <subcommand>` or file + field edit plus `/reload-*` or
+  restart). No new check without a `healthy/informational/broken/unknown`
+  envelope.
+- **Evidence bulk → `skills/<name>/references/`** (transcripts, matrices,
+  probes, scripts with `tools/test_*.py` coverage). `SKILL.md` keeps the map,
+  the pitfalls, and the localization workflow.
+- **Size budget:** a `SKILL.md` past ~200 lines or covering more than one
+  surface gets split or spilled to `references/`. One surface per skill.
+- **Single router:** `diagnosing-triage` §0b/§1/§2 is the only symptom→skill
+  router; the configuration map stays a surface→location→skill map. New
+  routing lands in triage first, with `goldens.md` re-run.
+
 ### Content voice
 
 How the *content* reads — distinct from the conversational tone above. Describe

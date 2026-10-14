@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths, including the PM-era no-in-tree-venv case."
-version: 1.5.7
+version: 1.5.8
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -111,109 +111,19 @@ The in-tree candidate scan is `is_dir()` only — no `pyvenv.cfg` validation, no
 
 ### C. Script that needs the best available answer
 
-Active venv first (A), then the project's candidate dirs (B). That is what the replica below does — and it is a **superset** of upstream, not a mirror: steps 1–2 are the replica's own additions for script use.
-
-```python
-import os
-import sys
-from pathlib import Path
-
-def resolve_venv(project_root: Path | None = None) -> Path | None:
-    """Resolve the active or canonical venv for a Hermes Agent checkout.
-
-    Resolution order:
-    1. VIRTUAL_ENV environment variable (if set and valid)
-    2. sys.prefix (if running inside a venv)
-    3. venv/ (installer default — project_venv_dir() resolves this first)
-    4. .venv/ (uv default)
-    5. None (system Python, no venv)
-
-    NOT a mirror of upstream: steps 1-2 (active-env detection) are this
-    replica's own additions for script use - project_venv_dir() never
-    reads VIRTUAL_ENV, and it consults sys.prefix only for its out-of-tree
-    fallback (gated by a direct_url.json ownership check). Steps 3-4
-    mirror upstream's candidate scan exactly: is_dir() alone, so a stray
-    empty directory wins the same way it does upstream. Prefer importing
-    project_venv_dir() when Hermes core is importable; use this replica
-    outside the checkout.
-    """
-    # 1. Explicit override
-    env_venv = os.environ.get("VIRTUAL_ENV")
-    if env_venv:
-        p = Path(env_venv)
-        if p.is_dir() and (p / "pyvenv.cfg").exists():
-            return p
-
-    # 2. Running inside a venv
-    if hasattr(sys, "real_prefix") or (
-        hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
-    ):
-        prefix = Path(sys.prefix)
-        if prefix.is_dir() and (prefix / "pyvenv.cfg").exists():
-            return prefix
-
-    # 3 & 4. Check project root candidates — venv first, matching upstream
-    root = project_root or Path.cwd()
-    for name in ("venv", ".venv"):
-        candidate = root / name
-        if candidate.is_dir():
-            return candidate
-
-    # 5. No venv found
-    return None
-```
+Active venv first (§A), then the project's candidate dirs (§B) — copy
+`references/resolve_venv.py` (a superset of upstream for script use; prefer
+importing `project_venv_dir()` when Hermes core is importable).
 
 ### D. PM-era installs: ask the package manager
 
-The in-tree resolver answers "which venv directory does this checkout have". On a
-**PM-era install (2026-09 onward)** there is no in-tree venv at all: PM keeps the
-dependency environment under `$HERMES_HOME/installs/<key>/environments/` and the
-shared runtime store in `$HERMES_HOME/tools`, and it removes a legacy in-tree
-venv once a generation is committed.
-
-So `project_venv_dir()` can return `None` **even though a dependency environment
-exists** — it never looks under `$HERMES_HOME/installs/<key>/environments/`. A
-`None` there means "wrong question", not "nothing installed".
-
-Ask PM instead:
-
-| Call | Returns |
-|---|---|
-| `committed_venv(root)` | the **venv directory** PM committed, or `None` |
-| `project_python(root)` | the **interpreter executable** — never `None` |
-
-**These are not interchangeable, in two ways.**
-
-`venv_bin_dir()` appends `bin`/`Scripts` to a venv *directory*, so pass it
-`committed_venv()`'s result — never `project_python()`'s, which would yield
-`.../bin/bin/python`.
-
-And they answer different questions, which decides which one you may trust.
-`project_python()` is `venv_python(selected_venv(root))`, and `selected_venv()`
-falls back through `base_venv()` to the in-tree `venv` directory — so it
-**cannot return `None`** even when PM has committed nothing. On an install with
-no committed generation it returns `<root>/venv/bin/python`, a path that does
-not exist, and a caller that launches it gets a failure that looks like a broken
-interpreter rather than an uncommitted environment.
-
-> [!IMPORTANT]
-> Verify a committed environment exists before using `project_python()`. Either call `committed_venv(root)` first and handle `None`, or check the returned path with `Path.is_file()` before executing it. `venv_python()` is documented as returning a path that *may not exist*, so the existence check is the caller's job.
-
-Both calls read the same record, so both raise `RuntimeError` when it exists but cannot be read or parsed. Handle three outcomes rather than assuming success:
-
-- **`committed_venv()` → `None`** — no generation is committed yet. Not an error
-  yet; the first `hermes update` creates it. Do **not** fall back to
-  `project_python()` here: that is the stale-interpreter path above.
-- **`RuntimeError`** — the record exists but cannot be read or parsed (the
-  record-reading helper in `pm/environments.py`). Treat this as *corrupt dependency
-  state*: re-run `hermes update`. Do **not** report it as "no environment",
-  which sends the reader down the wrong path entirely.
-- **`committed_venv()` → a path that fails `is_dir()`** — the record names an
-  environment that is gone, or it was removed by hand. Re-run `hermes update`.
-  Note the asymmetry: this is a **directory**, so test it with `is_dir()`.
-  `is_file()` belongs only to the executable from `project_python()`, and a
-  valid committed environment is not a file — checking the directory with
-  `is_file()` rejects every healthy install.
+On a **PM-era install (2026-09 onward)** there is no in-tree venv:
+`project_venv_dir()` can return `None` while a dependency environment exists
+under `$HERMES_HOME/installs/<key>/environments/`. Ask PM instead —
+`committed_venv(root)` for the directory (or `None`), `project_python(root)`
+for the executable (never `None`; not interchangeable, and the latter can name
+a path that does not exist). Full table, traps, and the three-outcome handling:
+`references/pm_era_venvs.md`.
 
 ## Cross-platform path construction
 

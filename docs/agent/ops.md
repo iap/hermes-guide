@@ -146,7 +146,9 @@ dual checkouts for those Hermes-facing facts.
 ### Handoff and coordination
 
 - In the PR **Environment** block and Notes, use an honest handoff line when
-  only one host ran: `Verified: POSIX. Windows: not run` (or the reverse / WSL).
+  only one host ran, naming the OS: `Verified: Linux. macOS: not run` (or
+  `Verified: macOS.`, `Verified: Windows.`, `Verified: WSL.` with the rest
+  marked not run — never the bare word "POSIX", which names no machine).
   Same honesty rule as the validation table.
 - Before overlapping work: `gh pr list`, read Environment / OS labels
   (`macos` / `linux` / `windows` / `wsl` from `label-pr-metadata.yml`), rebase.
