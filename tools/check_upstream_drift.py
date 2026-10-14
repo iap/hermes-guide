@@ -314,26 +314,32 @@ def read_pinned_tag() -> str | None:
             # Only the executable portion of each line counts: a trailing
             # inline comment (e.g. `# git remote add ...`) is not executable
             # and must neither declare a remote nor bless a SHA.
-            hermes_remotes = set()
+            # Remotes are keyed by checkout: an optional `git -C <dir>`
+            # prefix scopes the declaration, and a fetch matches only a
+            # remote declared for the same checkout (bare lines share the
+            # implicit checkout). A URL-direct fetch names its repo
+            # absolutely and needs no declaration.
+            hermes_remotes: set[tuple[str | None, str]] = set()
             for line in lines:
                 code = line.split("#", 1)[0]
                 m = re.search(
-                    r"\bremote\s+(?:add|set-url)\s+(\S+)\s+(\S+)", code
+                    r"\bgit\s+(?:-C\s+(?P<dir>\S+)\s+)?remote\s+(?:add|set-url)"
+                    r"\s+(\S+)\s+(\S+)", code,
                 )
-                if m and m.group(2).rstrip("/").endswith(
+                if m and m.group(3).rstrip("/").endswith(
                     ("hermes-agent", "hermes-agent.git")
                 ):
-                    hermes_remotes.add(m.group(1))
+                    hermes_remotes.add((m.group("dir"), m.group(2)))
             for line in lines:
                 m = re.search(
-                    r"\bgit\s+(?:-C\s+\S+\s+)?fetch\s+(?:-q\s+|(?:--depth\s+\S+\s+))*"
+                    r"\bgit\s+(?:-C\s+(?P<dir>\S+)\s+)?fetch\s+(?:-q\s+|(?:--depth\s+\S+\s+))*"
                     r"(?P<remote>\S+)\s+(?P<sha>[0-9a-f]{40})\b",
                     line.split("#", 1)[0],
                 )
                 if not m:
                     continue
                 remote = m.group("remote")
-                if remote in hermes_remotes or remote.rstrip("/").endswith(
+                if (m.group("dir"), remote) in hermes_remotes or remote.rstrip("/").endswith(
                     ("hermes-agent", "hermes-agent.git")
                 ):
                     shas.add(m.group("sha"))

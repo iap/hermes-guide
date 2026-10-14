@@ -531,6 +531,33 @@ def case_pin_inline_comment_blesses_nothing(mod):
     print("OK: inline comments bless neither remotes nor SHAs")
 
 
+def case_pin_checkout_scoped_remotes(mod):
+    """A remote declared for one checkout must not bless another's fetch.
+
+    CodeRabbit review on PR #220: `git -C hermes remote add origin
+    <hermes-URL>` plus `git -C other fetch origin <sha>` shared the bare
+    remote name, so the unrelated SHA joined the pin set (and a second pin
+    fails the lookup closed instead of checking freshness). Remotes match
+    only within the same `-C` checkout; bare lines share the implicit one.
+    """
+    td = Path(tempfile.mkdtemp())
+    try:
+        wf = td / "workflows"
+        wf.mkdir()
+        (wf / "reusable-ci.yml").write_text(
+            "git -C hermes remote add origin "
+            "https://github.com/NousResearch/hermes-agent.git\n"
+            f"git -C hermes fetch -q --depth 1 origin {_SHA}\n"
+            f"git -C other fetch -q --depth 1 origin {_SHA2}\n",
+            encoding="utf-8")
+        with mock.patch.object(mod, "WORKFLOWS_DIR", wf):
+            assert mod.read_pinned_tag() == _SHA, (
+                "cross-checkout fetch must not hide the Hermes pin")
+    finally:
+        shutil.rmtree(td)
+    print("OK: remotes match only within the same checkout")
+
+
 _SHA = "53bc70c5ee8544040cd9f0708d25c0f55276a44b"
 
 
@@ -617,6 +644,7 @@ def main() -> int:
         case_pin_prose_mention_blesses_nothing,
         case_pin_unrelated_sha_fetch_ignored,
         case_pin_inline_comment_blesses_nothing,
+        case_pin_checkout_scoped_remotes,
         case_pin_reads_fetch_sha,
         case_pin_mixed_forms_conflict,
         case_pin_sha_skips_tag_freshness,

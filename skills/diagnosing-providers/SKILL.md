@@ -134,7 +134,7 @@ When a provider is configured with a credential pool (`hermes auth list` shows m
 
 **Env var rotation:** setting `OPENAI_API_KEY`, `OPENAI_API_KEY_2`, `OPENAI_API_KEY_3` creates a three-key pool — visible to the Hermes process via `.env` or exported environment (`.env` wins). The env scanner (`agent/credential_pool.py` numbered-sibling discovery) auto-discovers numbered siblings. If a new key isn't picked up, verify the variable name matches the expected pattern and that it is visible to the Hermes process (not just an interactive shell).
 
-**Custom provider pools:** a custom endpoint in `providers:` gets its own pool key. Use `hermes auth list` to find the custom provider's pool ID, then `hermes auth add <custom-pool-id>` to add credentials.
+**Custom provider pools:** a custom endpoint in `providers:` gets its own pool key. Use `hermes auth list` to find the custom provider's pool ID, then `hermes auth add <custom-pool-id>` to add credentials. If the list shows no entry yet (first credential), pass the `providers:` key from `config.yaml` — it resolves to the pool automatically.
 
 **Cooldown behavior:** when a key fails with a rate limit or auth error, Hermes marks it cooldown and tries the next key. Cooldowns clear on `hermes auth reset` or after the cooldown period expires. A provider with all keys in cooldown appears "logged out" until one clears. A transient 429 is retried once on the same key before rotation (cap-shaped 429s rotate immediately); OAuth 401s refresh the token before rotating. `hermes auth reset` clears local cooldown/exhaustion state only — it does not restore provider quota.
 
