@@ -1,7 +1,7 @@
 ﻿---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, plugins, and credential pools live on disk. For breakage routing ("something is wrong"), prefer diagnosing-triage.
-version: 1.4.1
+version: 1.4.2
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -54,6 +54,12 @@ The practical consequence: `CLAUDE.md`/`.cursorrules` at a repository root are *
 ## Key $HERMES_HOME inventory
 
 `config.yaml` (main config + `platforms:`/`gateway:` messaging settings) · `.env` (secrets; documented vars override config) · `gateway.json` (legacy gateway fallback) · `skills/` · `skill-bundles/` · `hooks/` (gateway hooks) · `agent-hooks/` (shell-hook script convention) · `plugins/` · `shell-hooks-allowlist.json` (shell-hook consent) · `mcp-tokens/` (OAuth caches) · `logs/` · `state.db` (sessions).
+
+## Display, attachments, and LSP notes
+
+- **Display defaults resolve per key**: `display.platforms.<p>.<key>` beats `display.<key>`, which beats built-in platform/global defaults — so a global `display:` block overrides only the keys it sets; unset keys still use tier defaults. Set global keys deliberately, prefer `display.platforms.<p>` for surface-specific tweaks.
+- **Attachments** stage under `attachments.storage` (`hermes-home` or workspace root) — a "missing attachment" report starts by checking which root is configured.
+- **LSP** post-write lint runs by default with `trusted_workspaces` gating which trees it may touch — lint doing nothing can mean an unlisted workspace, a non-git tree, a disabled server, or missing tooling; check all four before calling LSP broken.
 
 ## Credential pool
 
@@ -176,4 +182,4 @@ Every diagnosis should end in a concrete action: a `hermes <subcommand>` command
 
 ---
 
-*Facts re-verified 2026-10-13 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/prompt_builder.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py::discover_context_files`, `_hermes_md_candidates`/`_find_hermes_md`); the former bare line citation for project-context discovery was re-pointed to those symbols at `2f6170bf` (2026-09-22, drift #103); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. **Credential pool** (re-verified 2026-10-13 against the pinned baseline `f97608f`): `agent/credential_pool.py` — numbered-sibling discovery plus `_seed_from_env` ingesting API-key providers from env vars into the pool; pool entries persist in `auth.json` as `env:`-sourced references re-hydrated on load. Provider registry (`hermes_cli/auth.py`, `openai-api` entry): API-key provider keyed on `OPENAI_API_KEY` with optional `OPENAI_BASE_URL` override. `hermes auth` subcommands (`list`/`add`/`status`/`reset`/`priority`/`remove`, all positional — `--priority` is an `add` flag only) verified against the installed CLI. Profile behavior re-checked 2026-10-15 (`hermes_cli/profiles.py::get_profile_dir`, roster skips marker-less dirs and `default`) plus live ghost-dir removal. Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at the declared baseline `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: the earlier-cited commit `8d3745a99b` exists in history (2026-09-04); the `profile:` block has no config reader (the `profile` hits in the tree are session records, not this block); an MCP entry's `disabled:` key is unread — `enabled` is the control (`hermes_cli/mcp_config.py`); **project context is looked up per source, not by one rule** — `.hermes.md`/`HERMES.md` walk cwd→git root (`agent/prompt_builder.py::_find_hermes_md`), `AGENTS.md` is a merged chain git root→cwd, and `CLAUDE.md`/`.cursorrules` are cwd-only (`agent/prompt_builder.py::discover_context_files`, `_hermes_md_candidates`/`_find_hermes_md`); the former bare line citation for project-context discovery was re-pointed to those symbols at `2f6170bf` (2026-09-22, drift #103); `mcp-tokens/`, `profile describe`, and `import-agent` all exist. **Credential pool** (re-verified 2026-10-13 against the pinned baseline `f97608f`): `agent/credential_pool.py` — numbered-sibling discovery plus `_seed_from_env` ingesting API-key providers from env vars into the pool; pool entries persist in `auth.json` as `env:`-sourced references re-hydrated on load. Provider registry (`hermes_cli/auth.py`, `openai-api` entry): API-key provider keyed on `OPENAI_API_KEY` with optional `OPENAI_BASE_URL` override. `hermes auth` subcommands (`list`/`add`/`status`/`reset`/`priority`/`remove`, all positional — `--priority` is an `add` flag only) verified against the installed CLI. Profile behavior re-checked 2026-10-15 (`hermes_cli/profiles.py::get_profile_dir`, roster skips marker-less dirs and `default`) plus live ghost-dir removal. Display/attachments/LSP notes verified 2026-10-15 against the installed source (per-surface code defaults, `attachments.storage`, opt-in `lsp:` block). Re-verify before reuse.*
