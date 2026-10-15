@@ -26,7 +26,7 @@ Hermes source and is not a fork of `hermes-agent`.
 
 <!-- BEGIN GENERATED: inventory -->
 - **Plugin** — `plugin.yaml` + `__init__.py` / `checks.py` / `constants.py`. Registers `/hermes-doctor` and `hermes guide` (seven read-only health checks: config, mcp, skills, commands, hooks, plugins, memories).
-- **Skills** — `twenty-one` `skills/<name>/SKILL.md` files: one install guide (`installing-hermes`), one configuration map (`hermes-configuration-guide`), eighteen `diagnosing-*` playbooks, one other skill. They install separately, through the skills tap.
+- **Skills** — `twenty-one` `skills/<name>/SKILL.md` files: one install guide (`installing-hermes`), one configuration map (`hermes-configuration-guide`), eighteen `diagnosing-*` playbooks, one other skill (`hermes-post-update`). They install separately, through the skills tap.
 <!-- END GENERATED: inventory -->
 
 Catalog install: `hermes plugins install hermes-guide`. Skills: `hermes skills

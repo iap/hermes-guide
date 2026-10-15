@@ -60,7 +60,8 @@ def _healthy(stash_extra: dict | None = None) -> dict:
         ("git", "rev-parse", "origin/master"): (0, "a" * 40),
         (sys.executable, "tools/check_version_consistency.py"): (0, "OK: version"),
         (sys.executable, "tools/gen_changelog.py", "--check"): (0, "OK: changelog"),
-        ("gh", "run", "list"): (0, "completed\tsuccess\tCI\tmaster"),
+        ("gh", "run", "list"): (0, '[{"status": "completed", "conclusion": "success", '
+                              '"headSha": "' + "a" * 40 + '"}]'),
         ("gh", "issue", "list"): (0, ""),
         ("git", "describe", "--tags"): (0, "v0.7.1"),
         ("git", "log", "--oneline"): (0, "abc subject"),
@@ -121,6 +122,23 @@ def test_blockers_use_p1_label():
     assert "P1" in flat and "priority:high" not in flat, flat
 
 
+def test_stale_ci_sha_fails():
+    mod = _load()
+    stubs = _healthy({("gh", "run", "list"): (0, '[{"status": "completed", "conclusion": "success", '
+                                               '"headSha": "' + "b" * 40 + '"}]')})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 1, out
+    assert "[FAIL] master-ci" in out and "tip is" in out, out
+
+
+def test_malformed_ci_output_is_unknown():
+    mod = _load()
+    stubs = _healthy({("gh", "run", "list"): (0, "not json at all")})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 0, out
+    assert "[??] master-ci" in out and "READY WITH ADVISORIES" in out, out
+
+
 def main() -> int:
     cases = [
         test_ready_when_all_pass,
@@ -129,6 +147,8 @@ def main() -> int:
         test_failed_history_is_unknown_not_zero_pass,
         test_master_ci_scoped_to_ci_workflow,
         test_blockers_use_p1_label,
+        test_stale_ci_sha_fails,
+        test_malformed_ci_output_is_unknown,
     ]
     failed = 0
     for case in cases:

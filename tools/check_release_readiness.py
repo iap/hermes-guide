@@ -17,6 +17,7 @@ the verdict when ``gh`` or the network is unavailable — the human decides.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -71,15 +72,34 @@ def _git_tree() -> tuple[str, str, str]:
 
 def _master_ci() -> tuple[str, str, str]:
     # Scope to the CI workflow by name: an unscoped branch listing lets a green
-    # scheduled upstream-drift run mask a red CI run.
+    # scheduled upstream-drift run mask a red CI run. Request JSON (the
+    # human-readable table is not a machine interface) and bind the run to the
+    # current origin/master SHA — a green run for an older commit is not
+    # evidence for this release candidate.
     code, out = _run("gh", "run", "list", "--workflow", "CI",
-                     "--branch", "master", "--limit", "1")
+                     "--branch", "master", "--limit", "1",
+                     "--json", "status,conclusion,headSha")
     if code != 0:
         return ("unknown", "gh unavailable (offline?)", "re-run with network")
-    line = out.splitlines()[0] if out else ""
-    if "\tsuccess\t" in line or line.startswith("completed\tsuccess"):
-        return ("pass", line.split("\t")[2] if "\t" in line else line, "")
-    return ("fail", line or "(no runs)", "fix master CI before tagging")
+    try:
+        runs = json.loads(out) if out else []
+    except json.JSONDecodeError:
+        return ("unknown", f"unparseable gh output: {out[:80]}", "re-run with network")
+    if not runs:
+        return ("fail", "no CI runs on master", "CI must run before tagging")
+    run = runs[0]
+    if run.get("status") != "completed" or run.get("conclusion") != "success":
+        return ("fail", f"latest CI run: {run.get('status')}/{run.get('conclusion')}",
+                "fix master CI before tagging")
+    code, tip = _run("git", "rev-parse", "origin/master")
+    if code != 0:
+        return ("unknown", "origin/master unresolvable — cannot bind run to tip",
+                "git fetch origin, then re-check")
+    if run.get("headSha") != tip.strip():
+        return ("fail",
+                f"latest green CI is for {str(run.get('headSha'))[:8]}, tip is {tip.strip()[:8]}",
+                "wait for CI on the current tip before tagging")
+    return ("pass", f"CI green on origin/master {tip.strip()[:8]}", "")
 
 
 def _open_blockers() -> tuple[str, str, str]:
