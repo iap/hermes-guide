@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.8
+version: 1.0.9
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -105,4 +105,4 @@ Run `hermes pm install ffmpeg` (PM-era install) or `apt install ffmpeg` / `brew 
 - `hermes_cli/cli_voice_mixin.py`, `hermes_cli/setup_tts.py` — voice wiring and TTS setup
 - `tools/tts_streaming.py` — streaming provider resolution (`resolve_streaming_provider`)
 
-*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/voice.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/voice-mode). Re-checked 2026-10-12 against the live install (upstream `e0734a66`): `hermes_cli/tts.py` and `hermes_cli/stt.py` do not exist — provider logic lives in `hermes_cli/voice.py` (+ `cli_voice_mixin.py`, `setup_tts.py`, `tools/tts_streaming.py`). Voice turns verified 2026-10-15 against the installed source (`agent/voice_turn_route.py` route model + reasoning-off floor, `voice_chat` reasoning none, `stt.streaming` capability flag). Re-verify before reuse.*
+*Facts re-verified 2026-09-21 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/voice.py`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/features/voice-mode). Re-checked 2026-10-12 against the live install (upstream `e0734a66`): `hermes_cli/tts.py` and `hermes_cli/stt.py` do not exist — provider logic lives in `hermes_cli/voice.py` (+ `cli_voice_mixin.py`, `setup_tts.py`, `tools/tts_streaming.py`). Voice turns verified 2026-10-15 against the installed source at `9bda154d` (v0.21.7) (`agent/voice_turn_route.py` route model + reasoning-off floor, `voice_chat` reasoning none, `stt.streaming` capability flag). Re-verify before reuse.*

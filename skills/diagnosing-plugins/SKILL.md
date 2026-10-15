@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and sub-category selection keys.
-version: 1.2.7
+version: 1.2.8
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -54,6 +54,7 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 6. **`hermes plugins update` refuses** — the install is pinned to an exact commit SHA. → Choose a new commit explicitly: `hermes plugins install <source> --force --ref <new-sha>`.
 7. **Plugin edits after install lost on update** — updates autostash and re-apply local edits, but conflicts can drop them. → Keep plugin customizations in your own fork/repo and install from that.
 8. **It's not really a plugin** — TTS/STT command providers are config-driven (`tts.providers.<name>` / `stt.providers.<name>` with `type: command`); MCP integrations are `mcp_servers:` entries; gateway hooks are directories. → Route to the right surface: **`diagnosing-mcp`**, **`diagnosing-hooks`**, or the config docs.
+9. **Core plugin gone after update (e.g. Spotify)** — some bundled plugins moved to the catalog; an enabled entry with no matching directory is not a broken install. → `hermes plugins install <name>` from the catalog (or remove it from `plugins.enabled`).
 
 ## 5. Localization workflow
 
@@ -87,4 +88,4 @@ Run `hermes plugins enable my-plugin`, then restart the session. Verify with `he
 
 ---
 
-*Facts re-verified 2026-09-28 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c` (corrective pass): entry-point group `hermes_agent.plugins` and the project-plugins gate `HERMES_ENABLE_PROJECT_PLUGINS` (`plugins/memory/__init__.py`, `hermes_cli/plugin_dev.py`); the capability set and fail-closed behaviour (`hermes_cli/plugins.py::has_capability`, `plugin_capability_granted`); `plugins.enabled` handling (`hermes_cli/plugins.py`); the sub-category directory list (`plugins/`, narrowed in the corrective pass — bundled Kanban is gated by `plugins.enabled`, per `hermes_cli/plugins_discovery.py`); selection keys `context.engine` (`hermes_cli/web_server_config.py`) and `image_gen.provider` (`agent/image_gen_*.py`). One claim was corrected (the nonexistent `llm.model_override` id). Re-verify before reuse.*
+*Facts re-verified 2026-09-28 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c` (corrective pass): entry-point group `hermes_agent.plugins` and the project-plugins gate `HERMES_ENABLE_PROJECT_PLUGINS` (`plugins/memory/__init__.py`, `hermes_cli/plugin_dev.py`); the capability set and fail-closed behaviour (`hermes_cli/plugins.py::has_capability`, `plugin_capability_granted`); `plugins.enabled` handling (`hermes_cli/plugins.py`); the sub-category directory list (`plugins/`, narrowed in the corrective pass — bundled Kanban is gated by `plugins.enabled`, per `hermes_cli/plugins_discovery.py`); selection keys `context.engine` (`hermes_cli/web_server_config.py`) and `image_gen.provider` (`agent/image_gen_*.py`). One claim was corrected (the nonexistent `llm.model_override` id). Spotify core-to-catalog move verified 2026-10-15 against the installed source at `9bda154d` (v0.21.7): absent from bundled `plugins/`, present as official catalog entry (`spotify` 2.0.0); migration in `hermes_cli/left_core_migration.py`. Re-verify before reuse.*
