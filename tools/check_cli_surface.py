@@ -72,6 +72,12 @@ PLUGIN_COMMANDS = {
 HIDDEN_GLOBAL_FLAGS = {"-p"}
 
 
+# Tops newer than some supported installs, absent from the CI install pin
+# (v2026.9.24; blocked on upstream #136259). Skipped ONLY when the running
+# CLI also lacks them — never a blanket pass. Re-check when the pin moves.
+SKIP_IF_ABSENT = {"pm"}
+
+
 def _usage_names(help_text: str) -> set[str]:
     """Command/positional names from three argparse shapes.
 
@@ -231,6 +237,7 @@ def verify(cites) -> tuple[list[str], str]:
     text_cache: dict[tuple[str, ...], str] = {}
     failures: list[str] = []
     checked = 0
+    skipped: list[str] = []
 
     def text_of(cmd: list[str]) -> str | None:
         """Raw `--help` text, fetched once per command path (each launch
@@ -285,6 +292,9 @@ def verify(cites) -> tuple[list[str], str]:
             continue
         canon = top if top in top_cmds else canonical(top)
         if canon is None:
+            if top in SKIP_IF_ABSENT:
+                skipped.append(top)
+                continue
             failures.append(
                 "%s:%d: %s — unknown top-level command (have: %s)" %
                 (skill, ln, span, _sample(top_cmds, top)))
@@ -312,6 +322,10 @@ def verify(cites) -> tuple[list[str], str]:
                 "%s:%d: %s — unknown flag (have for %s: %s)" %
                 (skill, ln, span, canon, _sample(available, flag)))
     summary = "OK: %d cited command(s) resolve against the live CLI" % checked
+    if skipped:
+        summary += " (%d skipped as absent here: %s)" % (
+            len(skipped), ", ".join(sorted(set(skipped))))
+    return failures, summary
     return failures, summary
 
 
