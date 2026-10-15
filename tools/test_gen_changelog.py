@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -288,7 +289,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
     def upcoming_preserves_section_date() -> str | None:
         """Regenerating must not re-stamp an existing section's date.
 
-        An untagged version is dated with today(), so a rerun on a later day
+        An untagged version is dated with the UTC day, so a rerun on a later day
         would rewrite the heading and churn the file for no content reason.
         """
         with tempfile.TemporaryDirectory() as tmp:
@@ -332,6 +333,28 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 return f"--upcoming without a version expected 1, got {code}: {out}"
         return None
 
+    def upcoming_stamps_utc_date() -> str | None:
+        """A new section carries the UTC day, never the machine-local day."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat: first (#1)")
+            code, out = _run(root, "--upcoming")
+            if code != 0:
+                return f"--upcoming expected 0, got {code}: {out}"
+            want = datetime.now(timezone.utc).date().isoformat()
+            text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+            if f"## v1.0.0 ({want})" not in text:
+                return f"--upcoming did not stamp the UTC date {want}:\n{text}"
+        return None
+
+    def upcoming_never_stamps_local_date() -> str | None:
+        """The generator must not call date.today() (local-day stamp)."""
+        src = TOOL.read_text(encoding="utf-8")
+        if "date.today(" in src:
+            return "gen_changelog.py still calls date.today()"
+        return None
+
     return [
         ("--upcoming then --check is clean", check_clean_after_upcoming),
         ("--check fails on a tag with no section", check_fails_on_missing_section),
@@ -345,6 +368,8 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         ("uncovered release tags still fail", release_tags_still_fail_when_uncovered),
         ("--upcoming preserves an existing section date", upcoming_preserves_section_date),
         ("--upcoming fails without a plugin.yaml version", upcoming_fails_without_version),
+        ("--upcoming stamps the UTC date", upcoming_stamps_utc_date),
+        ("--upcoming never calls date.today", upcoming_never_stamps_local_date),
     ]
 
 

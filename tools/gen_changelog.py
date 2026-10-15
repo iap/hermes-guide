@@ -35,7 +35,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -204,6 +204,12 @@ def split_sections(text: str) -> tuple[str, dict[str, str]]:
     return header, sections
 
 
+def _utc_today() -> str:
+    """Release-section stamp: the UTC day, so every runner (local or CI)
+    stamps the same date regardless of machine timezone."""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
 def write_upcoming() -> int:
     """Write the section for plugin.yaml's version, merging it into CHANGELOG.md.
 
@@ -231,7 +237,7 @@ def write_upcoming() -> int:
     else:
         prev_tag = rel[0] if rel else None
         commits = get_commits(prev_tag)
-        release_date = date.today().isoformat()
+        release_date = _utc_today()
 
     section = format_release(tag, release_date, commits)
     if not section:
@@ -252,7 +258,7 @@ def write_upcoming() -> int:
         header = header.rstrip("\n") + "\n\n"
 
     # Keep an existing section's date. An untagged version is stamped with
-    # today's date, so regenerating the same section on a later day would
+    # the UTC date, so regenerating the same section on a later day would
     # otherwise rewrite the heading and make the file churn for no content
     # reason. The date records when the release was cut, not when the generator
     # last ran.

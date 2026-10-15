@@ -54,7 +54,7 @@ def _check(cmd: list[str], label: str, fix: str) -> tuple[str, str, str]:
     return (status, evidence, "" if status == "pass" else fix)
 
 
-def _git_tree() -> tuple[str, str, str]:
+def _git_tree(*, offline: bool = False) -> tuple[str, str, str]:
     code, out = _run("git", "status", "--porcelain")
     if code != 0:
         return ("fail", "git status unavailable", "run from inside the repo")
@@ -66,6 +66,11 @@ def _git_tree() -> tuple[str, str, str]:
     branch = branch.strip()
     if branch != "master":
         return ("fail", f"on branch {branch!r}", "tags cut from master")
+    if offline:
+        # No fetch without network: the local origin/master ref may be
+        # stale, so sync is indeterminate rather than claimed.
+        return ("unknown", "offline — sync with origin/master unverifiable without fetch",
+                "re-run with network")
     code, _ = _run("git", "fetch", "origin", "master")
     if code != 0:
         return ("unknown", "fetch of origin/master failed — sync state indeterminate",
@@ -166,7 +171,7 @@ def main(argv: list[str]) -> int:
 
     offline = "--offline" in argv
     items: list[tuple[str, tuple[str, str, str]]] = [
-        ("tree", _git_tree()),
+        ("tree", _git_tree(offline=offline)),
         ("version-consistency",
          _check(["tools/check_version_consistency.py"], "version",
                 "align the five version sites")),
