@@ -269,18 +269,21 @@ def _negated(line: str, pos: int) -> bool:
     # first comma (or `then`) is the clause boundary, searched only
     # before the cite — a cite inside the antecedent keeps its negator.
     head = masked[start:pos]
-    cond = re.match(r"\s*(?:if|when)\b", head, re.IGNORECASE)
+    # Bullets, ordered markers, and quotes are prose chrome, not scope.
+    opened = re.sub(r"^\s*(?:[-*+]|\d{1,3}[.)]|>)\s*", "", head)
+    cond = re.match(r"\s*(?:if|when)\b", opened, re.IGNORECASE)
     if cond:
-        tail = head[cond.end():]
+        tail = opened[cond.end():]
         bounds = []
-        comma = tail.find(",")
-        if comma >= 0:
-            bounds.append(cond.end() + comma + 1)
+        for sep in (",", ";"):
+            idx = tail.find(sep)
+            if idx >= 0:
+                bounds.append(cond.end() + idx + 1)
         m_then = re.search(r"\bthen\b", tail, re.IGNORECASE)
         if m_then:
             bounds.append(cond.end() + m_then.end())
         if bounds:
-            segment = head[min(bounds):]
+            segment = opened[min(bounds):]
     segment = CONTRAST_RE.split(segment)[-1]
     return NEG_RE.search(segment) is not None
 
@@ -485,6 +488,13 @@ def _selftest() -> int:
     assert not _negated(cond, cond.index("`"))
     # ... while a cite inside the antecedent keeps its negator.
     cond = "If you have not run `hermes setup`, run it now."
+    assert _negated(cond, cond.index("`"))
+    # Bullets and semicolons are equivalent boundaries.
+    cond = "- If the gateway is not running, run `hermes gateway start`."
+    assert not _negated(cond, cond.index("`"))
+    cond = "If the gateway is not running; run `hermes gateway start`."
+    assert not _negated(cond, cond.index("`"))
+    cond = "- If you have not run `hermes setup`, run it now."
     assert _negated(cond, cond.index("`"))
     assert _cite_parts("hooks test <event> [--for-tool X]") == (
         ["hooks", "test"], ["--for-tool"])
