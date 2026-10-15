@@ -43,7 +43,6 @@ WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
 FLAG_RE = re.compile(r"--[A-Za-z][A-Za-z0-9_-]*")
 SHORT_RE = re.compile(r"(?<!\S)-[A-Za-z](?!\S)")
 BRACE_RE = re.compile(r"\{([^{}]+)\}")
-POSLINE_RE = re.compile(r"(?m)^  ([a-z][a-z0-9_-]*)(?:  |\t)")
 
 # Global flags valid at any depth (from top-level `hermes --help` options).
 GLOBAL_FLAGS = {
@@ -60,10 +59,11 @@ SESSION_PREFIXES = ("/",)
 
 # Plugin-provided commands never appear in `hermes --help` (only builtins
 # do). Listed here with their subcommand sets so skill cites resolve.
-# Scopes mirror checks._CHECKS; update together.
+# Scopes mirror checks._CHECKS; update together. Flags are the command's
+# own options (`hermes guide --help` takes only -h); globals apply on top.
 PLUGIN_COMMANDS = {
-    "guide": {"config", "mcp", "skills", "commands", "hooks", "plugins",
-              "memories"},
+    "guide": ({"config", "mcp", "skills", "commands", "hooks", "plugins",
+               "memories"}, set()),
 }
 
 
@@ -85,7 +85,8 @@ def _usage_names(help_text: str) -> set[str]:
     - 4-space command columns: ``    chat<2+ spaces>Interactive...``
       (top-level help lists subcommands this way, no braces). A parenthesized
       alias group (``desktop (gui)``) is tolerated after the name.
-    - 2-space positional lines (narrower argparse layouts).
+    Two-space positional labels (``log_name``) are deliberately NOT
+    parsed: they name a parameter, not a runnable subcommand.
     Continuation lines use single-space gaps and never match: the name
     must be followed by two or more spaces (or a tab), optionally via an
     alias group.
@@ -96,8 +97,6 @@ def _usage_names(help_text: str) -> set[str]:
     for m in re.finditer(
             r"(?m)^    ([a-z][a-z0-9_-]*)(?:\s+\([^)]*\))?(?:  +|\t)",
             help_text):
-        names.add(m.group(1))
-    for m in POSLINE_RE.finditer(help_text):
         names.add(m.group(1))
     return {n for n in names if n}
 
@@ -141,19 +140,27 @@ def _usage_flags(help_text: str) -> set[str]:
     return flags
 
 
-def _run_help(args: list[str]) -> str | None:
-    """`hermes ... --help` stdout, or None when the CLI is absent/broken."""
+def _run_help(args: list[str]) -> tuple[str | None, str | None]:
+    """`hermes ... --help` as (stdout, error).
+
+    error is None on success; otherwise "absent" (no executable) or the
+    failure ("exit N", "timeout", "spawn error"). Callers distinguish a
+    missing CLI (skip cleanly, dogfood contract) from a broken one (fail:
+    in full tier the binary must answer).
+    """
     exe = shutil.which("hermes")
     if exe is None:
-        return None
+        return None, "absent"
     try:
         proc = subprocess.run(
             [exe, *args, "--help"], capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
+    except OSError as exc:
+        return None, "spawn error: %s" % exc
     if proc.returncode != 0:
-        return None
-    return proc.stdout
+        return None, "exit %d" % proc.returncode
+    return proc.stdout, None
 
 
 # Flags taking a value: the following token is data, not a subcommand.
@@ -197,12 +204,35 @@ def _cite_parts(span: str) -> tuple[list[str], list[str]] | None:
 
 # A cite inside a negation ("there is no `hermes voice status`", "never
 # run `hermes x`") discusses a non-command, so there is nothing to resolve.
-# Limitation, documented: conditional advice ("do not run X unless Y")
-# also skips, even though X is real there. The D5 rule targets endorsed
-# fix-path commands; meta-discussion about absent commands is out of scope.
+# The negation governs its sentence: "There is no A, B, or C" skips all
+# three, while "not installed. Run X" still checks X (own sentence). A
+# contrast marker (but/yet/however/except/instead) ends the scope, so
+# "not X but Y" checks Y.
+# Limitation, documented: "do not run X unless Y" stays skipped even
+# though X is real there. The D5 rule targets endorsed fix-path commands;
+# meta-discussion about absent commands is out of scope.
 NEG_RE = re.compile(
     r"\b(no|not|never|n't|without|instead of|rather than|isn't|aren't"
     r"|don't|doesn't|can't|cannot|won't|avoid)\b", re.I)
+SENTENCE_RE = re.compile(r"[.!?\n]+")
+CONTRAST_RE = re.compile(
+    r"\b(?:but|yet|however|although|though|while|whereas|except"
+    r"|instead)\b", re.I)
+
+
+def _negated(line: str, pos: int) -> bool:
+    """True when a negator governs the span starting at pos."""
+    start = 0
+    for m in SENTENCE_RE.finditer(line):
+        end = m.end()
+        if start <= pos < end or (pos == end and end == len(line)):
+            break
+        start = end
+    else:
+        end = len(line)
+    segment = line[start:pos]
+    segment = CONTRAST_RE.split(segment)[-1]
+    return NEG_RE.search(segment) is not None
 
 
 def collect() -> list[tuple[str, int, str, list[str], list[str]]]:
@@ -213,7 +243,7 @@ def collect() -> list[tuple[str, int, str, list[str], list[str]]]:
         for i, line in enumerate(
                 f.read_text(encoding="utf-8").splitlines(), 1):
             for m in SPAN_RE.finditer(line):
-                if NEG_RE.search(line[max(0, m.start() - 80):m.start()]):
+                if _negated(line, m.start()):
                     continue
                 rest = m.group(1).strip()
                 if not rest:
@@ -228,9 +258,11 @@ def collect() -> list[tuple[str, int, str, list[str], list[str]]]:
 
 def verify(cites) -> tuple[list[str], str]:
     """Resolve cites against the live CLI. Returns (failures, summary)."""
-    top_text = _run_help([])
+    top_text, top_err = _run_help([])
     if top_text is None:
-        return [], "SKIP: no hermes on PATH"
+        if top_err == "absent":
+            return [], "SKIP: no hermes on PATH"
+        return ["hermes --help failed (%s): cannot verify" % top_err], ""
     top_cmds = _usage_names(top_text)
     top_flags = _usage_flags(top_text) | GLOBAL_FLAGS | HIDDEN_GLOBAL_FLAGS
     sub_cache: dict[tuple[str, ...], tuple[set[str], set[str]]] = {}
@@ -245,7 +277,7 @@ def verify(cites) -> tuple[list[str], str]:
         seconds — this cache is what keeps a full-tree run in budget)."""
         key = tuple(cmd)
         if key not in text_cache:
-            text = _run_help(cmd)
+            text, _err = _run_help(cmd)
             if text is None:
                 return None
             text_cache[key] = text
@@ -284,11 +316,17 @@ def verify(cites) -> tuple[list[str], str]:
         top = pos[0]
         if top in PLUGIN_COMMANDS:
             checked += 1
-            if len(pos) > 1 and pos[1] not in PLUGIN_COMMANDS[top]:
+            scopes, allowed = PLUGIN_COMMANDS[top]
+            if len(pos) > 1 and pos[1] not in scopes:
                 failures.append(
                     "%s:%d: %s — unknown scope (have for %s: %s)" %
-                    (skill, ln, span, top,
-                     ", ".join(sorted(PLUGIN_COMMANDS[top]))))
+                    (skill, ln, span, top, ", ".join(sorted(scopes))))
+                continue
+            for flag in flags:
+                if flag not in allowed and flag not in top_flags:
+                    failures.append(
+                        "%s:%d: %s — unknown flag (have for %s: %s)" %
+                        (skill, ln, span, top, _sample(allowed, flag)))
             continue
         canon = top if top in top_cmds else canonical(top)
         if canon is None:
@@ -326,7 +364,6 @@ def verify(cites) -> tuple[list[str], str]:
         summary += " (%d skipped as absent here: %s)" % (
             len(skipped), ", ".join(sorted(set(skipped))))
     return failures, summary
-    return failures, summary
 
 
 def _sample(options: set[str], want: str, limit: int = 8) -> str:
@@ -351,6 +388,10 @@ def _selftest() -> int:
     assert _cite_parts("guide <scope>") == (["guide"], [])
     assert NEG_RE.search("there is no `hermes voice status` here")
     assert not NEG_RE.search("run `hermes guide` to check")
+    assert _negated("There is no `a`, `b`, or `c`.", 25)
+    assert not _negated("not installed. Run `hermes x` now", 19)
+    assert _negated("not `a` but `b`", 4)
+    assert not _negated("not `a` but `b`", 12)
     print("OK: cli-surface selftest")
     return 0
 
