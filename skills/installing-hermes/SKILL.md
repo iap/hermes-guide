@@ -108,7 +108,7 @@ path` before trusting it.
    (or Docker) for supported setups and offer a dedicated flake with default and
    smaller package outputs. A Nix-built bundle is an excellent *fallback* binary
    (immutable, independent of the venv), not the primary install path.
-4. **tirith is gone.** The pre-exec security scanner (`tools/tirith_security.py`) was removed upstream in 2026-10; its config block is replaced by a generic `Security` section plus opt-in LSP post-write lint (`lsp.trusted_workspaces`). A `tirith`-era install may still carry `.tirith-install-failed` and stale `tirith_*` keys — harmless leftovers, not active config.
+4. **tirith is gone.** The pre-exec security scanner (`tools/tirith_security.py`) was removed upstream in 2026-10; its config block is replaced by a generic `Security` section plus LSP post-write lint (enabled by default). A `tirith`-era install may still carry `.tirith-install-failed` and stale `tirith_*` keys — harmless leftovers, not active config.
 
 ## Dual-install coexistence
 
