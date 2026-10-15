@@ -85,9 +85,13 @@ def _master_ci() -> tuple[str, str, str]:
         runs = json.loads(out) if out else []
     except json.JSONDecodeError:
         return ("unknown", f"unparseable gh output: {out[:80]}", "re-run with network")
+    if not isinstance(runs, list):
+        return ("unknown", f"unexpected gh shape: {str(runs)[:80]}", "re-run with network")
     if not runs:
         return ("fail", "no CI runs on master", "CI must run before tagging")
     run = runs[0]
+    if not isinstance(run, dict):
+        return ("unknown", f"unexpected gh item shape: {str(run)[:80]}", "re-run with network")
     if run.get("status") != "completed" or run.get("conclusion") != "success":
         return ("fail", f"latest CI run: {run.get('status')}/{run.get('conclusion')}",
                 "fix master CI before tagging")

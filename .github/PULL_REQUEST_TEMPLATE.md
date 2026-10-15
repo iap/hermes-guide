@@ -51,7 +51,7 @@ can compare it against the re-run. -->
 | Generated doc blocks | `python tools/render_docs.py` | [x/y] | [add/removed a skill? run `--write` first] |
 | Version bump | `python tools/check_skill_version_bump.py <base-ref>` | [x/y] | [paste the line] |
 | Syntax | `python -m py_compile __init__.py checks.py constants.py` | [x/y] | [paste the line] |
-| Regression tests | `for f in tools/test_*.py; do python3 "$f" || exit 1; done` | [x/y] | [run each file; a bare `python tools/test_*.py` passes every path to one interpreter and runs only the first — paste the per-file lines; list any that did not run here] |
+| Regression tests | POSIX: `for f in tools/test_*.py; do python3 "$f" || exit 1; done` · PowerShell: `Get-ChildItem tools/test_*.py | ForEach-Object { python $_.FullName; if ($LASTEXITCODE) { exit 1 } }` | [x/y] | [run each file — a bare `python tools/test_*.py` passes every path to one interpreter and runs only the first; paste the per-file lines; list any that did not run here] |
 | Citation integrity | `python tools/check_citation_integrity.py --src <checkout>` | [x/y or not run] | [needs a Hermes checkout] |
 | Provenance | `python tools/check_skill_provenance.py` | [x/y or not run] | [paste the line] |
 | Counts | `python tools/test_skill_counts.py` | [x/y or not run] | [paste the line] |

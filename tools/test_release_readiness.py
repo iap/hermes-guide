@@ -139,6 +139,15 @@ def test_malformed_ci_output_is_unknown():
     assert "[??] master-ci" in out and "READY WITH ADVISORIES" in out, out
 
 
+def test_unexpected_ci_shape_is_unknown_not_crash():
+    mod = _load()
+    for bad in ('{"status": "completed"}', '[null]'):
+        stubs = _healthy({("gh", "run", "list"): (0, bad)})
+        code, out, _ = _run_main(mod, stubs)
+        assert code == 0, (bad, out)
+        assert "[??] master-ci" in out, (bad, out)
+
+
 def main() -> int:
     cases = [
         test_ready_when_all_pass,
@@ -149,6 +158,7 @@ def main() -> int:
         test_blockers_use_p1_label,
         test_stale_ci_sha_fails,
         test_malformed_ci_output_is_unknown,
+        test_unexpected_ci_shape_is_unknown_not_crash,
     ]
     failed = 0
     for case in cases:

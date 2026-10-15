@@ -49,10 +49,12 @@ Alternatively, clone this repo into your Hermes plugins directory:
 ```bash
 # POSIX / WSL: $HERMES_HOME is ~/.hermes
 git clone --depth 1 https://github.com/iap/hermes-guide ~/.hermes/plugins/hermes-guide
+hermes plugins adopt hermes-guide
 hermes plugins enable hermes-guide
 ```
 
-Prefer a fresh clone over `cp -r .`: it leaves working-tree caches and build
+Adopting registers the self-cloned directory in provenance tracking so
+`hermes plugins update` covers it. Prefer a fresh clone over `cp -r .`: it leaves working-tree caches and build
 artifacts (`__pycache__`, venvs) behind. Keep the clone's `.git` — Hermes
 updates Git-managed plugins in place, and deleting it breaks those updates.
 Only delete `.git` for a standalone archive copy that will never be updated
