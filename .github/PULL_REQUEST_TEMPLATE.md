@@ -51,7 +51,7 @@ can compare it against the re-run. -->
 | Generated doc blocks | `python tools/render_docs.py` | [x/y] | [add/removed a skill? run `--write` first] |
 | Version bump | `python tools/check_skill_version_bump.py <base-ref>` | [x/y] | [paste the line] |
 | Syntax | `python -m py_compile __init__.py checks.py constants.py` | [x/y] | [paste the line] |
-| Regression tests | POSIX: `for f in tools/test_*.py; do python3 "$f" || exit 1; done` · PowerShell: `Get-ChildItem tools/test_*.py | ForEach-Object { python $_.FullName; if ($LASTEXITCODE) { exit 1 } }` | [x/y] | [run each file — a bare `python tools/test_*.py` passes every path to one interpreter and runs only the first; paste the per-file lines; list any that did not run here] |
+| Regression tests | POSIX loop or PowerShell foreach over `tools/test_*.py` (see Notes) | [x/y] | [POSIX: `for f in tools/test_*.py; do python3 "$f" or exit 1 on failure; done` — PowerShell: `foreach ($f in Get-ChildItem tools/test_*.py) { python $f.FullName; if ($LASTEXITCODE) { exit 1 } }`. Run each file; a bare `python tools/test_*.py` passes every path to one interpreter and runs only the first. Pipes avoided: `|` chars break this table. Paste the per-file lines; list any that did not run here] |
 | Citation integrity | `python tools/check_citation_integrity.py --src <checkout>` | [x/y or not run] | [needs a Hermes checkout] |
 | Provenance | `python tools/check_skill_provenance.py` | [x/y or not run] | [paste the line] |
 | Counts | `python tools/test_skill_counts.py` | [x/y or not run] | [paste the line] |

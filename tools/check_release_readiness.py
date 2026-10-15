@@ -26,13 +26,24 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _run(*args: str) -> tuple[int, str]:
+    code, stdout, stderr = _run_split(*args)
+    # Evidence prefers stdout; stderr surfaces transport/CLI errors.
+    return code, stdout if stdout else stderr
+
+
+def _run_split(*args: str) -> tuple[int, str, str]:
+    """Run a command, keeping stdout and stderr separate.
+
+    JSON consumers must parse stdout only: CLIs can emit telemetry or
+    diagnostics on stderr alongside valid stdout payloads.
+    """
     try:
         p = subprocess.run(
             list(args), capture_output=True, text=True, cwd=REPO, timeout=60
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return 127, str(exc)
-    return p.returncode, (p.stdout + p.stderr).strip()
+        return 127, "", str(exc)
+    return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
 def _check(cmd: list[str], label: str, fix: str) -> tuple[str, str, str]:
@@ -76,11 +87,12 @@ def _master_ci() -> tuple[str, str, str]:
     # human-readable table is not a machine interface) and bind the run to the
     # current origin/master SHA — a green run for an older commit is not
     # evidence for this release candidate.
-    code, out = _run("gh", "run", "list", "--workflow", "CI",
-                     "--branch", "master", "--limit", "1",
-                     "--json", "status,conclusion,headSha")
+    code, out, err = _run_split("gh", "run", "list", "--workflow", "CI",
+                               "--branch", "master", "--limit", "1",
+                               "--json", "status,conclusion,headSha")
     if code != 0:
-        return ("unknown", "gh unavailable (offline?)", "re-run with network")
+        return ("unknown", f"gh failed: {(out + ' ' + err).strip()[:80] or 'no output'}",
+                "re-run with network")
     try:
         runs = json.loads(out) if out else []
     except json.JSONDecodeError:
@@ -92,16 +104,21 @@ def _master_ci() -> tuple[str, str, str]:
     run = runs[0]
     if not isinstance(run, dict):
         return ("unknown", f"unexpected gh item shape: {str(run)[:80]}", "re-run with network")
-    if run.get("status") != "completed" or run.get("conclusion") != "success":
-        return ("fail", f"latest CI run: {run.get('status')}/{run.get('conclusion')}",
+    # Malformed items are indeterminate, not evidence: a missing status or
+    # headSha must never read as failed or stale CI.
+    status, conclusion, head_sha = run.get("status"), run.get("conclusion"), run.get("headSha")
+    if not all(isinstance(v, str) for v in (status, conclusion, head_sha)):
+        return ("unknown", f"run item missing fields: {str(run)[:80]}", "re-run with network")
+    if status != "completed" or conclusion != "success":
+        return ("fail", f"latest CI run: {status}/{conclusion}",
                 "fix master CI before tagging")
     code, tip = _run("git", "rev-parse", "origin/master")
     if code != 0:
         return ("unknown", "origin/master unresolvable — cannot bind run to tip",
                 "git fetch origin, then re-check")
-    if run.get("headSha") != tip.strip():
+    if head_sha != tip.strip():
         return ("fail",
-                f"latest green CI is for {str(run.get('headSha'))[:8]}, tip is {tip.strip()[:8]}",
+                f"latest green CI is for {head_sha[:8]}, tip is {tip.strip()[:8]}",
                 "wait for CI on the current tip before tagging")
     return ("pass", f"CI green on origin/master {tip.strip()[:8]}", "")
 

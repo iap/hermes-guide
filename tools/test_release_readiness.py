@@ -44,7 +44,12 @@ def _run_main(mod, stubs: dict) -> tuple[int, str]:
                 return result
         return (127, "unexpected call: " + " ".join(args))
 
+    def fake_split(*args: str):
+        code, out = fake_run(*args)
+        return code, out, ""
+
     mod._run = fake_run
+    mod._run_split = fake_split
     buf = io.StringIO()
     with redirect_stdout(buf):
         code = mod.main([])
@@ -139,9 +144,10 @@ def test_malformed_ci_output_is_unknown():
     assert "[??] master-ci" in out and "READY WITH ADVISORIES" in out, out
 
 
-def test_unexpected_ci_shape_is_unknown_not_crash():
+def test_run_missing_fields_is_unknown():
     mod = _load()
-    for bad in ('{"status": "completed"}', '[null]'):
+    for bad in ('[{}]', '[{"status": "completed", "conclusion": "success"}]',
+                  '{"status": "completed"}', '[null]'):
         stubs = _healthy({("gh", "run", "list"): (0, bad)})
         code, out, _ = _run_main(mod, stubs)
         assert code == 0, (bad, out)
@@ -158,7 +164,7 @@ def main() -> int:
         test_blockers_use_p1_label,
         test_stale_ci_sha_fails,
         test_malformed_ci_output_is_unknown,
-        test_unexpected_ci_shape_is_unknown_not_crash,
+        test_run_missing_fields_is_unknown,
     ]
     failed = 0
     for case in cases:
