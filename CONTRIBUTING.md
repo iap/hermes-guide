@@ -59,6 +59,20 @@ when the checks produce it.
 For a question rather than a defect, do not open an issue — see
 [Questions](#questions).
 
+### Tracking multi-part work with sub-issues
+
+One epic issue with a checkbox list rots: checkboxes have no owners, no
+discussion, and no progress signal. For work with independently ownable parts
+(parallel sessions each take one), use GitHub **sub-issues** instead — each part
+is a real issue with its own labels/assignee, and the parent shows a progress
+bar. Tasklist checkboxes stay for single-owner sequences only.
+
+- A child has exactly one parent; closing is manual both directions (finishing
+  all children does not close the parent — close it explicitly).
+- The research, verification notes, and process live in the parent body;
+  each child carries only its own scope and acceptance.
+- Search: `has:sub-issue`, `parent-issue:NNN`.
+
 What happens after you submit is in [Contribution gate](#contribution-gate).
 
 ## Contribution gate
