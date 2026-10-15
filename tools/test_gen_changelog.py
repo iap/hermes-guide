@@ -22,6 +22,7 @@ Exit codes: 0 clean, 1 a case failed.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 import shutil
@@ -288,7 +289,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
     def upcoming_preserves_section_date() -> str | None:
         """Regenerating must not re-stamp an existing section's date.
 
-        An untagged version is dated with today(), so a rerun on a later day
+        An untagged version is dated with the UTC day, so a rerun on a later day
         would rewrite the heading and churn the file for no content reason.
         """
         with tempfile.TemporaryDirectory() as tmp:
@@ -332,6 +333,57 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 return f"--upcoming without a version expected 1, got {code}: {out}"
         return None
 
+    def upcoming_stamps_utc_date() -> str | None:
+        """A new section carries the UTC day, never the machine-local day.
+
+        Deterministic via HERMES_CHANGELOG_DATE: a wall-clock assertion
+        here would flake when UTC midnight falls between stamp and check.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat: first (#1)")
+            os.environ["HERMES_CHANGELOG_DATE"] = "2031-05-17"
+            try:
+                code, out = _run(root, "--upcoming")
+            finally:
+                del os.environ["HERMES_CHANGELOG_DATE"]
+            if code != 0:
+                return f"--upcoming expected 0, got {code}: {out}"
+            text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+            if "## v1.0.0 (2031-05-17)" not in text:
+                return f"--upcoming did not stamp the override date:\n{text}"
+        return None
+
+    def utc_helper_ignores_local_day() -> str | None:
+        """_utc_today() follows UTC even when the local day differs.
+
+        23:30 UTC is already tomorrow east of UTC+1 — date.today() would
+        stamp the wrong day there.
+        """
+        from datetime import datetime as _dt
+        from datetime import timezone as _tz
+        spec = importlib.util.spec_from_file_location("gen_changelog_probe", TOOL)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        class _Fixed(_dt):
+            @classmethod
+            def now(cls, tz=None):
+                return _dt(2031, 5, 17, 23, 30, tzinfo=_tz.utc)
+
+        mod.datetime = _Fixed
+        if mod._utc_today() != "2031-05-17":
+            return f"_utc_today() did not follow UTC: {mod._utc_today()}"
+        return None
+
+    def upcoming_never_stamps_local_date() -> str | None:
+        """The generator must not call date.today() (local-day stamp)."""
+        src = TOOL.read_text(encoding="utf-8")
+        if "date.today(" in src:
+            return "gen_changelog.py still calls date.today()"
+        return None
+
     return [
         ("--upcoming then --check is clean", check_clean_after_upcoming),
         ("--check fails on a tag with no section", check_fails_on_missing_section),
@@ -345,6 +397,9 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         ("uncovered release tags still fail", release_tags_still_fail_when_uncovered),
         ("--upcoming preserves an existing section date", upcoming_preserves_section_date),
         ("--upcoming fails without a plugin.yaml version", upcoming_fails_without_version),
+        ("--upcoming stamps the UTC date", upcoming_stamps_utc_date),
+        ("_utc_today ignores the local day", utc_helper_ignores_local_day),
+        ("--upcoming never calls date.today", upcoming_never_stamps_local_date),
     ]
 
 

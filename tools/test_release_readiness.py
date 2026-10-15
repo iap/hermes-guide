@@ -5,7 +5,9 @@ Pins: READY only when every item passes; indeterminate items yield
 ``READY WITH ADVISORIES`` (never a bare READY); any ``fail`` yields
 NOT READY exit 1; a failed history inspection is ``unknown``, not a
 zero-commit pass; the master-CI query is scoped to the CI workflow; the
-blocker query uses the P1 label. No network, no gh: ``_run`` is stubbed.
+blocker query uses the P1 label; ``--offline`` never fetches (tree sync
+reads ``unknown``) while the online run still fetches. No network, no
+gh: ``_run`` is stubbed.
 
 Run: python3 tools/test_release_readiness.py
 """
@@ -30,7 +32,7 @@ def _load():
     return mod
 
 
-def _run_main(mod, stubs: dict) -> tuple[int, str]:
+def _run_main(mod, stubs: dict, argv: list | None = None) -> tuple[int, str]:
     """Run main() with _run replaced by a stub map.
 
     stubs: {(argv-tuple-prefix): (code, output)}; unmatched calls fail closed.
@@ -52,7 +54,7 @@ def _run_main(mod, stubs: dict) -> tuple[int, str]:
     mod._run_split = fake_split
     buf = io.StringIO()
     with redirect_stdout(buf):
-        code = mod.main([])
+        code = mod.main(argv if argv is not None else [])
     return code, buf.getvalue(), calls
 
 
@@ -154,6 +156,23 @@ def test_run_missing_fields_is_unknown():
         assert "[??] master-ci" in out, (bad, out)
 
 
+def test_offline_tree_skips_fetch():
+    mod = _load()
+    code, out, calls = _run_main(mod, _healthy(), ["--offline"])
+    fetches = [c for c in calls if c[:2] == ("git", "fetch")]
+    assert not fetches, f"--offline fetched: {fetches}"
+    assert "[??] tree" in out, out
+    assert "READY WITH ADVISORIES" in out, out
+
+
+def test_online_tree_still_fetches():
+    mod = _load()
+    _, out, calls = _run_main(mod, _healthy(), [])
+    fetches = [c for c in calls if c[:2] == ("git", "fetch")]
+    assert fetches, "online run skipped the fetch"
+    assert "[ok] tree" in out, out
+
+
 def main() -> int:
     cases = [
         test_ready_when_all_pass,
@@ -165,6 +184,8 @@ def main() -> int:
         test_stale_ci_sha_fails,
         test_malformed_ci_output_is_unknown,
         test_run_missing_fields_is_unknown,
+        test_offline_tree_skips_fetch,
+        test_online_tree_still_fetches,
     ]
     failed = 0
     for case in cases:
