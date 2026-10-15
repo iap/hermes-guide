@@ -1,0 +1,9 @@
+# CodeRabbit configuration for iap/hermes-guide.
+#
+# Reviews stay manual here (`@coderabbitai review` per PR): automatic reviews
+# are disabled in the CodeRabbit dashboard, not in this file — do not enable
+# them here. This file exists for one reason: silence the "Review skipped"
+# status comment on every PR (`reviews.review_status: false`).
+
+reviews:
+  review_status: false
