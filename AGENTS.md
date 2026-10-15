@@ -137,3 +137,12 @@ State plainly what you checked, what passed, and what you skipped. A validation
 table with honest `not run` entries is accepted; a claim that outruns the evidence
 is not — `validate-claim.yml` re-runs the hermetic gates against your PR head and
 fails the check if your table does not match reality.
+
+## Pre-merge cross-check
+
+Never merge on green CI alone. Immediately before merging a PR, verify: all
+checks pass (not pending), every review thread resolved (fixed or declined with
+file:line evidence — never auto-resolved to unblock), both reviewers heard
+where present (a silent bot is not an approving bot; trigger CodeRabbit after
+Qodo lands when coverage matters), `mergeStateStatus` is `CLEAN`, and the merge
+is explicitly authorized. Report the checklist result, then merge.
