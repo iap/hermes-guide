@@ -131,15 +131,31 @@ def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
 # --- blocks ----------------------------------------------------------------
 
 
+def _other_skill_names(ctx: dict) -> list[str]:
+    known = {"installing-hermes", "hermes-configuration-guide"}
+    return sorted(n for n in ctx["skills"]
+                  if n not in known and not n.startswith("diagnosing-"))
+
+
+def _other_part(others: list[str], playbook_word: str) -> str | None:
+    if not others:
+        return None
+    if len(others) <= 3:
+        # Name them: durable for a small bucket, no hardcoded count to go stale.
+        quoted = ", ".join(f"`{n}`" for n in others)
+        return f"{_word_num(len(others))} other skill{'s' if len(others) != 1 else ''} ({quoted})"
+    return f"{_word_num(len(others))} other skills"
+
+
 def _readme_inventory(ctx: dict) -> list[str]:
     total = len(ctx["skills"])
     diags = len(ctx["diagnostics"])
-    others = total - diags - 2  # subtract install guide + config map
     parts = [f"one install guide", f"one configuration map"]
     if diags:
         parts.append(f"{_word_num(diags)} per-surface `diagnosing-*` playbooks")
-    if others:
-        parts.append(f"{_word_num(others)} other skill{'s' if others != 1 else ''}")
+    other = _other_part(_other_skill_names(ctx), "")
+    if other:
+        parts.append(other)
     return [
         f"**{_word_num(total).capitalize()} troubleshooting skills** — "
         + ", ".join(parts)
@@ -165,13 +181,13 @@ def _agents_inventory(ctx: dict) -> list[str]:
     total = len(ctx["skills"])
     diags = len(ctx["diagnostics"])
     checks = ctx["labels"]
-    others = total - diags - 2  # subtract install guide + config map
     parts = [f"one install guide (`installing-hermes`)",
              f"one configuration map (`hermes-configuration-guide`)"]
     if diags:
         parts.append(f"{_word_num(diags)} `diagnosing-*` playbooks")
-    if others:
-        parts.append(f"{_word_num(others)} other skill{'s' if others != 1 else ''}")
+    other = _other_part(_other_skill_names(ctx), "")
+    if other:
+        parts.append(other)
     return [
         f"- **Plugin** — `plugin.yaml` + `__init__.py` / `checks.py` / "
         f"`constants.py`. Registers `/hermes-doctor` and `hermes guide` "

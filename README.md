@@ -10,7 +10,7 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
-**Twenty-one troubleshooting skills** — one install guide, one configuration map, eighteen per-surface `diagnosing-*` playbooks, one other skill.
+**Twenty-one troubleshooting skills** — one install guide, one configuration map, eighteen per-surface `diagnosing-*` playbooks, one other skill (`hermes-post-update`).
 <!-- END GENERATED: intro-inventory -->
 
 > [!NOTE]
@@ -49,12 +49,16 @@ Alternatively, clone this repo into your Hermes plugins directory:
 ```bash
 # POSIX / WSL: $HERMES_HOME is ~/.hermes
 git clone --depth 1 https://github.com/iap/hermes-guide ~/.hermes/plugins/hermes-guide
+hermes plugins adopt hermes-guide
 hermes plugins enable hermes-guide
 ```
 
-Prefer a fresh clone over `cp -r .`: it leaves working-tree caches and build
-artifacts (`__pycache__`, venvs) behind. Note the clone still carries `.git` —
-delete it if you want a pristine copy.
+Adopting registers the self-cloned directory in provenance tracking so
+`hermes plugins update` covers it. Prefer a fresh clone over `cp -r .`: it leaves working-tree caches and build
+artifacts (`__pycache__`, venvs) behind. Keep the clone's `.git` — Hermes
+updates Git-managed plugins in place, and deleting it breaks those updates.
+Only delete `.git` for a standalone archive copy that will never be updated
+as a plugin.
 
 > [!NOTE]
 > On native Windows `$HERMES_HOME` is `%LOCALAPPDATA%\hermes`, not `~/.hermes`. Run `hermes config path` to confirm where yours is.

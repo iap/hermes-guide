@@ -17,6 +17,7 @@ the verdict when ``gh`` or the network is unavailable — the human decides.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -25,13 +26,24 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _run(*args: str) -> tuple[int, str]:
+    code, stdout, stderr = _run_split(*args)
+    # Evidence prefers stdout; stderr surfaces transport/CLI errors.
+    return code, stdout if stdout else stderr
+
+
+def _run_split(*args: str) -> tuple[int, str, str]:
+    """Run a command, keeping stdout and stderr separate.
+
+    JSON consumers must parse stdout only: CLIs can emit telemetry or
+    diagnostics on stderr alongside valid stdout payloads.
+    """
     try:
         p = subprocess.run(
             list(args), capture_output=True, text=True, cwd=REPO, timeout=60
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return 127, str(exc)
-    return p.returncode, (p.stdout + p.stderr).strip()
+        return 127, "", str(exc)
+    return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
 def _check(cmd: list[str], label: str, fix: str) -> tuple[str, str, str]:
@@ -71,15 +83,44 @@ def _git_tree() -> tuple[str, str, str]:
 
 def _master_ci() -> tuple[str, str, str]:
     # Scope to the CI workflow by name: an unscoped branch listing lets a green
-    # scheduled upstream-drift run mask a red CI run.
-    code, out = _run("gh", "run", "list", "--workflow", "CI",
-                     "--branch", "master", "--limit", "1")
+    # scheduled upstream-drift run mask a red CI run. Request JSON (the
+    # human-readable table is not a machine interface) and bind the run to the
+    # current origin/master SHA — a green run for an older commit is not
+    # evidence for this release candidate.
+    code, out, err = _run_split("gh", "run", "list", "--workflow", "CI",
+                               "--branch", "master", "--limit", "1",
+                               "--json", "status,conclusion,headSha")
     if code != 0:
-        return ("unknown", "gh unavailable (offline?)", "re-run with network")
-    line = out.splitlines()[0] if out else ""
-    if "\tsuccess\t" in line or line.startswith("completed\tsuccess"):
-        return ("pass", line.split("\t")[2] if "\t" in line else line, "")
-    return ("fail", line or "(no runs)", "fix master CI before tagging")
+        return ("unknown", f"gh failed: {(out + ' ' + err).strip()[:80] or 'no output'}",
+                "re-run with network")
+    try:
+        runs = json.loads(out) if out else []
+    except json.JSONDecodeError:
+        return ("unknown", f"unparseable gh output: {out[:80]}", "re-run with network")
+    if not isinstance(runs, list):
+        return ("unknown", f"unexpected gh shape: {str(runs)[:80]}", "re-run with network")
+    if not runs:
+        return ("fail", "no CI runs on master", "CI must run before tagging")
+    run = runs[0]
+    if not isinstance(run, dict):
+        return ("unknown", f"unexpected gh item shape: {str(run)[:80]}", "re-run with network")
+    # Malformed items are indeterminate, not evidence: a missing status or
+    # headSha must never read as failed or stale CI.
+    status, conclusion, head_sha = run.get("status"), run.get("conclusion"), run.get("headSha")
+    if not all(isinstance(v, str) for v in (status, conclusion, head_sha)):
+        return ("unknown", f"run item missing fields: {str(run)[:80]}", "re-run with network")
+    if status != "completed" or conclusion != "success":
+        return ("fail", f"latest CI run: {status}/{conclusion}",
+                "fix master CI before tagging")
+    code, tip = _run("git", "rev-parse", "origin/master")
+    if code != 0:
+        return ("unknown", "origin/master unresolvable — cannot bind run to tip",
+                "git fetch origin, then re-check")
+    if head_sha != tip.strip():
+        return ("fail",
+                f"latest green CI is for {head_sha[:8]}, tip is {tip.strip()[:8]}",
+                "wait for CI on the current tip before tagging")
+    return ("pass", f"CI green on origin/master {tip.strip()[:8]}", "")
 
 
 def _open_blockers() -> tuple[str, str, str]:

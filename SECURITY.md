@@ -30,6 +30,14 @@ at the first proactive session boundary
 plugin-scoped setting it declares is the opt-in `proactive` boolean (see
 `plugin.yaml` `config_schema`); it does not touch any other core Hermes config.
 
+Memory findings quote short entry snippets (truncated, e.g. the first 60
+characters of a duplicated entry) so the report is actionable without opening
+the store files. Snippets come only from the built-in `MEMORY.md`/`USER.md`
+stores read above. The plugin itself performs no upload and sends nothing to
+any model: the report is returned to the invoking session, which a gateway
+delivers through its configured messaging channel like any other command
+output.
+
 This contract is enforced in CI by `tools/check_no_mutation.py`, which fails the
 build if any Python source introduces a write-mode `open()`, `yaml.dump()` /
 `json.dump()`, `Path.write_text()`, `os.remove()`, `shutil.*`, or a mutating
