@@ -1,0 +1,164 @@
+"""Release-readiness verdict for hermes-guide.
+
+Manual pre-tag gate (advisory, never CI-blocking — releases stay human
+decisions). Run from a clean checkout before pushing a ``v*`` tag::
+
+    python tools/check_release_readiness.py          # full verdict (needs gh + network for items 4-6)
+    python tools/check_release_readiness.py --offline  # tree/version/changelog only
+    python tools/check_release_readiness.py --selftest # CI wiring probe, no network
+
+Verdict contract: ``READY`` (exit 0, harness ``OK:``) when every check passes;
+``READY WITH ADVISORIES`` (exit 0) when some items are indeterminate — the
+indeterminate state is never reported as a bare READY; ``NOT READY`` (exit 1,
+harness ``FAIL``) with per-item evidence otherwise.
+Network-dependent items degrade to ``UNKNOWN`` (advisory) rather than failing
+the verdict when ``gh`` or the network is unavailable — the human decides.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+def _run(*args: str) -> tuple[int, str]:
+    try:
+        p = subprocess.run(
+            list(args), capture_output=True, text=True, cwd=REPO, timeout=60
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 127, str(exc)
+    return p.returncode, (p.stdout + p.stderr).strip()
+
+
+def _check(cmd: list[str], label: str, fix: str) -> tuple[str, str, str]:
+    """Run a delegate guard. Returns (status, evidence, fix)."""
+    code, out = _run(sys.executable, *cmd)
+    status = "pass" if code == 0 else "fail"
+    evidence = out.splitlines()[-1] if out else "(no output)"
+    return (status, evidence, "" if status == "pass" else fix)
+
+
+def _git_tree() -> tuple[str, str, str]:
+    code, out = _run("git", "status", "--porcelain")
+    if code != 0:
+        return ("fail", "git status unavailable", "run from inside the repo")
+    if out:
+        first = out.splitlines()[0]
+        return ("fail", f"dirty tree: {first} (+{len(out.splitlines()) - 1} more)",
+                "commit or stash before tagging")
+    code, branch = _run("git", "branch", "--show-current")
+    branch = branch.strip()
+    if branch != "master":
+        return ("fail", f"on branch {branch!r}", "tags cut from master")
+    code, _ = _run("git", "fetch", "origin", "master")
+    if code != 0:
+        return ("unknown", "fetch of origin/master failed — sync state indeterminate",
+                "re-run with network")
+    code2, head = _run("git", "rev-parse", "HEAD")
+    code3, upstream = _run("git", "rev-parse", "origin/master")
+    if code2 != 0 or code3 != 0:
+        return ("fail", "HEAD or origin/master unresolvable",
+                "git fetch origin, then re-check")
+    if head.strip() != upstream.strip():
+        return ("fail", f"HEAD {head[:8]} != origin/master {upstream[:8]}",
+                "pull / push before tagging")
+    return ("pass", f"clean, on master, synced at {head[:8]} (fetched)", "")
+
+
+def _master_ci() -> tuple[str, str, str]:
+    # Scope to the CI workflow by name: an unscoped branch listing lets a green
+    # scheduled upstream-drift run mask a red CI run.
+    code, out = _run("gh", "run", "list", "--workflow", "CI",
+                     "--branch", "master", "--limit", "1")
+    if code != 0:
+        return ("unknown", "gh unavailable (offline?)", "re-run with network")
+    line = out.splitlines()[0] if out else ""
+    if "\tsuccess\t" in line or line.startswith("completed\tsuccess"):
+        return ("pass", line.split("\t")[2] if "\t" in line else line, "")
+    return ("fail", line or "(no runs)", "fix master CI before tagging")
+
+
+def _open_blockers() -> tuple[str, str, str]:
+    # Release-blocking priority is the P1 label (repo vocabulary); there is no
+    # `priority:high` label, so querying it would always pass.
+    code, out = _run("gh", "issue", "list", "--state", "open",
+                     "--label", "P1", "--limit", "10")
+    if code != 0:
+        return ("unknown", "gh unavailable (offline?)", "re-run with network")
+    if not out:
+        return ("pass", "no open P1 issues", "")
+    n = len(out.splitlines())
+    return ("fail", f"{n} open P1 issue(s): {out.splitlines()[0]}",
+            "resolve or downgrade before tagging")
+
+
+def _commits_since_tag() -> tuple[str, str, str]:
+    # Advisory "is there anything worth shipping" signal. This intentionally
+    # reports local commits since the last tag — not the upstream catalog pin
+    # (a separate reviewed change in hermes-agent, owned by other tooling).
+    code, tag = _run("git", "describe", "--tags", "--abbrev=0", "origin/master")
+    if code != 0:
+        return ("unknown", "no release tag reachable", "tag history unavailable")
+    tag = tag.strip()
+    code, out = _run("git", "log", "--oneline", f"{tag}..origin/master", "--")
+    if code != 0:
+        return ("unknown", f"history inspection {tag}..origin/master failed",
+                "fetch full history and re-run")
+    n = len(out.splitlines()) if out else 0
+    return ("pass", f"{n} commit(s) on origin/master since {tag} (advisory)", "")
+
+
+def main(argv: list[str]) -> int:
+    if "--selftest" in argv:
+        cases = [
+            _check(["tools/check_version_consistency.py"], "version", "fix"),
+            _check(["tools/gen_changelog.py", "--check"], "changelog", "fix"),
+        ]
+        bad = [c for c in cases if c[0] != "pass"]
+        print(f"OK: selftest delegates wired ({len(cases) - len(bad)}/{len(cases)})"
+              if not bad else f"FAIL: selftest delegate broken: {bad[0][1]}")
+        return 0 if not bad else 1
+
+    offline = "--offline" in argv
+    items: list[tuple[str, tuple[str, str, str]]] = [
+        ("tree", _git_tree()),
+        ("version-consistency",
+         _check(["tools/check_version_consistency.py"], "version",
+                "align the five version sites")),
+        ("changelog",
+         _check(["tools/gen_changelog.py", "--check"], "changelog",
+                "run tools/gen_changelog.py --upcoming in the bump PR")),
+    ]
+    if not offline:
+        items += [
+            ("master-ci", _master_ci()),
+            ("blockers", _open_blockers()),
+            ("commits-since-tag", _commits_since_tag()),
+        ]
+
+    hard_fail = [name for name, (st, _, _) in items if st == "fail"]
+    unknowns = [name for name, (st, _, _) in items if st == "unknown"]
+    for name, (st, evidence, fix) in items:
+        tag = {"pass": "ok", "fail": "FAIL", "unknown": "??"}.get(st, "??")
+        line = f"[{tag}] {name}: {evidence}"
+        if st == "fail":
+            line += f" -> {fix}"
+        print(line)
+    if hard_fail:
+        print(f"FAIL: release NOT READY ({len(hard_fail)} blocking: {', '.join(hard_fail)})")
+        return 1
+    if unknowns:
+        # Indeterminate stays indeterminate: exit 0 (advisory tool, the human
+        # decides) but never print a bare READY over unknown items.
+        print(f"OK: release READY WITH ADVISORIES ({', '.join(unknowns)} indeterminate — confirm by hand)")
+        return 0
+    print("OK: release READY")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

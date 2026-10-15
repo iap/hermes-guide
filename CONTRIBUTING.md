@@ -338,9 +338,16 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    `python tools/gen_changelog.py --upcoming`. It reads the commits since the
    newest tag, so the entry covers the work being released and is reviewed and
    CI-validated before any tag exists.
-3. Merge the PR. Then push the tag `v<plugin.yaml version>` to master;
-   `release.yml` verifies the tag matches `plugin.yaml`, that the tagged commit
-   is on master, and that every tag has a section.
+3. Merge the PR. Then check readiness on the merged master:
+   `python tools/check_release_readiness.py`. It verdicts `READY` /
+   `READY WITH ADVISORIES` / `NOT READY` from tree state, version consistency,
+   changelog coverage, master CI, open `P1` issues, and commits since the last
+   tag. It must run here — after the new version and section exist — not
+   before the bump, where it would only re-verify the previous release.
+   Advisory only — the tag stays a human decision. Then push the tag
+   `v<plugin.yaml version>` to master; `release.yml` verifies the tag matches
+   `plugin.yaml`, that the tagged commit is on master, and that every tag has
+   a section.
 
 CI runs `gen_changelog.py --check` on the PR, and it is part of the hermetic
 tier (`tools/check_gates.py`), so a forgotten section fails locally and in CI
