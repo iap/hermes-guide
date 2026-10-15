@@ -214,7 +214,9 @@ def _register_start_skill(ctx, skill_file=None):
     The tap installs separately; this router ships inside the plugin so a
     plugin-only install still routes model-driven diagnosis to ``hermes guide``.
     Registration is metadata: nothing is executed and nothing is written. A
-    missing file or a failing registrar must never break plugin load.
+    missing file or a failing registrar must never break plugin load; builds
+    whose plugin API predates the extended registration form fall back to the
+    two-argument call.
     """
     path = Path(skill_file) if skill_file is not None else _START_SKILL_FILE
     frontmatter = _read_frontmatter(path)
@@ -224,8 +226,18 @@ def _register_start_skill(ctx, skill_file=None):
             "hermes-guide: router skill not registered (missing file or description)"
         )
         return
+    register = getattr(ctx, "register_skill", None)
+    if register is None:
+        logger.warning(
+            "hermes-guide: this Hermes build exposes no ctx.register_skill; router skill not registered"
+        )
+        return
     try:
-        ctx.register_skill("start", path, description=description, frontmatter=frontmatter)
+        try:
+            register("start", path, description=description, frontmatter=frontmatter)
+        except TypeError:
+            # Older plugin-API builds accept only the two-argument form.
+            register("start", path)
     except Exception:  # pragma: no cover - defensive: keep plugin load alive
         logger.warning("hermes-guide: router skill registration failed", exc_info=True)
 

@@ -1,6 +1,6 @@
 ---
 name: start
-description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the read-only `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
+description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
 version: 1.0.0
 metadata:
   hermes:
@@ -24,13 +24,13 @@ The user reports a Hermes problem without naming the subsystem:
 - "The bot isn't responding." / "It won't start."
 - "I can't install anything."
 
-When the subsystem is already named (MCP, hooks, cron, voice, ...), run
-`hermes guide <scope>` directly and load the matching `diagnosing-*` playbook
-when it is installed.
+When the subsystem is already named (MCP, hooks, cron, voice, ...), go
+straight to its playbook when installed — `hermes guide <scope>` covers only
+the seven scopes below; cron and voice, for example, are playbook-only.
 
 ## Step 1 — baseline before guessing
 
-Run the read-only health check and read its lines:
+Run the health check and read its lines:
 
 - Terminal: `hermes guide` (all scopes) or `hermes guide <scope>`.
   Exit codes: `0` healthy, `1` broken or unknown, `2` bad scope.
@@ -38,6 +38,11 @@ Run the read-only health check and read its lines:
 
 Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
 `memories`.
+
+The check writes nothing, with one disclosed exception: the `hooks` scope runs
+`hermes hooks doctor`, which executes each approved shell hook once with a
+synthetic payload — that is how it verifies a hook actually runs. Every other
+scope reads state only.
 
 Status marks in the output: `+` healthy, `~` informational, `x` broken,
 `?` unknown. `?` means unmeasured — treat it as broken until the scope runs
@@ -53,24 +58,33 @@ The short version:
 - `x <any other scope>` → load the matching `diagnosing-*` playbook when it is
   installed (scope `memories` maps to `diagnosing-memory`); otherwise act on
   the finding text directly — it names the file and the field.
+- `~` lines are actionable hints, not noise: `~ commands` →
+  `diagnosing-commands`; `~ memories` → `diagnosing-memory`; otherwise treat
+  them like a softer `x`.
 - A flagged `?` (unknown) line → `hermes-configuration-guide` Step 0 first;
   when the venv or interpreter is suspect, `diagnosing-path`.
+- Every scope healthy but the symptom persists → keep going: the baseline
+  cannot see delivery, host load, or platform problems. Route by the symptom
+  itself — for example a bot that is not responding → `diagnosing-gateway`;
+  slowness, or several surfaces failing at once → `diagnosing-host-pressure`.
 
-When the tap is not installed and the user needs the deeper playbooks, the
-install is:
+When the tap is not installed and the user needs the deeper playbooks:
 
 ```bash
 hermes skills tap add iap/hermes-guide
-hermes skills install "iap/hermes-guide/skills/diagnosing-mcp"
+hermes skills install "iap/hermes-guide/skills/<playbook>"
 ```
 
-The identifier must include the `skills/` prefix; the README carries the
-install-all loop for the full set.
+Substitute the playbook the routing selected (`diagnosing-mcp` for MCP
+findings, `diagnosing-gateway` for messaging, ...). The identifier must
+include the `skills/` prefix; the README carries the install-all loop for the
+full set.
 
 ## Rules
 
-- Triage is read-only: do not edit configuration or execute hooks while
-  diagnosing.
+- Triage writes nothing. The only execution allowed is the `hooks` scope's own
+  synthetic verification run (Step 1) — do not execute hooks beyond it, and do
+  not edit configuration while diagnosing.
 - Mutations need explicit user consent, one change at a time, then re-run the
   check that flagged it.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill

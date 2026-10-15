@@ -16,7 +16,11 @@ Cases:
 3. the source layout keeps the tap exact: ``plugin-skills/start/SKILL.md``
    exists, nothing named ``start`` lives under ``skills/``;
 4. a missing skill file -> the plugin still loads and registers no skill;
-5. a raising ``register_skill`` -> contained, ``register()`` still completes.
+5. a raising ``register_skill`` -> contained, ``register()`` still completes,
+   the command surface survives;
+6. a registrar that rejects the extended keyword form with ``TypeError`` ->
+   the two-argument fallback registers the skill;
+7. a context without ``register_skill`` at all -> contained, no crash.
 
 Run: python3 tools/test_bootstrap_skill.py
 """
@@ -39,12 +43,13 @@ class _Boom(Exception):
 class _FakeCtx:
     """Records the registrations ``register()`` makes through a ctx surface."""
 
-    def __init__(self, fail_skill: bool = False):
+    def __init__(self, fail_skill: bool = False, legacy: bool = False):
         self.commands: list[str] = []
         self.cli_commands: list[str] = []
         self.hooks: list[str] = []
         self.skills: list[dict] = []
         self._fail_skill = fail_skill
+        self._legacy = legacy
 
     def register_command(self, name, handler=None, description=""):
         self.commands.append(name)
@@ -59,6 +64,8 @@ class _FakeCtx:
         return default
 
     def register_skill(self, name, path, description="", frontmatter=None):
+        if self._legacy and (description or frontmatter):
+            raise TypeError("register_skill() takes 3 positional arguments")
         if self._fail_skill:
             raise _Boom("register_skill failed")
         self.skills.append(
@@ -139,12 +146,31 @@ def main() -> int:
         _check("failed registration stored no skill", not ctx3.skills)
         _check("command registration survives skill failure", "hermes-doctor" in ctx3.commands)
 
+        # 6: legacy registrar -> two-argument fallback.
+        ctx4 = _FakeCtx(legacy=True)
+        hermes_guide.register(ctx4)
+        _check("legacy fallback registers", len(ctx4.skills) == 1, f"got {len(ctx4.skills)}")
+        if len(ctx4.skills) == 1:
+            _check("legacy fallback keeps the name", ctx4.skills[0]["name"] == "start")
+
+        # 7: no registrar attribute at all -> contained.
+        class _NoSkillCtx(_FakeCtx):
+            register_skill = None  # type: ignore[assignment]
+
+        ctx5 = _NoSkillCtx()
+        try:
+            hermes_guide.register(ctx5)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"register() crashed without a registrar: {exc!r}")
+        _check("no registrar registers no skill", not ctx5.skills)
+        _check("no registrar keeps the command surface", "hermes-doctor" in ctx5.commands)
+
     if failures:
         print("FAIL: bootstrap skill registration")
         for line in failures:
             print(f"  - {line}")
         return 1
-    print("OK: bootstrap skill registers (name, description, source of truth); missing/failing cases contained; tap inventory untouched")
+    print("OK: bootstrap skill registers (name, description, source of truth); legacy/missing/failing cases contained; tap inventory untouched")
     return 0
 
 
