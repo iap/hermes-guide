@@ -13,6 +13,11 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 **Twenty-one troubleshooting skills** — one install guide, one configuration map, eighteen per-surface `diagnosing-*` playbooks, one other skill (`hermes-post-update`).
 <!-- END GENERATED: intro-inventory -->
 
+Enabling the plugin additionally registers one router skill (`hermes-guide:start`) in
+model sessions: it routes "something is wrong" reports to `hermes guide` and, once
+the tap is installed, to the matching playbook. The playbooks themselves ship only
+via the tap.
+
 > [!NOTE]
 > The `hooks` check runs `hermes hooks doctor`, which executes each approved
 > shell hook once with a synthetic payload — that is how it verifies a hook

@@ -14,6 +14,7 @@ tracked top-level path and every `.github/` file.
 | `constants.py` | Single source of truth for names/values that drift across Hermes versions |
 | `pyproject.toml` | Project metadata and the mypy configuration |
 | `skills/<name>/SKILL.md` | The skills tap surface (one directory per skill) |
+| `plugin-skills/<name>/SKILL.md` | Skills the plugin registers itself via `ctx.register_skill` — currently the `start` router. Outside `skills/` on purpose: the tap inventory, generated counts, and install loop stay exact |
 | `tools/check_*.py` | Guard linters — every one is a machine gate with an exit code |
 | `tools/check_doc_style.py` | Tone guard: emoji outside Python string literals, filler phrases in Markdown prose |
 | `tools/check_issue_templates.py` | Reporter-surface guard: issue-template schema, and docs that promise a route the chooser does not offer |
@@ -46,7 +47,9 @@ tracked top-level path and every `.github/` file.
 | `.gitignore` | The durable control for what never enters the index |
 
 Keep the layout stable: plugin Python at the repo root, skills under
-`skills/<name>/`, harness scripts under `tools/` — with one exception:
+`skills/<name>/`, plugin-registered skills under `plugin-skills/<name>/`
+(deliberately outside `skills/`, whose contents drive the generated counts and
+the tap install loop), harness scripts under `tools/` — with one exception:
 `tests/check_scanner_hygiene.py` lives under `tests/` because the upstream
 install scanner rates its literal attack-string fixtures dangerous anywhere
 else. Do not add ad-hoc scripts at the root or under `skills/` that CI or
