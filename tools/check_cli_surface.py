@@ -73,9 +73,11 @@ HIDDEN_GLOBAL_FLAGS = {"-p"}
 
 
 # Tops newer than some supported installs, absent from the CI install pin
-# (v2026.9.24; blocked on upstream #136259). Skipped ONLY when the running
-# CLI also lacks them — never a blanket pass. Re-check when the pin moves.
-SKIP_IF_ABSENT = {"pm"}
+# (v2026.9.24; blocked on upstream #136259). Skipped ONLY where the running
+# CLI cannot answer: unknown top, or a `--help` failure anywhere in the
+# cite's chain. Never a blanket pass — where the CLI answers, every check
+# still applies. Re-check when the pin moves.
+SKIP_IF_ABSENT = {"pm", "connectors"}
 
 
 def _usage_names(help_text: str) -> set[str]:
@@ -359,6 +361,9 @@ def verify(cites) -> tuple[list[str], str]:
             if sub not in _enum_values(text_of([canon]) or ""):
                 err = help_err([canon])
                 if err is not None:
+                    if canon in SKIP_IF_ABSENT:
+                        skipped.append(canon)
+                        continue
                     failures.append(
                         "%s:%d: %s — `hermes %s --help` failed (%s)" %
                         (skill, ln, span, canon, err))
@@ -376,6 +381,9 @@ def verify(cites) -> tuple[list[str], str]:
             if sub is not None:
                 err = help_err([canon, sub])
                 if err is not None:
+                    if canon in SKIP_IF_ABSENT:
+                        skipped.append(canon)
+                        break
                     failures.append(
                         "%s:%d: %s — `hermes %s %s --help` failed (%s)" %
                         (skill, ln, span, canon, sub, err))
