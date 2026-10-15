@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.1.6
+version: 1.1.7
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -28,7 +28,11 @@ Platform config lives under `gateway.platforms.<name>` in `config.yaml`, but **e
 - `hermes gateway start` / `hermes gateway restart` — manage gateway lifecycle
 - `hermes gateway setup` — interactive platform setup wizard (shows actual fields per platform)
 - `hermes logs --follow` — watch gateway logs in real-time
-- `$HERMES_HOME/logs/gateway.log` — gateway log file
+- `$HERMES_HOME/logs/gateway.log` — gateway log file (resolve the home first: `hermes config path`)
+
+## 2b. Connectors (named app accounts)
+
+Separately from platforms, Hermes manages named third-party accounts via Nous Portal (`hermes connectors list` — every connector and its state; `accounts [--all]`, `connect`, `rename`, `disconnect`). A bot failing only on services backed by a connector (rather than all platforms) points here, not at gateway connectivity: check `hermes connectors list` for state, `accounts` (with `--all` for retired ones) for the account, `connect --reconnect` (with `--alias` naming which account) to repair a stopped one, `rename`/`disconnect` to tidy up. There is no account-ID targeting — repair is by app + alias.
 
 ## 3. Pitfalls (symptom → cause → fix)
 
@@ -79,4 +83,4 @@ Run `hermes gateway start` to start the gateway, then verify with `hermes gatewa
 - `hermes_cli/gateway.py` — gateway CLI commands
 - `hermes_cli/platforms/` — platform-specific adapters
 
-*Facts re-verified 2026-09-28 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/gateway.py`, `hermes_cli/platforms/`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/messaging/). Re-verify before reuse.*
+*Facts re-verified 2026-09-28 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/gateway.py`, `hermes_cli/platforms/`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/messaging/). Connectors section verified 2026-10-15 against the installed CLI (`hermes connectors`: list/accounts/connect/rename/disconnect). Re-verify before reuse.*
