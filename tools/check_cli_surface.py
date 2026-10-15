@@ -264,6 +264,17 @@ def _negated(line: str, pos: int) -> bool:
     else:
         end = len(line)
     segment = masked[start:pos]
+    # A negator inside a leading conditional ("if ...,", "when ...,")
+    # governs the antecedent, not a cite in the consequent: only text
+    # after the clause comma can negate the span. The mask already
+    # removed commas inside code spans, so the first comma is the
+    # clause boundary. ("If down, do not run `hermes x`" still skips.)
+    head = masked[start:pos]
+    cond = re.match(r"\s*(?:if|when)\b", head, re.IGNORECASE)
+    if cond:
+        comma = head.find(",", cond.end())
+        if 0 <= comma:
+            segment = head[comma + 1:]
     segment = CONTRAST_RE.split(segment)[-1]
     return NEG_RE.search(segment) is not None
 
@@ -455,6 +466,14 @@ def _selftest() -> int:
     assert not _negated("not `a` but `b`", 12)
     # Dots inside spans are not sentence boundaries.
     assert _negated("There is no `a.b`, or `c`.", 22)
+    # A negator in a leading conditional does not reach the consequent.
+    cond = "If the gateway is not running, run `hermes gateway start`."
+    assert not _negated(cond, cond.index("`"))
+    cond = "When the cache is not warm, run `hermes guide`."
+    assert not _negated(cond, cond.index("`"))
+    # ... unless the consequent itself is negated.
+    cond = "If the service is down, do not run `hermes x`."
+    assert _negated(cond, cond.index("`"))
     assert _cite_parts("hooks test <event> [--for-tool X]") == (
         ["hooks", "test"], ["--for-tool"])
     assert _cite_parts("plugins install [--enable|--no-enable]") == (
