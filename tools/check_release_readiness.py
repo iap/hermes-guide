@@ -54,7 +54,7 @@ def _check(cmd: list[str], label: str, fix: str) -> tuple[str, str, str]:
     return (status, evidence, "" if status == "pass" else fix)
 
 
-def _git_tree() -> tuple[str, str, str]:
+def _git_tree(allow_fetch: bool = True) -> tuple[str, str, str]:
     code, out = _run("git", "status", "--porcelain")
     if code != 0:
         return ("fail", "git status unavailable", "run from inside the repo")
@@ -66,6 +66,18 @@ def _git_tree() -> tuple[str, str, str]:
     branch = branch.strip()
     if branch != "master":
         return ("fail", f"on branch {branch!r}", "tags cut from master")
+    if not allow_fetch:
+        # Offline means offline: no network. Compare against the cached ref and
+        # say so — a stale cache must never read as confirmed sync.
+        code2, head = _run("git", "rev-parse", "HEAD")
+        code3, upstream = _run("git", "rev-parse", "origin/master")
+        if code2 != 0 or code3 != 0:
+            return ("unknown", "HEAD or origin/master unresolvable offline",
+                    "re-run with network")
+        match = "matches" if head.strip() == upstream.strip() else "differs from"
+        return ("unknown",
+                f"offline: HEAD {match} cached origin/master ({upstream.strip()[:8]}) — unconfirmed",
+                "re-run with network to confirm sync")
     code, _ = _run("git", "fetch", "origin", "master")
     if code != 0:
         return ("unknown", "fetch of origin/master failed — sync state indeterminate",
@@ -166,7 +178,7 @@ def main(argv: list[str]) -> int:
 
     offline = "--offline" in argv
     items: list[tuple[str, tuple[str, str, str]]] = [
-        ("tree", _git_tree()),
+        ("tree", _git_tree(allow_fetch=not offline)),
         ("version-consistency",
          _check(["tools/check_version_consistency.py"], "version",
                 "align the five version sites")),

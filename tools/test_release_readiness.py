@@ -30,7 +30,7 @@ def _load():
     return mod
 
 
-def _run_main(mod, stubs: dict) -> tuple[int, str]:
+def _run_main(mod, stubs: dict, argv: list | None = None) -> tuple[int, str]:
     """Run main() with _run replaced by a stub map.
 
     stubs: {(argv-tuple-prefix): (code, output)}; unmatched calls fail closed.
@@ -52,7 +52,7 @@ def _run_main(mod, stubs: dict) -> tuple[int, str]:
     mod._run_split = fake_split
     buf = io.StringIO()
     with redirect_stdout(buf):
-        code = mod.main([])
+        code = mod.main(argv if argv is not None else [])
     return code, buf.getvalue(), calls
 
 
@@ -144,6 +144,15 @@ def test_malformed_ci_output_is_unknown():
     assert "[??] master-ci" in out and "READY WITH ADVISORIES" in out, out
 
 
+def test_offline_never_fetches():
+    mod = _load()
+    code, out, calls = _run_main(mod, _healthy(), ["--offline"])
+    fetches = [c for c in calls if c[:2] == ("git", "fetch")]
+    assert not fetches, f"offline mode fetched: {fetches}"
+    assert code == 0, out
+    assert "[??] tree" in out and "READY WITH ADVISORIES" in out, out
+
+
 def test_run_missing_fields_is_unknown():
     mod = _load()
     for bad in ('[{}]', '[{"status": "completed", "conclusion": "success"}]',
@@ -163,6 +172,7 @@ def main() -> int:
         test_master_ci_scoped_to_ci_workflow,
         test_blockers_use_p1_label,
         test_stale_ci_sha_fails,
+        test_offline_never_fetches,
         test_malformed_ci_output_is_unknown,
         test_run_missing_fields_is_unknown,
     ]
