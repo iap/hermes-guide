@@ -137,3 +137,8 @@ State plainly what you checked, what passed, and what you skipped. A validation
 table with honest `not run` entries is accepted; a claim that outruns the evidence
 is not — `validate-claim.yml` re-runs the hermetic gates against your PR head and
 fails the check if your table does not match reality.
+
+## Pre-merge cross-check
+
+Never merge on green CI alone — run the checklist in
+[docs/agent/ops.md](docs/agent/ops.md#pre-merge-cross-check) first.
