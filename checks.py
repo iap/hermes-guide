@@ -1351,7 +1351,7 @@ def _session_stats(lines):
     interrupted — exactly the looping shape. Never raises on malformed
     lines — a diagnostic must survive the logs it exists to diagnose.
     """
-    stats = {}
+    stats: dict[str, dict[str, int | bool]] = {}
 
     def _bucket(session):
         return stats.setdefault(
