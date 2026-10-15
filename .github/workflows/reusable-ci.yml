@@ -357,6 +357,22 @@ jobs:
         # Pure file reads + git ls-files (also in the hermetic tier); fast tier.
         run: python tools/test_skill_counts.py
 
+      - name: Cross-skill count consistency
+        # One filename-anchored count must agree repo-wide (or carry a scope
+        # word). Pure file reads; fast tier.
+        run: |
+          python tools/check_skill_consistency.py --selftest
+          python tools/check_skill_consistency.py
+
+      - name: CLI surface assertion
+        # Every `hermes <subcommand>` cited in skills must resolve against
+        # the live CLI (top + subcommand + flags, aliases and hidden
+        # commands included). Needs the install above, so full tier only.
+        if: inputs.run-full-gate
+        run: |
+          python tools/check_cli_surface.py --selftest
+          python tools/check_cli_surface.py
+
       - name: Generated doc blocks
         # The counts, scope list and install loop in README.md / AGENTS.md are
         # rendered from the tree by tools/render_docs.py. Check mode is the
