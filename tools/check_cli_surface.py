@@ -251,15 +251,19 @@ CONTRAST_RE = re.compile(
 
 def _negated(line: str, pos: int) -> bool:
     """True when a negator governs the span starting at pos."""
+    # Mask code spans with equal-length blanks first: a period inside a
+    # span (``config.yaml`, `v1.2.0`) is not a sentence boundary, and
+    # positions stay valid because the mask preserves length.
+    masked = re.sub(r"`[^`]*`", lambda m: " " * len(m.group(0)), line)
     start = 0
-    for m in SENTENCE_RE.finditer(line):
+    for m in SENTENCE_RE.finditer(masked):
         end = m.end()
         if start <= pos < end or (pos == end and end == len(line)):
             break
         start = end
     else:
         end = len(line)
-    segment = line[start:pos]
+    segment = masked[start:pos]
     segment = CONTRAST_RE.split(segment)[-1]
     return NEG_RE.search(segment) is not None
 
@@ -449,6 +453,8 @@ def _selftest() -> int:
     assert not _negated("not installed. Run `hermes x` now", 19)
     assert _negated("not `a` but `b`", 4)
     assert not _negated("not `a` but `b`", 12)
+    # Dots inside spans are not sentence boundaries.
+    assert _negated("There is no `a.b`, or `c`.", 22)
     assert _cite_parts("hooks test <event> [--for-tool X]") == (
         ["hooks", "test"], ["--for-tool"])
     assert _cite_parts("plugins install [--enable|--no-enable]") == (
@@ -471,6 +477,13 @@ def main() -> int:
     print(summary)
     for f in failures:
         print("FAIL:", f)
+    # Transparency, not validation: when several hermes executables share
+    # PATH, the log must show which one the cites were checked against.
+    # (PATH-first is correct for CI, where the install step owns PATH;
+    # on multi-install dev machines, read this line before trusting a pass.)
+    exe = shutil.which("hermes")
+    if exe:
+        print("hermes under check: %s" % exe)
     return 1 if failures else 0
 
 
