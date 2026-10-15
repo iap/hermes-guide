@@ -73,10 +73,10 @@ HIDDEN_GLOBAL_FLAGS = {"-p"}
 
 
 # Tops newer than some supported installs, absent from the CI install pin
-# (v2026.9.24; blocked on upstream #136259). Skipped ONLY where the running
-# CLI cannot answer: unknown top, or a `--help` failure anywhere in the
-# cite's chain. Never a blanket pass — where the CLI answers, every check
-# still applies. Re-check when the pin moves.
+# (v2026.9.24; blocked on upstream #136259). Skipped ONLY at top-level
+# absence — never a blanket pass, and never for subcommand or flag help
+# failures: a present-but-broken subcommand is exactly what this check
+# exists to catch. Re-check when the pin moves.
 SKIP_IF_ABSENT = {"pm", "connectors"}
 
 
@@ -277,15 +277,17 @@ def verify(cites) -> tuple[list[str], str]:
     def text_of(cmd: list[str]) -> str | None:
         """Raw `--help` text, fetched once per command path (each launch
         pays the CLI startup prelude, so every duplicate fetch costs
-        seconds — this cache is what keeps a full-tree run in budget)."""
+        seconds — this cache is what keeps a full-tree run in budget).
+        Failures are recorded too: without that, every later cite of a
+        broken command relaunches a 60-second timeout each."""
         key = tuple(cmd)
-        if key not in text_cache:
+        if key not in text_cache and key not in err_cache:
             text, err = _run_help(cmd)
-            if text is None:
-                err_cache[key] = err or "unknown error"
-                return None
-            text_cache[key] = text
-        return text_cache[key]
+            if err is not None:
+                err_cache[key] = err
+            else:
+                text_cache[key] = text or ""
+        return text_cache.get(key)
 
     def help_err(cmd: list[str]) -> str | None:
         """Failure reason for a `--help` call, or None when it succeeded."""
@@ -361,9 +363,6 @@ def verify(cites) -> tuple[list[str], str]:
             if sub not in _enum_values(text_of([canon]) or ""):
                 err = help_err([canon])
                 if err is not None:
-                    if canon in SKIP_IF_ABSENT:
-                        skipped.append(canon)
-                        continue
                     failures.append(
                         "%s:%d: %s — `hermes %s --help` failed (%s)" %
                         (skill, ln, span, canon, err))
@@ -381,9 +380,6 @@ def verify(cites) -> tuple[list[str], str]:
             if sub is not None:
                 err = help_err([canon, sub])
                 if err is not None:
-                    if canon in SKIP_IF_ABSENT:
-                        skipped.append(canon)
-                        break
                     failures.append(
                         "%s:%d: %s — `hermes %s %s --help` failed (%s)" %
                         (skill, ln, span, canon, sub, err))
