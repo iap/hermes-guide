@@ -271,6 +271,10 @@ jobs:
         # Stdlib-only git fixtures — no Hermes, no network.
         run: python tools/test_gen_changelog.py
 
+      - name: Release-readiness verdict regression
+        # Stubbed _run — no gh, no network, hermetic-safe.
+        run: python tools/test_release_readiness.py
+
       - name: Malformed skill-name regression
         # Imports hermes_guide.checks, so it needs the full tier.
         if: inputs.run-full-gate

@@ -8,7 +8,9 @@ decisions). Run from a clean checkout before pushing a ``v*`` tag::
     python tools/check_release_readiness.py --selftest # CI wiring probe, no network
 
 Verdict contract: ``READY`` (exit 0, harness ``OK:``) when every check passes;
-``NOT READY`` (exit 1, harness ``FAIL``) with per-item evidence otherwise.
+``READY WITH ADVISORIES`` (exit 0) when some items are indeterminate — the
+indeterminate state is never reported as a bare READY; ``NOT READY`` (exit 1,
+harness ``FAIL``) with per-item evidence otherwise.
 Network-dependent items degrade to ``UNKNOWN`` (advisory) rather than failing
 the verdict when ``gh`` or the network is unavailable — the human decides.
 """
@@ -50,6 +52,12 @@ def _git_tree() -> tuple[str, str, str]:
                 "commit or stash before tagging")
     code, branch = _run("git", "branch", "--show-current")
     branch = branch.strip()
+    if branch != "master":
+        return ("fail", f"on branch {branch!r}", "tags cut from master")
+    code, _ = _run("git", "fetch", "origin", "master")
+    if code != 0:
+        return ("unknown", "fetch of origin/master failed — sync state indeterminate",
+                "re-run with network")
     code2, head = _run("git", "rev-parse", "HEAD")
     code3, upstream = _run("git", "rev-parse", "origin/master")
     if code2 != 0 or code3 != 0:
@@ -58,14 +66,14 @@ def _git_tree() -> tuple[str, str, str]:
     if head.strip() != upstream.strip():
         return ("fail", f"HEAD {head[:8]} != origin/master {upstream[:8]}",
                 "pull / push before tagging")
-    if branch != "master":
-        return ("fail", f"on branch {branch!r}, HEAD synced",
-                "tags cut from master")
-    return ("pass", f"clean, on master, synced at {head[:8]}", "")
+    return ("pass", f"clean, on master, synced at {head[:8]} (fetched)", "")
 
 
 def _master_ci() -> tuple[str, str, str]:
-    code, out = _run("gh", "run", "list", "--branch", "master", "--limit", "1")
+    # Scope to the CI workflow by name: an unscoped branch listing lets a green
+    # scheduled upstream-drift run mask a red CI run.
+    code, out = _run("gh", "run", "list", "--workflow", "CI",
+                     "--branch", "master", "--limit", "1")
     if code != 0:
         return ("unknown", "gh unavailable (offline?)", "re-run with network")
     line = out.splitlines()[0] if out else ""
@@ -75,31 +83,33 @@ def _master_ci() -> tuple[str, str, str]:
 
 
 def _open_blockers() -> tuple[str, str, str]:
+    # Release-blocking priority is the P1 label (repo vocabulary); there is no
+    # `priority:high` label, so querying it would always pass.
     code, out = _run("gh", "issue", "list", "--state", "open",
-                     "--label", "priority:high", "--limit", "10")
+                     "--label", "P1", "--limit", "10")
     if code != 0:
         return ("unknown", "gh unavailable (offline?)", "re-run with network")
     if not out:
-        return ("pass", "no open priority:high issues", "")
+        return ("pass", "no open P1 issues", "")
     n = len(out.splitlines())
-    return ("fail", f"{n} open priority:high issue(s): {out.splitlines()[0]}",
+    return ("fail", f"{n} open P1 issue(s): {out.splitlines()[0]}",
             "resolve or downgrade before tagging")
 
 
-def _catalog_currency() -> tuple[str, str, str]:
-    base = REPO / ".github" / "upstream-drift.baseline"
-    try:
-        pinned = base.read_text(encoding="utf-8-sig").strip().split()[0]
-    except OSError:
-        return ("unknown", "baseline file unreadable", "check .github/upstream-drift.baseline")
+def _commits_since_tag() -> tuple[str, str, str]:
+    # Advisory "is there anything worth shipping" signal. This intentionally
+    # reports local commits since the last tag — not the upstream catalog pin
+    # (a separate reviewed change in hermes-agent, owned by other tooling).
     code, tag = _run("git", "describe", "--tags", "--abbrev=0", "origin/master")
     if code != 0:
         return ("unknown", "no release tag reachable", "tag history unavailable")
     tag = tag.strip()
     code, out = _run("git", "log", "--oneline", f"{tag}..origin/master", "--")
-    n = len(out.splitlines()) if (code == 0 and out) else 0
-    return ("pass",
-            f"upstream pin {pinned[:8]}; {n} commit(s) on origin/master since {tag} (advisory)", "")
+    if code != 0:
+        return ("unknown", f"history inspection {tag}..origin/master failed",
+                "fetch full history and re-run")
+    n = len(out.splitlines()) if out else 0
+    return ("pass", f"{n} commit(s) on origin/master since {tag} (advisory)", "")
 
 
 def main(argv: list[str]) -> int:
@@ -127,10 +137,11 @@ def main(argv: list[str]) -> int:
         items += [
             ("master-ci", _master_ci()),
             ("blockers", _open_blockers()),
-            ("catalog-currency", _catalog_currency()),
+            ("commits-since-tag", _commits_since_tag()),
         ]
 
     hard_fail = [name for name, (st, _, _) in items if st == "fail"]
+    unknowns = [name for name, (st, _, _) in items if st == "unknown"]
     for name, (st, evidence, fix) in items:
         tag = {"pass": "ok", "fail": "FAIL", "unknown": "??"}.get(st, "??")
         line = f"[{tag}] {name}: {evidence}"
@@ -140,7 +151,12 @@ def main(argv: list[str]) -> int:
     if hard_fail:
         print(f"FAIL: release NOT READY ({len(hard_fail)} blocking: {', '.join(hard_fail)})")
         return 1
-    print("OK: release READY (unknown items are advisory — confirm by hand)")
+    if unknowns:
+        # Indeterminate stays indeterminate: exit 0 (advisory tool, the human
+        # decides) but never print a bare READY over unknown items.
+        print(f"OK: release READY WITH ADVISORIES ({', '.join(unknowns)} indeterminate — confirm by hand)")
+        return 0
+    print("OK: release READY")
     return 0
 
 
