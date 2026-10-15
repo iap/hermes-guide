@@ -2,6 +2,59 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.7.2 (2026-10-16)
+
+### Features
+
+- **guide**: sessions check detects runaway loop signatures ([#254](https://github.com/iap/hermes-guide/pull/254))
+- **plugin**: register a router skill for plugin-only installs ([#248](https://github.com/iap/hermes-guide/pull/248))
+- **skills**: Tier 2 batch - display, persistence, attachments/LSP, spotify ([#243](https://github.com/iap/hermes-guide/pull/243))
+- **ci**: CLI-surface and cross-skill consistency guards ([#240](https://github.com/iap/hermes-guide/pull/240))
+- **release**: add release-readiness verdict gate ([#244](https://github.com/iap/hermes-guide/pull/244))
+- **skills**: Tier 2 connectors section + voice turns section ([#239](https://github.com/iap/hermes-guide/pull/239))
+- **skills**: document MCP sampling expose_client_tools key ([#238](https://github.com/iap/hermes-guide/pull/238))
+- **skills**: mcp node-absolute-path pitfall + key-optional pitfall ([#225](https://github.com/iap/hermes-guide/pull/225))
+- **skills**: growth policy, trim heaviest skills into references/ ([#223](https://github.com/iap/hermes-guide/pull/223))
+- **skills**: document stuck-update tail, DISABLE hatch, shim-ABI mismatch ([#219](https://github.com/iap/hermes-guide/pull/219))
+- **skills**: add hermes-post-update skill
+- **drift**: absorb Tier 1 upstream changes + pin CI to post-PM main ([#211](https://github.com/iap/hermes-guide/pull/211))
+- **self-diagnose**: correctness, routing, and CI efficiency overhaul ([#206](https://github.com/iap/hermes-guide/pull/206))
+
+### Bug Fixes
+
+- **audit**: offline tree skips fetch, changelog stamps UTC ([#253](https://github.com/iap/hermes-guide/pull/253))
+- **audit**: findings 1-4 + 7 from independent review ([#247](https://github.com/iap/hermes-guide/pull/247))
+- **plugins**: name bundled resolutions; docs(providers): catalog floods ([#226](https://github.com/iap/hermes-guide/pull/226))
+- **ci**: run changelog guard on the PR, not only at tag time
+- **release**: land the changelog in the bump PR, not on a stranded branch ([#212](https://github.com/iap/hermes-guide/pull/212))
+
+### Documentation
+
+- **cli-tui**: dashboard browser-open helper note ([#249](https://github.com/iap/hermes-guide/pull/249))
+- **agents**: parallel-session branch discipline ([#245](https://github.com/iap/hermes-guide/pull/245))
+- **agents**: record pre-merge cross-check rule ([#242](https://github.com/iap/hermes-guide/pull/242))
+- **contributing**: record sub-issues convention for multi-part work ([#230](https://github.com/iap/hermes-guide/pull/230))
+- **config**: profiles/default/ is not the default profile ([#228](https://github.com/iap/hermes-guide/pull/228))
+- **agents**: split deep ops into docs/agent/, slim AGENTS.md ([#222](https://github.com/iap/hermes-guide/pull/222))
+- **agents**: document reviewer-bot thread triage ([#221](https://github.com/iap/hermes-guide/pull/221))
+- **skills**: add credential pool coverage to configuration guide and providers diagnostic ([#220](https://github.com/iap/hermes-guide/pull/220))
+- **triage**: add invented-command anti-pattern golden (D5) ([#218](https://github.com/iap/hermes-guide/pull/218))
+- disambiguate hermes-guide (plugin) from hermes-agent (harness) ([#217](https://github.com/iap/hermes-guide/pull/217))
+- **agents**: add Security Guidelines and Testing Requirements sections ([#216](https://github.com/iap/hermes-guide/pull/216))
+- **triage**: add manual golden prompts for routing regression
+- **contributing**: add commit signing section for human and agent contributors ([#209](https://github.com/iap/hermes-guide/pull/209))
+
+### Chores
+
+- **release**: bump to 0.7.2
+- **reviews**: silence coderabbit skipped-status noise via config ([#229](https://github.com/iap/hermes-guide/pull/229))
+- Revert "docs(contributing): add commit signing section for human and agent contributors (#209)" (#210)
+- **scanner**: move scanner-hygiene guard under tests/ per upstream review ([#207](https://github.com/iap/hermes-guide/pull/207))
+
+### Tests
+
+- **path**: behavioral coverage for references/resolve_venv.py ([#224](https://github.com/iap/hermes-guide/pull/224))
+
 ## v0.7.1 (2026-10-12)
 
 ### Bug Fixes
