@@ -24,7 +24,6 @@ voice:
   silence_threshold: 200
   silence_duration: 3.0
   stop_phrases: ["stop"]
-```
 
 stt:
   enabled: true
@@ -44,7 +43,7 @@ tts:
 
 ## 1b. Voice turns (route model vs session model)
 
-Spoken turns run on a separate route (`agent/voice_turn_route.py`), not the session model: the route model reasons **off** by default (lowest valid level where off is refused), so a voice reply that feels "dumber" than the same prompt typed is expected routing, not a model failure. Streaming transcription is capability-gated (`stt.streaming` plus provider support; live resampling is pure-Python). ffmpeg matters on the file path: command-provider transcription normalizes audio through ffmpeg when configured. Diagnose accordingly: wrong-model symptoms → check which route served the turn; stalls → streaming support and credentials first, ffmpeg only for file-based normalize failures.
+Spoken turns run on a voice route (`agent/voice_turn_route.py`) that may select a separate model or retain the session model — with `auxiliary.voice_chat` on `provider: auto` (or `main` without model/base_url), expect the session route. The route reasons **off** by default, which reads as less detailed replies. Streaming transcription is capability-gated (`stt.streaming` plus provider support; live resampling is pure-Python). Catalog voice bridges (`alice-voice`, `carbonvoice-platform`, `deepgram-voice`, `hermes-live-voice`, `omnivoice`) are separate installable providers — a bridge-specific failure points at the bridge plugin, not the turn router. ffmpeg matters on the file path: command-provider transcription normalizes audio through ffmpeg when configured. Diagnose accordingly: unexpected-model symptoms → check which route served the turn; stalls → streaming support and credentials first, ffmpeg only for file-based normalize failures.
 
 ## 2. How to inspect
 

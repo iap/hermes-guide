@@ -32,7 +32,7 @@ Platform config lives under `gateway.platforms.<name>` in `config.yaml`, but **e
 
 ## 2b. Connectors (named app accounts)
 
-Separately from platforms, Hermes manages named third-party accounts via Nous Portal (`hermes connectors list` — every connector and its state; `accounts [--all]`, `connect` (browser flow), `rename`, `disconnect`). A bot failing only on services backed by a connector (rather than all platforms) points here, not at gateway connectivity: check `hermes connectors list` for state, `accounts` (with `--all` for retired ones) for the account, `connect` to re-link, `rename`/`disconnect` to tidy up.
+Separately from platforms, Hermes manages named third-party accounts via Nous Portal (`hermes connectors list` — every connector and its state; `accounts [--all]`, `connect`, `rename`, `disconnect`). A bot failing only on services backed by a connector (rather than all platforms) points here, not at gateway connectivity: check `hermes connectors list` for state, `accounts` (with `--all` for retired ones) for the account, `connect --reconnect` (with `--alias` naming which account) to repair a stopped one, `rename`/`disconnect` to tidy up. There is no account-ID targeting — repair is by app + alias.
 
 ## 3. Pitfalls (symptom → cause → fix)
 
