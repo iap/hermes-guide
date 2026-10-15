@@ -32,6 +32,7 @@ This tool is stdlib-only — no external dependencies.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -206,7 +207,14 @@ def split_sections(text: str) -> tuple[str, dict[str, str]]:
 
 def _utc_today() -> str:
     """Release-section stamp: the UTC day, so every runner (local or CI)
-    stamps the same date regardless of machine timezone."""
+    stamps the same date regardless of machine timezone.
+
+    ``HERMES_CHANGELOG_DATE`` (YYYY-MM-DD) overrides it for tests and for
+    backdating a release section by hand.
+    """
+    override = os.environ.get("HERMES_CHANGELOG_DATE", "").strip()
+    if override:
+        return override
     return datetime.now(timezone.utc).date().isoformat()
 
 
