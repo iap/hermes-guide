@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, provider/auth failures, and credential pool exhaustion.
-version: 1.2.0
+version: 1.3.0
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -140,6 +140,19 @@ When a provider is configured with a credential pool (`hermes auth list` shows m
 
 For hub-install auth (GitHub tokens, `Could not fetch from any source`), see `diagnosing-auth`.
 
+### Provider catalog floods the picker
+
+A picker showing hundreds of models from providers never configured usually comes from the **provider catalog layer**, not `discover_models` (which covers custom endpoints only):
+
+- The remote curated catalog (`model_catalog.enabled: true`, `model_catalog.url`, `ttl_minutes: 20` in `config.yaml`; `hermes_cli/config_defaults.py`) refreshes picker lists in the background; on network failure it silently keeps the stale cache.
+- Per-provider live `/v1/models` probes cache to disk (`provider_models_cache.json`, 1h TTL; curated OpenRouter cache under `cache/`; `models_dev_cache.json`), so a flood persists until the TTL lapses.
+
+Fix path, narrowest first:
+
+1. `hermes model --refresh` — clears per-provider `/v1/models` probe caches and re-fetches. It does not clear the remote curated-manifest cache: delete `$HERMES_HOME/cache/model_catalog.json` to force that refetch (stale copies keep serving until a refresh succeeds, so waiting out `ttl_minutes` alone does not guarantee clearing), then `hermes gateway restart` to apply.
+2. `model_catalog.excluded_providers: [<slug>, ...]` in `config.yaml` — drops whole providers from the catalog (slug or alias, case-insensitive), then `hermes gateway restart` to apply.
+3. `model_catalog.enabled: false` in `config.yaml` — disables remote fetching and falls back to the in-repo snapshot (use `excluded_providers` above to hide providers instead of disabling everything), then `hermes gateway restart` to apply.
+
 ## Step 6 — Legacy format
 
 Older configs use a top-level `custom_providers:` list with `base_url` instead of `api`. Still supported and auto-migrated to the `providers:` dict on `hermes update` (config v12).
@@ -179,4 +192,4 @@ Remove the `models:` dict and `models_discovered:` flag from the provider entry 
 
 ---
 
-*Facts re-verified 2026-10-13 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/model_switch_providers.py::_entry_credentials` (key_cmd resolved first and returned early; `key_env` read for the identity tuple but not used as the credential when key_cmd wins; inline `api_key` next) and `::_discover_flag` (`discover_models` defaults True; `"false"`/`"no"`/`"0"` strings coerce to False); `hermes_cli/model_switch.py::_models_config_is_allowlist` (a `discovered` catalog is never a pin; dict shape is per-model metadata, list shape is an allowlist); `hermes_cli/config.py:2739` (`custom_endpoint_key_env` — `HERMES_CUSTOM_<SLUG>_API_KEY` derivation). The Step 2.5 probe was rewritten 2026-09-21 (prose form) after the skills scanner rated the scripted curl|python and urllib forms as supply-chain/exfiltration shapes. **Re-pointed 2026-09-29 (drift #123):** `config.py` citations updated to `2739` at `5000e2993`. **Credential pool** (re-verified 2026-10-13 against the pinned baseline `f97608f`): `agent/credential_pool.py` — numbered-sibling discovery plus `_seed_from_env` ingesting API-key providers from env vars into the pool; pool entries persist in `auth.json` as `env:`-sourced references re-hydrated on load. Provider registry (`hermes_cli/auth.py`, `openai-api` entry): API-key provider keyed on `OPENAI_API_KEY` with optional `OPENAI_BASE_URL` override. `hermes auth` subcommands (`list`/`add`/`status`/`reset`/`priority`/`remove`, all positional — `--priority` is an `add` flag only) verified against the installed CLI. Re-verify before reuse.*
+*Facts re-verified 2026-10-14 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/model_switch_providers.py::_entry_credentials` (key_cmd resolved first and returned early; `key_env` read for the identity tuple but not used as the credential when key_cmd wins; inline `api_key` next) and `::_discover_flag` (`discover_models` defaults True; `"false"`/`"no"`/`"0"` strings coerce to False); `hermes_cli/model_switch.py::_models_config_is_allowlist` (a `discovered` catalog is never a pin; dict shape is per-model metadata, list shape is an allowlist); `hermes_cli/config.py:2739` (`custom_endpoint_key_env` — `HERMES_CUSTOM_<SLUG>_API_KEY` derivation). The Step 2.5 probe was rewritten 2026-09-21 (prose form) after the skills scanner rated the scripted curl|python and urllib forms as supply-chain/exfiltration shapes. **Re-pointed 2026-09-29 (drift #123):** `config.py` citations updated to `2739` at `5000e2993`. **Credential pool** (re-verified 2026-10-13 against the pinned baseline `f97608f`): `agent/credential_pool.py` — numbered-sibling discovery plus `_seed_from_env` ingesting API-key providers from env vars into the pool; pool entries persist in `auth.json` as `env:`-sourced references re-hydrated on load. Provider registry (`hermes_cli/auth.py`, `openai-api` entry): API-key provider keyed on `OPENAI_API_KEY` with optional `OPENAI_BASE_URL` override. `hermes auth` subcommands (`list`/`add`/`status`/`reset`/`priority`/`remove`, all positional — `--priority` is an `add` flag only) verified against the installed CLI. **Provider catalog** (verified 2026-10-14 against installed source): `model_catalog` block (`enabled`, `url`, `ttl_minutes: 20`; `hermes_cli/config_defaults.py`); curated picker caches (`hermes_cli/models.py`, per-provider `/v1/models` probes, disk TTLs); `model_catalog.excluded_providers` honored by slug or alias, case-insensitive (`agent/inventory.py`, `hermes_cli/main_provider_setup.py`); `hermes model --refresh` wipes the picker disk cache. Re-verify before reuse.*
