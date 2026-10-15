@@ -248,6 +248,12 @@ jobs:
           python tools/check_version_consistency.py --selftest
           python tools/check_version_consistency.py
 
+      - name: Release-readiness gate wiring
+        # The readiness gate itself is a manual pre-tag verdict (needs gh +
+        # network for CI/blocker items), so CI only runs its --selftest probe:
+        # that keeps the delegates wired without gating PRs on release state.
+        run: python tools/check_release_readiness.py --selftest
+
       - name: Changelog release-section guard
         # release.yml runs `gen_changelog.py --check` at tag time and fails
         # closed on a missing section. That is too late to be useful: the

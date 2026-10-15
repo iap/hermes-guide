@@ -330,7 +330,11 @@ verified on one host is not verified on the others. Name the platform in the PR.
 The changelog section ships **inside the version-bump PR**, not on the tag.
 `release.yml` only *checks* for it and fails closed when it is missing.
 
-1. Bump the version in all five sites in one commit (the
+1. Check readiness first: `python tools/check_release_readiness.py`. It
+   verdicts `READY` / `NOT READY` from tree state, version consistency,
+   changelog coverage, master CI, open `priority:high` issues, and commits
+   since the last tag. Advisory only — the tag stays a human decision.
+2. Bump the version in all five sites in one commit (the
    `check_version_consistency.py` guard lists them: `plugin.yaml`,
    `__init__.py`, `SECURITY.md` policy sentence + supported table,
    `pyproject.toml`).
