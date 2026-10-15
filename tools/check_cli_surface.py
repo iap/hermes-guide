@@ -95,6 +95,10 @@ def _usage_names(help_text: str) -> set[str]:
     """
     names: set[str] = set()
     for m in BRACE_RE.finditer(help_text):
+        # Option-value braces (`--source {all,hub}`) are flag values, not
+        # runnable subcommands — only groups that do NOT follow a flag.
+        if re.search(r"--[A-Za-z][A-Za-z0-9_-]*\s+$", help_text[:m.start()]):
+            continue
         names.update(p.strip() for p in m.group(1).split(","))
     for m in re.finditer(
             r"(?m)^    ([a-z][a-z0-9_-]*)(?:\s+\([^)]*\))?(?:  +|\t)",
@@ -167,37 +171,60 @@ def _run_help(args: list[str]) -> tuple[str | None, str | None]:
 
 # Flags taking a value: the following token is data, not a subcommand.
 # `-z` takes the whole rest of the span (a free prompt string).
+# `-p` verified behaviorally (`hermes -p <profile> ...` is routine) though
+# absent from `--help` text — profile-prefixed cites must not read the
+# profile name as the command.
 VALUE_FLAGS = {
     "-m", "--provider", "--reasoning", "-t", "--resume", "--in",
-    "--continue", "--skills", "--usage-file",
+    "--continue", "--skills", "--usage-file", "-p",
 }
+
+# Bracketed flag groups in skill examples (`[--for-tool X]`,
+# `[--enable|--no-enable]`): unwrap before tokenizing so each alternative
+# is validated. Brackets without a `--` inside (e.g. `[name]`) are left
+# alone and fall through to the placeholder path below.
+BRACKET_RE = re.compile(r"\[([^\[\]]*--[^\[\]]*)\]")
 
 
 def _cite_parts(span: str) -> tuple[list[str], list[str]] | None:
     """Split a span body into (positionals, flags); None when not a command."""
     if span.startswith(SESSION_PREFIXES):
         return None
+    span = BRACKET_RE.sub(lambda m: m.group(1).replace("|", " "), span)
     tokens = re.findall(r"<[^>]*>|[^\s]+", span)
     pos: list[str] = []
     flags: list[str] = []
     skip_next = False
+    prev_flag = False
     for tok in tokens:
         if skip_next:
             skip_next = False
+            prev_flag = False
             continue
         if tok == "-z":
             break  # free prompt string follows; nothing after is a command
         if tok in VALUE_FLAGS:
             skip_next = True
+            prev_flag = False
             continue
         if tok.startswith("<") or "/" in tok or "\\" in tok or "." in tok:
             if tok.startswith("-"):
                 flags.append(tok)
+                prev_flag = True
+            else:
+                prev_flag = False
             continue  # placeholder, path, dotted value: not verifiable here
         if tok.startswith("--") or (tok.startswith("-") and len(tok) == 2):
             flags.append(tok)
+            prev_flag = True
         elif WORD_RE.fullmatch(tok):
+            # An ALLCAPS token right after a flag is that flag's value
+            # (`[--for-tool X]`), not a subcommand.
+            if prev_flag and re.fullmatch(r"[A-Z][A-Z0-9_]*", tok):
+                prev_flag = False
+                continue
             pos.append(tok)
+            prev_flag = False
         # Anything else ($VAR, values, operators) is out of scope.
     if not pos:
         return None
@@ -422,6 +449,14 @@ def _selftest() -> int:
     assert not _negated("not installed. Run `hermes x` now", 19)
     assert _negated("not `a` but `b`", 4)
     assert not _negated("not `a` but `b`", 12)
+    assert _cite_parts("hooks test <event> [--for-tool X]") == (
+        ["hooks", "test"], ["--for-tool"])
+    assert _cite_parts("plugins install [--enable|--no-enable]") == (
+        ["plugins", "install"], ["--enable", "--no-enable"])
+    assert _cite_parts("-p work config path") == (["config", "path"], [])
+    optvals = ("usage: hermes x [-h] [--source {all,hub}] ...\n"
+               "  other  O\n")
+    assert _usage_names(optvals) == set()
     print("OK: cli-surface selftest")
     return 0
 

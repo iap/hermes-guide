@@ -58,11 +58,14 @@ SCOPE_WORDS = (
 
 def _numbers_near_filename(line: str) -> list[tuple[str, str]]:
     """(dir-key, basename, count) for explicit ``file (N unit)`` constructions."""
-    lowered = line.lower()
-    if any(w in lowered for w in SCOPE_WORDS):
+    # Scope words count only outside code spans: a filename like
+    # `profile.yaml` must not exempt its own line.
+    prose = re.sub(r"`[^`]*`", "", line)
+    if any(w in prose.lower() for w in SCOPE_WORDS):
         return []
     out = []
-    for m in FILE_RE.finditer(line):
+    matches = list(FILE_RE.finditer(line))
+    for idx, m in enumerate(matches):
         inner = m.group(1)
         parts = inner.split("/")
         base = parts[-1]
@@ -70,7 +73,13 @@ def _numbers_near_filename(line: str) -> list[tuple[str, str]]:
         # `config.yaml` never accuses `$HERMES_HOME/config.yaml` of
         # disagreeing, and vice versa.
         key = "/".join(parts[:-1])
-        window = line[m.end():m.end() + COUNT_WINDOW]
+        # A count following a second filename belongs to that file, not
+        # this one: bound the window at the next filename match (and at
+        # COUNT_WINDOW regardless, so distant numbers never attach).
+        end = m.end() + COUNT_WINDOW
+        if idx + 1 < len(matches):
+            end = min(end, matches[idx + 1].start())
+        window = line[m.end():end]
         for c in COUNT_RE.finditer(window):
             out.append((key, base, c.group(1).replace(",", "")))
     return out
@@ -125,6 +134,12 @@ def _selftest() -> int:
     fails, _ = verify([("s1", 1, "$H", "config.yaml", "5", "x"),
                        ("s2", 2, "bot", "config.yaml", "7", "y")])
     assert not fails
+    # Scope words inside backticked spans do not exempt the line.
+    assert _numbers_near_filename("`profile.yaml` (120 lines) z") == [
+        ("", "profile.yaml", "120")]
+    # A count after a second filename belongs to the second file.
+    assert _numbers_near_filename("`a.py` (10 lines), `b.py` (20 lines)") == [
+        ("", "a.py", "10"), ("", "b.py", "20")]
     print("OK: skill-consistency selftest")
     return 0
 
