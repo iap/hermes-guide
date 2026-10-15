@@ -114,6 +114,15 @@ A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. 
 - Accepts cite the fixing commit. Declines cite the guard or code that overrules the finding (e.g. "provenance 21/21 green; symbol proof is `check_citation_integrity`'s job").
 - Posting is mechanical; the verdict must be verified first.
 
+## Pre-merge cross-check
+
+Never merge on green CI alone. Immediately before merging a PR, verify: all
+checks pass (not pending), every review thread resolved (fixed or declined with
+file:line evidence — never auto-resolved to unblock), both reviewers heard
+where present (a silent bot is not an approving bot; trigger CodeRabbit after
+Qodo lands when coverage matters), `mergeStateStatus` is `CLEAN`, and the merge
+is explicitly authorized. Report the checklist result, then merge.
+
 ## Multi-environment maintenance
 
 This repo is maintained in parallel from **different host environments**, each
