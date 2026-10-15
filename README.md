@@ -7,7 +7,7 @@ Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/Nous
 It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. The plugin is **read-only** (no config writes; empty `capabilities:`). It ships two independent things:
 
 1. **A plugin.** `/hermes-doctor` in a session, `hermes guide` in a terminal. Read-only health checks across <!-- BEGIN GENERATED: intro-scopes -->
-`config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`
+`config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
 **Twenty-one troubleshooting skills** — one install guide, one configuration map, eighteen per-surface `diagnosing-*` playbooks, one other skill (`hermes-post-update`).

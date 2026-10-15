@@ -429,7 +429,7 @@ def _selftest() -> int:
             fails += 1
 
     # Word numbers, including the deliberate ceiling.
-    for n, word in ((0, "zero"), (1, "one"), (2, "two"), (7, "seven"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one")):
+    for n, word in ((0, "zero"), (1, "one"), (2, "two"), (7, "seven"), (8, "eight"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one")):
         if _word_num(n) != word:
             print(
                 f"selftest FAIL: _word_num({n}) == {_word_num(n)!r}, expected {word!r}"

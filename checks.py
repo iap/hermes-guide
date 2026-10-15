@@ -1317,6 +1317,130 @@ def check_memory_hygiene():
     return {"status": "healthy", "reason": "memory stores within limits, no hygiene findings", "detail": memories_dir}
 
 
+# --- session loop-signature audit ------------------------------------------
+
+# A runaway research/agentic session (observed 2026-10-16: 47 turns, 20+
+# tool-turns per turn, 70K input tokens per call on a free-tier model) leaves
+# a recognizable signature in logs/agent.log: many turns, high per-turn tool
+# use, large resends, alternation repairs after interrupts. Thresholds below
+# are ours (not upstream drift) — set from that incident with headroom.
+_SESSION_LOG_TAIL_LINES = 3000
+_SESSION_LOOP_MIN_TURNS = 15
+_SESSION_LOOP_MIN_API_CALLS = 20
+_SESSION_LOOP_MIN_TOOL_TURNS = 10
+_SESSION_LOOP_MIN_INPUT_TOKENS = 40000
+_SESSION_ELEVATED_MIN_TURNS = 8
+
+_TURN_END_RE = re.compile(
+    r"Turn ended:.*?tool_turns=(\d+).*?session=(\S+)"
+)
+_API_CALL_RE = re.compile(
+    r"\[(\S+)\] agent\.conversation_loop: API call #\d+: model=(\S+).*?in=(\d+)"
+)
+_REPAIR_RE = re.compile(
+    r"(?:alternation repair|Re-anchored).*?session=(\S+)"
+)
+
+
+def _session_stats(lines):
+    """Aggregate per-session loop signals from agent.log lines.
+
+    Returns {session_id: {turns, api_calls, max_tool_turns, max_in_tokens,
+    repairs, free_model}}. Interrupted turns never emit "Turn ended", so
+    api_calls is the primary volume signal for sessions that keep getting
+    interrupted — exactly the looping shape. Never raises on malformed
+    lines — a diagnostic must survive the logs it exists to diagnose.
+    """
+    stats = {}
+
+    def _bucket(session):
+        return stats.setdefault(
+            session,
+            {"turns": 0, "api_calls": 0, "max_tool_turns": 0,
+             "max_in_tokens": 0, "repairs": 0, "free_model": False},
+        )
+
+    for line in lines:
+        try:
+            m = _TURN_END_RE.search(line)
+            if m:
+                s = _bucket(m.group(2))
+                s["turns"] += 1
+                s["max_tool_turns"] = max(s["max_tool_turns"], int(m.group(1)))
+                continue
+            m = _API_CALL_RE.search(line)
+            if m:
+                s = _bucket(m.group(1))
+                s["api_calls"] += 1
+                s["max_in_tokens"] = max(s["max_in_tokens"], int(m.group(3)))
+                if ":free" in m.group(2):
+                    s["free_model"] = True
+                continue
+            m = _REPAIR_RE.search(line)
+            if m:
+                _bucket(m.group(1))["repairs"] += 1
+        except (ValueError, IndexError):
+            continue
+    return stats
+
+
+def check_session_health():
+    """Read-only runaway-session audit from logs/agent.log.
+
+    Flags sessions matching the loop signature (many turns + high per-turn
+    tool use + large context resends): the fix is a fresh session, a
+    capable (non-free-tier) default model for research work, and splitting
+    generate-then-verify into separate turns. Never mutates anything; reads
+    only the log tail.
+    """
+    home = _hermes_home()
+    if not home:
+        return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
+    log_path = os.path.join(home, "logs", "agent.log")
+    if not os.path.exists(log_path):
+        return {"status": "healthy", "reason": "no agent activity logged yet (nothing to audit)",
+                "detail": log_path}
+    try:
+        with open(log_path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()[-_SESSION_LOG_TAIL_LINES:]
+    except OSError as exc:
+        return {"status": "unknown", "reason": f"cannot read agent log: {exc}", "detail": log_path}
+    stats = _session_stats(lines)
+    if not stats:
+        return {"status": "healthy", "reason": "no session activity in recent log tail",
+                "detail": log_path}
+    broken = []
+    notes = []
+    for session, s in sorted(stats.items()):
+        volume = s["turns"] >= _SESSION_LOOP_MIN_TURNS or s["api_calls"] >= _SESSION_LOOP_MIN_API_CALLS
+        if (volume
+                and s["max_tool_turns"] >= _SESSION_LOOP_MIN_TOOL_TURNS
+                and s["max_in_tokens"] >= _SESSION_LOOP_MIN_INPUT_TOKENS):
+            finding = (
+                f"session {session}: runaway signature — {s['turns']} turns, "
+                f"{s['api_calls']} api calls, "
+                f"{s['max_tool_turns']} max tool-turns/turn, "
+                f"{s['max_in_tokens']} max input tokens"
+                + (", free-tier model" if s["free_model"] else "")
+                + (f", {s['repairs']} interrupt repair(s)" if s["repairs"] else "")
+                + " — start a fresh session, use a capable default model, "
+                  "split generate-then-verify into separate turns"
+            )
+            broken.append(finding)
+        elif s["turns"] >= _SESSION_ELEVATED_MIN_TURNS or s["max_in_tokens"] >= _SESSION_LOOP_MIN_INPUT_TOKENS:
+            notes.append(
+                f"session {session}: elevated — {s['turns']} turns, "
+                f"{s['max_tool_turns']} max tool-turns/turn, "
+                f"{s['max_in_tokens']} max input tokens"
+            )
+    if broken:
+        return {"status": "broken", "reason": f"{len(broken)} runaway session(s)", "detail": broken + notes}
+    if notes:
+        return {"status": "informational", "reason": f"{len(notes)} elevated session(s)", "detail": notes}
+    return {"status": "healthy", "reason": "no runaway session signature in recent log tail",
+            "detail": log_path}
+
+
 # --- runner ---------------------------------------------------------------
 
 _CHECKS = [
@@ -1330,6 +1454,10 @@ _CHECKS = [
     # audits) — "memory" is reserved by constants.PLUGIN_SUBCATEGORY_DIRS and
     # the F3 guard forbids it as a literal here.
     ("memories", check_memory_hygiene),
+    # Label is "sessions" (the per-session loop signatures audited in
+    # logs/agent.log) — "session" singular is avoided for the same
+    # collision-safety reason as "memories" above.
+    ("sessions", check_session_health),
 ]
 
 

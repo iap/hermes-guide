@@ -24,6 +24,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | A5 | Baseline shows `x config` | `hermes-configuration-guide` Step 0, then re-run scope |
 | A6 | Baseline shows `?` (unknown) | treat as unmeasured — resolve home/config via configuration guide; never call unknown "healthy" |
 | A7 | Baseline all `+` healthy; user still vague | continue symptom flowchart / §3 clarify — do not invent a broken surface |
+| A8 | Baseline shows `x sessions` (runaway signature) | §1b runaway branch — fresh session + model-tier check, NOT more interrupts of the same session |
 
 ---
 
@@ -36,6 +37,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | B3 | Several things broken at once, intermittent. | `diagnosing-host-pressure` (escalation: multi-surface + intermittent) |
 | B4 | It crashed. / It stopped working. | clarify surface (§3 scope questions) — do NOT guess `diagnosing-host-pressure` or `diagnosing-desktop` without a named surface |
 | B5 | The bot isn't responding. (no platform named) | `diagnosing-gateway` first — not `diagnosing-bot-mode` first |
+| B5b | It's looping again. / It keeps doing the same thing. | §1b runaway branch — do NOT route to a feature skill or keep the session alive |
 | B6 | Skills aren't working. (no discovery vs /command) | clarify: "Is the skill missing from the index, or is its `/command` missing?" → `diagnosing-skills` if discovery, `diagnosing-commands` if `/command` |
 | B7a | I can't install a skill/plugin (hub install fails) | `diagnosing-auth` (dead token degrades every hub adapter) |
 | B7b | I can't install/upgrade/reinstall Hermes itself | `installing-hermes` |

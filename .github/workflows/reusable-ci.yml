@@ -207,6 +207,11 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_memory_hygiene.py
 
+      - name: Session health regression test
+        # Shim-loads checks.py with fixture logs — no Hermes, no network.
+        if: inputs.run-full-gate
+        run: python tools/test_session_health.py
+
       - name: Exit contract (guide CLI)
         if: inputs.run-full-gate
         run: python tools/test_exit_contract.py
