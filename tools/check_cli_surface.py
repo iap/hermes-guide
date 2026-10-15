@@ -264,17 +264,23 @@ def _negated(line: str, pos: int) -> bool:
     else:
         end = len(line)
     segment = masked[start:pos]
-    # A negator inside a leading conditional ("if ...,", "when ...,")
-    # governs the antecedent, not a cite in the consequent: only text
-    # after the clause comma can negate the span. The mask already
-    # removed commas inside code spans, so the first comma is the
-    # clause boundary. ("If down, do not run `hermes x`" still skips.)
+    # A negator inside a leading conditional governs the antecedent,
+    # not a cite in the consequent: only text after the clause boundary
+    # first comma (or `then`) is the clause boundary, searched only
+    # before the cite — a cite inside the antecedent keeps its negator.
     head = masked[start:pos]
     cond = re.match(r"\s*(?:if|when)\b", head, re.IGNORECASE)
     if cond:
-        comma = head.find(",", cond.end())
-        if 0 <= comma:
-            segment = head[comma + 1:]
+        tail = head[cond.end():]
+        bounds = []
+        comma = tail.find(",")
+        if comma >= 0:
+            bounds.append(cond.end() + comma + 1)
+        m_then = re.search(r"\bthen\b", tail, re.IGNORECASE)
+        if m_then:
+            bounds.append(cond.end() + m_then.end())
+        if bounds:
+            segment = head[min(bounds):]
     segment = CONTRAST_RE.split(segment)[-1]
     return NEG_RE.search(segment) is not None
 
@@ -473,6 +479,12 @@ def _selftest() -> int:
     assert not _negated(cond, cond.index("`"))
     # ... unless the consequent itself is negated.
     cond = "If the service is down, do not run `hermes x`."
+    assert _negated(cond, cond.index("`"))
+    # `then`-delimited conditionals narrow the same way ...
+    cond = "If the gateway is not running then run `hermes gateway start`."
+    assert not _negated(cond, cond.index("`"))
+    # ... while a cite inside the antecedent keeps its negator.
+    cond = "If you have not run `hermes setup`, run it now."
     assert _negated(cond, cond.index("`"))
     assert _cite_parts("hooks test <event> [--for-tool X]") == (
         ["hooks", "test"], ["--for-tool"])
