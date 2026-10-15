@@ -59,7 +59,7 @@ The practical consequence: `CLAUDE.md`/`.cursorrules` at a repository root are *
 
 - **Display defaults resolve per key**: `display.platforms.<p>.<key>` beats `display.<key>`, which beats built-in platform/global defaults — so a global `display:` block overrides only the keys it sets; unset keys still use tier defaults. Set global keys deliberately, prefer `display.platforms.<p>` for surface-specific tweaks.
 - **Attachments** stage under `attachments.storage` (`hermes-home` or workspace root) — a "missing attachment" report starts by checking which root is configured.
-- **LSP** post-write lint runs by default with `trusted_workspaces` gating which trees it may touch — lint doing nothing can mean an unlisted workspace, a non-git tree, a disabled server, or missing tooling; check all four before calling LSP broken.
+- **LSP** post-write lint runs by default (`lsp.enabled: True`) — trust covers launched/session workspaces plus `trusted_workspaces` entries (`agent/lsp/manager.py`); lint doing nothing can mean `lsp.enabled: false`, an unlisted non-session tree, a non-git tree, a disabled server, or missing tooling; check in that order before calling LSP broken.
 
 ## Credential pool
 
