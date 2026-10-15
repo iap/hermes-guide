@@ -267,6 +267,7 @@ def verify(cites) -> tuple[list[str], str]:
     top_flags = _usage_flags(top_text) | GLOBAL_FLAGS | HIDDEN_GLOBAL_FLAGS
     sub_cache: dict[tuple[str, ...], tuple[set[str], set[str]]] = {}
     text_cache: dict[tuple[str, ...], str] = {}
+    err_cache: dict[tuple[str, ...], str] = {}
     failures: list[str] = []
     checked = 0
     skipped: list[str] = []
@@ -277,11 +278,17 @@ def verify(cites) -> tuple[list[str], str]:
         seconds — this cache is what keeps a full-tree run in budget)."""
         key = tuple(cmd)
         if key not in text_cache:
-            text, _err = _run_help(cmd)
+            text, err = _run_help(cmd)
             if text is None:
+                err_cache[key] = err or "unknown error"
                 return None
             text_cache[key] = text
         return text_cache[key]
+
+    def help_err(cmd: list[str]) -> str | None:
+        """Failure reason for a `--help` call, or None when it succeeded."""
+        text_of(cmd)
+        return err_cache.get(tuple(cmd))
 
     def sub_tree(cmd: list[str]) -> tuple[set[str], set[str]]:
         key = tuple(cmd)
@@ -333,9 +340,15 @@ def verify(cites) -> tuple[list[str], str]:
             if top in SKIP_IF_ABSENT:
                 skipped.append(top)
                 continue
-            failures.append(
-                "%s:%d: %s — unknown top-level command (have: %s)" %
-                (skill, ln, span, _sample(top_cmds, top)))
+            err = help_err([top])
+            if err is not None:
+                failures.append(
+                    "%s:%d: %s — `hermes %s --help` failed (%s)" %
+                    (skill, ln, span, top, err))
+            else:
+                failures.append(
+                    "%s:%d: %s — unknown top-level command (have: %s)" %
+                    (skill, ln, span, _sample(top_cmds, top)))
             continue
         checked += 1
         names, available = sub_tree([canon])
@@ -344,9 +357,15 @@ def verify(cites) -> tuple[list[str], str]:
             # Maybe an enum value (`logs gui`), not a subcommand. The top
             # text is already cached — no extra launch.
             if sub not in _enum_values(text_of([canon]) or ""):
-                failures.append(
-                    "%s:%d: %s — unknown subcommand (have for %s: %s)" %
-                    (skill, ln, span, canon, _sample(names, sub)))
+                err = help_err([canon])
+                if err is not None:
+                    failures.append(
+                        "%s:%d: %s — `hermes %s --help` failed (%s)" %
+                        (skill, ln, span, canon, err))
+                else:
+                    failures.append(
+                        "%s:%d: %s — unknown subcommand (have for %s: %s)" %
+                        (skill, ln, span, canon, _sample(names, sub)))
                 continue
             sub = None  # enum value accepted; no deeper flags to check
         for flag in flags:
@@ -354,8 +373,15 @@ def verify(cites) -> tuple[list[str], str]:
                 continue
             # Subcommand-specific flags live one depth deeper — fetch that
             # help only now that a flag actually missed up top.
-            if sub is not None and flag in sub_tree([canon, sub])[1]:
-                continue
+            if sub is not None:
+                err = help_err([canon, sub])
+                if err is not None:
+                    failures.append(
+                        "%s:%d: %s — `hermes %s %s --help` failed (%s)" %
+                        (skill, ln, span, canon, sub, err))
+                    break
+                if flag in sub_tree([canon, sub])[1]:
+                    continue
             failures.append(
                 "%s:%d: %s — unknown flag (have for %s: %s)" %
                 (skill, ln, span, canon, _sample(available, flag)))

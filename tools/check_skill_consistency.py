@@ -41,7 +41,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO / "skills"
 
-FILE_RE = re.compile(r"`([^`*]*\.(?:json|yaml|yml|md|py|toml|lock))`")
+FILE_RE = re.compile(r"`([^`*]*\.(?:json|yaml|yml|md|py|toml|lock|ts|tsx|js|jsx))`")
 COUNT_RE = re.compile(
     r"\(\s*(\d[\d,]*)\s*(?:lines?|files?|skills?|rows?|entries|checks?|tests?|cases?)\s*\)")
 COUNT_WINDOW = 60
@@ -57,61 +57,73 @@ SCOPE_WORDS = (
 
 
 def _numbers_near_filename(line: str) -> list[tuple[str, str]]:
-    """(basename, count) for explicit ``file (N unit)`` constructions."""
+    """(dir-key, basename, count) for explicit ``file (N unit)`` constructions."""
     lowered = line.lower()
     if any(w in lowered for w in SCOPE_WORDS):
         return []
     out = []
     for m in FILE_RE.finditer(line):
-        base = m.group(1).split("/")[-1]
+        inner = m.group(1)
+        parts = inner.split("/")
+        base = parts[-1]
+        # Bare basenames (no directory) match only each other: a bare
+        # `config.yaml` never accuses `$HERMES_HOME/config.yaml` of
+        # disagreeing, and vice versa.
+        key = "/".join(parts[:-1])
         window = line[m.end():m.end() + COUNT_WINDOW]
         for c in COUNT_RE.finditer(window):
-            out.append((base, c.group(1).replace(",", "")))
+            out.append((key, base, c.group(1).replace(",", "")))
     return out
 
 
-def collect() -> list[tuple[str, int, str, str, str]]:
-    """(skill, line, filename, number, text) for filename-anchored numbers."""
+def collect() -> list[tuple[str, int, str, str, str, str]]:
+    """(skill, line, dir-key, filename, number, text) for anchored numbers."""
     out = []
     for f in sorted(SKILLS_DIR.glob("*/SKILL.md")):
         skill = f.parent.name
         for i, line in enumerate(
                 f.read_text(encoding="utf-8").splitlines(), 1):
-            for base, num in _numbers_near_filename(line):
-                out.append((skill, i, base, num, line.strip()))
+            for key, base, num in _numbers_near_filename(line):
+                out.append((skill, i, key, base, num, line.strip()))
     return out
 
 
 def verify(rows) -> tuple[list[str], str]:
-    """Group by filename; disagreeing numbers fail unless scoped (done above)."""
-    by_file: dict[str, dict[str, list[str]]] = {}
-    for skill, ln, base, num, text in rows:
-        by_file.setdefault(base, {}).setdefault(num, []).append(
+    """Group by (dir, filename); disagreeing numbers fail unless scoped."""
+    by_file: dict[tuple[str, str], dict[str, list[str]]] = {}
+    for skill, ln, key, base, num, text in rows:
+        by_file.setdefault((key, base), {}).setdefault(num, []).append(
             "%s:%d" % (skill, ln))
     failures = []
-    for base in sorted(by_file):
-        if len(by_file[base]) > 1:
+    for (key, base) in sorted(by_file):
+        if len(by_file[(key, base)]) > 1:
+            shown = (key + "/" if key else "") + base
             parts = "; ".join(
                 "%s at %s" % (num, ", ".join(locs))
-                for num, locs in sorted(by_file[base].items()))
+                for num, locs in sorted(by_file[(key, base)].items()))
             failures.append(
                 "%s: disagreeing numbers: %s "
-                "(qualify one side with a scope word, or drop the count)" % (base, parts))
+                "(qualify one side with a scope word, or drop the count)" % (shown, parts))
     summary = "OK: %d filename-anchored number(s) agree across skills" % sum(
         len(v) for v in by_file.values())
     return failures, summary
 
 
 def _selftest() -> int:
-    assert _numbers_near_filename("`a.json` (3057 lines) x") == [("a.json", "3057")]
+    assert _numbers_near_filename("`a.json` (3057 lines) x") == [("", "a.json", "3057")]
     assert _numbers_near_filename("POSIX `a.json` (1 lines) y") == []
     assert _numbers_near_filename("no file 42 here") == []
     assert _numbers_near_filename("`a.py` see #12912, timeout 300") == []
     assert _numbers_near_filename("`*.py` (4 files) globbed") == []
-    fails, _ = verify([("s1", 1, "a.json", "3057", "x"),
-                       ("s2", 2, "a.json", "3083", "y")])
+    assert _numbers_near_filename("`d/a.ts` (9 lines) z") == [("d", "a.ts", "9")]
+    fails, _ = verify([("s1", 1, "", "a.json", "3057", "x"),
+                       ("s2", 2, "", "a.json", "3083", "y")])
     assert len(fails) == 1 and "a.json" in fails[0]
-    fails, _ = verify([("s1", 1, "a.json", "3057", "x")])
+    fails, _ = verify([("s1", 1, "", "a.json", "3057", "x")])
+    assert not fails
+    # Same basename, different dirs: no comparison.
+    fails, _ = verify([("s1", 1, "$H", "config.yaml", "5", "x"),
+                       ("s2", 2, "bot", "config.yaml", "7", "y")])
     assert not fails
     print("OK: skill-consistency selftest")
     return 0
