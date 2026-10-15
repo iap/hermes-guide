@@ -194,7 +194,10 @@ def _read_frontmatter(path):
     """Parse the YAML frontmatter of a SKILL.md; ``{}`` when absent or malformed."""
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeError):
+        # UnicodeError covers UnicodeDecodeError: a damaged or
+        # differently-encoded file must degrade to "no frontmatter", not
+        # break plugin load.
         return {}
     if not text.startswith("---"):
         return {}

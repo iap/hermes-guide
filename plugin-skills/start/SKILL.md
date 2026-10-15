@@ -24,6 +24,10 @@ The user reports a Hermes problem without naming the subsystem:
 - "The bot isn't responding." / "It won't start."
 - "I can't install anything."
 
+If Hermes itself will not launch — it crashes on start, or no command runs —
+skip the baseline; it cannot execute. Go to `installing-hermes` for the
+install and repair routes, and return to `hermes guide` once a command runs.
+
 When the subsystem is already named (MCP, hooks, cron, voice, ...), go
 straight to its playbook when installed — `hermes guide <scope>` covers only
 the seven scopes below; cron and voice, for example, are playbook-only.
@@ -63,12 +67,20 @@ The short version:
   them like a softer `x`.
 - A flagged `?` (unknown) line → `hermes-configuration-guide` Step 0 first;
   when the venv or interpreter is suspect, `diagnosing-path`.
+- Failed installs: `hermes skills install` / `hermes plugins install` ending
+  in not-found, 401, or 403 → `diagnosing-auth` first (a dead token makes
+  every hub adapter read "not found"); a Hermes install or upgrade itself
+  failing → `installing-hermes`. While the install path is failing, do not
+  loop the tap install below — fix the failure first.
 - Every scope healthy but the symptom persists → keep going: the baseline
   cannot see delivery, host load, or platform problems. Route by the symptom
-  itself — for example a bot that is not responding → `diagnosing-gateway`;
-  slowness, or several surfaces failing at once → `diagnosing-host-pressure`.
+  itself — for example a bot that is not responding → `diagnosing-gateway`
+  first; when the gateway checks out healthy, continue to `diagnosing-bot-mode`
+  (profiles, conflicts, DMs). Slowness, or several surfaces failing at once →
+  `diagnosing-host-pressure`.
 
-When the tap is not installed and the user needs the deeper playbooks:
+When the tap is not installed, the install path is healthy, and the user
+wants the deeper playbooks:
 
 ```bash
 hermes skills tap add iap/hermes-guide
@@ -90,4 +102,4 @@ full set.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill
   or the target playbook explicitly.
 
-*Facts verified 2026-10-16 against this repo's `checks.py` scope registry and the upstream baseline `f97608f178d1ffeca59860195ab7da295f7c8e5f`; routing targets verified present in `skills/`. Re-verify before reuse.*
+*Facts (re-)verified 2026-10-15 against upstream source at commit `f97608f178d1ffeca59860195ab7da295f7c8e5f` (`hermes guide` scopes and exit codes); in-repo routing targets verified in `checks.py` and `skills/`. Re-verify before reuse.*

@@ -20,7 +20,9 @@ Cases:
    the command surface survives;
 6. a registrar that rejects the extended keyword form with ``TypeError`` ->
    the two-argument fallback registers the skill;
-7. a context without ``register_skill`` at all -> contained, no crash.
+7. a context without ``register_skill`` at all -> contained, no crash;
+8. a damaged (invalid UTF-8) skill file -> contained: no frontmatter, no
+   crash, plugin load survives.
 
 Run: python3 tools/test_bootstrap_skill.py
 """
@@ -164,6 +166,17 @@ def main() -> int:
             failures.append(f"register() crashed without a registrar: {exc!r}")
         _check("no registrar registers no skill", not ctx5.skills)
         _check("no registrar keeps the command surface", "hermes-doctor" in ctx5.commands)
+
+        # 8: damaged file (invalid UTF-8) -> contained.
+        bad = Path(td) / "damaged.md"
+        bad.write_bytes(b"---\ndescription: \xff not utf-8\n---\nbody\n")
+        _check("damaged file yields no frontmatter", hermes_guide._read_frontmatter(bad) == {})
+        ctx6 = _FakeCtx()
+        try:
+            hermes_guide._register_start_skill(ctx6, skill_file=bad)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"damaged file escaped containment: {exc!r}")
+        _check("damaged file registers nothing", not ctx6.skills)
 
     if failures:
         print("FAIL: bootstrap skill registration")
