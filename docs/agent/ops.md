@@ -166,6 +166,14 @@ dual checkouts for those Hermes-facing facts.
   branches.
 - Fill the PR template **Environment** block. Platform-specific claims name the
   host that checked them.
+- One session owns each PR branch: others review but do not push to it
+  without asking. Announce branch claims before starting review fixes
+  elsewhere.
+- Never force-push a branch another session has checked out. Rebase private
+  work freely; integrate shared branches by agreement, and say so first — a
+  stale-head review round costs more than the rebase saves.
+- Bot reviews: batch fix commits, then trigger one review round per settled
+  head — never trigger-per-push. Quota and reviewer attention are shared.
 
 ## Explaining
 
