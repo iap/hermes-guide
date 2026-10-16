@@ -108,6 +108,7 @@ SKILL_FOR_SCOPE = {
     "plugins": "diagnosing-plugins",
     "memories": "diagnosing-memory",
     "sessions": "diagnosing-triage",
+    "update": "diagnosing-cli-tui",
 }
 
 # Near-duplicate detection budget: entries beyond this count skip the pairwise

@@ -218,6 +218,11 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_session_health.py
 
+      - name: Update lock regression test
+        # Shim-loads checks.py with fixture lock dirs — no Hermes, no network.
+        if: inputs.run-full-gate
+        run: python tools/test_update_lock.py
+
       - name: Exit contract (guide CLI)
         if: inputs.run-full-gate
         run: python tools/test_exit_contract.py

@@ -1480,6 +1480,62 @@ def check_session_health():
             "detail": log_path}
 
 
+# --- stale update-lock audit ------------------------------------------------
+
+# Observed live 2026-10-16: a timeout-killed plugin install left
+# hermes-agent/.git/hermes-update.lock with a dead owner PID, and every
+# `hermes` CLI invocation hung on "an update is still running" until the
+# lock was removed by hand (liveness-verified first). The check below
+# reports the verdict; removal stays human-confirmed — this tool never
+# deletes the lock itself.
+_UPDATE_LOCK_RELPATH = os.path.join("hermes-agent", ".git", "hermes-update.lock")
+
+
+def _lock_owner_alive(pid):
+    """True when the lock owner PID exists (EPERM still means alive)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return True
+    return True
+
+
+def check_update_lock():
+    """Read-only stale-lock audit for the Hermes agent update lock.
+
+    Reads the owner PID from hermes-agent/.git/hermes-update.lock and tests
+    liveness: a dead owner means every CLI invocation wedges on the stale
+    lock (broken — remove after confirming no update is genuinely running);
+    a live owner means an update is legitimately in progress
+    (informational); no lock file means healthy. Never removes anything.
+    """
+    home = _hermes_home()
+    if not home:
+        return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
+    lock_path = os.path.join(home, _UPDATE_LOCK_RELPATH)
+    if not os.path.exists(lock_path):
+        return {"status": "healthy", "reason": "no update lock present (nothing to audit)",
+                "detail": lock_path}
+    try:
+        with open(lock_path, encoding="utf-8", errors="replace") as fh:
+            first = fh.readline().strip()
+        pid = int(first)
+    except (OSError, ValueError):
+        return {"status": "unknown", "reason": f"unreadable update lock: {lock_path}",
+                "detail": lock_path}
+    if _lock_owner_alive(pid):
+        return {"status": "informational",
+                "reason": f"update in progress (owner PID {pid} alive) — wait, do not remove the lock",
+                "detail": lock_path}
+    return {"status": "broken",
+            "reason": f"stale update lock (owner PID {pid} dead) — every hermes invocation wedges until it is removed",
+            "detail": lock_path}
+
+
 # --- runner ---------------------------------------------------------------
 
 _CHECKS = [
@@ -1497,6 +1553,9 @@ _CHECKS = [
     # logs/agent.log) — "session" singular is avoided for the same
     # collision-safety reason as "memories" above.
     ("sessions", check_session_health),
+    # Label is "update" (the hermes-agent update lock audited for stale
+    # dead-owner state) — "upgrade" is not a Hermes term, so no alias.
+    ("update", check_update_lock),
 ]
 
 

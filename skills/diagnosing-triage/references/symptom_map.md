@@ -5,6 +5,7 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | Symptom | Target skill |
 |---|---|
 | Agent keeps repeating itself / "looping again" / same tool calls every turn | diagnosing-triage (§1b runaway branch) |
+| Every hermes command hangs on "an update is still running" | diagnosing-cli-tui (§1b stale lock) |
 | "Could not fetch from any source" / "Could not find … in any source" | diagnosing-auth |
 | GitHub 401 on hub installs | diagnosing-auth |
 | Rate-limit 403 during installs | diagnosing-auth |
