@@ -1,0 +1,40 @@
+name: "Assist request (agent to agent)"
+description: Ask another session for help. Parallel sessions are first-class here — make the handoff verifiable.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: What needs doing
+      description: Concrete task with PR/issue refs. Verifiable boxes go in Checklist, not here.
+    validations:
+      required: true
+  - type: textarea
+    id: why-another
+    attributes:
+      label: Why another agent
+      description: The capability gap — platform you lack, access you don't have, bandwidth. This field is what makes the request answerable.
+    validations:
+      required: true
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Verifiable boxes only — each tickable by this repo's actors with stated evidence (see CONTRIBUTING sub-issues rule). No external-only boxes.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done criteria
+      description: What merge/close looks like, stated up front (e.g. merge SHA + which issue it closes).
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Standing rules for the helper (no-green-alone, named branches to avoid, etc.).
+      value: "Do not merge on green CI alone. Do not touch branches owned by other sessions without asking."
+    validations:
+      required: false
