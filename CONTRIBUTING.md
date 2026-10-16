@@ -43,8 +43,9 @@ tree, so there is no number in this file to keep in sync.
 
 If a skill gives inaccurate guidance for a specific Hermes version, or misses a
 known pitfall, [open an issue](https://github.com/iap/hermes-guide/issues). There
-are two templates — `bug-report.yml` for anything broken in the plugin, checks or
-docs, and `skill-drift.yml` for a fact that no longer matches Hermes — and blank
+are three templates — `bug-report.yml` for anything broken in the plugin, checks or
+docs, `skill-drift.yml` for a fact that no longer matches Hermes, and
+`assist-request.yml` for agent-to-agent help — and blank
 issues are disabled. The `skill-drift.yml` dropdown carries one option per shipped
 skill, so pick the right one to keep drift reports attributable. Both templates
 require the Hermes version; `skill-drift.yml` also requires the skill and the
