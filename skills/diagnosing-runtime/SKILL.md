@@ -14,6 +14,12 @@ When the Hermes CLI itself is broken — commands produce no output, exit 0 with
 no diagnostic text, hang, or return empty — the problem is the runtime, not
 any config surface. This skill covers the diagnosis and recovery.
 
+Resolve `$HERMES_HOME` first — every path below hangs off it: `hermes config
+path` prints the config file, its directory is the home (POSIX default
+`~/.hermes`, native Windows `%LOCALAPPDATA%\hermes`). Named profiles re-home
+to `<root>/profiles/<p>`, and `$HERMES_RUNTIME_DIR` overrides tool paths —
+never hardcode `~/.hermes`.
+
 ## Symptoms
 
 - `hermes guide` exits 0 but prints no scope output (just "finishing an interrupted source update" or nothing)
@@ -22,18 +28,24 @@ any config surface. This skill covers the diagnosis and recovery.
 - CLI commands hang indefinitely (exit 124 from timeout)
 - Plugin load timeouts ("load timed out after 10s")
 
-## Step 1 — Confirm the scope
+## Step 1 — Confirm the scope, per probe
 
-Run these in order. If any produces normal output, the runtime is fine and
-the issue is config-level (use `diagnosing-triage` instead).
+Run these in order; route on the FIRST one that misbehaves, not on the first
+that works:
 
 ```bash
 hermes --version
 hermes config path
 hermes plugins list
+hermes guide
 ```
 
-If all three return empty or hang, proceed to Step 2.
+- `hermes --version` empty/hanging → Step 2 (runtime is down).
+- Version works but `hermes guide` prints nothing → stay here: the guide
+  plugin itself fails to load — continue with Step 4 (plugin load health),
+  not `diagnosing-triage` (triage's baseline needs a working guide).
+- Version works and guide works → the runtime is fine; the issue is
+  config-level (use `diagnosing-triage` instead).
 
 ## Step 2 — Check for a stuck source update
 
@@ -48,43 +60,39 @@ doing anything else.
 ```bash
 # Retry the update
 hermes update
-
-# If that exits 0 but doesn't fix it, check for lock files
-ls ~/.hermes/.update-lock 2>/dev/null
-ls ~/.hermes/.source-update.lock 2>/dev/null
-
-# Remove stale locks (they prevent the update from completing)
-rm -f ~/.hermes/.update-lock ~/.hermes/.source-update.lock
-
-# Retry
-hermes update
 ```
+
+If the wedge persists, the checkout lock or the owed completion tail is
+involved — do not invent lock filenames. The lock lives at `<git common
+dir>/hermes-update.lock` (or `<install root>/.hermes-update.lock` for a ZIP
+install), and an owed tail is recorded as a `source-completion-pending`
+marker. Follow the diagnosing-cli-tui stale-lock note for the liveness
+verdicts (live owner → wait; dead owner + free lock → human-confirmed
+removal; dead owner + held lock → wait, never delete) — including its
+no-baseline exception, since a fully wedged CLI cannot run any check first.
 
 ## Step 3 — Check node dependencies
 
 The Hermes runtime depends on node for its own operation (the CLI, plugin
-loading, desktop app). A broken node install blocks everything.
+loading, desktop app). A broken node install blocks everything. PM keeps one
+versioned directory per tool under `$HERMES_HOME/tools/` (live layout:
+`node-26.7.0-win32-x64`, `npm-12.0.2-win32-x64`, plus a shared `node/`
+tree) — there is no `tools/node` symlink to repair, so never create one by
+hand.
 
 ```bash
-# Check if the active node symlink exists
-ls -la ~/.hermes/tools/node/bin/node
-
-# If missing, check for versioned installs
-ls ~/.hermes/tools/node-*/bin/node
-
-# If versioned installs exist, create the symlink
-ln -sf ~/.hermes/tools/node-*/ ~/.hermes/tools/node
-
-# Verify
-~/.hermes/tools/node/bin/node --version
-```
-
-**If no node binary exists at all**, the package manager needs to reinstall it:
-
-```bash
+# PM's view of the managed tools (repairs the recorded environment)
 hermes pm doctor
+
+# Reinstall a missing tool by package name
 hermes pm install node
+
+# Rebuild without re-resolving
+hermes pm repair
 ```
+
+Verify with `hermes pm doctor` (clean) and `hermes --version` (normal
+output) — not by poking versioned directories directly.
 
 ## Step 4 — Check plugin load health
 
@@ -92,8 +100,11 @@ If the CLI partially works but plugins fail:
 
 ```bash
 # Check which plugins are enabled
-python3 -c "import yaml; c=yaml.safe_load(open('$HOME/.hermes/config.yaml')); print(c.get('plugins',{}).get('enabled',[]))"
+python3 -c "import yaml; c=yaml.safe_load(open('config.yaml')); print(c.get('plugins',{}).get('enabled',[]))"
+```
+(run from the `$HERMES_HOME` resolved above — never a hardcoded home).
 
+```bash
 # Check plugin discovery
 hermes plugins list 2>&1 | head -20
 ```
@@ -104,34 +115,38 @@ indicate:
 - A plugin trying to connect to an external service during load
 - Resource exhaustion (see `diagnosing-host-pressure`)
 
-**Temporary workaround:** disable the failing plugin in `config.yaml`:
+**Temporary workaround:** disable the failing plugin. For a regular plugin,
+comment it out of `plugins.enabled` in `config.yaml`:
 
 ```yaml
 plugins:
   enabled:
     # Remove or comment out the failing plugin
-    # - telegram-platform
+    # - some-regular-plugin
 ```
 
-Then restart the session.
+Then restart the session. Platform sub-plugins (telegram and friends) do
+NOT gate on `plugins.enabled` — check their selection key in config (see
+`diagnosing-plugins`) instead of editing the list.
 
 ## Step 5 — Direct config inspection (bypass the CLI)
 
-When the CLI is completely unusable, read config directly:
+When the CLI is completely unusable, read config directly under the
+`$HERMES_HOME` resolved above:
 
 ```bash
 # Config location
-cat ~/.hermes/config.yaml
+cat "$HERMES_HOME/config.yaml"
 
 # Plugin directory
-ls ~/.hermes/plugins/
+ls "$HERMES_HOME/plugins/"
 
 # Skills directory
-ls ~/.hermes/skills/ | head -20
+ls "$HERMES_HOME/skills/" | head -20
 
 # Recent errors
-tail -50 ~/.hermes/logs/errors.log
-tail -50 ~/.hermes/logs/agent.log
+tail -50 "$HERMES_HOME/logs/errors.log"
+tail -50 "$HERMES_HOME/logs/agent.log"
 ```
 
 This lets you diagnose config-level issues (wrong paths, missing files,
@@ -142,7 +157,7 @@ syntax errors) without a working CLI.
 If none of the above resolves the issue:
 
 1. **Restart the session** — a fresh process may clear stuck state
-2. **Check for stale processes:** `ps aux | grep hermes` — kill any zombie Hermes processes
+2. **Check for stale processes:** `ps aux | grep hermes` — identify stray Hermes processes before killing any; never blanket-kill
 3. **As a last resort, reinstall Hermes** — see `installing-hermes`
 
 ## When to use this vs other skills
@@ -153,4 +168,4 @@ If none of the above resolves the issue:
 - **`diagnosing-plugins`:** A specific plugin won't load (but CLI works)
 - **`installing-hermes`:** Fresh install or complete reinstall needed
 
-*Facts verified 2026-10-16 against Hermes Agent v0.21.5+2176.g962d453.dirty (2026.9.24) on macOS 12.7.6; node v24.13.1 and v20.18.0 under ~/.hermes/tools/. Re-verify before reuse.*
+*Facts verified 2026-10-16 against upstream source at `9bda154d` (v0.21.7): PM-versioned tool layout under `$HERMES_HOME/tools/` (live: `node-26.7.0-win32-x64`; `pm doctor`/`install [names]`/`repair` in `hermes pm --help`); owed-tail marker `source-completion-pending` (`hermes_cli/venv_sync.py`); checkout lock names (`hermes_cli/update_lock.py`); platform selection keys over `plugins.enabled` (see diagnosing-plugins). Re-verify before reuse.*
