@@ -43,7 +43,11 @@ and leave Result as "not run" — that is honest and accepted. A wrong count is
 not accepted.
 
 Paste the actual final line of each command's output into Notes so a reviewer
-can compare it against the re-run. -->
+can compare it against the re-run.
+
+Before merge, update this table to its final state: no box may still say
+"pending" on a merged PR. Same rule as issue checkboxes (CONTRIBUTING) —
+a merged PR claiming pending work misleads the next reader. -->
 
 | Check | Command | Result | Notes |
 |---|---|---|---|
