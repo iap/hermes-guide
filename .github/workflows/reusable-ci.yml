@@ -61,7 +61,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Pinned, not floating: ubuntu-latest migrates to Ubuntu 26 on
+        # 2026-10-19 (actions/runner-images#14748) and a surprise image
+        # bump under a green tree is indistinguishable from a real
+        # regression. Same philosophy as the macos-15-intel pin below.
+        # (`linux` is not a GHA-hosted runner label — jobs would queue
+        # forever — so pinning the Ubuntu version is the available lever.)
+        os: [ubuntu-24.04, windows-latest]
         # Floor (3.11) tracks upstream's .python-version; ceiling (3.12) is
         # what this repo already ran. Upstream declares >=3.11,<3.15 (verified
         # against tag v2026.9.24), so a single pin in either direction just
