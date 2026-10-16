@@ -114,6 +114,18 @@ A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. 
 - Accepts cite the fixing commit. Declines cite the guard or code that overrules the finding (e.g. "provenance 21/21 green; symbol proof is `check_citation_integrity`'s job").
 - Posting is mechanical; the verdict must be verified first.
 
+Round summaries use one shape so a human reads the verdict in one glance —
+fixed count, declined count, fixing commit, then the evidence. One line per
+finding, cause → change; declines carry reason + file:line evidence; close
+with the verification line (tests, gates, mypy/CI as applicable):
+
+  **Round N adjudication — X fixed, Y declined** (`<sha>`)
+  Fixed:
+  - <cause> → <change>
+  Declined (with reason + evidence):
+  - <finding> (<why it stands>)
+  Verification: <tests x/y, gates, mypy/CI>
+
 ## Delegation (swarm and second opinions)
 
 Delegate when tasks are independent (parallel workstreams), verification must
