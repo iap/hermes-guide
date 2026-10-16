@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.0.8
+version: 1.0.9
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -50,8 +50,10 @@ Route its `~`/`x`/`?` lines first:
 | `x plugins` | diagnosing-plugins |
 | `x memories` | diagnosing-memory |
 | `x sessions` (runaway loop signature) | stay here — §1b runaway branch below |
-| `x update` (stale update lock) | diagnosing-cli-tui §1b |
+| `x update` (stale update lock) | diagnosing-cli-tui §1 stale-lock note |
 | `?` (unknown — home unresolvable, doctor output unrecognized) | hermes-configuration-guide Step 0 (resolve home/config), then re-run the scope; unknown means unmeasured, never healthy |
+
+Exception — no baseline possible: when every `hermes` invocation hangs (e.g. on `an update is still running`), the baseline cannot run. Load the diagnosing-cli-tui stale-lock note directly and follow its manual steps; run `hermes guide update` after the CLI recovers as confirmation, not as the entry point.
 
 Then continue with symptom routing below for whatever the baseline did not explain.
 
@@ -271,4 +273,4 @@ When the triage skill routes to a diagnostic skill, the model reports findings u
 - **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
 - **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
-*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id — footer dated to that evidence day). `x update` row + symptom-map stale-lock row point at diagnosing-cli-tui §1b (update-lock check verified by tools/test_update_lock.py). Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id — footer dated to that evidence day). `x update` row + symptom-map stale-lock row point at the diagnosing-cli-tui §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py). Re-verify before reuse.*

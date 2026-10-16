@@ -32,6 +32,7 @@ import shlex
 import subprocess
 import sys
 import time
+from contextlib import suppress
 
 import yaml
 
@@ -1488,7 +1489,108 @@ def check_session_health():
 # lock was removed by hand (liveness-verified first). The check below
 # reports the verdict; removal stays human-confirmed — this tool never
 # deletes the lock itself.
-_UPDATE_LOCK_RELPATH = os.path.join("hermes-agent", ".git", "hermes-update.lock")
+#
+# Install roots are resolved like the installed updater
+# (hermes_cli/update_lock.py checkout_lock_path): `<root>/.git` as a dir or
+# as a `gitdir:` file (linked worktree/submodule) names the common dir
+# through `commondir`; no `.git` means a ZIP install whose lock sits at the
+# root. The standard co-located `<home>/hermes-agent` root is the only
+# candidate: an unrecognized layout reads unknown, never healthy.
+_UPDATE_LOCK_INSTALL_DIR = "hermes-agent"
+_UPDATE_LOCK_GIT_NAME = "hermes-update.lock"
+_UPDATE_LOCK_ROOT_NAME = ".hermes-update.lock"
+# Windows lease range mirroring the updater's R5b joiner slots: a dead
+# owner's completion child holds a lease byte, not the main byte.
+_WINDOWS_LOCK_OFFSET = 1 << 20
+_WINDOWS_LEASE_SLOTS = 16
+
+
+def _install_git_common_dir(root):
+    """Git common dir of an install root, or None (mirrors upstream _git_common_dir)."""
+    dot = os.path.join(root, ".git")
+    try:
+        if os.path.isdir(dot):
+            gitdir = dot
+        elif os.path.isfile(dot):
+            with open(dot, encoding="utf-8-sig") as fh:
+                text = fh.read().strip()
+            if not text.startswith("gitdir:"):
+                return None
+            target = text[len("gitdir:"):].strip()
+            gitdir = target if os.path.isabs(target) else os.path.join(root, target)
+        else:
+            return None
+        commondir = os.path.join(gitdir, "commondir")
+        if os.path.isfile(commondir):
+            with open(commondir, encoding="utf-8-sig") as fh:
+                gitdir = os.path.join(gitdir, fh.read().strip())
+    except OSError:
+        return None
+    return os.path.normpath(gitdir)
+
+
+def _checkout_lock_candidates(home):
+    """Candidate lock paths for the standard co-located install root."""
+    root = os.path.join(home, _UPDATE_LOCK_INSTALL_DIR)
+    common = _install_git_common_dir(root)
+    if common is not None:
+        return [os.path.join(common, _UPDATE_LOCK_GIT_NAME)]
+    if os.path.exists(root):
+        # Present root, no git dir: ZIP-install layout.
+        return [os.path.join(root, _UPDATE_LOCK_ROOT_NAME)]
+    return []
+
+
+def _checkout_lock_free(path):
+    """Non-blocking kernel-lock probe: True free, False held, None indeterminate.
+
+    Takes and instantly releases the lock the updater holds (flock on POSIX;
+    the record byte plus lease range on Windows — a dead owner's completion
+    child holds a lease, never the record alone). A momentary collide may
+    delay a racing updater by microseconds; the probe itself holds nothing
+    on return.
+    """
+    if os.name == "nt":
+        try:
+            import msvcrt
+            fd = os.open(path, os.O_RDWR | getattr(os, "O_BINARY", 0))
+        except OSError:
+            return None
+        slots = [_WINDOWS_LOCK_OFFSET] + list(range(
+            _WINDOWS_LOCK_OFFSET + 1, _WINDOWS_LOCK_OFFSET + 1 + _WINDOWS_LEASE_SLOTS))
+        taken = []
+        try:
+            for off in slots:
+                os.lseek(fd, off, os.SEEK_SET)
+                try:
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                except OSError:
+                    return False
+                taken.append(off)
+            return True
+        except OSError:
+            return None
+        finally:
+            for off in taken:
+                with suppress(OSError):
+                    os.lseek(fd, off, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            os.close(fd)
+    try:
+        import fcntl
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return None
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        return True
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
 
 
 def _lock_owner_alive(pid):
@@ -1540,16 +1642,25 @@ def _windows_pid_alive(pid):
         kernel32.OpenProcess.restype = wintypes.HANDLE
         kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+        kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, wintypes.LPVOID]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.GetLastError.restype = wintypes.DWORD
         handle = kernel32.OpenProcess(0x1000, False, pid)
         if not handle:
             err = kernel32.GetLastError()
             if err == 5:  # ERROR_ACCESS_DENIED: alive, unopenable
                 return None
-            return False  # ERROR_INVALID_PARAMETER and friends: no such PID
+            if err == 87:  # ERROR_INVALID_PARAMETER: no such PID
+                return False
+            return None  # any other failure is unmeasured, never dead
         try:
             exit_code = wintypes.DWORD()
             if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
                 return None
+            # STILL_ACTIVE residual: a process that genuinely exited with
+            # code 259 reads alive. Fail-closed (wait, do not remove) and
+            # pathological in practice; removal stays human-confirmed.
             return exit_code.value == 259  # STILL_ACTIVE
         finally:
             kernel32.CloseHandle(handle)
@@ -1560,24 +1671,46 @@ def _windows_pid_alive(pid):
 def check_update_lock():
     """Read-only stale-lock audit for the Hermes agent update lock.
 
-    Reads the owner PID from hermes-agent/.git/hermes-update.lock and tests
-    liveness: a dead owner means every CLI invocation wedges on the stale
-    lock (broken — remove after confirming no update is genuinely running);
-    a live owner means an update is legitimately in progress
-    (informational); no lock file means healthy. Never removes anything.
+    Resolves the checkout lock like the installed updater (git common dir,
+    ZIP-install root fallback); an unrecognized layout reads unknown, never
+    healthy. Tests owner-PID liveness, then the kernel lock itself: a dead
+    owner with a HELD checkout is genuinely wedged (broken — wait for the
+    holder, never delete); a dead owner with a FREE checkout is harmless
+    residue (informational — safe to remove with human confirmation, CLI
+    unaffected); anything unmeasurable reads unknown. Never removes anything.
     """
     home = _hermes_home()
     if not home:
         return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
-    lock_path = os.path.join(home, _UPDATE_LOCK_RELPATH)
-    if not os.path.exists(lock_path):
-        return {"status": "healthy", "reason": "no update lock present (nothing to audit)",
-                "detail": lock_path}
     try:
-        with open(lock_path, encoding="utf-8", errors="replace") as fh:
-            first = fh.readline().strip()
+        candidates = _checkout_lock_candidates(home)
+    except OSError as exc:
+        return {"status": "unknown",
+                "reason": f"cannot resolve the install checkout ({exc.strerror or exc})",
+                "detail": home}
+    if not candidates:
+        return {"status": "unknown",
+                "reason": "install layout unrecognized (no hermes-agent checkout beside $HERMES_HOME) — verify the update lock by hand",
+                "detail": home}
+    lock_path = None
+    for candidate in candidates:
+        try:
+            with open(candidate, encoding="utf-8", errors="replace") as fh:
+                first = fh.readline().strip()
+        except FileNotFoundError:
+            continue  # absent here; another candidate (or healthy) may apply
+        except OSError as exc:
+            return {"status": "unknown",
+                    "reason": f"update lock present but unreadable: {candidate} ({exc.strerror or exc})",
+                    "detail": candidate}
+        lock_path = candidate
+        break
+    if lock_path is None:
+        return {"status": "healthy", "reason": "no update lock present (nothing to audit)",
+                "detail": candidates[0]}
+    try:
         pid = int(first)
-    except (OSError, ValueError):
+    except ValueError:
         return {"status": "unknown", "reason": f"unreadable update lock: {lock_path}",
                 "detail": lock_path}
     # PID liveness cannot exclude PID reuse: a recycled PID reads alive.
@@ -1589,8 +1722,17 @@ def check_update_lock():
                 "reason": f"update in progress (owner PID {pid} alive) — wait, do not remove the lock",
                 "detail": lock_path}
     if alive is False:
-        return {"status": "broken",
-                "reason": f"stale update lock (owner PID {pid} dead) — every hermes invocation wedges until it is removed",
+        free = _checkout_lock_free(lock_path)
+        if free is False:
+            return {"status": "broken",
+                    "reason": f"update owner PID {pid} dead but the checkout is still held by a process it started — every hermes invocation wedges until it exits; wait, do not remove the lock",
+                    "detail": lock_path}
+        if free is True:
+            return {"status": "informational",
+                    "reason": f"stale update lock record (owner PID {pid} dead, checkout free) — harmless residue, CLI unaffected; safe to remove with human confirmation",
+                    "detail": lock_path}
+        return {"status": "unknown",
+                "reason": f"owner PID {pid} dead but the checkout lock cannot be probed — verify by hand before touching the lock",
                 "detail": lock_path}
     return {"status": "unknown",
             "reason": f"owner PID {pid} liveness indeterminate — verify by hand before touching the lock",
