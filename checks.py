@@ -24,6 +24,7 @@ subprocess.
 """
 
 import collections
+import contextvars
 import importlib
 import json
 import os
@@ -223,7 +224,7 @@ def _run_hermes(args, timeout=20):
     the floor), keeping the fallback reachable without starving early
     candidates.
     """
-    if _FAST_MODE:
+    if _FAST_MODE.get():
         return -1, "", "fast mode: subprocess skipped (no `hermes` launch)"
     candidates = _hermes_candidates()
     if not candidates:
@@ -248,12 +249,14 @@ def _run_hermes(args, timeout=20):
 # walk — happen exactly once instead of once per check).
 _cache: dict = {}
 
-# Set while run_all(fast=True) executes: _run_hermes short-circuits instead
+# Fast-mode switch for run_all(fast=True): _run_hermes short-circuits instead
 # of starting a subprocess, so a degraded host (minutes per launch while
 # Hermes retries failed update completion) still gets a bounded, honest
-# report. Restored by try/finally in run_all; same locking discipline as
-# _cache (none — one run per process in practice).
-_FAST_MODE = False
+# report. A ContextVar (not a process global): overlapping runs in different
+# threads/contexts keep their own mode, so a concurrent normal run can neither
+# clear a fast run's suppression nor inherit it. run_all sets and resets it
+# via token, so the value never leaks past the call.
+_FAST_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar("_FAST_MODE", default=False)
 
 
 def _hermes_home_from_library():
@@ -1830,18 +1833,21 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
     ``_run_hermes`` call short-circuits) and hooks always use the in-process
     variant. Home/config resolve from the library only; when they do not (no
     live Hermes process), each requested check reports ``unknown`` as skipped
-    in fast mode instead of paying the 60 s + 90 s subprocess budgets. A
-    partial fast report beats a timeout-killed full one.
+    in fast mode instead of paying the 60 s + 90 s subprocess budgets. When
+    home resolves but config.yaml is absent, the expected path is still
+    reported (missing, not unknown). A partial fast report beats a
+    timeout-killed full one.
     """
-    global _FAST_MODE
     _cache.clear()
     valid = labels()
     if scope is not None and scope not in valid:
         raise ValueError(
             f"unknown scope {scope!r}; valid scopes: {', '.join(valid)} "
             "(if docs name a scope missing here, the installed hermes-guide "
-            "predates them — run `hermes plugins update hermes-guide`)"
+            "predates them — run `hermes plugins update hermes-guide` "
+            "(or reselect the pin on a pinned install))"
         )
+    token = None
     if fast:
         home = _hermes_home_from_library()
         if not home:
@@ -1855,7 +1861,11 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
                 }
                 for label in wanted
             }
-        _FAST_MODE = True
+        # Seed the expected config path from the known home (file or not):
+        # the slow-path subprocess is blocked below, so without this a
+        # missing config.yaml would read unknown instead of missing.
+        _cache["config_path"] = os.path.join(home, constants.CONFIG_FILENAME)
+        token = _FAST_MODE.set(True)
     results = {}
     try:
         for label, fn in _CHECKS:
@@ -1872,5 +1882,6 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
                     "detail": None,
                 }
     finally:
-        _FAST_MODE = False
+        if token is not None:
+            _FAST_MODE.reset(token)
     return results
