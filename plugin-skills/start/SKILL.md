@@ -25,8 +25,17 @@ The user reports a Hermes problem without naming the subsystem:
 - "I can't install anything."
 
 If Hermes itself will not launch — it crashes on start, or no command runs —
-skip the baseline; it cannot execute. Go to `installing-hermes` for the
-install and repair routes, and return to `hermes guide` once a command runs.
+the baseline cannot execute, and the tap may not be installed either.
+Sequence it by reachability:
+
+1. Load `installing-hermes` if it is already installed — the install and
+   repair routes are the remedy for a broken launch.
+2. If the tap is not installed and a command runs at all (`hermes --help`,
+   `hermes plugins info`, anything), install it and load `installing-hermes`.
+3. If nothing runs, answer from this skill's Rules and the README install
+   section (`hermes plugins install iap/hermes-guide --enable`) — name the
+   install route instead of deferring to an unreachable playbook. Return to
+   `hermes guide` once a command runs.
 
 When the subsystem is already named (MCP, hooks, cron, voice, ...), go
 straight to its playbook when installed — `hermes guide <scope>` covers only
@@ -76,8 +85,12 @@ The short version:
   cannot see delivery, host load, or platform problems. Route by the symptom
   itself — for example a bot that is not responding → `diagnosing-gateway`
   first; when the gateway checks out healthy, continue to `diagnosing-bot-mode`
-  (profiles, conflicts, DMs). Slowness, or several surfaces failing at once →
-  `diagnosing-host-pressure`.
+  (profiles, conflicts, DMs). Slowness needs one clarifying question first:
+  general performance or several surfaces → `diagnosing-host-pressure`; a
+  single feature (one model call, one skill, one provider) → that feature's
+  playbook (`diagnosing-providers` for model calls, `diagnosing-skills` for
+  skills, ...). A non-responding bot stays on the gateway path above — not
+  slowness.
 
 When the tap is not installed, the install path is healthy, and the user
 wants the deeper playbooks:
