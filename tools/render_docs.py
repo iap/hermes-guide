@@ -76,6 +76,7 @@ _WORDS = [
     "nineteen",
     "twenty",
     "twenty-one",
+    "twenty-two",
 ]
 
 

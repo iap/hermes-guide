@@ -1,11 +1,11 @@
 ---
 name: start
 description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, diagnostics, triage, routing]
-    related_skills: [diagnosing-triage, hermes-configuration-guide, installing-hermes]
+    related_skills: [diagnosing-triage, diagnosing-runtime, hermes-configuration-guide, installing-hermes]
 ---
 
 # Hermes Guide — Start
