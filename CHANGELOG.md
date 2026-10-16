@@ -2,6 +2,35 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.0 (2026-10-16)
+
+### Features
+
+- **guide**: fast/degraded-host mode with --fast, outdated-plugin scope hint
+- **issues**: assist requests carry help wanted ([#269](https://github.com/iap/hermes-guide/pull/269))
+- **guide**: update scope detects stale dead-owner locks ([#264](https://github.com/iap/hermes-guide/pull/264))
+- **issues**: assist-request template for agent handoffs ([#266](https://github.com/iap/hermes-guide/pull/266))
+- **issues**: evidence-structured bug template ([#262](https://github.com/iap/hermes-guide/pull/262))
+
+### Documentation
+
+- **ops**: fork-safe reviewer reply command ([#271](https://github.com/iap/hermes-guide/pull/271))
+- **ops**: review-round comment shape ([#270](https://github.com/iap/hermes-guide/pull/270))
+- **ops**: delegation vehicles and worker-output discipline ([#267](https://github.com/iap/hermes-guide/pull/267))
+- **cli-tui**: stale update-lock verdicts note ([#263](https://github.com/iap/hermes-guide/pull/263))
+- add embedding guide for host-app integration ([#260](https://github.com/iap/hermes-guide/pull/260))
+- **template**: validation table must be final before merge ([#258](https://github.com/iap/hermes-guide/pull/258))
+- **contributing**: boxes must be tickable, park external waits ([#257](https://github.com/iap/hermes-guide/pull/257))
+- **contributing**: checkboxes are claims, verify before ticking ([#256](https://github.com/iap/hermes-guide/pull/256))
+
+### CI
+
+- pin ubuntu-24.04 ahead of Ubuntu 26 migration ([#255](https://github.com/iap/hermes-guide/pull/255))
+
+### Chores
+
+- **qodo**: tune primary reviewer with repo context ([#259](https://github.com/iap/hermes-guide/pull/259))
+
 ## v0.7.2 (2026-10-16)
 
 ### Features
