@@ -40,6 +40,10 @@ hermes plugins list
 hermes guide
 ```
 
+- `hermes config path` hanging/empty → home unresolvable: fix that first
+  (hermes-configuration-guide Step 0), then re-run the probes.
+- `hermes plugins list` failing → Step 4 (plugin load health) directly.
+
 - `hermes --version` empty/hanging → the classic CLI is Python, not node:
   suspect the interpreter/venv/shim (see `diagnosing-path`), then continue
   with Step 5 (direct inspection) here — not Step 3.
@@ -78,10 +82,12 @@ no-baseline exception, since a fully wedged CLI cannot run any check first.
 Node matters for the TUI (node-pty), the desktop app, and node-backed tools —
 not for the classic CLI, which is Python (`hermes --version` blank points at
 the interpreter/venv/shim per Step 1, never here). PM keeps one versioned
-directory per tool under `$HERMES_HOME/tools/` (live layout:
-`node-26.7.0-win32-x64`, `npm-12.0.2-win32-x64`, plus a shared `node/`
-tree) — there is no `tools/node` symlink to repair, so never create one by
-hand.
+directory per tool under `$HERMES_HOME/tools/` named
+`<tool>-<version>-<platform>` — e.g. `node-26.7.0-win32-x64` on this Windows
+host (`darwin-arm64`, `linux-x64` triplets on theirs; list the directory to
+see yours, and note `$HERMES_RUNTIME_DIR` redirects the whole store) — plus
+a shared `node/` tree — there is no `tools/node` symlink to repair, so never
+create one by hand.
 
 ```bash
 # PM's view of the managed tools (repairs the recorded environment)

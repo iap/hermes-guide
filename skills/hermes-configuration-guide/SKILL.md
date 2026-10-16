@@ -109,7 +109,7 @@ Notes:
 
 ## Routing — when something is wrong
 - Vague description ("something is wrong", "it's slow", "it crashed") without naming a subsystem → **`diagnosing-triage`** (meta-skill that routes to the correct diagnostic skill)
-- CLI produces no output, commands hang or return empty (`hermes guide` prints nothing, `hermes --version` is blank) → **`diagnosing-runtime`** (runtime failure — stuck source update, broken node deps, recovery routes)
+- Runtime/launch substrate (interpreter and venv, PM tool store under `$HERMES_HOME/tools/`, update locks and completion markers) → **`diagnosing-runtime`**
 
 - MCP server not connecting, tools missing, OAuth failing → **`diagnosing-mcp`**
 - A skill not discovered, not triggering, shadowed, or stuck "user-modified" → **`diagnosing-skills`**
