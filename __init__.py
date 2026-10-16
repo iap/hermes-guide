@@ -6,6 +6,7 @@ it covers what they don't; it does not replace them.
 Exposes:
   - `/hermes-doctor`  slash command  (CLI + gateway sessions)
   - `hermes guide <scope>`  CLI subcommand  (terminal; exit 1 on broken or unknown)
+  - `hermes-guide:start`  router skill  (model sessions; registered while the plugin is enabled)
 
 Checks: config, mcp, skills, commands, hooks, plugins, memories — seven
 read-only checks implemented in `checks.py`.
@@ -19,6 +20,9 @@ __version__ = "0.7.1"
 
 import logging
 import sys
+from pathlib import Path
+
+import yaml
 
 from . import checks
 
@@ -183,6 +187,64 @@ def _proactive_check_start(**kwargs):
     _proactive_check(**kwargs)
 
 
+_START_SKILL_FILE = Path(__file__).resolve().parent / "plugin-skills" / "start" / "SKILL.md"
+
+
+def _read_frontmatter(path):
+    """Parse the YAML frontmatter of a SKILL.md; ``{}`` when absent or malformed."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        # UnicodeError covers UnicodeDecodeError: a damaged or
+        # differently-encoded file must degrade to "no frontmatter", not
+        # break plugin load.
+        return {}
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end == -1:
+        return {}
+    try:
+        data = yaml.safe_load(text[3:end])
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _register_start_skill(ctx, skill_file=None):
+    """Register the plugin-side router skill (``hermes-guide:start``).
+
+    The tap installs separately; this router ships inside the plugin so a
+    plugin-only install still routes model-driven diagnosis to ``hermes guide``.
+    Registration is metadata: nothing is executed and nothing is written. A
+    missing file or a failing registrar must never break plugin load; builds
+    whose plugin API predates the extended registration form fall back to the
+    two-argument call.
+    """
+    path = Path(skill_file) if skill_file is not None else _START_SKILL_FILE
+    frontmatter = _read_frontmatter(path)
+    description = str(frontmatter.get("description") or "").strip()
+    if not path.is_file() or not description:
+        logger.warning(
+            "hermes-guide: router skill not registered (missing file or description)"
+        )
+        return
+    register = getattr(ctx, "register_skill", None)
+    if register is None:
+        logger.warning(
+            "hermes-guide: this Hermes build exposes no ctx.register_skill; router skill not registered"
+        )
+        return
+    try:
+        try:
+            register("start", path, description=description, frontmatter=frontmatter)
+        except TypeError:
+            # Older plugin-API builds accept only the two-argument form.
+            register("start", path)
+    except Exception:  # pragma: no cover - defensive: keep plugin load alive
+        logger.warning("hermes-guide: router skill registration failed", exc_info=True)
+
+
 def register(ctx):
     ctx.register_command(
         "hermes-doctor",
@@ -195,6 +257,7 @@ def register(ctx):
         setup_fn=_setup_cli,
         handler_fn=_run_cli,
     )
+    _register_start_skill(ctx)
 
     if ctx.get_config("proactive", False):
         ctx.register_hook("on_session_start", _proactive_check_start)

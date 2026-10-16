@@ -294,6 +294,13 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_hooks_readonly_check.py
 
+      - name: Bootstrap skill registration regression
+        # register() must always register the plugin-side router skill
+        # (hermes-guide:start) from plugin-skills/, kept out of the tap
+        # inventory. Imports hermes_guide, so it needs the full tier.
+        if: inputs.run-full-gate
+        run: python tools/test_bootstrap_skill.py
+
       - name: Plugin notes regression
         if: inputs.run-full-gate
         run: python tools/test_plugins_notes.py
