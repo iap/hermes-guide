@@ -109,8 +109,13 @@ local until the user explicitly asks for it.
 
 A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. Triage each thread before replying: reproduce it against the repo guards and cited code, then fix or decline with file:line evidence. Never auto-resolve a thread to unblock a merge.
 
-- Reply inline so the reason sits next to the finding:
-  `gh api repos/iap/hermes-guide/pulls/<PR>/comments -X POST -f body="<verdict>: <reason + evidence>" -F in_reply_to=<comment-id>`
+- Reply inline so the reason sits next to the finding. Derive the repo —
+  never hardcode `iap/hermes-guide`, or a fork checkout posts the verdict
+  onto an unrelated upstream PR sharing the number (misdirection, not a
+  clean error):
+  `gh api repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/pulls/<PR>/comments -X POST -f body="<verdict>: <reason + evidence>" -F in_reply_to=<comment-id>`
+  Glance at the resolved repo before posting; the token needs PR write scope
+  wherever the PR lives.
 - Accepts cite the fixing commit. Declines cite the guard or code that overrules the finding (e.g. "provenance 21/21 green; symbol proof is `check_citation_integrity`'s job").
 - Posting is mechanical; the verdict must be verified first.
 
