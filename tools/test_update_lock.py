@@ -222,6 +222,48 @@ def test_unreadable_lock_is_unknown():
     assert result["status"] == "unknown", result
 
 
+def test_unreadable_git_metadata_is_unknown():
+    # Present-but-unreadable .git/commondir must not become a ZIP guess.
+    checks = _load_checks()
+    home = _home_with_lock(f"{_dead_pid()}\n")
+    commondir = os.path.join(home, "hermes-agent", ".git", "commondir")
+    with open(commondir, "w", encoding="utf-8") as fh:
+        fh.write("shared\n")
+    os.chmod(commondir, 0)
+    try:
+        with open(commondir, encoding="utf-8"):
+            readable = True
+    except OSError:
+        readable = False
+    if readable:
+        os.chmod(commondir, 0o644)
+        print("SKIP [unreadable metadata]: platform ignores mode bits for the owner")
+        return
+    try:
+        checks._hermes_home = lambda: home
+        result = checks.check_update_lock()
+    finally:
+        os.chmod(commondir, 0o644)
+    assert result["status"] == "unknown", result
+
+
+def test_readonly_lock_never_reads_broken():
+    # A lock file we may not write: the probe cannot take, so the verdict
+    # must never authorize removal. POSIX falls back to a read-only flock
+    # (measured verdict); Windows cannot probe without write (unknown).
+    checks = _load_checks()
+    home = _home_with_lock(f"{_dead_pid()}\n")
+    path = os.path.join(home, "hermes-agent", ".git", "hermes-update.lock")
+    os.chmod(path, 0o444)
+    try:
+        checks._hermes_home = lambda: home
+        result = checks.check_update_lock()
+    finally:
+        os.chmod(path, 0o644)
+    assert result["status"] in ("informational", "unknown"), result
+    assert "safe to remove" not in result["reason"], result
+
+
 def test_unparseable_lock_is_unknown():
     checks = _load_checks()
     checks._hermes_home = lambda: _home_with_lock("not-a-pid\n")
@@ -300,6 +342,8 @@ def main() -> int:
         test_worktree_lock_resolves_through_commondir,
         test_zip_layout_lock_found_at_root,
         test_unreadable_lock_is_unknown,
+        test_unreadable_git_metadata_is_unknown,
+        test_readonly_lock_never_reads_broken,
         test_unparseable_lock_is_unknown,
         test_probe_failure_is_unknown_not_live,
         test_nonpositive_pid_is_unknown,

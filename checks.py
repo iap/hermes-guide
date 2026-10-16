@@ -1506,26 +1506,32 @@ _WINDOWS_LEASE_SLOTS = 16
 
 
 def _install_git_common_dir(root):
-    """Git common dir of an install root, or None (mirrors upstream _git_common_dir)."""
+    """Git common dir of an install root, or None (mirrors upstream _git_common_dir).
+
+    None means NO git metadata at all (ZIP layout or bare root). Anything
+    present-but-unreadable raises OSError: a corrupt `.git` must read
+    unknown, never silently become a ZIP guess.
+    """
     dot = os.path.join(root, ".git")
-    try:
-        if os.path.isdir(dot):
-            gitdir = dot
-        elif os.path.isfile(dot):
-            with open(dot, encoding="utf-8-sig") as fh:
-                text = fh.read().strip()
-            if not text.startswith("gitdir:"):
-                return None
-            target = text[len("gitdir:"):].strip()
-            gitdir = target if os.path.isabs(target) else os.path.join(root, target)
-        else:
-            return None
-        commondir = os.path.join(gitdir, "commondir")
-        if os.path.isfile(commondir):
-            with open(commondir, encoding="utf-8-sig") as fh:
-                gitdir = os.path.join(gitdir, fh.read().strip())
-    except OSError:
+    if not os.path.lexists(dot):
         return None
+    if os.path.isdir(dot):
+        gitdir = dot
+    elif os.path.isfile(dot):
+        with open(dot, encoding="utf-8-sig") as fh:
+            text = fh.read().strip()
+        if not text.startswith("gitdir:"):
+            raise OSError(f"{dot} is not a gitdir pointer")
+        target = text[len("gitdir:"):].strip()
+        gitdir = target if os.path.isabs(target) else os.path.join(root, target)
+    else:
+        raise OSError(f"{dot} is not a file or directory")
+    commondir = os.path.join(gitdir, "commondir")
+    if os.path.lexists(commondir) and not os.path.isfile(commondir):
+        raise OSError(f"{commondir} is not a file")
+    if os.path.isfile(commondir):
+        with open(commondir, encoding="utf-8-sig") as fh:
+            gitdir = os.path.join(gitdir, fh.read().strip())
     return os.path.normpath(gitdir)
 
 
@@ -1588,7 +1594,13 @@ def _checkout_lock_free(path):
         _flock = getattr(fcntl, "flock")
         _EX = getattr(fcntl, "LOCK_EX")
         _NB = getattr(fcntl, "LOCK_NB")
-        fd = os.open(path, os.O_RDONLY)
+        try:
+            # Writable first: NFS grants exclusive locks only on
+            # writable descriptors; read-only is the fallback for
+            # root-owned lock files, where flock still works locally.
+            fd = os.open(path, os.O_RDWR)
+        except OSError:
+            fd = os.open(path, os.O_RDONLY)
     except OSError:
         return None
     try:
