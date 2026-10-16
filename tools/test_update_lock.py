@@ -64,13 +64,16 @@ def _hold_lock(path: str):
     """Hold path's kernel lock like a live updater child; return a releaser."""
     if os.name == "nt":
         import msvcrt
+        _locking = getattr(msvcrt, "locking")
+        _NBLCK = getattr(msvcrt, "LK_NBLCK")
+        _UNLCK = getattr(msvcrt, "LK_UNLCK")
         fd = os.open(path, os.O_RDWR | getattr(os, "O_BINARY", 0))
         os.lseek(fd, 1 << 20, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        _locking(fd, _NBLCK, 1)
         def release():
             try:
                 os.lseek(fd, 1 << 20, os.SEEK_SET)
-                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                _locking(fd, _UNLCK, 1)
             finally:
                 os.close(fd)
         return release

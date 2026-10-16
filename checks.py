@@ -1553,6 +1553,11 @@ def _checkout_lock_free(path):
     if os.name == "nt":
         try:
             import msvcrt
+            # getattr, not attribute access: typeshed guards msvcrt members
+            # to win32, so mypy on POSIX sees none of them.
+            _locking = getattr(msvcrt, "locking")
+            _NBLCK = getattr(msvcrt, "LK_NBLCK")
+            _UNLCK = getattr(msvcrt, "LK_UNLCK")
             fd = os.open(path, os.O_RDWR | getattr(os, "O_BINARY", 0))
         except OSError:
             return None
@@ -1563,7 +1568,7 @@ def _checkout_lock_free(path):
             for off in slots:
                 os.lseek(fd, off, os.SEEK_SET)
                 try:
-                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                    _locking(fd, _NBLCK, 1)
                 except OSError:
                     return False
                 taken.append(off)
@@ -1574,16 +1579,21 @@ def _checkout_lock_free(path):
             for off in taken:
                 with suppress(OSError):
                     os.lseek(fd, off, os.SEEK_SET)
-                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                    _locking(fd, _UNLCK, 1)
             os.close(fd)
     try:
         import fcntl
+        # getattr, not attribute access: typeshed guards fcntl members
+        # to POSIX, so mypy on Windows sees none of them.
+        _flock = getattr(fcntl, "flock")
+        _EX = getattr(fcntl, "LOCK_EX")
+        _NB = getattr(fcntl, "LOCK_NB")
         fd = os.open(path, os.O_RDONLY)
     except OSError:
         return None
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _flock(fd, _EX | _NB)
         except BlockingIOError:
             return False
         return True
