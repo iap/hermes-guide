@@ -89,7 +89,7 @@ def _plugin_skill_names_cases() -> list[str]:
                 f"---\n{name_line}description: unhashable name\nversion: 1.0.0\n---\nbody\n",
             )
 
-            checks._cache.clear()
+            checks._store().clear()
             # point the walker at the fixture instead of the real repo skills/
             checks.__file__ = str(plugin_root / "checks.py")
             try:
@@ -131,7 +131,7 @@ def main(argv: list[str]) -> int:
                 f"---\n{name_line}description: unhashable name\nversion: 1.0.0\n---\nbody\n",
             )
 
-            checks._cache.clear()
+            checks._store().clear()
             checks._hermes_home_from_library = lambda: str(home)
             checks._hermes_config_path = lambda: str(home / "config.yaml")
             _write(home / "config.yaml", "model: test\n")
@@ -141,7 +141,7 @@ def main(argv: list[str]) -> int:
             # are compared against it rather than asserted absolutely, so the
             # test stays honest instead of hard-coding unrelated verdicts.
             baseline = {}
-            checks._cache.clear()
+            checks._store().clear()
             for label, env in checks.run_all().items():
                 baseline[label] = env.get("status")
             _healthy_only = dict(baseline)
@@ -172,7 +172,7 @@ def main(argv: list[str]) -> int:
                 )
 
             # (d) via the shipped entry point: broken, but never a crash envelope
-            checks._cache.clear()
+            checks._store().clear()
             results = checks.run_all()
             skills_env = results.get("skills", {})
             if skills_env.get("status") != "broken":

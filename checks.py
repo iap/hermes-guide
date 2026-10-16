@@ -243,11 +243,22 @@ def _run_hermes(args, timeout=20):
     return rc, stdout, stderr
 
 
-# Per-run memoization (cleared at the start of every run_all() so each
-# invocation re-resolves fresh, but within one run the expensive resolutions —
-# the `hermes config path` subprocess, the config.yaml read, and the skills
-# walk — happen exactly once instead of once per check).
-_cache: dict = {}
+# Per-run memoization. Each run_all() gets its own store (cleared at start)
+# so overlapping runs in different threads/contexts never see each other's
+# resolutions: a concurrent normal run cannot clear a fast run's seeded
+# config path, and memoization still happens exactly once per check within
+# one run. A ContextVar holding None default (never a shared dict — a mutable
+# default would be one store for every context); _store() materializes it.
+_cache: contextvars.ContextVar[dict | None] = contextvars.ContextVar("_cache", default=None)
+
+
+def _store() -> dict:
+    """The memoization dict for this run_all() invocation's context."""
+    store = _cache.get()
+    if store is None:
+        store = {}
+        _cache.set(store)
+    return store
 
 # Fast-mode switch for run_all(fast=True): _run_hermes short-circuits instead
 # of starting a subprocess, so a degraded host (minutes per launch while
@@ -279,20 +290,21 @@ def _hermes_home_from_library():
 
 
 def _hermes_config_path():
-    if "config_path" not in _cache:
+    store = _store()
+    if "config_path" not in store:
         # Fast path: construct from library-derived home (no subprocess)
         home = _hermes_home_from_library()
         if home:
             config = os.path.join(home, constants.CONFIG_FILENAME)
             if os.path.isfile(config):
-                _cache["config_path"] = config
-                return _cache["config_path"]
+                store["config_path"] = config
+                return store["config_path"]
         # Slow path: fall back to `hermes config path` subprocess
         rc, stdout, _ = _run_hermes(list(constants.CLI_CONFIG_PATH_ARGV), timeout=_CONFIG_PATH_TIMEOUT)
         lines = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
         # Use stdout only (never stderr) — the path is printed to stdout.
-        _cache["config_path"] = lines[-1] if rc == 0 and lines else None
-    return _cache["config_path"]
+        store["config_path"] = lines[-1] if rc == 0 and lines else None
+    return store["config_path"]
 
 
 def _hermes_home():
@@ -311,15 +323,16 @@ def _read_config():
     path = _hermes_config_path()
     if not path:
         return None, None
-    if "config_data" not in _cache:
+    store = _store()
+    if "config_data" not in store:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 loaded = yaml.safe_load(f)
             # A non-mapping root (list/scalar) is malformed for our purposes.
-            _cache["config_data"] = loaded if isinstance(loaded, dict) else None
+            store["config_data"] = loaded if isinstance(loaded, dict) else None
         except Exception:
-            _cache["config_data"] = None
-    return path, _cache["config_data"]
+            store["config_data"] = None
+    return path, store["config_data"]
 
 
 def frontmatter(path):
@@ -359,8 +372,8 @@ def _plugin_skill_names():
     Falls back to the directory basename when frontmatter is unreadable — the
     hub installs by directory name, so that is the fallback users see too.
     """
-    if "plugin_skills" in _cache:
-        return _cache["plugin_skills"]
+    if "plugin_skills" in _store():
+        return _store()["plugin_skills"]
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills")
     names = set()
     if os.path.isdir(root):
@@ -374,7 +387,7 @@ def _plugin_skill_names():
                 # guards report the malformed file separately.
                 raw = (fm or {}).get("name")
                 names.add(raw if isinstance(raw, str) and raw else os.path.basename(dirpath))
-    _cache["plugin_skills"] = names
+    _store()["plugin_skills"] = names
     return names
 
 
@@ -386,7 +399,7 @@ def _iter_skills():
     skills — mirroring the loader so archived/backup copies never produce
     false positives.
     """
-    if "skills" not in _cache:
+    if "skills" not in _store():
         home = _hermes_home()
         out = []
         if home:
@@ -396,8 +409,8 @@ def _iter_skills():
                     dirnames[:] = [d for d in dirnames if not d.startswith(".")]
                     if "SKILL.md" in filenames:
                         out.append((dirpath, frontmatter(os.path.join(dirpath, "SKILL.md"))))
-        _cache["skills"] = out
-    return _cache["skills"]
+        _store()["skills"] = out
+    return _store()["skills"]
 
 
 def _bundled_skill_names():
@@ -408,7 +421,7 @@ def _bundled_skill_names():
     are not user-fixable (an update overwrites them) and are labelled
     distinctly instead of prompting the user to edit them.
     """
-    if "bundled_names" not in _cache:
+    if "bundled_names" not in _store():
         home = _hermes_home()
         names = set()
         if home:
@@ -424,8 +437,8 @@ def _bundled_skill_names():
                     # Unreadable/malformed manifest — treat as empty (best-effort;
                     # fail open toward user-actionable labels).
                     names = set()
-        _cache["bundled_names"] = names
-    return _cache["bundled_names"]
+        _store()["bundled_names"] = names
+    return _store()["bundled_names"]
 
 
 def _as_name_set(value):
@@ -1838,7 +1851,7 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
     reported (missing, not unknown). A partial fast report beats a
     timeout-killed full one.
     """
-    _cache.clear()
+    _store().clear()
     valid = labels()
     if scope is not None and scope not in valid:
         raise ValueError(
@@ -1864,7 +1877,7 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
         # Seed the expected config path from the known home (file or not):
         # the slow-path subprocess is blocked below, so without this a
         # missing config.yaml would read unknown instead of missing.
-        _cache["config_path"] = os.path.join(home, constants.CONFIG_FILENAME)
+        _store()["config_path"] = os.path.join(home, constants.CONFIG_FILENAME)
         token = _FAST_MODE.set(True)
     results = {}
     try:

@@ -89,7 +89,7 @@ def main(argv: list[str]) -> int:
         _write(config, "plugins:\n  enabled: []\n  disabled: []\n")
         (home / "plugins").mkdir(parents=True, exist_ok=True)
 
-        checks._cache.clear()
+        checks._store().clear()
         checks._hermes_config_path = lambda: str(config)
         checks._hermes_home_from_library = lambda: str(home)
         checks._bundled_plugins_dir = lambda: str(bundled)

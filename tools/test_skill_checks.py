@@ -76,7 +76,7 @@ def main(argv: list[str]) -> int:
         home = Path(td) / "home"
         _build_home(home)
 
-        checks._cache.clear()
+        checks._store().clear()
         checks._hermes_home_from_library = lambda: str(home)
 
         # (1) hidden/archive dirs are skipped

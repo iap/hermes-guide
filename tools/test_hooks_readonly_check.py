@@ -84,7 +84,7 @@ def main(argv: list[str]) -> int:
             raise _Boom("subprocess path used by the readonly check")
 
         def _install(specs, allowlisted=None, executable=None, module=True):
-            checks._cache.clear()
+            checks._store().clear()
             if module:
                 fake = _FakeShellHooks(specs, allowlisted or {}, executable or {})
                 checks._load_shell_hooks = lambda: fake
@@ -157,7 +157,7 @@ def main(argv: list[str]) -> int:
         allowlist.unlink()
 
         # 7. config unreadable -> unknown (subprocess fallback stubbed to fail)
-        checks._cache.clear()
+        checks._store().clear()
         saved = config.read_text(encoding="utf-8")
         config.unlink()
         checks._load_shell_hooks = lambda: _FakeShellHooks([], {}, {})
@@ -169,7 +169,7 @@ def main(argv: list[str]) -> int:
 
         # 8. wiring: run_all(readonly_hooks=True) uses the readonly check,
         #    the default keeps the doctor-based check.
-        checks._cache.clear()
+        checks._store().clear()
         doctor_calls = []
         checks._run = lambda cmd, timeout=20: (0, "No shell hooks configured.\n", "")
         checks._run_hermes = lambda args, timeout=20: (
