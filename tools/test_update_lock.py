@@ -94,12 +94,21 @@ def test_unparseable_lock_is_unknown():
 def test_probe_failure_is_unknown_not_live():
     checks = _load_checks()
     checks._hermes_home = lambda: _home_with_lock("12345\n")
-    orig_kill = os.kill
-    checks.os.kill = lambda pid, sig: (_ for _ in ()).throw(OSError("probe exploded"))
-    try:
-        result = checks.check_update_lock()
-    finally:
-        checks.os.kill = orig_kill
+    if os.name == "nt":
+        # Windows takes the ctypes branch: patch that seam instead.
+        orig = checks._windows_pid_alive
+        checks._windows_pid_alive = lambda pid: (_ for _ in ()).throw(OSError("probe exploded"))
+        try:
+            result = checks.check_update_lock()
+        finally:
+            checks._windows_pid_alive = orig
+    else:
+        orig_kill = os.kill
+        checks.os.kill = lambda pid, sig: (_ for _ in ()).throw(OSError("probe exploded"))
+        try:
+            result = checks.check_update_lock()
+        finally:
+            checks.os.kill = orig_kill
     assert result["status"] == "unknown", result
     assert "indeterminate" in result["reason"], result
 
@@ -125,11 +134,15 @@ def test_huge_pid_is_unknown_not_crash():
 
 
 def test_windows_probe_never_raises():
-    # POSIX hosts have no ctypes.windll: the Windows branch must degrade to
-    # False/None, never raise — a raising probe would break the whole check.
+    # POSIX hosts have no ctypes.windll: the branch must degrade without
+    # raising. On real Windows, our own PID must read alive — that is the
+    # probe actually working, not just not-crashing.
     checks = _load_checks()
     result = checks._windows_pid_alive(os.getpid())
-    assert result in (False, None), result
+    if os.name == "nt":
+        assert result is True, result
+    else:
+        assert result in (False, None), result
 
 
 def test_update_label_registered():

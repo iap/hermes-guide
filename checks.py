@@ -1501,9 +1501,10 @@ def _lock_owner_alive(pid):
     An indeterminate probe returns None — never guess dead, because the
     dead verdict authorizes a human to delete the lock.
     """
-    if pid <= 0:
-        # kill(2) group semantics (0 = own group, negative = other groups):
-        # a corrupt lock reading would probe the wrong processes entirely.
+    if not 0 < pid <= 0xFFFFFFFF:
+        # 0/-1 are kill(2) process-group selectors, not processes; anything
+        # past DWORD range cannot be a PID on any supported platform. A
+        # corrupt lock reading must never probe (or read as) a live owner.
         return None
     if os.name == "nt":
         return _windows_pid_alive(pid)
