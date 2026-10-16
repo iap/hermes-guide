@@ -85,6 +85,48 @@ def test_runaway_signature_is_broken():
     assert "free-tier" in detail, result
 
 
+def test_single_spike_is_not_runaway():
+    # One heavy turn plus one big (unrelated) context call must not read as
+    # a loop: the signature requires repetition.
+    checks = _load_checks()
+    lines = _turn_lines("steady", turns=16, tool_turns=1, in_tokens=3000)
+    lines.append(
+        "2026-10-16 05:42:30,950 INFO [steady] agent.conversation_loop: "
+        "API call #99: model=vendor/big provider=x in=50000 out=300 "
+        "total=50300 latency=9.6s id=0000000000000000000000000000000000000099\n"
+    )
+    lines.append(
+        "2026-10-16 05:42:58,422 INFO [steady] agent.conversation_loop: "
+        "Turn ended: reason=text_response(finish_reason=stop) model=vendor/big "
+        "api_calls=2/90 budget=2/90 tool_turns=12 "
+        "last_msg_role=assistant response_len=764 session=steady\n"
+    )
+    checks._hermes_home = lambda: _home_with_log(lines)
+    result = checks.check_session_health()
+    assert result["status"] != "broken", result
+
+
+def test_stale_runaway_is_note_not_broken():
+    checks = _load_checks()
+    old = _turn_lines("oldsess", turns=16, tool_turns=20,
+                      in_tokens=70000, model="vendor/small:free", repairs=2)
+    filler = _turn_lines("newbie", turns=2, tool_turns=1, in_tokens=2000)
+    filler = filler * 300  # push oldsess out of the recent window
+    checks._hermes_home = lambda: _home_with_log(old + filler)
+    result = checks.check_session_health()
+    assert result["status"] != "broken", result
+    assert "past runaway" in " ".join(result["detail"] or []), result
+
+
+def test_unparseable_tail_is_unknown():
+    checks = _load_checks()
+    lines = ["2026-10-16 05:42:30,950 INFO [x] agent.conversation_loop: "
+             "heartbeat ok\n"]
+    checks._hermes_home = lambda: _home_with_log(lines)
+    result = checks.check_session_health()
+    assert result["status"] == "unknown", result
+
+
 def test_interrupted_session_volume_via_api_calls():
     # Interrupted turns never emit "Turn ended": volume must also come from
     # api_calls, or exactly the looping shape goes undetected.
@@ -148,6 +190,9 @@ def test_sessions_label_registered():
 def main() -> int:
     cases = [
         test_runaway_signature_is_broken,
+        test_single_spike_is_not_runaway,
+        test_stale_runaway_is_note_not_broken,
+        test_unparseable_tail_is_unknown,
         test_interrupted_session_volume_via_api_calls,
         test_elevated_is_informational,
         test_quiet_is_healthy,

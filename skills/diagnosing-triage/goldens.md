@@ -37,7 +37,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | B3 | Several things broken at once, intermittent. | `diagnosing-host-pressure` (escalation: multi-surface + intermittent) |
 | B4 | It crashed. / It stopped working. | clarify surface (§3 scope questions) — do NOT guess `diagnosing-host-pressure` or `diagnosing-desktop` without a named surface |
 | B5 | The bot isn't responding. (no platform named) | `diagnosing-gateway` first — not `diagnosing-bot-mode` first |
-| B5b | It's looping again. / It keeps doing the same thing. | §1b runaway branch — do NOT route to a feature skill or keep the session alive |
+| B5b | The agent keeps repeating the same answer turn after turn. | §1b runaway branch — do NOT route to a feature skill or keep the session alive |
 | B6 | Skills aren't working. (no discovery vs /command) | clarify: "Is the skill missing from the index, or is its `/command` missing?" → `diagnosing-skills` if discovery, `diagnosing-commands` if `/command` |
 | B7a | I can't install a skill/plugin (hub install fails) | `diagnosing-auth` (dead token degrades every hub adapter) |
 | B7b | I can't install/upgrade/reinstall Hermes itself | `installing-hermes` |

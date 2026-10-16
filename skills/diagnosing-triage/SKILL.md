@@ -68,8 +68,8 @@ Is the agent LOOPING — repeating the same answer or tool calls turn after
   turn, interrupts don't change course (`hermes guide sessions` shows
   `x sessions` with a runaway signature)?
   └─ YES → do NOT keep interrupting the same session: start a fresh session;
-           check the default model tier in config.yaml (`model:` — a free-tier
-           model with a large context loops by default, not by exception);
+           inspect the default model tier in config.yaml (`model:` — a
+           free-tier default with a large context is a known loop risk);
            split generate-then-verify into separate turns. Details in §1b.
   └─ NO ↓
 
@@ -174,15 +174,15 @@ Still unsure?
 
 ## 1b. Runaway session (looping agent)
 
-Signature (confirmed live 2026-10-16: 47-turn session, 20+ tool-turns/turn,
-70K+ input tokens/call on a free-tier default model): the agent repeats the
+Signature (live incident: 47-turn session, 20+ tool-turns/turn, 70K+ input
+tokens/call on a free-tier default model): the agent repeats the
 same answer or tool sequence every turn, and interrupts produce
 meta-reasoning about looping without changing course. Interrupts fire
 correctly — the defect is that interrupt repair re-sends the full context
-and the weak model regenerates the same output.
+and a weak model regenerates the same output.
 
 1. Kill the session, don't rescue it — each post-interrupt turn reasons about the loop itself and poisons context further.
-2. Check `config.yaml` `model:` — a `:free` default with a large context is the expected-loop configuration, not an anomaly. Use a capable model for research/agentic work.
+2. Inspect `config.yaml` `model:` — a `:free` default paired with a large context is a known loop-risk configuration (one factor among others, not a sole cause). Use a capable model for research/agentic work.
 3. Split the task: one turn generates candidates with no verification, a later turn verifies only the shortlist. Interleaving generation with per-item checks is what the loop feeds on.
 4. `hermes guide sessions` detects the signature early (turns/api-calls, tool-turns, context size, free-tier flag) — run it at the first "looping again" report, not the tenth.
 
@@ -270,4 +270,4 @@ When the triage skill routes to a diagnostic skill, the model reports findings u
 - **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
 - **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
-*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified 2026-10-16 against a live runaway in `$HERMES_HOME/logs/agent.log` (47-turn session, 20+ tool-turns/turn, 70K+ input tokens on a free-tier default). Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id — footer dated to that evidence day). Re-verify before reuse.*
