@@ -148,18 +148,24 @@ def main() -> int:
     checks._run = _recorder
     checks._hermes_home_from_library = lambda: str(home)
     stop2 = threading.Event()
+    iterated = threading.Event()
     iters = [0]
 
     def normal_loop():
         while not stop2.is_set():
             checks.run_all()
             iters[0] += 1
+            iterated.set()
 
     w2 = threading.Thread(target=normal_loop, daemon=True)
     me = threading.get_ident()
     try:
         reset_calls()
         w2.start()
+        # Deterministic overlap: only run the fast check after the worker
+        # completed a full normal run; it keeps looping while we check.
+        if not iterated.wait(timeout=60):
+            failures.append("cache isolation: worker never completed a normal run")
         fast_cfg = checks.run_all(scope="config", fast=True)["config"]
         stop2.set()
         w2.join(timeout=60)
