@@ -66,7 +66,7 @@ def _handle_doctor(raw_args):
     fast = "--fast" in tokens
     scope = " ".join(t for t in tokens if t != "--fast") or None
     try:
-        call = {"scope": scope}
+        call: dict = {"scope": scope}
         if fast:
             call["fast"] = True
         _, text = _format_result(checks.run_all(**call))
@@ -81,7 +81,7 @@ def _run_cli(args):
     scope = getattr(args, "scope", None)
     fast = getattr(args, "fast", False)
     try:
-        call = {"scope": scope}
+        call: dict = {"scope": scope}
         if fast:
             call["fast"] = True
         exit_ok, text = _format_result(checks.run_all(**call))
