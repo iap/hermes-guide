@@ -40,7 +40,9 @@ hermes plugins list
 hermes guide
 ```
 
-- `hermes --version` empty/hanging → Step 2 (runtime is down).
+- `hermes --version` empty/hanging → the classic CLI is Python, not node:
+  suspect the interpreter/venv/shim (see `diagnosing-path`), then continue
+  with Step 5 (direct inspection) here — not Step 3.
 - Version works but `hermes guide` prints nothing → stay here: the guide
   plugin itself fails to load — continue with Step 4 (plugin load health),
   not `diagnosing-triage` (triage's baseline needs a working guide).
@@ -71,11 +73,12 @@ verdicts (live owner → wait; dead owner + free lock → human-confirmed
 removal; dead owner + held lock → wait, never delete) — including its
 no-baseline exception, since a fully wedged CLI cannot run any check first.
 
-## Step 3 — Check node dependencies
+## Step 3 — Check node dependencies (TUI/desktop scope only)
 
-The Hermes runtime depends on node for its own operation (the CLI, plugin
-loading, desktop app). A broken node install blocks everything. PM keeps one
-versioned directory per tool under `$HERMES_HOME/tools/` (live layout:
+Node matters for the TUI (node-pty), the desktop app, and node-backed tools —
+not for the classic CLI, which is Python (`hermes --version` blank points at
+the interpreter/venv/shim per Step 1, never here). PM keeps one versioned
+directory per tool under `$HERMES_HOME/tools/` (live layout:
 `node-26.7.0-win32-x64`, `npm-12.0.2-win32-x64`, plus a shared `node/`
 tree) — there is no `tools/node` symlink to repair, so never create one by
 hand.
@@ -91,8 +94,8 @@ hermes pm install node
 hermes pm repair
 ```
 
-Verify with `hermes pm doctor` (clean) and `hermes --version` (normal
-output) — not by poking versioned directories directly.
+Verify with `hermes pm doctor` (clean) and the previously failing surface
+(TUI launch, desktop start) — not by poking versioned directories directly.
 
 ## Step 4 — Check plugin load health
 
