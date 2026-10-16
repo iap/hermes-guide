@@ -63,7 +63,7 @@ SESSION_PREFIXES = ("/",)
 # own options (`hermes guide --help` takes only -h); globals apply on top.
 PLUGIN_COMMANDS = {
     "guide": ({"config", "mcp", "skills", "commands", "hooks", "plugins",
-               "memories", "sessions"}, set()),
+               "memories", "sessions", "update"}, set()),
 }
 
 

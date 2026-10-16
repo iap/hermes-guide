@@ -430,7 +430,7 @@ def _selftest() -> int:
 
     # Word numbers, including the deliberate ceiling.
     word_cases = ((0, "zero"), (1, "one"), (2, "two"), (7, "seven"), (8, "eight"),
-                  (19, "nineteen"), (20, "twenty"), (21, "twenty-one"))
+                  (9, "nine"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one"))
     for n, word in word_cases:
         if _word_num(n) != word:
             print(

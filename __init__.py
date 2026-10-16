@@ -8,7 +8,7 @@ Exposes:
   - `hermes guide <scope>`  CLI subcommand  (terminal; exit 1 on broken or unknown)
   - `hermes-guide:start`  router skill  (model sessions; registered while the plugin is enabled)
 
-Checks: config, mcp, skills, commands, hooks, plugins, memories, sessions — eight
+Checks: config, mcp, skills, commands, hooks, plugins, memories, sessions, update — nine
 read-only checks implemented in `checks.py`.
 
 Opt-in `proactive: true` runs drift checks on session start/end and logs

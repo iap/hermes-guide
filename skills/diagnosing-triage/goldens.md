@@ -25,6 +25,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | A6 | Baseline shows `?` (unknown) | treat as unmeasured — resolve home/config via configuration guide; never call unknown "healthy" |
 | A7 | Baseline all `+` healthy; user still vague | continue symptom flowchart / §3 clarify — do not invent a broken surface |
 | A8 | Baseline shows `x sessions` (runaway signature) | §1b runaway branch — fresh session + model-tier check, NOT more interrupts of the same session |
+| A9 | Baseline shows `x update` (stale lock) | diagnosing-cli-tui §1 stale-lock note — verify owner-PID liveness before touching the lock |
 
 ---
 
