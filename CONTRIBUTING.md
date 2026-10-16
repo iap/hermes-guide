@@ -76,6 +76,10 @@ bar. Tasklist checkboxes stay for single-owner sequences only.
   ticking it, and never tick work another session owns. Same standard as PR
   validation tables — an unticked-done or ticked-undone box misleads the next
   session reading the tracker.
+- Every box must be tickable by this repo's actors with stated evidence. A
+  box that only an external party can complete (upstream merge, vendor fix)
+  is a dependency, not a task: park it as its own blocked issue (like #204)
+  and keep it out of closable checklists.
 - Search: `has:sub-issue`, `parent-issue:NNN`.
 
 What happens after you submit is in [Contribution gate](#contribution-gate).
