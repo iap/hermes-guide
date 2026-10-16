@@ -7,10 +7,15 @@ All notable changes to hermes-guide are documented here.
 ### Features
 
 - **guide**: fast/degraded-host mode with --fast, outdated-plugin scope hint
+- **skills**: add diagnosing-runtime for CLI-no-output failures ([#268](https://github.com/iap/hermes-guide/pull/268))
 - **issues**: assist requests carry help wanted ([#269](https://github.com/iap/hermes-guide/pull/269))
 - **guide**: update scope detects stale dead-owner locks ([#264](https://github.com/iap/hermes-guide/pull/264))
 - **issues**: assist-request template for agent handoffs ([#266](https://github.com/iap/hermes-guide/pull/266))
 - **issues**: evidence-structured bug template ([#262](https://github.com/iap/hermes-guide/pull/262))
+
+### Bug Fixes
+
+- annotate mixed kwargs dict for mypy (bool into str-or-None map)
 
 ### Documentation
 
@@ -29,6 +34,7 @@ All notable changes to hermes-guide are documented here.
 
 ### Chores
 
+- release: bump to v0.8.0 with changelog section
 - **qodo**: tune primary reviewer with repo context ([#259](https://github.com/iap/hermes-guide/pull/259))
 
 ## v0.7.2 (2026-10-16)
