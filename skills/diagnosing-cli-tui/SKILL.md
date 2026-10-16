@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.16
+version: 1.1.17
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -58,7 +58,9 @@ User env vars: `EDITOR=code --wait`, `HERMES_TUI_THEME=dark`.
 
 ### Stale update lock wedges every launch
 
-Every `hermes` invocation hanging on `an update is still running` / `finishing an interrupted source update` with no update in progress means a leftover checkout lock (`hermes_cli/update_lock.py::read_live_update` judges it; `hermes_cli/update_lock.py::describe_holder` explains refusals). Read the holder record at `<git common dir>/hermes-update.lock` (or `<install root>/.hermes-update.lock` for a ZIP install with no `.git`) — `pid`, `started_at`, `ct:` creation time — then judge liveness the way upstream does: the owner counts live only while its pid runs **and** its recorded creation time still matches (2 s tolerance), so a dead pid is suggestive but a reused pid proves nothing. Three verdicts: live owner → wait (watch `hermes logs`), never touch the lock; dead owner **and** no surviving updater child (`Get-Process` shows no hermes update/python holdouts) → stale, safe to remove with human confirmation, then `hermes --version` must exit 0; dead owner **but** an updater-started process still runs → it holds the checkout (`held`) — wait, never delete. Deletion is the only write in this flow and stays human-confirmed. `hermes guide update` automates the PID-liveness verdict where the install can still launch (fully wedged installs start here by hand). Observed live 2026-10-16: timeout-killed plugin install, owner PID dead 6+ min, CLI recovered after removal.
+Every `hermes` invocation hanging on `an update is still running` / `finishing an interrupted source update` with no update in progress means a leftover checkout lock (`hermes_cli/update_lock.py::read_live_update` judges it; `hermes_cli/update_lock.py::describe_holder` explains refusals). Read the holder record at `<git common dir>/hermes-update.lock` (or `<install root>/.hermes-update.lock` for a ZIP install with no `.git`) — `pid`, `started_at`, `ct:` creation time — then judge liveness the way upstream does: the owner counts live only while its pid runs **and** its recorded creation time still matches (2 s tolerance), so a dead pid is suggestive but a reused pid proves nothing. Three verdicts: live owner → wait (watch `hermes logs`), never touch the lock; dead owner **and** no surviving updater child (`Get-Process` shows no hermes update/python holdouts) → stale, safe to remove with human confirmation, then `hermes --version` must exit 0; dead owner **but** an updater-started process still runs → it holds the checkout (`held`) — wait, never delete. Deletion is the only write in this flow and stays human-confirmed. `hermes guide update` automates the PID-liveness verdict where the install can still launch (fully wedged installs start here by hand). Observed live 2026-10-16: timeout-killed plugin install, owner PID dead 6+ min, CLI recovered after removal. When probing liveness by hand, never use `os.kill(pid, 0)` on Windows — it terminates the target there (POSIX-only idiom); use `Get-Process` instead.
+
+Upstream anchors: lock names `hermes_cli/update_lock.py:59-60`; wedge wording `hermes_cli/venv_sync.py:409,428`, `hermes_cli/source_completion.py:68`.
 
 ## 2. In-TUI slash commands that fix rendering
 

@@ -1492,7 +1492,17 @@ _UPDATE_LOCK_RELPATH = os.path.join("hermes-agent", ".git", "hermes-update.lock"
 
 
 def _lock_owner_alive(pid):
-    """True when the lock owner PID exists (EPERM still means alive)."""
+    """Liveness probe for the lock owner PID: True alive, False dead, None indeterminate.
+
+    POSIX uses os.kill(pid, 0), which is side-effect-free there. On native
+    Windows os.kill(pid, 0) TERMINATES the probed process (TerminateProcess
+    path — POSIX signal 0 has no Windows equivalent), so Windows uses
+    ctypes OpenProcess + GetExitCodeProcess instead (stdlib-only, no kill).
+    An indeterminate probe returns None — never guess dead, because the
+    dead verdict authorizes a human to delete the lock.
+    """
+    if os.name == "nt":
+        return _windows_pid_alive(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -1500,8 +1510,31 @@ def _lock_owner_alive(pid):
     except PermissionError:
         return True
     except OSError:
-        return True
+        return None
     return True
+
+
+def _windows_pid_alive(pid):
+    """Existence check without TerminateProcess (see _lock_owner_alive)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        windll = getattr(ctypes, "windll", None)
+        if windll is None:
+            return None  # not a Windows runtime at all
+        kernel32 = windll.kernel32
+        handle = kernel32.OpenProcess(0x00100000, False, pid)
+        if not handle:
+            return False
+        try:
+            exit_code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return None
+            return exit_code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        return None
 
 
 def check_update_lock():
@@ -1527,12 +1560,20 @@ def check_update_lock():
     except (OSError, ValueError):
         return {"status": "unknown", "reason": f"unreadable update lock: {lock_path}",
                 "detail": lock_path}
-    if _lock_owner_alive(pid):
+    # PID liveness cannot exclude PID reuse: a recycled PID reads alive.
+    # The removal step stays human-confirmed for exactly this reason — the
+    # check authorizes nothing by itself.
+    alive = _lock_owner_alive(pid)
+    if alive is True:
         return {"status": "informational",
                 "reason": f"update in progress (owner PID {pid} alive) — wait, do not remove the lock",
                 "detail": lock_path}
-    return {"status": "broken",
-            "reason": f"stale update lock (owner PID {pid} dead) — every hermes invocation wedges until it is removed",
+    if alive is False:
+        return {"status": "broken",
+                "reason": f"stale update lock (owner PID {pid} dead) — every hermes invocation wedges until it is removed",
+                "detail": lock_path}
+    return {"status": "unknown",
+            "reason": f"owner PID {pid} liveness indeterminate — verify by hand before touching the lock",
             "detail": lock_path}
 
 

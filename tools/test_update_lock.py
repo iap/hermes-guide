@@ -91,6 +91,27 @@ def test_unparseable_lock_is_unknown():
     assert result["status"] == "unknown", result
 
 
+def test_probe_failure_is_unknown_not_live():
+    checks = _load_checks()
+    checks._hermes_home = lambda: _home_with_lock("12345\n")
+    orig_kill = os.kill
+    checks.os.kill = lambda pid, sig: (_ for _ in ()).throw(OSError("probe exploded"))
+    try:
+        result = checks.check_update_lock()
+    finally:
+        checks.os.kill = orig_kill
+    assert result["status"] == "unknown", result
+    assert "indeterminate" in result["reason"], result
+
+
+def test_windows_probe_never_raises():
+    # POSIX hosts have no ctypes.windll: the Windows branch must degrade to
+    # False/None, never raise — a raising probe would break the whole check.
+    checks = _load_checks()
+    result = checks._windows_pid_alive(os.getpid())
+    assert result in (False, None), result
+
+
 def test_update_label_registered():
     checks = _load_checks()
     assert "update" in checks.labels()
@@ -103,6 +124,8 @@ def main() -> int:
         test_live_owner_is_informational,
         test_absent_lock_is_healthy,
         test_unparseable_lock_is_unknown,
+        test_probe_failure_is_unknown_not_live,
+        test_windows_probe_never_raises,
         test_update_label_registered,
     ]
     failed = 0
