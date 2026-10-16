@@ -151,6 +151,7 @@ Skills track the Hermes Agent source and its shipped documentation (`website/doc
 | Human contributors (skills, PRs, voice) | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Agents working in this repo | [AGENTS.md](AGENTS.md) (always-on) → [docs/agent/](docs/agent/README.md) (on demand) |
 | Security / read-only contract | [SECURITY.md](SECURITY.md) |
+| App builders / host integration | [docs/embedding.md](docs/embedding.md) |
 
 ## License
 

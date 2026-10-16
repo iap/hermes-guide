@@ -24,6 +24,7 @@ tracked top-level path and every `.github/` file.
 | `tools/pr_metadata_labels.py` | PR label/priority parser shared by the labelling workflows |
 | `tests/check_scanner_hygiene.py` | Scanner-hygiene guard — lives under `tests/` (not `tools/`) because the upstream install scanner rates its literal attack-string fixtures dangerous outside a tests directory |
 | `docs/agent/` | On-demand agent/maintainer deep ops (this tree); not injected every turn |
+| `docs/embedding.md` | Host-app integration guide — guarantee chain, bridge patterns, eval scenario |
 | `.github/workflows/reusable-ci.yml` | The CI body: ubuntu+windows × Python 3.11/3.12 matrix, all gates |
 | `.github/workflows/ci.yml` | Thin caller that triggers `reusable-ci.yml` and passes it `base-ref` / `run-full-gate` |
 | `.github/workflows/upstream-drift.yml` | Weekly watch; opens an issue when Hermes changes a watched file or drift-prone fact |
