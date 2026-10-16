@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.0.6
+version: 1.0.7
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -49,6 +49,7 @@ Route its `~`/`x`/`?` lines first:
 | `x hooks` | diagnosing-hooks |
 | `x plugins` | diagnosing-plugins |
 | `x memories` | diagnosing-memory |
+| `x sessions` (runaway loop signature) | stay here — §1b runaway branch below |
 | `?` (unknown — home unresolvable, doctor output unrecognized) | hermes-configuration-guide Step 0 (resolve home/config), then re-run the scope; unknown means unmeasured, never healthy |
 
 Then continue with symptom routing below for whatever the baseline did not explain.
@@ -61,6 +62,15 @@ Start at the top. Follow the first branch that matches the user's description.
 Is `config.yaml` missing, unparsable, or did a guide scope return unknown?
   └─ YES → hermes-configuration-guide Step 0 (resolve home/config), then
            diagnosing-path if the venv/interpreter is suspect; re-run the scope
+  └─ NO ↓
+
+Is the agent LOOPING — repeating the same answer or tool calls turn after
+  turn, interrupts don't change course (`hermes guide sessions` shows
+  `x sessions` with a runaway signature)?
+  └─ YES → do NOT keep interrupting the same session: start a fresh session;
+           inspect the default model tier in config.yaml (`model:` — a
+           free-tier default with a large context is a known loop risk);
+           split generate-then-verify into separate turns. Details in §1b.
   └─ NO ↓
 
 Is a `hermes skills` / `hermes plugins install` failing with not-found/401/403?
@@ -162,6 +172,20 @@ Still unsure?
   └─ If the user is asking "where is X configured?" → hermes-configuration-guide
 ```
 
+## 1b. Runaway session (looping agent)
+
+Signature (live incident: 47-turn session, 20+ tool-turns/turn, 70K+ input
+tokens/call on a free-tier default model): the agent repeats the
+same answer or tool sequence every turn, and interrupts produce
+meta-reasoning about looping without changing course. Interrupts fire
+correctly — the defect is that interrupt repair re-sends the full context
+and a weak model regenerates the same output.
+
+1. Kill the session, don't rescue it — each post-interrupt turn reasons about the loop itself and poisons context further.
+2. Inspect `config.yaml` `model:` — a `:free` default paired with a large context is a known loop-risk configuration (one factor among others, not a sole cause). Use a capable model for research/agentic work.
+3. Split the task: one turn generates candidates with no verification, a later turn verifies only the shortlist. Interleaving generation with per-item checks is what the loop feeds on.
+4. `hermes guide sessions` detects the signature early (turns/api-calls, tool-turns, context size, free-tier flag) — run it at the first "looping again" report, not the tenth.
+
 ## 2. Symptom → Skill mapping table
 
 The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 68 rows from specific symptoms to the target skill. Load the matched skill directly.
@@ -246,4 +270,4 @@ When the triage skill routes to a diagnostic skill, the model reports findings u
 - **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
 - **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
-*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id — footer dated to that evidence day). Re-verify before reuse.*

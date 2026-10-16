@@ -429,7 +429,9 @@ def _selftest() -> int:
             fails += 1
 
     # Word numbers, including the deliberate ceiling.
-    for n, word in ((0, "zero"), (1, "one"), (2, "two"), (7, "seven"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one")):
+    word_cases = ((0, "zero"), (1, "one"), (2, "two"), (7, "seven"), (8, "eight"),
+                  (19, "nineteen"), (20, "twenty"), (21, "twenty-one"))
+    for n, word in word_cases:
         if _word_num(n) != word:
             print(
                 f"selftest FAIL: _word_num({n}) == {_word_num(n)!r}, expected {word!r}"
@@ -443,7 +445,7 @@ def _selftest() -> int:
         print("selftest FAIL: _word_num(22) should refuse rather than invent a word")
         fails += 1
 
-    total = len(_SELFTEST_CASES) + len(_SELFTEST_ERRORS) + 7
+    total = len(_SELFTEST_CASES) + len(_SELFTEST_ERRORS) + len(word_cases)
     if fails:
         return 1
     print(f"selftest OK ({total} cases)")

@@ -1317,6 +1317,169 @@ def check_memory_hygiene():
     return {"status": "healthy", "reason": "memory stores within limits, no hygiene findings", "detail": memories_dir}
 
 
+# --- session loop-signature audit ------------------------------------------
+
+# A runaway research/agentic session (observed incident, log timestamps
+# 2026-10-16 local: 47-turn session, 20+ tool-turns/turn, 70K+ input
+# tokens/call on a free-tier default model) leaves a recognizable signature
+# in logs/agent.log: repeated heavy turns, large context resends,
+# alternation repairs after interrupts. Thresholds below are ours (not
+# upstream drift) — set from that incident with headroom.
+#
+# Log-shape anchor (re-check if Hermes changes its logging): "Turn ended"
+# lines are emitted by agent/turn_finalizer.py, "API call #N: model=...
+# in=..." lines by agent/turn_usage.py, both under the
+# agent.conversation_loop logger with the session id in [...] brackets
+# (API lines) or session= (turn lines).
+_SESSION_LOG_TAIL_LINES = 3000
+_SESSION_RECENT_LINES = 1000
+_SESSION_LOOP_MIN_TURNS = 15
+_SESSION_LOOP_MIN_API_CALLS = 20
+_SESSION_LOOP_MIN_HEAVY_TURNS = 3
+_SESSION_LOOP_MIN_STREAK = 10
+_SESSION_LOOP_MIN_TOOL_TURNS = 10
+_SESSION_LOOP_MIN_INPUT_TOKENS = 40000
+_SESSION_ELEVATED_MIN_TURNS = 8
+
+_TURN_END_RE = re.compile(
+    r"Turn ended:.*?tool_turns=(\d+).*?session=(\S+)"
+)
+_API_CALL_RE = re.compile(
+    r"\[(\S+)\] agent\.conversation_loop: API call #\d+: model=(\S+).*?in=(\d+)"
+)
+_REPAIR_RE = re.compile(
+    r"(?:alternation repair|Re-anchored).*?session=(\S+)"
+)
+
+
+def _session_stats(lines):
+    """Aggregate per-session loop signals from agent.log lines.
+
+    Returns {session_id: {turns, api_calls, heavy_turns, max_streak,
+    max_in_tokens, repairs, free_model, last_seen}}. Interrupted turns never
+    emit "Turn ended", so api_calls and the uninterrupted-API-call streak
+    are the primary volume signals for sessions that keep getting
+    interrupted — exactly the looping shape. heavy_turns counts turns with
+    >= _SESSION_LOOP_MIN_TOOL_TURNS tool calls so one heavy turn plus one
+    big (unrelated) context call cannot trip the signature. Never raises on
+    malformed lines — a diagnostic must survive the logs it exists to
+    diagnose.
+    """
+    stats: dict[str, dict[str, int | bool]] = {}
+
+    def _bucket(session):
+        return stats.setdefault(
+            session,
+            {"turns": 0, "api_calls": 0, "heavy_turns": 0, "streak": 0,
+             "max_streak": 0, "max_in_tokens": 0, "repairs": 0,
+             "free_model": False, "last_seen": 0},
+        )
+
+    for idx, line in enumerate(lines):
+        try:
+            m = _TURN_END_RE.search(line)
+            if m:
+                s = _bucket(m.group(2))
+                s["turns"] += 1
+                if int(m.group(1)) >= _SESSION_LOOP_MIN_TOOL_TURNS:
+                    s["heavy_turns"] += 1
+                s["streak"] = 0
+                s["last_seen"] = idx
+                continue
+            m = _API_CALL_RE.search(line)
+            if m:
+                s = _bucket(m.group(1))
+                s["api_calls"] += 1
+                s["streak"] += 1
+                s["max_streak"] = max(s["max_streak"], s["streak"])
+                s["max_in_tokens"] = max(s["max_in_tokens"], int(m.group(3)))
+                if ":free" in m.group(2):
+                    s["free_model"] = True
+                s["last_seen"] = idx
+                continue
+            m = _REPAIR_RE.search(line)
+            if m:
+                s = _bucket(m.group(1))
+                s["repairs"] += 1
+                s["last_seen"] = idx
+        except (ValueError, IndexError):
+            continue
+    return stats
+
+
+def check_session_health():
+    """Read-only runaway-session audit from logs/agent.log.
+
+    Flags sessions matching the loop signature (many turns + high per-turn
+    tool use + large context resends): the fix is a fresh session, a
+    capable (non-free-tier) default model for research work, and splitting
+    generate-then-verify into separate turns. Never mutates anything; reads
+    only the log tail.
+    """
+    home = _hermes_home()
+    if not home:
+        return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
+    log_path = os.path.join(home, "logs", "agent.log")
+    if not os.path.exists(log_path):
+        # Hermes writes agent.log on every run: absent means no runs yet,
+        # so there is genuinely nothing to audit (same precedent as absent
+        # memory stores reporting healthy).
+        return {"status": "healthy", "reason": "no agent activity logged yet (nothing to audit)",
+                "detail": log_path}
+    try:
+        with open(log_path, encoding="utf-8", errors="replace") as fh:
+            # Bounded tail: never load the whole log (multi-MB files at
+            # proactive session boundaries).
+            lines = collections.deque(fh, maxlen=_SESSION_LOG_TAIL_LINES)
+    except OSError as exc:
+        return {"status": "unknown", "reason": f"cannot read agent log: {exc}", "detail": log_path}
+    tail = list(lines)
+    stats = _session_stats(tail)
+    loop_lines = sum(1 for line in tail if "conversation_loop" in line)
+    if loop_lines and not stats:
+        # Log tail is unusable (rotated format? truncated lines?) — that is
+        # indeterminate, never a clean bill of health.
+        return {"status": "unknown", "reason": "log tail has session lines but none parsed",
+                "detail": log_path}
+    if not stats:
+        return {"status": "healthy", "reason": "no session activity in recent log tail",
+                "detail": log_path}
+    recent_from = len(tail) - _SESSION_RECENT_LINES
+    broken = []
+    notes = []
+    for session, s in sorted(stats.items()):
+        volume = s["turns"] >= _SESSION_LOOP_MIN_TURNS or s["api_calls"] >= _SESSION_LOOP_MIN_API_CALLS
+        repeated = s["heavy_turns"] >= _SESSION_LOOP_MIN_HEAVY_TURNS or s["max_streak"] >= _SESSION_LOOP_MIN_STREAK
+        big_context = s["max_in_tokens"] >= _SESSION_LOOP_MIN_INPUT_TOKENS
+        corroborated = s["repairs"] >= 1 or s["free_model"]
+        current = s["last_seen"] >= recent_from
+        summary = (
+            f"session {session}: {s['turns']} turns, "
+            f"{s['api_calls']} api calls, "
+            f"{s['heavy_turns']} heavy turn(s), "
+            f"{s['max_in_tokens']} max input tokens"
+            + (", free-tier model" if s["free_model"] else "")
+            + (f", {s['repairs']} interrupt repair(s)" if s["repairs"] else "")
+        )
+        if volume and repeated and big_context and corroborated:
+            if current:
+                broken.append(
+                    summary + " — runaway signature: start a fresh session, "
+                    "check the default model tier, split generate-then-verify "
+                    "into separate turns"
+                )
+            else:
+                notes.append(summary + " — past runaway signature, session idle in recent log")
+        elif s["turns"] >= _SESSION_ELEVATED_MIN_TURNS or big_context:
+            notes.append(summary + " — elevated")
+    if broken:
+        return {"status": "broken", "reason": f"{len(broken)} runaway session(s)", "detail": broken + notes}
+    if notes:
+        return {"status": "informational", "reason": f"{len(notes)} elevated session(s)", "detail": notes}
+    return {"status": "healthy", "reason": "no runaway session signature in recent log tail",
+            "detail": log_path}
+
+
 # --- runner ---------------------------------------------------------------
 
 _CHECKS = [
@@ -1330,6 +1493,10 @@ _CHECKS = [
     # audits) — "memory" is reserved by constants.PLUGIN_SUBCATEGORY_DIRS and
     # the F3 guard forbids it as a literal here.
     ("memories", check_memory_hygiene),
+    # Label is "sessions" (the per-session loop signatures audited in
+    # logs/agent.log) — "session" singular is avoided for the same
+    # collision-safety reason as "memories" above.
+    ("sessions", check_session_health),
 ]
 
 
