@@ -15,10 +15,15 @@ All notable changes to hermes-guide are documented here.
 
 ### Bug Fixes
 
+- **skill**: cite pin-resolvable update_cmd_maint hint, step path to 1.5.11
+- **review**: ContextVar fast flag, missing-config path, EPERM nuance, upstream cites
 - annotate mixed kwargs dict for mypy (bool into str-or-None map)
+- **resolver**: distinct timeout sentinel, honest floor, deadline docs ([#275](https://github.com/iap/hermes-guide/pull/275))
 
 ### Documentation
 
+- **triage**: step to 1.0.11 on rebased base, refresh v0.8.0 changelog
+- **routing**: single-source disambiguation in config map ([#276](https://github.com/iap/hermes-guide/pull/276))
 - **ops**: fork-safe reviewer reply command ([#271](https://github.com/iap/hermes-guide/pull/271))
 - **ops**: review-round comment shape ([#270](https://github.com/iap/hermes-guide/pull/270))
 - **ops**: delegation vehicles and worker-output discipline ([#267](https://github.com/iap/hermes-guide/pull/267))
