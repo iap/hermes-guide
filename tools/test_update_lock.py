@@ -104,6 +104,26 @@ def test_probe_failure_is_unknown_not_live():
     assert "indeterminate" in result["reason"], result
 
 
+def test_nonpositive_pid_is_unknown():
+    # pid 0/-1 are kill(2) process-group selectors, not processes: a corrupt
+    # lock must never read as a live owner.
+    checks = _load_checks()
+    for bad in ("0\n", "-1\n"):
+        checks._hermes_home = lambda: _home_with_lock(bad)
+        result = checks.check_update_lock()
+        assert result["status"] == "unknown", (bad, result)
+
+
+def test_huge_pid_is_unknown_not_crash():
+    # Python ints are unbounded; os.kill raises OverflowError past C long.
+    # That must be indeterminate, never an escaped crash (which run_all
+    # would report as broken).
+    checks = _load_checks()
+    checks._hermes_home = lambda: _home_with_lock(f"{2 ** 70}\n")
+    result = checks.check_update_lock()
+    assert result["status"] == "unknown", result
+
+
 def test_windows_probe_never_raises():
     # POSIX hosts have no ctypes.windll: the Windows branch must degrade to
     # False/None, never raise — a raising probe would break the whole check.
@@ -125,6 +145,8 @@ def main() -> int:
         test_absent_lock_is_healthy,
         test_unparseable_lock_is_unknown,
         test_probe_failure_is_unknown_not_live,
+        test_nonpositive_pid_is_unknown,
+        test_huge_pid_is_unknown_not_crash,
         test_windows_probe_never_raises,
         test_update_label_registered,
     ]

@@ -1501,6 +1501,10 @@ def _lock_owner_alive(pid):
     An indeterminate probe returns None — never guess dead, because the
     dead verdict authorizes a human to delete the lock.
     """
+    if pid <= 0:
+        # kill(2) group semantics (0 = own group, negative = other groups):
+        # a corrupt lock reading would probe the wrong processes entirely.
+        return None
     if os.name == "nt":
         return _windows_pid_alive(pid)
     try:
@@ -1509,13 +1513,19 @@ def _lock_owner_alive(pid):
         return False
     except PermissionError:
         return True
-    except OSError:
+    except (OSError, OverflowError):
         return None
     return True
 
 
 def _windows_pid_alive(pid):
-    """Existence check without TerminateProcess (see _lock_owner_alive)."""
+    """Existence check without TerminateProcess (see _lock_owner_alive).
+
+    PROCESS_QUERY_LIMITED_INFORMATION (0x1000) is the documented minimum
+    for GetExitCodeProcess — SYNCHRONIZE alone would fail the call. An
+    access-denied open means alive-but-unopenable (system processes), which
+    maps to None, never False: False authorizes deleting a live lock.
+    """
     try:
         import ctypes
         from ctypes import wintypes
@@ -1523,9 +1533,15 @@ def _windows_pid_alive(pid):
         if windll is None:
             return None  # not a Windows runtime at all
         kernel32 = windll.kernel32
-        handle = kernel32.OpenProcess(0x00100000, False, pid)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+        handle = kernel32.OpenProcess(0x1000, False, pid)
         if not handle:
-            return False
+            err = kernel32.GetLastError()
+            if err == 5:  # ERROR_ACCESS_DENIED: alive, unopenable
+                return None
+            return False  # ERROR_INVALID_PARAMETER and friends: no such PID
         try:
             exit_code = wintypes.DWORD()
             if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
