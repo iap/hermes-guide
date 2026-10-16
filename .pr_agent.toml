@@ -1,0 +1,27 @@
+# Qodo review tuning for iap/hermes-guide.
+#
+# Qodo is the automatic primary reviewer here (CodeRabbit stays manual via
+# `@coderabbitai review`). This file gives Qodo the repo context its raw
+# defaults lack — every instruction below pins a past false positive or a
+# contract Qodo should enforce. Keep it specific and short; Qodo docs ask
+# for extra_instructions that are clear and concise, not a handbook.
+
+[pr_reviewer]
+extra_instructions = """This repo is a READ-ONLY diagnostics plugin for Hermes agent (plugin + skills tap). Plugin Python must never write config or filesystem (enforced by tools/check_no_mutation.py) — flag any write-mode open, dump, or mutating subprocess in plugin sources.
+
+check scopes: checks.py _CHECKS labels must mirror tools/check_cli_surface.py PLUGIN_COMMANDS guide scopes — flag any scope present in one but not the other.
+
+Labels: release-blocking priority is the P1 label. There is NO priority:high label — never suggest querying it; verify any label you reference exists via `gh label list`.
+
+Dates: CHANGELOG sections stamp the UTC day (HERMES_CHANGELOG_DATE override exists for tests). Skill provenance footers carry evidence dates tied to log/source timestamps — challenge any date that contradicts its cited evidence.
+
+Generated blocks (AGENTS.md / README.md inventory, scopes) come from `python tools/render_docs.py --write` — never suggest hand-editing inside them.
+
+Version lives in five sites (plugin.yaml, __init__.py, SECURITY.md policy sentence + supported table, pyproject.toml) — flag a bump that misses one.
+
+Behavioral changes under tools/ need tools/test_*.py coverage wired into .github/workflows/reusable-ci.yml — flag behavior without a wired test.
+
+Ground factual claims in this repo's source or the installed Hermes agent; say explicitly when a claim needs live verification instead of asserting it."""
+
+# Behavioral coverage is a merge-blocking repo contract — make Qodo check it too.
+require_tests_review = true
