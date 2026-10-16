@@ -37,6 +37,7 @@ tracked top-level path and every `.github/` file.
 | `.github/dependabot.yml` | Weekly version-update PRs for the SHA-pinned actions |
 | `.pre-commit-config.yaml` | Local hook running the hermetic gate tier at commit time |
 | `.coderabbit.yaml` | Reviewer-bot config: manual reviews only, "Review skipped" status silenced |
+| `.pr_agent.toml` | Reviewer-bot config: Qodo automatic primary, repo-tuned instructions |
 | `AGENTS.md` | Always-on agent contract (slim); deep ops live under `docs/agent/` |
 | `CLAUDE.md` | `@AGENTS.md` import — the Claude Code entry point |
 | `CONTRIBUTING.md` | The authoring standard: naming, content rules, voice |
