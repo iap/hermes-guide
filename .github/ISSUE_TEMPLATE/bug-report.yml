@@ -3,10 +3,25 @@ description: Something in the plugin, checks, or docs is wrong or broken.
 labels: ["bug"]
 body:
   - type: textarea
-    id: what
+    id: observed
     attributes:
-      label: What happened
-      description: Expected vs actual.
+      label: Observed
+      description: Expected vs actual, with the exact command run.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: File + line numbers, or pasted log excerpt (redact tokens). Mark anything not directly observed as assumed.
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version / installed SHA
+      description: plugin.yaml version and install source (catalog pin or --ref SHA). Findings depend on which copy is installed.
+      placeholder: "0.7.2 @ 3cca7c0"
     validations:
       required: true
   - type: input
@@ -29,8 +44,18 @@ body:
         - WSL
     validations:
       required: false
-  - type: textarea
-    id: logs
+  - type: input
+    id: modified
     attributes:
-      label: Relevant output
-      description: Command output or logs (redact tokens).
+      label: What was modified during diagnosis
+      description: The plugin is read-only; if you removed a lock, edited a file, or restarted a service to diagnose, record it here. Leave as-is when nothing was touched.
+      value: "nothing"
+    validations:
+      required: false
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Suggested fix or check, if any. Keep observed and proposed separate.
+    validations:
+      required: false

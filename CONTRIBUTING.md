@@ -48,7 +48,11 @@ docs, and `skill-drift.yml` for a fact that no longer matches Hermes — and bla
 issues are disabled. The `skill-drift.yml` dropdown carries one option per shipped
 skill, so pick the right one to keep drift reports attributable. Both templates
 require the Hermes version; `skill-drift.yml` also requires the skill and the
-evidence for the drift.
+evidence for the drift. `bug-report.yml` additionally asks for observed vs
+assumed evidence, the installed plugin version/SHA, and anything modified
+during diagnosis — API-filed issues bypass templates entirely, so agents must
+supply the same required fields by hand (Observed, Evidence, plugin
+version/SHA, Hermes version; modified-diagnosis stays optional).
 
 A configuration problem is not a separate form. `config.yml` in
 `.github/ISSUE_TEMPLATE/` is GitHub's chooser configuration, not a report you can
