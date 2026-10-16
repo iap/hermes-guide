@@ -28,6 +28,7 @@ body:
         - diagnosing-cron
         - diagnosing-gateway
         - diagnosing-host-pressure
+        - diagnosing-runtime
         - checks.py / constants.py
         - Other / multiple skills
     validations:

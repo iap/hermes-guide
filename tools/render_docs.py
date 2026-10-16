@@ -53,8 +53,8 @@ CHECKS_PY = REPO / "checks.py"
 BEGIN = "<!-- BEGIN GENERATED: {name} -->"
 END = "<!-- END GENERATED: {name} -->"
 
-# Two..twenty-one. Extending this is a deliberate edit: a twenty-second skill should
-# make someone look at the prose, not silently produce "22".
+# Two..twenty-two. Extending this is a deliberate edit: a twenty-third skill should
+# make someone look at the prose, not silently produce "23".
 _WORDS = [
     "two",
     "three",
@@ -76,6 +76,7 @@ _WORDS = [
     "nineteen",
     "twenty",
     "twenty-one",
+    "twenty-two",
 ]
 
 
@@ -430,7 +431,8 @@ def _selftest() -> int:
 
     # Word numbers, including the deliberate ceiling.
     word_cases = ((0, "zero"), (1, "one"), (2, "two"), (7, "seven"), (8, "eight"),
-                  (9, "nine"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one"))
+                  (9, "nine"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one"),
+                  (22, "twenty-two"))
     for n, word in word_cases:
         if _word_num(n) != word:
             print(
@@ -438,11 +440,11 @@ def _selftest() -> int:
             )
             fails += 1
     try:
-        _word_num(22)
+        _word_num(23)
     except SystemExit:
         pass
     else:
-        print("selftest FAIL: _word_num(22) should refuse rather than invent a word")
+        print("selftest FAIL: _word_num(23) should refuse rather than invent a word")
         fails += 1
 
     total = len(_SELFTEST_CASES) + len(_SELFTEST_ERRORS) + len(word_cases)

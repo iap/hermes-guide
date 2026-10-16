@@ -1,11 +1,11 @@
 ﻿---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, plugins, and credential pools live on disk. For breakage routing ("something is wrong"), prefer diagnosing-triage.
-version: 1.4.2
+version: 1.4.3
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
-    related_skills: [installing-hermes, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice]
+    related_skills: [installing-hermes, diagnosing-runtime, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice]
 ---
 
 # Hermes Configuration Guide
@@ -109,6 +109,7 @@ Notes:
 
 ## Routing — when something is wrong
 - Vague description ("something is wrong", "it's slow", "it crashed") without naming a subsystem → **`diagnosing-triage`** (meta-skill that routes to the correct diagnostic skill)
+- Runtime/launch substrate (interpreter and venv, PM tool store under `$HERMES_HOME/tools/`, update locks and completion markers) → **`diagnosing-runtime`**
 
 - MCP server not connecting, tools missing, OAuth failing → **`diagnosing-mcp`**
 - A skill not discovered, not triggering, shadowed, or stuck "user-modified" → **`diagnosing-skills`**

@@ -1,11 +1,11 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.0.9
+version: 1.0.10
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
-    related_skills: [hermes-configuration-guide, diagnosing-cli-tui, diagnosing-path, diagnosing-host-pressure, diagnosing-commands, diagnosing-mcp, diagnosing-skills, diagnosing-plugins, diagnosing-hooks, diagnosing-auth, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, installing-hermes]
+    related_skills: [hermes-configuration-guide, diagnosing-runtime, diagnosing-cli-tui, diagnosing-path, diagnosing-host-pressure, diagnosing-commands, diagnosing-mcp, diagnosing-skills, diagnosing-plugins, diagnosing-hooks, diagnosing-auth, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, installing-hermes]
 ---
 
 # Diagnosing Triage
@@ -74,6 +74,11 @@ Is the agent LOOPING — repeating the same answer or tool calls turn after
            inspect the default model tier in config.yaml (`model:` — a
            free-tier default with a large context is a known loop risk);
            split generate-then-verify into separate turns. Details in §1b.
+  └─ NO ↓
+
+Is the CLI itself broken — `hermes guide` prints nothing, commands hang,
+  or `hermes --version` is empty?
+  └─ YES → diagnosing-runtime
   └─ NO ↓
 
 Is a `hermes skills` / `hermes plugins install` failing with not-found/401/403?

@@ -10,7 +10,7 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`, `update`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
-**Twenty-one troubleshooting skills** — one install guide, one configuration map, eighteen per-surface `diagnosing-*` playbooks, one other skill (`hermes-post-update`).
+**Twenty-two troubleshooting skills** — one install guide, one configuration map, nineteen per-surface `diagnosing-*` playbooks, one other skill (`hermes-post-update`).
 <!-- END GENERATED: intro-inventory -->
 
 Enabling the plugin additionally registers one router skill (`hermes-guide:start`) in
@@ -103,7 +103,7 @@ hermes skills install iap/hermes-guide/skills/diagnosing-mcp
 
 <!-- BEGIN GENERATED: install-all-loop -->
 ```bash
-for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-skills diagnosing-triage diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes; do hermes skills install "iap/hermes-guide/skills/$s"; done
+for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-runtime diagnosing-skills diagnosing-triage diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
 <!-- END GENERATED: install-all-loop -->
 
@@ -134,6 +134,7 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 | `diagnosing-cron` | Cron job issues — jobs not firing, scheduler dead, wedged fire-claim, timezone issues, delivery failures |
 | `diagnosing-gateway` | Gateway & messaging issues — bot not responding, platform allowlist, token validation, gateway connectivity |
 | `diagnosing-host-pressure` | Host resource exhaustion presenting as multiple Hermes faults — load-vs-CPU, plugin load-budget discards, resolution order |
+| `diagnosing-runtime` | Runtime failures — CLI produces no output, commands hang or return empty, stuck source updates, broken node deps, recovery routes |
 
 ## Design principle
 
