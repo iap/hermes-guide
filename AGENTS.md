@@ -50,9 +50,9 @@ Repo layout encyclopedia: [docs/agent/layout.md](docs/agent/layout.md).
 ## Run this before you claim done
 
 ```bash
-python tools/check_gates.py          # the hermetic tier — 10 gates, no network/Hermes (two read the git index)
+python tools/check_gates.py          # the hermetic tier — 10 gates, no network/Hermes (three read the git index)
 python -m py_compile __init__.py checks.py constants.py
-hermes plugins doctor . --ci         # needs a local Hermes
+hermes plugins doctor . --ci         # needs a local Hermes; if it times out on a degraded host, record `not run` with cause
 ```
 
 `python tools/check_gates.py --list` prints the tier and what it leaves to CI.

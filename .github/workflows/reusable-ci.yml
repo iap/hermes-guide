@@ -227,6 +227,11 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_exit_contract.py
 
+      - name: Fast mode regression test
+        # Shim-loads checks.py with _run rigged to raise — no Hermes, no network.
+        if: inputs.run-full-gate
+        run: python tools/test_fast_mode.py
+
       - name: Check-envelope regression test
         if: inputs.run-full-gate
         run: python tools/test_check_envelopes.py
