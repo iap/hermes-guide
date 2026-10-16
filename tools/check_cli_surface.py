@@ -59,11 +59,12 @@ SESSION_PREFIXES = ("/",)
 
 # Plugin-provided commands never appear in `hermes --help` (only builtins
 # do). Listed here with their subcommand sets so skill cites resolve.
-# Scopes mirror checks._CHECKS; update together. Flags are the command's
-# own options (`hermes guide --help` takes only -h); globals apply on top.
+# Scopes mirror checks._CHECKS and flags mirror _setup_cli; update together.
+# Flags are the command's own options (`hermes guide --help` takes -h plus
+# --fast); globals apply on top.
 PLUGIN_COMMANDS = {
     "guide": ({"config", "mcp", "skills", "commands", "hooks", "plugins",
-               "memories", "sessions", "update"}, set()),
+               "memories", "sessions", "update"}, {"--fast"}),
 }
 
 

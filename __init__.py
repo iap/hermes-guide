@@ -57,10 +57,19 @@ def _format_result(results):
 
 
 def _handle_doctor(raw_args):
-    """`/hermes-doctor` handler — optional scope, e.g. `/hermes-doctor mcp`."""
-    scope = raw_args.strip() or None
+    """`/hermes-doctor` handler — optional scope, e.g. `/hermes-doctor mcp`.
+
+    A trailing ``--fast`` (e.g. ``/hermes-doctor --fast``) runs the degraded-
+    host variant: no subprocess starts (see ``checks.run_all``).
+    """
+    tokens = raw_args.strip().split()
+    fast = "--fast" in tokens
+    scope = " ".join(t for t in tokens if t != "--fast") or None
     try:
-        _, text = _format_result(checks.run_all(scope=scope))
+        call = {"scope": scope}
+        if fast:
+            call["fast"] = True
+        _, text = _format_result(checks.run_all(**call))
     except ValueError as exc:
         # Slash commands have no exit-code contract; surface the error as text.
         return f"error: {exc}"
@@ -70,8 +79,12 @@ def _handle_doctor(raw_args):
 def _run_cli(args):
     """`hermes guide <scope>` handler."""
     scope = getattr(args, "scope", None)
+    fast = getattr(args, "fast", False)
     try:
-        exit_ok, text = _format_result(checks.run_all(scope=scope))
+        call = {"scope": scope}
+        if fast:
+            call["fast"] = True
+        exit_ok, text = _format_result(checks.run_all(**call))
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(2)
@@ -84,6 +97,12 @@ def _setup_cli(subparser):
         "scope",
         nargs="?",
         help="optional filter: " + "|".join(checks.labels()),
+    )
+    subparser.add_argument(
+        "--fast",
+        action="store_true",
+        help="degraded-host variant: no subprocess starts; unresolvable "
+        "checks report unknown instead of stalling",
     )
 
 
@@ -156,8 +175,10 @@ def _proactive_check(**_kwargs):
     ``readonly_hooks`` keeps the hooks check in-process: `hermes hooks doctor`
     executes every approved hook once with a synthetic payload, which is fine
     when the user asked for it explicitly — not at a session boundary.
+    ``fast`` additionally starts no subprocess at all, so a degraded host
+    (minutes per `hermes` launch) still gets a bounded boundary report.
     """
-    for label, r in checks.run_all(readonly_hooks=True).items():
+    for label, r in checks.run_all(readonly_hooks=True, fast=True).items():
         status = r.get("status")
         skill = checks.constants.SKILL_FOR_SCOPE.get(label, "diagnosing-triage")
         if status == "broken":
