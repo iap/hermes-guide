@@ -522,7 +522,13 @@ def test_non_file_path_entry_is_ignored():
 
 
 def test_timeout_is_deadline_not_per_attempt():
-    """The sum of per-attempt budgets never exceeds the caller's timeout."""
+    """The sum of per-attempt budgets never exceeds the caller's timeout.
+
+    The slow first candidate gets the 10s floor (not a 1s starvation
+    budget); the deadline cap still holds, so with a small timeout later
+    candidates may never run — the deadline, not the floor, is the
+    contract. Fast attempts still let every candidate run.
+    """
     timeouts = []
     clock = [1000.0]
 
@@ -539,8 +545,11 @@ def test_timeout_is_deadline_not_per_attempt():
 
     total = sum(timeouts)
     check("timeout is a deadline (sum of attempts <= timeout)",
-          total <= 15.0 and len(timeouts) == 3,
+          total <= 15.0,
           f"attempts={timeouts} total={total:.1f}s")
+    check("slow first candidate gets the floor, not a starvation slice",
+          timeouts and timeouts[0] >= 10.0,
+          f"attempts={timeouts}")
 
 
 def test_timeout_never_exceeds_remaining():
@@ -573,15 +582,16 @@ def test_timeout_never_exceeds_remaining():
 def test_timeout_does_not_fall_through():
     """A candidate that hangs (TimeoutExpired) is not retried elsewhere.
 
-    _run converts TimeoutExpired to -1 (via its generic except Exception
-    branch). -1 is outside _NOT_EXECUTABLE, so _run_hermes returns immediately
-    without trying the second candidate.
+    _run converts TimeoutExpired to the distinct _TIMEOUT sentinel (-124),
+    never the generic -1. Both are outside _NOT_EXECUTABLE, so _run_hermes
+    returns immediately without trying the second candidate — answering
+    from a different install than the one that hung would be a misreport.
     """
     attempts = []
 
     def _hanging_run(cmd, timeout=20):
         attempts.append(cmd[0])
-        return -1, "", "Command timed out"
+        return -124, "", "Command timed out"
 
     with mock.patch.object(checks, "_hermes_candidates",
                           lambda: ["/hang/hermes", "/good/hermes"]), \
@@ -591,8 +601,28 @@ def test_timeout_does_not_fall_through():
     check("timeout does not fall through to second candidate",
           len(attempts) == 1 and attempts[0] == "/hang/hermes",
           f"attempts={attempts}")
-    check("timeout returns -1 (not a real answer)",
-          rc == -1, f"rc={rc}")
+    check("timeout returns the distinct sentinel (not a real answer)",
+          rc == -124, f"rc={rc}")
+
+
+def test_run_maps_timeout_to_sentinel():
+    """_run names TimeoutExpired distinctly from crashes."""
+    real = subprocess.run
+    sentinel = []
+
+    def _timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout"))
+
+    def _crash(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    with mock.patch.object(subprocess, "run", _timeout):
+        rc, _, err = checks._run(["/x/hermes"], timeout=5)
+    check("timeout maps to the sentinel", rc == -124, f"rc={rc}")
+    check("timeout message names the budget", "timed out after 5s" in err, f"err={err!r}")
+    with mock.patch.object(subprocess, "run", _crash):
+        rc, _, _ = checks._run(["/x/hermes"], timeout=5)
+    check("crashes still map to the generic failure", rc == -1, f"rc={rc}")
 
 
 def main():
@@ -613,6 +643,7 @@ def main():
     test_timeout_is_deadline_not_per_attempt()
     test_timeout_never_exceeds_remaining()
     test_timeout_does_not_fall_through()
+    test_run_maps_timeout_to_sentinel()
 
     cleanup()
 

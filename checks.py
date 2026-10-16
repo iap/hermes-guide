@@ -47,11 +47,18 @@ HERMES_EXE = "hermes.exe" if sys.platform == "win32" else "hermes"
 # real one, so it is reported rather than silently retried elsewhere.
 _NOT_EXECUTABLE = (-127, -126, 126, 127)
 
+# A subprocess that outlives its budget. Deliberately outside
+# _NOT_EXECUTABLE: a hang says nothing about which install is ours, so it
+# must not fall through to another install's answers — it is reported
+# distinctly so callers can name the cause instead of guessing from a repr.
+_TIMEOUT = -124
+
 # Wall-clock budget for the two `hermes` subcommands the checks shell out to.
 #
-# These are per-CANDIDATE, not per-call: `_run_hermes` may try more than one
-# entry point before one answers. The floor has to clear a cold `hermes`
-# start on a loaded host. Measured on a macOS 12.7 install where `hermes
+# These are per-CALL deadlines, not per-candidate budgets: `_run_hermes` may
+# try more than one entry point before one answers, and the remaining time is
+# divided among the remaining candidates. The floor has to clear a cold
+# `hermes` start on a loaded host. Measured on a macOS 12.7 install where `hermes
 # config path` took 12-25 s across runs, so a 15 s budget made every check
 # report "cannot resolve $HERMES_HOME" through no fault of the install - the
 # answer arrived a few seconds after the deadline. `config path` pays full
@@ -116,6 +123,8 @@ def _run(cmd, timeout=20):
         if exc.errno in _CANDIDATE_UNUSABLE_ERRNOS:
             return -126, "", f"{cmd[0]}: cannot execute ({exc.errno}): {exc.strerror}"
         return -1, "", repr(exc)
+    except subprocess.TimeoutExpired:
+        return _TIMEOUT, "", f"{cmd[0]}: timed out after {timeout}s"
     except Exception as exc:  # nosec B110
         return -1, "", repr(exc)
 
@@ -207,9 +216,12 @@ def _run_hermes(args, timeout=20):
     *timeout* is a deadline, not a per-attempt budget: the remaining time is
     divided among the remaining candidates so the total wall-clock never
     exceeds *timeout*. A candidate that hangs raises TimeoutExpired (not an
-    OSError), so it is NOT in _NOT_EXECUTABLE and does not fall through. Each
-    attempt receives a fair share of the remaining time (minimum 1s), keeping
-    the fallback reachable without starving early candidates.
+    OSError), so it is NOT in _NOT_EXECUTABLE and does not fall through —
+    falling through would answer from a different install than the one that
+    hung. Each attempt receives a fair share of the remaining time (minimum
+    10s, so a slow-but-working candidate on a loaded host is not starved by
+    the floor), keeping the fallback reachable without starving early
+    candidates.
     """
     candidates = _hermes_candidates()
     if not candidates:
@@ -221,7 +233,7 @@ def _run_hermes(args, timeout=20):
         if remaining <= 0:
             break
         left = len(candidates) - index
-        attempt = min(remaining, max(1.0, remaining / left))
+        attempt = min(remaining, max(10.0, remaining / left))
         rc, stdout, stderr = _run([exe, *args], timeout=attempt)
         if rc not in _NOT_EXECUTABLE:
             return rc, stdout, stderr
@@ -809,7 +821,7 @@ def check_hooks():
             "status": "unknown",
             "reason": f"`hermes hooks doctor` unavailable or failed (rc={rc})",
             # Keep Hermes stderr as evidence: a timeout surfaces here as
-            # rc=-1 with the TimeoutExpired repr, which is the only cause.
+            # rc=-124 with a "timed out after Ns" message naming the cause.
             "detail": (stderr.strip()[:2000] or stdout.strip()[:2000]) or None,
         }
     if constants.HOOKS_DOCTOR_NONE_CONFIGURED in stdout:
