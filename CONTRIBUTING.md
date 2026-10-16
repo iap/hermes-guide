@@ -71,6 +71,11 @@ bar. Tasklist checkboxes stay for single-owner sequences only.
   all children does not close the parent — close it explicitly).
 - The research, verification notes, and process live in the parent body;
   each child carries only its own scope and acceptance.
+- Checkboxes are claims: verify each one against live state (`gh issue view`,
+  `gh pr view`, merged SHAs, published tags) in the same session before
+  ticking it, and never tick work another session owns. Same standard as PR
+  validation tables — an unticked-done or ticked-undone box misleads the next
+  session reading the tracker.
 - Search: `has:sub-issue`, `parent-issue:NNN`.
 
 What happens after you submit is in [Contribution gate](#contribution-gate).
