@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.0.10
+version: 1.0.11
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -56,6 +56,8 @@ Route its `~`/`x`/`?` lines first:
 Exception — no baseline possible: when every `hermes` invocation hangs (e.g. on `an update is still running`), the baseline cannot run. Load the diagnosing-cli-tui stale-lock note directly and follow its manual steps; run `hermes guide update` after the CLI recovers as confirmation, not as the entry point.
 
 Then continue with symptom routing below for whatever the baseline did not explain.
+
+Ownership: symptom-order routing lives in this skill; surface-order rows live in the config map; pairwise precedence is canonical in the config-map Disambiguation list — edit each where it lives.
 
 ## 1. Triage flowchart
 
@@ -233,31 +235,15 @@ When the description is too vague to route with confidence, ask these questions 
 
 ## 4. Escalation
 
-When multiple skills might apply, use these priority rules to decide which to load first.
-
-### Priority order
-
-1. **Host pressure before per-surface config.** If multiple surfaces are failing at once, or if adapters are being discarded after a load timeout, load `diagnosing-host-pressure` first. Resource exhaustion mimics dozens of unrelated config bugs.
-
-2. **Auth before hub operations.** If a hub install or inspect fails with "not found" messages, load `diagnosing-auth` before `diagnosing-skills`. A dead token degrades every source adapter to "not found" at once.
-
-3. **Path before feature config.** If the wrong Python interpreter is active or the venv layout is confusing, load `diagnosing-path` before any feature-specific skill. Path issues cause cascading failures that look like feature bugs.
-
-4. **Install before diagnosis.** If Hermes itself is broken (won't start, crashes on launch), load `installing-hermes` before any `diagnosing-*` skill. You can't diagnose a broken install.
-
-5. **Platform before bot-mode.** If the bot isn't responding, load `diagnosing-gateway` before `diagnosing-bot-mode`. Gateway connectivity is a prerequisite for bot profiles.
+When multiple skills might apply, the priority rules live in one place:
+the Disambiguation list in `hermes-configuration-guide` (canonical — order
+there is load-first priority). Apply it instead of re-deriving precedence
+here; this section keeps only triage-local escalation.
 
 ### When to load multiple skills
 
-Some problems span multiple layers. In these case, load the higher-priority skill first, then the second:
-
-- **Skill not discovered AND `/command` missing** → load `diagnosing-skills` first (if the skill itself is missing from the index, the `/command` won't exist either). If the skill is present but the `/command` is shadowed, load `diagnosing-commands` instead.
-
-- **MCP server up but no tools AND provider configured but unavailable** → load `diagnosing-mcp` first (the MCP server is the more specific failure). If the MCP server connects fine but the model provider is the problem, load `diagnosing-providers`.
-
-- **Memory not persisting AND external memory provider configured** → load `diagnosing-memory` (it owns both built-in and external memory diagnosis).
-
-- **Several faults at once, intermittently** → load `diagnosing-host-pressure` first. Intermittent multi-surface failures are the signature of resource pressure.
+Some problems span multiple layers. Load the higher-priority skill first
+per the canonical list, then the second.
 
 ### When to use hermes-configuration-guide
 
@@ -278,4 +264,4 @@ When the triage skill routes to a diagnostic skill, the model reports findings u
 - **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
 - **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
-*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id). `x update` row + symptom-map stale-lock row point at the diagnosing-cli-tui §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py; rows re-checked 2026-10-16). Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id). `x update` row + symptom-map stale-lock row point at the diagnosing-cli-tui §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py; rows re-checked 2026-10-16). §4 escalation rules moved to the canonical config-map list 2026-10-16 (verbatim move, pointer left behind). Re-verify before reuse.*
