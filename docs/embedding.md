@@ -12,7 +12,7 @@ each hold:
 | Step | Condition | Failure looks like |
 |---|---|---|
 | 1. Tap installed | `hermes skills tap add iap/hermes-guide` run on the host | Skills exist nowhere; the model guesses |
-| 2. Skill in index | The tap skills land under `~/.hermes/skills/` and Hermes's skills-prompt scan picks them up | Installed but invisible — model never loads them |
+| 2. Skill in index | The tap skills land under `$HERMES_HOME/skills/` (default `~/.hermes/skills/` on POSIX/WSL, `%LOCALAPPDATA%\hermes\skills` on native Windows) and Hermes's skills-prompt scan picks them up | Installed but invisible — model never loads them |
 | 3. Model loads on trigger | The skill's `description` in the system prompt matches the user's phrasing | Visible but never loaded; model improvises |
 
 Step 3 is the load-bearing one. Every `diagnosing-*` skill and the `start`
@@ -24,8 +24,8 @@ interface. Keep them broad and symptom-shaped when editing.
 | Model | What the user gets | Playbooks available |
 |---|---|---|
 | Plugin only (`hermes plugins install hermes-guide`) | `/hermes-doctor`, `hermes guide`, and the `start` router skill (registered by the plugin itself) | Router only — routes to `hermes guide` |
-| Plugin + tap | Above + full `diagnosing-*` playbook set under `~/.hermes/skills/` | Full set |
-| Tap only | Playbooks under `~/.hermes/skills/`; no plugin commands | Full set, no `hermes guide` |
+| Plugin + tap | Above + full `diagnosing-*` playbook set under `$HERMES_HOME/skills/` | Full set |
+| Tap only | Playbooks under `$HERMES_HOME/skills/`; no plugin commands | Full set, no `hermes guide` |
 
 The plugin and the tap install independently on purpose: the plugin is the
 executable surface, the tap is the reference material. Neither implies the
@@ -37,13 +37,13 @@ A host app that manages its own agent sessions must bridge the gap between
 Hermes's skill index and its own model context. Three patterns, in order of
 preference:
 
-1. **Include `~/.hermes/skills` in the host's skill scan.** If the host has a
+1. **Include `$HERMES_HOME/skills` in the host's skill scan.** If the host has a
    configurable skill root or extra scan directory, add the Hermes skills
    directory (or a curated `diagnosing-*` subset) to it. The skills then appear
    in the host's `<available_skills>` with no duplication.
 
 2. **Mirror the tap skills into the host's skill directories.** Copy or symlink
-   the `diagnosing-*` directories from `~/.hermes/skills/` into the host's
+   the `diagnosing-*` directories from `$HERMES_HOME/skills/` into the host's
    skill roots. Simple, but creates a sync problem — document the refresh
    cadence.
 
