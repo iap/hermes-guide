@@ -248,9 +248,9 @@ def test_unreadable_git_metadata_is_unknown():
 
 
 def test_readonly_lock_never_reads_broken():
-    # A lock file we may not write: the probe cannot take, so the verdict
-    # must never authorize removal. POSIX falls back to a read-only flock
-    # (measured verdict); Windows cannot probe without write (unknown).
+    # A lock file we may not write: POSIX falls back to a read-only flock
+    # (measured verdict, removal wording allowed); Windows cannot probe
+    # without write (unknown, no removal wording). Neither reads broken.
     checks = _load_checks()
     home = _home_with_lock(f"{_dead_pid()}\n")
     path = os.path.join(home, "hermes-agent", ".git", "hermes-update.lock")
@@ -260,8 +260,12 @@ def test_readonly_lock_never_reads_broken():
         result = checks.check_update_lock()
     finally:
         os.chmod(path, 0o644)
-    assert result["status"] in ("informational", "unknown"), result
-    assert "safe to remove" not in result["reason"], result
+    if os.name == "nt":
+        assert result["status"] == "unknown", result
+        assert "safe to remove" not in result["reason"], result
+    else:
+        assert result["status"] == "informational", result
+        assert "safe to remove" in result["reason"], result
 
 
 def test_unparseable_lock_is_unknown():
