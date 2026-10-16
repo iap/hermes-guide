@@ -23,5 +23,7 @@ Behavioral changes under tools/ need tools/test_*.py coverage wired into .github
 
 Ground factual claims in this repo's source or the installed Hermes agent; say explicitly when a claim needs live verification instead of asserting it."""
 
-# Behavioral coverage is a merge-blocking repo contract — make Qodo check it too.
+# Ask Qodo to surface coverage gaps in review. This is advisory only — it
+# does not block merges; enforcement stays with CI's tool-coverage guard
+# (tools/check_tool_coverage.py), which fails closed on unwired tests.
 require_tests_review = true
