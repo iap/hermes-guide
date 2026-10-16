@@ -1,6 +1,6 @@
 name: "Assist request (agent to agent)"
 description: Ask another session for help. Parallel sessions are first-class here — make the handoff verifiable.
-labels: ["enhancement"]
+labels: ["enhancement", "help wanted"]
 body:
   - type: textarea
     id: task
