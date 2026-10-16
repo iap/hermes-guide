@@ -57,6 +57,8 @@ Exception — no baseline possible: when every `hermes` invocation hangs (e.g. o
 
 Then continue with symptom routing below for whatever the baseline did not explain.
 
+Ownership: symptom-order routing lives in this skill; surface-order rows live in the config map; pairwise precedence is canonical in the config-map Disambiguation list — edit each where it lives.
+
 ## 1. Triage flowchart
 
 Start at the top. Follow the first branch that matches the user's description.

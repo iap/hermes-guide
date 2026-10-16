@@ -132,13 +132,15 @@ Notes:
 ### Disambiguation — when two skills can claim the same symptom
 
 Canonical list: when several skills match, load the first-named skill first,
-then the second — order here is priority, not prose.
+then the second — order here is priority, not prose. Multi-surface faults
+go to host-pressure before any feature row below, no matter which symptom
+matched first.
 
+- **Several faults at once, intermittently**: load `diagnosing-host-pressure` first — intermittent multi-surface failures are the signature of resource pressure, which mimics unrelated config bugs.
 - **Skill not discovered vs `/command` missing**: if the skill itself is missing from the index, see `diagnosing-skills` first; if the skill is present but its `/command` is missing or shadowed, see `diagnosing-commands` instead.
 - **MCP server up but no tools vs provider configured but unavailable**: load `diagnosing-mcp` first (the MCP server is the more specific failure); if the MCP server connects fine but the model provider is the problem, load `diagnosing-providers`.
 - **Plugin not loading vs provider sub-category**: if a plugin is discovered but not enabled, see `diagnosing-plugins`; if a provider sub-category (e.g. `context.engine`, `image_gen.provider`) is misconfigured, see `diagnosing-providers`.
 - **Memory not persisting vs provider store unavailable**: load `diagnosing-memory` (it owns both built-in and external memory diagnosis).
-- **Several faults at once, intermittently**: load `diagnosing-host-pressure` first — intermittent multi-surface failures are the signature of resource pressure, which mimics unrelated config bugs.
 - **Hub install failing with "not found"**: load `diagnosing-auth` first — a dead token degrades every source adapter to "not found" at once.
 - **Wrong interpreter or confusing venv layout**: load `diagnosing-path` before any feature skill — path issues cascade into feature-looking failures.
 - **Hermes itself broken (won't start, crashes on launch)**: load `installing-hermes` before any `diagnosing-*` skill — a broken install cannot be diagnosed.
