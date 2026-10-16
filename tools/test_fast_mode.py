@@ -141,6 +141,41 @@ def main() -> int:
     finally:
         checks._hermes_home_from_library = real_home
 
+    # (3b) cache isolation: a concurrent normal run clearing its own store
+    # must not disturb the fast run's seeded config path. Stores are
+    # per-context, so this holds under any interleaving; the worker loop
+    # forces the overlap while the main thread reads its fast result.
+    checks._run = _recorder
+    checks._hermes_home_from_library = lambda: str(home)
+    stop2 = threading.Event()
+    iters = [0]
+
+    def normal_loop():
+        while not stop2.is_set():
+            checks.run_all()
+            iters[0] += 1
+
+    w2 = threading.Thread(target=normal_loop, daemon=True)
+    me = threading.get_ident()
+    try:
+        reset_calls()
+        w2.start()
+        fast_cfg = checks.run_all(scope="config", fast=True)["config"]
+        stop2.set()
+        w2.join(timeout=60)
+    finally:
+        stop2.set()
+        checks._hermes_home_from_library = real_home
+    if w2.is_alive():
+        failures.append("cache isolation: normal loop thread did not stop")
+    if not iters[0]:
+        failures.append("cache isolation: normal loop never ran (no overlap forced)")
+    if fast_cfg.get("status") != "broken" or "missing" not in str(fast_cfg.get("reason", "")):
+        failures.append(f"cache isolation: fast config lost its seeded path: {fast_cfg}")
+    with lock:
+        mine = [c for i, c in calls if i == me]
+        if mine:
+            failures.append(f"cache isolation: fast run started {len(mine)} subprocess(es)")
     # (4) no library home: every envelope is unknown-skipped, never healthy
     checks._run = _recorder
     checks._hermes_home_from_library = lambda: None

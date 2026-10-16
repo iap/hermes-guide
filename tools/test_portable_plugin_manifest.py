@@ -118,7 +118,7 @@ def main(argv: list[str]) -> int:
         config = home / "config.yaml"
         _write(config, "plugins:\n  enabled:\n    - portable-only\n  disabled: []\n")
 
-        checks._cache.clear()
+        checks._store().clear()
         checks._hermes_config_path = lambda: str(config)
         checks._hermes_home_from_library = lambda: str(home)
         checks._bundled_plugins_dir = lambda: None

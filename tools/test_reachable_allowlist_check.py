@@ -75,7 +75,7 @@ def main(argv: list[str]) -> int:
         # (2) a malformed allowlist is broken on every doctor outcome
         allowlist.write_text("{ this is not json", encoding="utf-8")
         for label, response in doctor_outputs.items():
-            checks._cache.clear()
+            checks._store().clear()
             checks._run = lambda cmd, timeout=20, _r=response: _r
             result = checks.check_hooks()
             if result.get("status") != "broken":
@@ -93,7 +93,7 @@ def main(argv: list[str]) -> int:
         allowlist.write_text('{"hooks": []}', encoding="utf-8")
         for label, expected in (("no-hooks", "healthy"), ("healthy", "healthy"),
                                 ("unknown-wording", "unknown")):
-            checks._cache.clear()
+            checks._store().clear()
             checks._run = lambda cmd, timeout=20, _r=doctor_outputs[label]: _r
             result = checks.check_hooks()
             if result.get("status") != expected:
@@ -104,7 +104,7 @@ def main(argv: list[str]) -> int:
 
         # (4) an absent allowlist is not a finding
         allowlist.unlink()
-        checks._cache.clear()
+        checks._store().clear()
         checks._run = lambda cmd, timeout=20: doctor_outputs["no-hooks"]
         if checks.check_hooks().get("status") != "healthy":
             failures.append("absent allowlist wrongly produced a finding")
