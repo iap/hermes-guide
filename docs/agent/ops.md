@@ -114,6 +114,26 @@ A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. 
 - Accepts cite the fixing commit. Declines cite the guard or code that overrules the finding (e.g. "provenance 21/21 green; symbol proof is `check_citation_integrity`'s job").
 - Posting is mechanical; the verdict must be verified first.
 
+## Delegation (swarm and second opinions)
+
+Delegate when tasks are independent (parallel workstreams), verification must
+be independent (a fresh context re-checking your work), or the path is
+unexecutable on the current host (Windows-only code from macOS, long probes).
+Do not delegate trivially serial work — overhead without independence is just
+slower same-model output.
+
+- **Vehicle matters more than headcount.** Built-in subagents share the
+  delegating model's engine: good for parallelism, weak for judgment
+  independence. For genuine engine diversity, route through the local Hermes
+  CLI on another model or through the review bots — and record which vehicle
+  was used, so "independently verified" never silently means self-agreement.
+- **Briefs are precise and bounded.** State the exact task, the evidence to
+  return, and explicit no-go constraints (no file edits, no push, no merge,
+  no restarts unless asked). Save transcripts for long probes.
+- **Worker output is evidence, not verdict.** Cross-check it against source
+  before acting — including second-model reviews, which share no context but
+  may share failure modes on judgment calls.
+
 ## Pre-merge cross-check
 
 Never merge on green CI alone. Immediately before merging a PR, verify: all
