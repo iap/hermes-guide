@@ -1507,7 +1507,10 @@ def _lock_owner_alive(pid):
         # corrupt lock reading must never probe (or read as) a live owner.
         return None
     if os.name == "nt":
-        return _windows_pid_alive(pid)
+        try:
+            return _windows_pid_alive(pid)
+        except Exception:
+            return None
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
