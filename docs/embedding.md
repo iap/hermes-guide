@@ -49,9 +49,10 @@ preference:
 
 3. **One host-native entry skill.** Ship a small skill in the host's own skill
    directory that, on any Hermes-related complaint, instructs the model to run
-   `hermes guide` (terminal) or `/hermes-doctor` (session) and follow the
-   `start` router. This is the minimal bridge: it teaches the model the entry
-   point without duplicating any playbook content.
+   `hermes guide` (terminal) or `/hermes-doctor` (session). If the host exposes
+   `hermes-guide:start` in its skill index, the entry skill can direct the model
+   to follow that router. Otherwise, include the router instructions in the
+   host-native skill.
 
 Pattern 1 is preferred when the host supports it; pattern 3 is the fallback for
 hosts with fixed skill directories.
