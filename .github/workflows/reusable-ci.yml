@@ -402,6 +402,15 @@ jobs:
           python tools/check_skill_consistency.py --selftest
           python tools/check_skill_consistency.py
 
+      - name: CLI registry mirror sync
+        # PLUGIN_COMMANDS in tools/check_cli_surface.py hand-mirrors the
+        # checks._CHECKS scopes and the _setup_cli flags (`hermes guide`
+        # scope validation consumes that mirror). Compare the three here so
+        # a renamed, added or dropped check cannot pass against a stale copy
+        # in the fast tier; the full-tier CLI surface assertion additionally
+        # resolves skill cites against the live CLI.
+        run: python tools/check_cli_surface.py --check-mirror
+
       - name: CLI surface assertion
         # Every `hermes <subcommand>` cited in skills must resolve against
         # the live CLI (top + subcommand + flags, aliases and hidden

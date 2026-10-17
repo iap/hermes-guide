@@ -463,15 +463,31 @@ def _check_labels(checks_src: str) -> list[str]:
     m = re.search(r"(?ms)^_CHECKS = \[(.*?)^\]", checks_src)
     if m is None:
         return []
-    return re.findall(r"\(\s*[\"']([a-z][a-z_-]*)[\"']\s*,\s*check_\w+\s*\)", m.group(1))
+    return re.findall(r"\(\s*[\"']([a-z][a-z_-]*)[\"']\s*,\s*[A-Za-z_]\w*\s*\)", m.group(1))
 
 
 def _setup_cli_flags(init_src: str) -> set[str]:
-    """Flag names (dash-prefixed) added inside __init__ ``_setup_cli``."""
+    """All option names (dash-prefixed) _setup_cli registers.
+
+    One add_argument call may register aliases (`add_argument("--fast",
+    "--quick")` counts both); only kwarg strings (action=, help text)
+    follow the option names, so the walk below consumes consecutive
+    comma-separated quoted dash-words and stops at the first kwarg.
+    """
     m = re.search(r"(?ms)^def _setup_cli\(.*?(?=\ndef |\Z)", init_src)
     if m is None:
         return set()
-    return set(re.findall(r"add_argument\(\s*[\"'](-[\w-]+)[\"']", m.group(0)))
+    names: set[str] = set()
+    name_re = re.compile(r"\s*[\"'](-[\w-]+)[\"']\s*(,)?")
+    for call in re.finditer(r"add_argument\(\s*", m.group(0)):
+        pos: int | None = call.end()
+        while pos is not None:
+            hit = name_re.match(m.group(0), pos)
+            if hit is None:
+                break
+            names.add(hit.group(1))
+            pos = hit.end() if hit.group(2) else None
+    return names
 
 
 def mirror_errors(
@@ -579,24 +595,41 @@ def _selftest() -> int:
             "        action='store_true')\n\ndef later():\n    pass\n")
     assert _setup_cli_flags(isrc) == {'--fast'}
     assert _setup_cli_flags("def other(sp):\n    sp.add_argument('--x')\n") == set()
+    isrc2 = ("def _setup_cli(sp):\n    sp.add_argument(\n"
+             "        '--fast', '--quick',\n"
+             "        action='store_true')\n\ndef later():\n    pass\n")
+    assert _setup_cli_flags(isrc2) == {'--fast', '--quick'}
+    csrc2 = ('_CHECKS = [\n    ("config", check_config_parses),\n'
+             '    ("sessions", audit_session_health),\n]\n')
+    assert _check_labels(csrc2) == ["config", "sessions"]
 
     print("OK: cli-surface selftest")
     return 0
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--selftest", action="store_true")
-    args = ap.parse_args()
-    if args.selftest:
-        return _selftest()
+def _report_sync() -> list[str]:
+    """Compare PLUGIN_COMMANDS with its two sources in the real tree."""
     sync = sync_failures()
     for m in sync:
         print("FAIL:", m)
     if not sync:
-        scopes, flags = PLUGIN_COMMANDS["guide"]
-        print("OK: PLUGIN_COMMANDS mirror in sync (%d scope(s), %d flag(s))"
-              % (len(scopes), len(flags)))
+        print("OK: PLUGIN_COMMANDS mirror matches checks._CHECKS and _setup_cli")
+    return sync
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--check-mirror", action="store_true",
+                    help="only verify the PLUGIN_COMMANDS mirror against its "
+                         "sources (pure file reads; no live hermes needed)")
+    args = ap.parse_args()
+    if args.check_mirror:
+        return 1 if _report_sync() else 0
+    rc = _selftest() if args.selftest else 0
+    sync = _report_sync()
+    if args.selftest:
+        return 1 if rc or sync else 0
     failures, summary = verify(collect())
     print(summary)
     for f in failures:
