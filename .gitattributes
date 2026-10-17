@@ -1,0 +1,24 @@
+# The index is LF, always. Without this, a Windows clone with the default
+# core.autocrlf=true checks out CRLF, and every file a Windows contributor
+# touches shows up as a whole-file diff in review.
+* text=auto eol=lf
+
+# Shell scripts stay LF: the shebang and the shell hook in
+# skills/diagnosing-host-pressure/scripts/ break on CRLF.
+*.sh text eol=lf
+
+# Native Windows scripts keep CRLF so cmd.exe and PowerShell can run them.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: no line-ending conversion, no diff attempts. Applies to the
+# README banner under assets/.
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary

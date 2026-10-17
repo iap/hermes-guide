@@ -2,6 +2,8 @@
 
 > **Package / slug:** `hermes-guide` · **Catalog:** curated Hermes plugin catalog (community tier)
 
+![hermes-guide concept banner](assets/concept-a-dual-line-v2b.jpg)
+
 Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
 It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. The plugin is **read-only** (no config writes; empty `capabilities:`). It ships two independent things:
