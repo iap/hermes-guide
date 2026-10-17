@@ -57,6 +57,8 @@ def _fixture(
     stall_limit: str = "100000",
     memsize_mb: str = "4096",
     in_container: bool = False,
+    cgroup_dirs: list[str] | None = None,
+    container_env: str | None = None,
 ) -> dict:
     """Run the real probe with a stubbed host. Returns stdout + exit code."""
     td = Path(tempfile.mkdtemp(prefix="hpp-fixture-"))
@@ -138,6 +140,19 @@ def _fixture(
         # A real detection signal the probe already reads, so this exercises the
         # shipped guard rather than a test-only hook.
         env["KUBERNETES_SERVICE_HOST"] = "10.0.0.1"
+
+    # The container-detection branches that read the filesystem need a
+    # directory to read. HERMES_PROBE_CGROUP_ROOT is the probe's own
+    # override-with-a-real-default knob, in the same spirit as
+    # HERMES_PROBE_STALL_LIMIT above: unset in production, it points at the
+    # real /sys/fs/cgroup.
+    if cgroup_dirs is not None:
+        cg = td / "cgroup"
+        for entry in cgroup_dirs:
+            (cg / entry).mkdir(parents=True, exist_ok=True)
+        env["HERMES_PROBE_CGROUP_ROOT"] = str(cg)
+    if container_env is not None:
+        env["container"] = container_env
 
     proc = subprocess.run(
         ["bash", str(PROBE)], capture_output=True, text=True, env=env, timeout=120
@@ -522,6 +537,54 @@ def main() -> int:
                  states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
                  in_container=True)
     _check("container: same numbers do NOT report load pressure", f["rc"] == 0, f"rc={f['rc']}")
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # Container detection by cgroup NAME, the branch that replaced the proc
+    # read. A real runtime name appears as a path component
+    # (system.slice/docker-<id>.scope, kubepods.slice/...), not in file
+    # contents, so the fixture stages directories and no file mentions it.
+    for label, dirs in (
+        ("docker scope", ["system.slice/docker-abc123.scope"]),
+        ("kubepods slice", ["kubepods.slice/kubepods-besteffort/pod1234"]),
+        ("crio scope", ["system.slice/crio-9f2a.scope"]),
+    ):
+        f = _fixture(os_name="Linux", cores="2", load="20",
+                     top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                     cgroup_dirs=dirs)
+        _check(f"cgroup name detects container ({label})",
+               "container detected" in f["out"], f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
+
+    # ...and a cgroup tree with no runtime name must NOT be read as a
+    # container, or the load verdict would be silently disabled everywhere.
+    f = _fixture(os_name="Linux", cores="2", load="20",
+                 top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                 cgroup_dirs=["system.slice/user.slice", "init.scope"])
+    _check("cgroup tree without a runtime name is NOT a container",
+           "container detected" not in f["out"], f"rc={f['rc']}")
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # An inherited $container that names no runtime (Podman sets
+    # container=podman; other software may set container=none) must not fake a
+    # container and suppress the load verdict.
+    for value in ("none", "0", ""):
+        f = _fixture(os_name="Linux", cores="2", load="20",
+                     top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                     cgroup_dirs=["system.slice/user.slice"], container_env=value)
+        _check(f"container={value!r} does not fake a container",
+               "container detected" not in f["out"], f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
+
+    # Podman's own value does name a runtime, so it must be honoured.
+    f = _fixture(os_name="Linux", cores="2", load="20",
+                 top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                 cgroup_dirs=["system.slice/user.slice"], container_env="podman")
+    _check("container=podman is honoured", "container detected" in f["out"], f"rc={f['rc']}")
+    shutil.rmtree(f["td"], ignore_errors=True)
     _check("container: says the two scopes differ",
            "host-wide" in f["out"] and "different scopes" in f["out"], f["out"][:400])
     _check("container: no per-core HIGH-load callout",

@@ -39,31 +39,47 @@ in_container=0
 if [ -f /.dockerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]; then
   in_container=1
 elif [ "$os_name" != "Darwin" ]; then
-  # Detection reads the cgroup hierarchy and the runtimes' own marker files,
-  # never the proc filesystem: reading the PID-1 cgroup file trips the install
-  # scanner's proc_access rule (severity high), and on current Hermes a
-  # community-source skill with any high finding is BLOCKED from installing -
-  # so the literal path must not appear in a comment here either. See
+  # Detection reads the runtimes' marker files and cgroup NAMES, never the
+  # proc filesystem: reading the PID-1 cgroup file trips the install scanner's
+  # proc_access rule (severity high), and on current Hermes a community-source
+  # skill with any high finding is BLOCKED from installing - so the literal
+  # path must not appear in a comment here either. See
   # https://github.com/iap/hermes-guide/issues/204.
   #
-  # Coverage matches the old read plus Podman: the cgroup grep looks for the
-  # same runtime names (docker|containerd|kubepods|lxc) in the same hierarchy,
-  # now under /sys/fs/cgroup instead of the PID-1 cgroup file, and
-  # /run/.containerenv plus $container cover Podman.
+  # The runtime name lives in the cgroup PATH (`/system.slice/docker-<id>.scope`,
+  # `/kubepods.slice/...`), so the check enumerates entry NAMES at depth 1-2.
+  # Grepping file CONTENTS instead misses a real container: its files do not
+  # spell out "docker", and a content match is a false signal.
   #
   # Deliberately NOT using systemd-detect-virt --container: verified on a
   # WSL2 host it exits 0 (bare, it reports "wsl"), which would classify every
   # WSL user as containerized and silently disable the load verdict there.
   #
   # A stale container cgroup left on a host that used to run one can make the
-  # grep say "container". That errs toward refusing the load comparison, which
-  # is the safe direction: the probe declines to compare two scopes rather than
-  # inventing a verdict from mismatched units.
-  if [ -f /run/.containerenv ] || [ -n "${container:-}" ]; then
+  # name check say "container". That errs toward refusing the load comparison,
+  # which is the safe direction: the probe declines to compare two scopes
+  # rather than inventing a verdict from mismatched units.
+  if [ -f /run/.containerenv ]; then
     in_container=1
-  elif grep -qaE 'docker|containerd|crio|kubepods|lxc|podman|libpod|nspawn' \
-         /sys/fs/cgroup/* /sys/fs/cgroup/*/* 2>/dev/null; then
-    in_container=1
+  else
+    # Podman exports container=podman; ignore `none` and anything that does
+    # not name a runtime, so an inherited variable cannot fake a container.
+    case "${container:-}" in
+      ""|none) ;;
+      *docker*|*containerd*|*crio*|*kubepods*|*lxc*|*podman*|*libpod*|*nspawn*)
+        in_container=1 ;;
+    esac
+    if [ "$in_container" -eq 0 ]; then
+      cgroup_root="${HERMES_PROBE_CGROUP_ROOT:-/sys/fs/cgroup}"
+      for cg_entry in "$cgroup_root"/* "$cgroup_root"/*/*; do
+        [ -d "$cg_entry" ] || continue
+        case "${cg_entry##*/}" in
+          *docker*|*containerd*|*crio*|*kubepods*|*lxc*|*podman*|*libpod*|*nspawn*)
+            in_container=1
+            break ;;
+        esac
+      done
+    fi
   fi
 fi
 
