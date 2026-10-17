@@ -79,6 +79,11 @@ REQUIRED_RULES: tuple[tuple[str, ...], ...] = (
 # is `attr/text=auto eol=lf`, two tokens) and the path follows a TAB.
 _EOL_ATTR_NO_TEXT = "-text"
 
+# The one resolved attribute this repo never wants on a tracked path. The
+# `*.bat`/`*.cmd`/`*.ps1` rules in `.gitattributes` would produce it, which is
+# why they are documented but not required: nothing tracked uses them yet.
+_EOL_CRLF = "eol=crlf"
+
 # Index states acceptable for a text path.
 _TEXT_INDEX_OK = ("i/lf", "i/none")
 
@@ -115,9 +120,12 @@ def missing_rules(text: str) -> list[str]:
 def parse_eol_line(line: str) -> tuple[str, str, str] | None:
     """Return ``(index_eol, attr, path)``, or None when the row is unusable.
 
-    A row without git's TAB path separator returns None rather than a guess:
-    the attribute column holds two tokens, so whitespace alone cannot say
-    where the path begins.
+    The attribute column is everything after the second field, joined back
+    together: it is `attr/-text` for a binary blob but `attr/text eol=lf` (two
+    tokens) for text, and dropping the second token loses the very `eol=crlf`
+    this guard exists to catch. A row without git's TAB path separator returns
+    None rather than a guess -- whitespace alone cannot say where the path
+    begins, because the attribute column holds two tokens.
     """
     info, tab, path = line.partition("\t")
     if not tab:
@@ -125,7 +133,12 @@ def parse_eol_line(line: str) -> tuple[str, str, str] | None:
     fields = info.split()
     if len(fields) < 3:
         return None
-    return fields[0], fields[2], path.strip()
+    return fields[0], " ".join(fields[2:]), path.strip()
+
+
+def split_entries(payload: str) -> list[str]:
+    """Split NUL-delimited `git ls-files --eol -z` output into rows."""
+    return [entry for entry in payload.split("\0") if entry.strip()]
 
 
 def expects_binary(path: str) -> bool:
@@ -136,7 +149,7 @@ def expects_binary(path: str) -> bool:
 
 
 def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
-    """Return ``(problems, tracked_count, unusable)`` for ls-files --eol output.
+    """Return ``(problems, tracked_count, unusable)`` for ls-files --eol -z output.
 
     A row that cannot be parsed lands in `unusable` rather than being dropped:
     see the module docstring for why a silent skip is worse than a red build.
@@ -144,25 +157,35 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
     problems: list[str] = []
     unusable: list[str] = []
     tracked = 0
-    for line in eol_output.splitlines():
-        if not line.strip():
-            continue
+    for line in split_entries(eol_output):
         parsed = parse_eol_line(line)
         if parsed is None:
             unusable.append(f"cannot tell where the path starts in: {line.strip()!r}")
             continue
         index, attr, path = parsed
         tracked += 1
+
+        # git normalizes the index, so a later rule that overrides eol=lf
+        # leaves an LF index and a CRLF checkout. Only the resolved attribute
+        # shows the override, which is why no tracked path may resolve to one.
+        if _EOL_CRLF in attr:
+            problems.append(
+                f"{path}: resolves to {attr!r}; every tracked path must check "
+                "out LF, so no rule may set eol=crlf"
+            )
+            continue
+
         if expects_binary(path):
-            if index != _BINARY_INDEX:
-                problems.append(
-                    f"{path}: index EOL is {index}, expected {_BINARY_INDEX}"
-                )
-            elif _EOL_ATTR_NO_TEXT not in attr:
+            # The declaration is the signal, not the index column: git reports
+            # `i/-text` for a binary blob but `i/none` for a small one with no
+            # terminator to classify, so keying on the index false-positives on
+            # a legitimate tiny asset.
+            if _EOL_ATTR_NO_TEXT not in attr:
                 problems.append(
                     f"{path}: attribute is {attr!r}, expected a `binary` "
-                    f"(or -text) rule; git keeps the blob binary by content "
-                    f"heuristic alone, which is not a declaration"
+                    f"(or -text) rule; git may keep the blob binary by content "
+                    f"heuristic alone (index EOL {index}), which is not a "
+                    "declaration"
                 )
         elif index == _BINARY_INDEX:
             # Binary because a rule says so (`attr/-text`) is a declaration and
@@ -208,7 +231,7 @@ def ls_files_eol(root: Path) -> tuple[str | None, str | None]:
     """Return ``(output, problem)`` for `git ls-files --eol` in *root*."""
     try:
         proc = subprocess.run(
-            ["git", "ls-files", "--eol"],
+            ["git", "ls-files", "--eol", "-z"],
             cwd=root, capture_output=True, text=True, timeout=60,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:

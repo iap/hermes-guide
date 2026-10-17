@@ -41,11 +41,20 @@ GOOD_ATTRS = """\
 *.png binary
 """
 
-CLEAN_EOL = (
-    "i/lf    w/crlf  attr/text=auto eol=lf \tREADME.md\n"
-    "i/lf    w/lf    attr/text eol=lf      \tskills/probe.sh\n"
-    "i/none  w/none  attr/text=auto eol=lf \t.github/upstream-drift.baseline\n"
-    "i/-text w/-text attr/-text            \tassets/banner.jpg\n"
+def _z(*rows: str) -> str:
+    """NUL-delimit rows the way `git ls-files --eol -z` emits them.
+
+    Fixtures stay readable as plain rows; the guard only ever sees the NUL form,
+    so there is no newline-parsing branch in it that production never takes.
+    """
+    return "".join(row + "\0" for row in rows if row)
+
+
+CLEAN_EOL = _z(
+    "i/lf    w/crlf  attr/text=auto eol=lf \tREADME.md",
+    "i/lf    w/lf    attr/text eol=lf      \tskills/probe.sh",
+    "i/none  w/none  attr/text=auto eol=lf \t.github/upstream-drift.baseline",
+    "i/-text w/-text attr/-text           \tassets/banner.jpg",
 )
 
 
@@ -138,7 +147,7 @@ def main() -> int:
         # genuinely ambiguous. Refusing to guess is the honest outcome -- a
         # silent mis-parse would report the wrong path, and a silent skip would
         # turn a future git format change into an all-green run.
-        code, messages = mod.audit(crlf, "i/crlf w/crlf attr/text=auto eol=lf skills/a.md\n")
+        code, messages = mod.audit(crlf, _z("i/crlf w/crlf attr/text=auto eol=lf skills/a.md"))
         expect("untabbed line is unusable input", code, 2)
         expect("untabbed line names the cause", any("path" in m for m in messages), True)
 
@@ -170,13 +179,63 @@ def main() -> int:
         expect("dropped binary rule exit code", code, 1)
         expect("dropped binary rule cites the attribute", any("attr" in m for m in messages), True)
 
+        # git reports i/none rather than i/-text for a SMALL binary blob (no
+        # terminator to classify), even with the `binary` rule in force. Keying
+        # the binary expectation on the index column therefore false-positives
+        # on a legitimate tiny asset; the resolved attribute is the reliable
+        # signal. Reproduced against a scratch repo before writing this case.
+        tiny = base / "tiny"
+        tiny.mkdir()
+        _tree(tiny)
+        code, messages = mod.audit(
+            tiny, CLEAN_EOL.replace(
+                "i/-text w/-text attr/-text           \tassets/banner.jpg",
+                "i/none  w/none  attr/-text           \tassets/tiny.jpg",
+            )
+        )
+        expect("tiny declared binary (i/none)", code, 0)
+        if code != 0:
+            failures.append(f"tiny declared binary messages: {messages}")
+
+        # A later rule that overrides eol=lf is invisible to the declaration
+        # layer (the required line is still present) and to the index layer
+        # (git still normalizes to i/lf) -- but the checkout would be CRLF. The
+        # resolved attribute is the only place the override shows up.
+        override = base / "override"
+        override.mkdir()
+        _tree(override, attrs=GOOD_ATTRS + "*.sh text eol=crlf\n")
+        code, messages = mod.audit(
+            override,
+            CLEAN_EOL.replace(
+                "i/lf    w/lf    attr/text eol=lf      \tskills/probe.sh",
+                "i/lf    w/crlf  attr/text eol=crlf    \tskills/probe.sh",
+            ),
+        )
+        expect("eol=crlf override exit code", code, 1)
+        expect("eol=crlf override is named", any("eol=crlf" in m for m in messages), True)
+        expect("eol=crlf override names the path", any("skills/probe.sh" in m for m in messages), True)
+
+        # `-z` is what keeps a non-ASCII path intact: without it git quotes
+        # `assets/café.md` as "assets/caf\303\251.md", which no longer matches
+        # the assets/ prefix. A textified asset must be reported under its real
+        # name, so this fails if the guard ever parses quoted output.
+        accented = base / "accented"
+        accented.mkdir()
+        _tree(accented)
+        code, messages = mod.audit(
+            accented,
+            _z("i/lf    w/crlf  attr/text=auto eol=lf \tassets/caf\u00e9.jpg"),
+        )
+        expect("non-ASCII textified asset exit code", code, 1)
+        expect("non-ASCII path is unquoted", any("assets/caf\u00e9.jpg" in m for m in messages), True)
+
         # A declared binary type outside assets/ (a diagram under docs/) is
         # legitimate: binary expectation follows the declared suffix, not the
         # directory, so a real asset addition does not need a guard edit.
         docs_png = base / "docs_png"
         docs_png.mkdir()
         _tree(docs_png)
-        code, _ = mod.audit(docs_png, CLEAN_EOL + "i/-text w/-text attr/-text            \tdocs/diagram.png\n")
+        code, _ = mod.audit(docs_png, CLEAN_EOL + _z("i/-text w/-text attr/-text           \tdocs/diagram.png"))
         expect("declared binary type outside assets/", code, 0)
 
         # ...but only while the rule exists, which the declaration layer checks.
@@ -185,7 +244,7 @@ def main() -> int:
         _tree(png_rule)
         code, messages = mod.audit(
             png_rule,
-            CLEAN_EOL + "i/-text w/-text attr/-text            \tdocs/diagram.png\n",
+            CLEAN_EOL + _z("i/-text w/-text attr/-text           \tdocs/diagram.png"),
         )
         expect("declared binary type with rule", code, 0)
         if code != 0:
@@ -198,7 +257,7 @@ def main() -> int:
         looks_binary.mkdir()
         _tree(looks_binary)
         code, messages = mod.audit(
-            looks_binary, "i/-text w/-text attr/text=auto eol=lf \tskills/x/y.md\n"
+            looks_binary, _z("i/-text w/-text attr/text=auto eol=lf \tskills/x/y.md")
         )
         expect("text path marked binary exit code", code, 1)
         expect("text path marked binary is explained", any("binary" in m for m in messages), True)
@@ -211,7 +270,7 @@ def main() -> int:
         unlisted.mkdir()
         _tree(unlisted, attrs=GOOD_ATTRS + "*.webm binary\n")
         code, messages = mod.audit(
-            unlisted, CLEAN_EOL + "i/-text w/-text attr/-text            \tdocs/demo.webm\n"
+            unlisted, CLEAN_EOL + _z("i/-text w/-text attr/-text           \tdocs/demo.webm")
         )
         expect("declared unlisted binary type", code, 0)
         if code != 0:
@@ -226,13 +285,13 @@ def main() -> int:
         spaced.mkdir()
         _tree(spaced)
         code, messages = mod.audit(
-            spaced, "i/crlf w/crlf attr/text \tdocs/a file with spaces.md\n"
+            spaced, _z("i/crlf w/crlf attr/text \tdocs/a file with spaces.md")
         )
         expect("spaced path violation reported", code, 1)
         expect("spaced path preserved", any("a file with spaces.md" in m for m in messages), True)
 
         # An untabbed junk line is unusable input too, not a silent skip.
-        code, messages = mod.audit(clean, "garbage without fields\n")
+        code, messages = mod.audit(clean, _z("garbage without fields"))
         expect("untabbed junk is unusable input", code, 2)
         expect("empty eol output", mod.audit(clean, "")[0], 2)
 
