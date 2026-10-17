@@ -46,7 +46,9 @@ hermes plugins install iap/hermes-guide --enable
 hermes plugins install iap/hermes-guide --ref <40-char-SHA> --enable
 ```
 
-Requires Hermes `>=0.21`. See `hermes plugins info hermes-guide` for the
+Requires Hermes `>=0.21` — declared as `requires_hermes` in `plugin.yaml` and
+enforced by the plugin loader (a build without it records-and-skips at load).
+See `hermes plugins info hermes-guide` for the
 catalog pin and disclosure text.
 
 ### Manual install

@@ -246,6 +246,13 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_check_envelopes.py
 
+      - name: Update-notice invocation site regression test
+        # Shim-loads the plugin package with a counting git stub — no Hermes,
+        # no network. Session start must stay subprocess-free; guide/doctor
+        # own the update check after their reports.
+        if: inputs.run-full-gate
+        run: python tools/test_update_notice_site.py
+
       - name: Claim-judge regression test
         # Extracts and runs the judge embedded in validate-claim.yml, so the
         # OUTCOME vocabulary cannot silently lose a plural again. The test list

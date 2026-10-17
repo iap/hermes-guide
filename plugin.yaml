@@ -10,6 +10,9 @@ description: >-
 manifest_version: 1
 api_version: 1
 license: MIT
+# Loader-enforced version floor (hermes_cli/plugins_manifest.py::requires_hermes_error):
+# unsatisfied Hermes builds record an error and skip the plugin before import.
+requires_hermes: ">=0.21"
 homepage: https://github.com/iap/hermes-guide
 tags: [diagnostics, observability, troubleshooting]
 python_dependencies:

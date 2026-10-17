@@ -19,6 +19,7 @@ in-process at those boundaries, never executed).
 __version__ = "0.8.1"
 
 import logging
+import subprocess
 import sys
 from pathlib import Path
 
@@ -73,6 +74,12 @@ def _handle_doctor(raw_args):
     except ValueError as exc:
         # Slash commands have no exit-code contract; surface the error as text.
         return f"error: {exc}"
+    # Update notice travels inside the response (the handler's only output
+    # channel is text). Skipped in fast mode: same no-subprocess contract.
+    if not fast:
+        notice = _version_check()
+        if notice:
+            text = f"{text}\n\n{notice}"
     return text
 
 
@@ -89,6 +96,12 @@ def _run_cli(args):
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(2)
     print(text)
+    # Update notice after the results; skipped in fast mode, whose contract
+    # is "no subprocess starts" (the notice would still spawn git).
+    if not fast:
+        notice = _version_check()
+        if notice:
+            print(notice)
     sys.exit(0 if exit_ok else 1)
 
 
@@ -109,22 +122,24 @@ def _setup_cli(subparser):
 _version_check_ran = False
 
 
-def _version_check():
-    """Check if a newer version is available; log a warning if so.
+def _version_check() -> str | None:
+    """Check if a newer release exists; return the notice text, or None.
 
     Read-only: uses git ls-remote to query the remote without writing
-    local refs. Fails silently when the plugin is not a git clone
-    (e.g. copied) or when git is unavailable.
-    Rate-limited: runs at most once per process.
+    local refs. Never raises, never logs on its own — the caller decides
+    where the notice is displayed (CLI stdout after its results, the
+    `/hermes-doctor` response text). Fails silently when the plugin is
+    not a git clone (e.g. copied) or when git is unavailable.
+    Rate-limited: runs at most once per process. Call sites are the two
+    explicit user-invoked surfaces only — `_run_cli` and `_handle_doctor`
+    (never a session boundary, never fast mode).
     """
     global _version_check_ran
     if _version_check_ran:
-        return
+        return None
     _version_check_ran = True
     try:
         import re
-        import subprocess
-        from pathlib import Path
 
         plugin_dir = Path(__file__).resolve().parent
         # Verify this is the root of the plugin's own clone
@@ -133,17 +148,17 @@ def _version_check():
             capture_output=True, text=True, timeout=5, cwd=plugin_dir,
         )
         if top_proc.returncode != 0:
-            return
+            return None
         toplevel = Path(top_proc.stdout.strip())
         if toplevel != plugin_dir:
-            return
+            return None
         # Read remote tags without writing local refs
         proc = subprocess.run(
             ["git", "ls-remote", "--tags", "--sort=v:refname", "origin"],  # nosec B607
             capture_output=True, text=True, timeout=10, cwd=plugin_dir,
         )
         if proc.returncode != 0:
-            return
+            return None
         # Parse tags: only full X.Y.Z, skip prerelease/malformed
         tag_re = re.compile(r"refs/tags/v(\d+\.\d+\.\d+)$")
         versions = []
@@ -152,7 +167,7 @@ def _version_check():
             if m:
                 versions.append(m.group(1))
         if not versions:
-            return
+            return None
         latest = versions[-1]  # sorted by v:refname, last is newest
         # Compare versions
         def parse_ver(v: str) -> tuple[int, int, int]:
@@ -160,13 +175,13 @@ def _version_check():
             return (int(parts[0]), int(parts[1]), int(parts[2]))
 
         if parse_ver(latest) > parse_ver(__version__):
-            logger.warning(
-                "hermes-guide: new version available (%s → %s). "
-                "Run: hermes plugins update hermes-guide",
-                __version__, latest,
+            return (
+                f"hermes-guide update available: {__version__} → {latest}. "
+                "Run: hermes plugins update hermes-guide"
             )
     except Exception:
         pass  # nosec B110 - version check is best-effort; never fail a session
+    return None
 
 
 def _proactive_check(**_kwargs):
@@ -199,12 +214,13 @@ def _proactive_check(**_kwargs):
 
 
 def _proactive_check_start(**kwargs):
-    """Session-start boundary: drift checks plus the update check.
+    """Session-start boundary: drift checks only, no network.
 
-    The update check (`git ls-remote`, up to ~15 s on first run) runs here
-    only — not on session end — so closing a session never stalls on network.
+    The update check used to run here and could stall an opted-in session
+    start (its own comment measured ~15 s on the first run); it now runs on
+    explicit `hermes guide` / `/hermes-doctor` invocations instead, where the
+    notice lands after results print and can't delay a boundary.
     """
-    _version_check()
     _proactive_check(**kwargs)
 
 
