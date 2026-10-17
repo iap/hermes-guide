@@ -1,7 +1,7 @@
 ---
 name: start
 description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, diagnostics, triage, routing]
@@ -39,23 +39,26 @@ Sequence it by reachability:
 
 When the subsystem is already named (MCP, hooks, cron, voice, ...), go
 straight to its playbook when installed — `hermes guide <scope>` covers only
-the seven scopes below; cron and voice, for example, are playbook-only.
+the nine scopes below; cron and voice, for example, are playbook-only.
 
 ## Step 1 — baseline before guessing
 
 Run the health check and read its lines:
 
 - Terminal: `hermes guide` (all scopes) or `hermes guide <scope>`.
-  Exit codes: `0` healthy, `1` broken or unknown, `2` bad scope.
+  Exit codes: `0` healthy, `1` broken or unknown, `2` bad scope. Add `--fast`
+  on a degraded host where every launch takes minutes — it runs in-process
+  with no subprocess.
 - In a session: `/hermes-doctor`, or `/hermes-doctor <scope>`.
 
 Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
-`memories`.
+`memories`, `sessions`, `update`.
 
 The check writes nothing, with one disclosed exception: the `hooks` scope runs
 `hermes hooks doctor`, which executes each approved shell hook once with a
 synthetic payload — that is how it verifies a hook actually runs. Every other
-scope reads state only.
+scope reads state only. With `--fast`, the `hooks` scope swaps to an
+in-process check instead — nothing executes.
 
 Status marks in the output: `+` healthy, `~` informational, `x` broken,
 `?` unknown. `?` means unmeasured — treat it as broken until the scope runs
@@ -115,4 +118,4 @@ full set.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill
   or the target playbook explicitly.
 
-*Facts (re-)verified 2026-10-15 against upstream source at commit `f97608f178d1ffeca59860195ab7da295f7c8e5f` (`hermes guide` scopes and exit codes); in-repo routing targets verified in `checks.py` and `skills/`. Re-verify before reuse.*
+*Facts (re-)verified 2026-10-18 against this repo's `checks.py` `_CHECKS` (nine scopes) and `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-18 — `sessions` and `update` shipped earlier but were missing here. Re-verify before reuse.*

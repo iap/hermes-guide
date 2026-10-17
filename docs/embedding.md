@@ -61,7 +61,8 @@ hosts with fixed skill directories.
 
 The playbooks assume the model can run shell commands. Specifically:
 
-- `hermes guide <scope>` — the read-only baseline (exit 0/1/2).
+- `hermes guide <scope>` — the read-only baseline (exit 0/1/2); `--fast` runs
+  it in-process with no subprocess, for degraded hosts.
 - `/hermes-doctor <scope>` — the in-session equivalent.
 - `hermes skills tap add iap/hermes-guide` — installing the tap.
 - `hermes skills install "iap/hermes-guide/skills/<playbook>"` — installing

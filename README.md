@@ -73,7 +73,7 @@ as a plugin.
 ## Use the plugin
 
 - **In a session:** `/hermes-doctor` for every surface, or `/hermes-doctor mcp` for one.
-- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy.
+- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy. On a degraded host — where every `hermes` launch replays a minutes-long update tail — `hermes guide --fast` runs all nine checks in-process with no subprocess.
 
 ### Proactive mode (opt-in)
 
