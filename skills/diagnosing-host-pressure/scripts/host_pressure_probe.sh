@@ -70,8 +70,11 @@ elif [ "$os_name" != "Darwin" ]; then
         in_container=1 ;;
     esac
     if [ "$in_container" -eq 0 ] && command -v systemd-detect-virt >/dev/null 2>&1; then
+      # Container values from systemd-detect-virt(1). lxc-libvirt is listed
+      # separately from lxc because libvirt-managed LXC reports that exact
+      # string; cloud identifiers (amazon, google) are VMs, not containers.
       case "$(systemd-detect-virt 2>/dev/null || echo none)" in
-        docker|podman|libpod|lxc|rkt|crio|containerd|systemd-nspawn)
+        docker|podman|libpod|lxc|lxc-libvirt|rkt|openvz|crio|containerd|systemd-nspawn)
           in_container=1 ;;
       esac
     fi

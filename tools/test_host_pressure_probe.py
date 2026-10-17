@@ -533,13 +533,13 @@ def main() -> int:
     _check("container: same numbers do NOT report load pressure", f["rc"] == 0, f"rc={f['rc']}")
     shutil.rmtree(f["td"], ignore_errors=True)
 
-    # Container detection by cgroup NAME, the branch that replaced the proc
-    # read. A real runtime name appears as a path component
     # systemd-detect-virt describes THIS system, so it is the scoped signal:
     # container values detect, VMs and bare metal must not, or the load verdict
     # would be silently disabled on exactly the hosts that run containers.
-    for value in ("docker", "podman", "libpod", "lxc", "rkt", "crio",
-                  "containerd", "systemd-nspawn"):
+    # lxc-libvirt is separate from lxc: libvirt-managed LXC reports that exact
+    # string, and matching only `lxc` missed it.
+    for value in ("docker", "podman", "libpod", "lxc", "lxc-libvirt", "rkt",
+                  "openvz", "crio", "containerd", "systemd-nspawn"):
         f = _fixture(os_name="Linux", cores="2", load="20",
                      top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
                      states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
@@ -548,7 +548,8 @@ def main() -> int:
                "container detected" in f["out"], f"rc={f['rc']}")
         shutil.rmtree(f["td"], ignore_errors=True)
 
-    for value in ("none", "kvm", "qemu", "wsl", "vmware", "oracle", "microsoft"):
+    for value in ("none", "kvm", "qemu", "wsl", "vmware", "oracle", "microsoft",
+                  "amazon", "google"):
         f = _fixture(os_name="Linux", cores="2", load="20",
                      top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
                      states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
