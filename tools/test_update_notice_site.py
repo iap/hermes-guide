@@ -16,6 +16,10 @@ Guards:
    (its result text passes through unchanged).
 4. The explicit surfaces share the once-per-process guard: the second
    invocation starts no git subprocess.
+5. Fast surfaces (`hermes guide --fast`, `/hermes-doctor --fast`) start no
+   git subprocess either — the fast contract is "no subprocess at all".
+6. When a newer release exists, the notice travels inside the
+   `/hermes-doctor` response text, not only to a log.
 
 Run: python3 tools/test_update_notice_site.py
 """
@@ -33,16 +37,21 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 class _GitCounter:
-    """Counts _version_check()'s subprocess.run calls; rev-parse fails closed."""
+    """Counts _version_check()'s subprocess.run calls; responds like git.
 
-    def __init__(self) -> None:
+    rev-parse answers with the package dir (so the top-level gate passes);
+    ls-remote answers with a configurable tag list (empty = no releases).
+    """
+
+    def __init__(self, pkg: str) -> None:
         self.count = 0
+        self.pkg = pkg
+        self.ls = ""
 
     def run(self, cmd, *args, **kwargs):
         self.count += 1
-        return subprocess.CompletedProcess(
-            cmd if isinstance(cmd, list) else [str(cmd)],
-            returncode=1, stdout="", stderr="git unavailable (stub)")
+        stdout = self.pkg if (cmd[1] == "rev-parse") else self.ls
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout=stdout, stderr="")
 
 
 def main(argv: list[str]) -> int:
@@ -57,7 +66,7 @@ def main(argv: list[str]) -> int:
 
         import hermes_guide as guide  # noqa: E402
 
-        counter = _GitCounter()
+        counter = _GitCounter(str(pkg.resolve()))
         real_subprocess = guide.subprocess
         guide.subprocess = SimpleNamespace(run=counter.run)
         real_run_all = guide.checks.run_all
@@ -80,8 +89,8 @@ def main(argv: list[str]) -> int:
                 args = SimpleNamespace(scope=None, fast=False)
                 guide._run_cli(args)
             except SystemExit as exc:
-                if exc.code != 0:
-                    failures.append(f"hermes guide exited {exc.code}; healthy run must exit 0")
+                if exc.code not in (0, 1):
+                    failures.append(f"hermes guide exited {exc.code}; exit contract violated")
             else:
                 failures.append("hermes guide did not exit; exit contract missing")
             after_cli = counter.count
@@ -90,11 +99,39 @@ def main(argv: list[str]) -> int:
 
             text = guide._handle_doctor("")
             if text != "stub report":
-                failures.append(f"/hermes-doctor text mutated: {text!r}")
+                failures.append(f"/hermes-doctor text mutated unexpectedly: {text!r}")
             if counter.count != after_cli:
                 failures.append(
                     "second explicit invocation ran git again; "
                     "the once-per-process guard must be shared")
+
+            # Guard 5: fast surfaces pay no git print, no subprocess.
+            guide._version_check_ran = False
+            counter.count = 0
+            try:
+                guide._run_cli(SimpleNamespace(scope=None, fast=True))
+            except SystemExit as exc:
+                if exc.code != 0:
+                    failures.append(f"fast guide exited {exc.code}; healthy stub must exit 0")
+            text_fast = guide._handle_doctor("--fast")
+            if text_fast != "stub report":
+                failures.append(f"fast /hermes-doctor text mutated: {text_fast!r}")
+            if counter.count != 0:
+                failures.append(
+                    f"fast surfaces ran {counter.count} git subprocess(es); "
+                    "fast mode must start none for the update notice either")
+
+            # Guard 6: a newer release travels inside the doctor response.
+            guide._version_check_ran = False
+            counter.count = 0
+            counter.ls = "refs/tags/v9.9.9\nrefs/tags/v10.0.0-alpha\n"
+            text2 = guide._handle_doctor("")
+            expected = (
+                f"hermes-guide update available: {guide.__version__} → 9.9.9. "
+                "Run: hermes plugins update hermes-guide")
+            if not text2.startswith("stub report\n\n" + expected):
+                failures.append(
+                    f"/hermes-doctor missing inline update notice: {text2!r}")
 
             guide._version_check_ran = False
             counter.count = 0
@@ -102,9 +139,9 @@ def main(argv: list[str]) -> int:
             if counter.count < 1:
                 failures.append("reset rate-limit was not honored on doctor")
         finally:
-            guide.subprocess = real_subprocess
-            guide.checks.run_all = real_run_all
-            guide._format_result = real_format
+                guide.subprocess = real_subprocess
+                guide.checks.run_all = real_run_all
+                guide._format_result = real_format
 
     for f in failures:
         print("FAIL:", f)
