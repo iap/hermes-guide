@@ -80,11 +80,19 @@ BINARY_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico", ".pdf", ".z
 # Rule lines the tracked tree depends on, as ordered token prefixes. A line
 # satisfies a requirement when its tokens start with the requirement, so extra
 # attributes on the same line (`* text=auto eol=lf diff=x`) still count.
+#
+# `*.png binary` is deliberately absent, and that asymmetry is the rule: an
+# entry earns a place here by having a tracked file that depends on it. The
+# banner earns it; a hypothetical future diagram does not, and requiring a type
+# nobody tracks can only ever fire as a false positive -- specifically, against
+# a repository that declares that type in a SUBDIR `.gitattributes`, which is a
+# perfectly normal git layout this guard would refuse to read. A dropped
+# binary rule is still caught without the entry: the resolved-attribute check
+# fires on the asset itself.
 REQUIRED_RULES: tuple[tuple[str, ...], ...] = (
     ("*", "text=auto", "eol=lf"),
     ("*.sh", "text", "eol=lf"),
     ("*.jpg", "binary"),
-    ("*.png", "binary"),
 )
 
 # `git ls-files --eol` columns: index EOL, worktree EOL, resolved attributes,
@@ -249,11 +257,18 @@ def audit(root: Path, eol_output: str, staged_attrs: str | None) -> tuple[int, l
             "separates the path with a TAB, so this guard cannot read it"
         ]
 
-    for label, text in (("worktree", worktree_attrs), ("staged", staged_attrs)):
-        problems = [
-            f"{label} .gitattributes does not declare: {rule}"
-            for rule in missing_rules(text)
-        ] + problems
+    worktree_missing = missing_rules(worktree_attrs)
+    staged_missing = missing_rules(staged_attrs)
+    for rule in worktree_missing:
+        problems.insert(0, f"worktree .gitattributes does not declare: {rule}")
+    for rule in staged_missing:
+        message = f"staged .gitattributes does not declare: {rule}"
+        # The usual cause of a staged-only finding is an edit that has not been
+        # staged yet. The finding stands (the commit would lack the rule), so
+        # name the fix rather than leaving the reader guessing.
+        if rule not in worktree_missing:
+            message += " (present in the worktree copy: stage it with `git add .gitattributes`)"
+        problems.insert(0, message)
     if problems:
         return 1, problems
     return 0, [

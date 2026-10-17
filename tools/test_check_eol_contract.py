@@ -38,7 +38,6 @@ GOOD_ATTRS = """\
 *.ps1 text eol=crlf
 
 *.jpg binary
-*.png binary
 """
 
 def _z(*rows: str) -> str:
@@ -313,6 +312,10 @@ def main() -> int:
         )
         expect("staged rule removal exit code", code, 1)
         expect("staged rule removal names the source", any("staged" in m for m in messages), True)
+        # The usual cause is an edit that was never staged. The finding stands
+        # (the commit would lack the rule), so it must name the fix.
+        expect("staged rule removal says how to fix it",
+               any("stage" in m.lower() for m in messages), True)
 
         worktree_gap = base / "worktree_gap"
         worktree_gap.mkdir()
@@ -326,6 +329,33 @@ def main() -> int:
         unreadable_index.mkdir()
         _tree(unreadable_index)
         expect("unreadable staged declaration", audit(unreadable_index, CLEAN_EOL, None)[0], 2)
+
+        # A binary type declared in a SUBDIR `.gitattributes` is a legitimate
+        # git layout. Requiring the type in the ROOT file would fail it, and
+        # `*.png binary` has no dependent file here anyway -- detection comes
+        # from the resolved-attribute check, which fires on the asset itself.
+        subdir_owner = base / "subdir_owner"
+        subdir_owner.mkdir()
+        _tree(subdir_owner)
+        code, messages = audit(
+            subdir_owner,
+            CLEAN_EOL + _z("i/-text w/-text attr/-text           \tdocs/diagram.png"),
+        )
+        expect("subdir-declared binary type", code, 0)
+        if code != 0:
+            failures.append(f"subdir-declared binary messages: {messages}")
+
+        # ...while an undeclared one is still caught, by the attribute check.
+        undeclared = base / "undeclared"
+        undeclared.mkdir()
+        _tree(undeclared)
+        code, messages = audit(
+            undeclared,
+            CLEAN_EOL + _z("i/-text w/-text attr/text=auto eol=lf \tassets/diagram.png"),
+        )
+        expect("undeclared binary type still caught", code, 1)
+        expect("undeclared binary type names the asset",
+               any("assets/diagram.png" in m for m in messages), True)
 
         # The declared CRLF script types must not be caught by the eol=crlf rule: a
         # tracked .bat that follows `.gitattributes` is compliant, and failing
