@@ -55,6 +55,12 @@ literal in `checks.py`. `tools/check_upstream_drift.py` watches these upstream.
 - File/symbol citations (`path.py::symbol`, `path.py:123`) must resolve against
   the revision in `.github/upstream-drift.baseline`
   (`check_citation_integrity.py --src <checkout>`).
+- Every skill must still be *installable* under the upstream scanner at the same
+  pinned revision, at community trust (`check_install_scan.py --src <checkout>`).
+  A mirror of the rules cannot enforce this — the mirror in
+  `tests/check_scanner_hygiene.py` is exactly why `diagnosing-host-pressure` sat
+  un-installable for months with every gate green (#204). Prefer a signal that
+  reaches upstream's own entry point over one that re-implements it.
 
 ## Security Guidelines
 
