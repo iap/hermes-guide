@@ -221,11 +221,18 @@ def staged_attr_problems(attrs_text: str, paths: list[str]) -> list[str]:
     checks out. This resolves `eol` and the text/binary state from *attrs_text*
     itself.
 
-    Attribute semantics, which is where a naive resolver goes wrong: git
-    attributes are INDEPENDENT. Each is last-writer-wins among the lines that
-    actually mention it, and a later line that says nothing about `eol` leaves
-    an earlier `eol=crlf` in force. So the two attributes are tracked
-    separately, never as one "last matching line" record.
+    Attribute semantics, which is where a naive resolver goes wrong. Two rules,
+    both learned the hard way on this PR:
+
+    * Attributes are INDEPENDENT. Each is last-writer-wins among the lines that
+      actually mention it, so a later line that says nothing about `eol` leaves
+      an earlier `eol=crlf` in force. They are never tracked as one "last
+      matching line" record.
+    * The text attribute is THREE-state, not boolean: `text`/`text=auto` sets
+      it, `-text` (and the `binary` macro) unsets it, and `!text` resets it to
+      UNSPECIFIED, which hands the decision back to git's content heuristic.
+      An expected-binary path needs the unset state; unspecified is not a
+      declaration.
 
     Scope, deliberately narrow: patterns are matched against the basename with
     `fnmatch`, which is right for `*` and `*.ext` (git matches a pattern
@@ -235,7 +242,8 @@ def staged_attr_problems(attrs_text: str, paths: list[str]) -> list[str]:
     """
     problems: list[str] = []
     eol_rules: list[tuple[str, str]] = []
-    text_rules: list[tuple[str, bool]] = []
+    # True = set, False = unset, None = unspecified (`!text`).
+    text_rules: list[tuple[str, bool | None]] = []
     for line in attrs_text.splitlines():
         tokens = line.split()
         if not tokens or tokens[0].startswith("#"):
@@ -246,6 +254,8 @@ def staged_attr_problems(attrs_text: str, paths: list[str]) -> list[str]:
                 eol_rules.append((pattern, token[4:]))
             elif token == "-text":
                 text_rules.append((pattern, False))
+            elif token == "!text":
+                text_rules.append((pattern, None))
             elif token == "text" or token.startswith("text="):
                 text_rules.append((pattern, True))
             elif token == "binary":
@@ -276,9 +286,12 @@ def staged_attr_problems(attrs_text: str, paths: list[str]) -> list[str]:
                 "path must check out LF"
             )
         if expects_binary(path) and last(text_rules, path) is not False:
+            state = {True: "set", None: "reset to unspecified"}.get(
+                last(text_rules, path), "unset"
+            )
             problems.append(
-                f"{path}: the declaration does not mark it binary; add or keep "
-                "a `binary` rule for its type"
+                f"{path}: the declaration leaves the text attribute {state}, "
+                "not binary; add or keep a `binary` rule for its type"
             )
     return problems
 

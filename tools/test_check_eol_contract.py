@@ -396,6 +396,21 @@ def main() -> int:
         expect("staged binary rule is clean",
                audit(staged_text_rule, CLEAN_EOL, GOOD_ATTRS + "*.jpg binary\n")[0], 0)
 
+        # `!text` is git's UNSPECIFIED reset, distinct from `-text` (unset) and `text`
+        # (set). A resolver that only knows the first two keeps the earlier
+        # `binary` in force and accepts a declaration that no longer protects
+        # the asset.
+        reset_rule = base / "reset_rule"
+        reset_rule.mkdir()
+        _tree(reset_rule)
+        code, messages = audit(reset_rule, CLEAN_EOL, GOOD_ATTRS + "*.jpg !text\n")
+        expect("staged !text reset exit code", code, 1)
+        expect("staged !text reset names the asset", any("assets/banner.jpg" in m for m in messages), True)
+
+        # ...and an explicit -text (or the binary macro) after a reset is fine.
+        expect("staged -text after reset is clean",
+               audit(reset_rule, CLEAN_EOL, GOOD_ATTRS + "*.jpg !text\n*.jpg binary\n")[0], 0)
+
         # 4. This repo, live --------------------------------------------------
         proc = subprocess.run(
             ["git", "ls-files", "--eol", "-z"], cwd=REPO, capture_output=True, text=True, check=False
