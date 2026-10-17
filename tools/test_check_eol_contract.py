@@ -327,6 +327,49 @@ def main() -> int:
         _tree(unreadable_index)
         expect("unreadable staged declaration", audit(unreadable_index, CLEAN_EOL, None)[0], 2)
 
+        # The declared CRLF script types must not be caught by the eol=crlf rule: a
+        # tracked .bat that follows `.gitattributes` is compliant, and failing
+        # it would be a false positive waiting for the first Windows script.
+        win_script = base / "win_script"
+        win_script.mkdir()
+        _tree(win_script)
+        code, messages = audit(
+            win_script,
+            CLEAN_EOL + _z(
+                "i/lf    w/crlf  attr/text eol=crlf    \tscripts/build.bat",
+                "i/lf    w/crlf  attr/text eol=crlf    \tscripts/run.ps1",
+                "i/lf    w/crlf  attr/text eol=crlf    \tscripts/run.cmd",
+            ),
+        )
+        expect("declared CRLF script types", code, 0)
+        if code != 0:
+            failures.append(f"declared CRLF script messages: {messages}")
+
+        # ...while a CRLF override on anything else still fails.
+        expect("CRLF on a .sh is still a finding",
+               audit(win_script, CLEAN_EOL + _z("i/lf    w/crlf  attr/text eol=crlf    \tprobe.sh"))[0], 1)
+
+        # A CRLF override that exists ONLY in the staged declaration is what CI
+        # will check out, while `git ls-files --eol` resolves attributes from the
+        # worktree copy and reports the clean value. Both copies are therefore
+        # resolved independently.
+        staged_only = base / "staged_only"
+        staged_only.mkdir()
+        _tree(staged_only, attrs=GOOD_ATTRS + "*.sh text eol=crlf\n")
+        code, messages = audit(
+            staged_only, CLEAN_EOL, GOOD_ATTRS + "*.sh text eol=crlf\n"
+        )
+        expect("staged-only CRLF override exit code", code, 1)
+        expect("staged-only override names the source", any("staged" in m for m in messages), True)
+
+        # A pattern git resolves against the full path (`assets/**`) is outside
+        # this resolver's scope; it must not be silently treated as verified.
+        code, messages = audit(
+            staged_only, CLEAN_EOL, GOOD_ATTRS + "assets/** text eol=crlf\n"
+        )
+        expect("unresolved staged pattern is reported", code, 1)
+        expect("unresolved staged pattern is explained", any("cannot resolve" in m for m in messages), True)
+
         # 4. This repo, live --------------------------------------------------
         proc = subprocess.run(
             ["git", "ls-files", "--eol", "-z"], cwd=REPO, capture_output=True, text=True, check=False

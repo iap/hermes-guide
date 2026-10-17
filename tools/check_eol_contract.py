@@ -50,6 +50,7 @@ Exit codes: 0 clean, 1 contract violated, 2 unusable input (git/`.gitattributes`
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import subprocess
 import sys
 from pathlib import Path
@@ -80,9 +81,12 @@ REQUIRED_RULES: tuple[tuple[str, ...], ...] = (
 _EOL_ATTR_NO_TEXT = "-text"
 
 # The one resolved attribute this repo never wants on a tracked path. The
-# `*.bat`/`*.cmd`/`*.ps1` rules in `.gitattributes` would produce it, which is
-# why they are documented but not required: nothing tracked uses them yet.
+# declared CRLF script types are the exception: `.gitattributes` assigns
+# eol=crlf to them on purpose, so a tracked .bat/.cmd/.ps1 that follows the
+# declaration is compliant and must not be reported.
 _EOL_CRLF = "eol=crlf"
+
+CRLF_EXEMPT_SUFFIXES = (".bat", ".cmd", ".ps1")
 
 # Index states acceptable for a text path.
 _TEXT_INDEX_OK = ("i/lf", "i/none")
@@ -167,8 +171,9 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
 
         # git normalizes the index, so a later rule that overrides eol=lf
         # leaves an LF index and a CRLF checkout. Only the resolved attribute
-        # shows the override, which is why no tracked path may resolve to one.
-        if _EOL_CRLF in attr:
+        # shows the override, which is why no tracked path outside the declared
+        # CRLF script types may resolve to one.
+        if _EOL_CRLF in attr and not path.casefold().endswith(CRLF_EXEMPT_SUFFIXES):
             problems.append(
                 f"{path}: resolves to {attr!r}; every tracked path must check "
                 "out LF, so no rule may set eol=crlf"
@@ -203,6 +208,55 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
     return problems, tracked, unusable
 
 
+def crlf_exempt(path: str) -> bool:
+    """True for the script types `.gitattributes` declares as CRLF."""
+    return path.casefold().endswith(CRLF_EXEMPT_SUFFIXES)
+
+
+def staged_crlf_problems(attrs_text: str, paths: list[str]) -> list[str]:
+    """Return findings for paths the DECLARATION alone sends to CRLF checkout.
+
+    `git ls-files --eol` resolves attributes from the worktree `.gitattributes`,
+    so it cannot see an override that exists only in the index -- the copy CI
+    checks out. This resolves the `eol` attribute from *attrs_text* directly.
+
+    Scope, deliberately narrow: patterns are matched against the basename with
+    `fnmatch`, which is right for `*` and `*.ext` (git matches a pattern
+    without a slash against the basename at any depth) and wrong for a pattern
+    containing a slash, which is anchored at the .gitattributes directory. An
+    anchored pattern is reported as unresolvable rather than assumed safe.
+    """
+    problems: list[str] = []
+    rules: list[tuple[str, str]] = []
+    for line in attrs_text.splitlines():
+        tokens = line.split()
+        if not tokens or tokens[0].startswith("#"):
+            continue
+        eol = next((t[4:] for t in tokens[1:] if t.startswith("eol=")), "")
+        rules.append((tokens[0], eol))
+        if "/" in tokens[0] and tokens[0] != "*":
+            problems.append(
+                f".gitattributes pattern {tokens[0]!r} contains a slash; this "
+                "guard cannot resolve it against the tree, so its eol is "
+                "unverified"
+            )
+    if not rules:
+        return problems
+    for path in paths:
+        name = path.rsplit("/", 1)[-1]
+        # git applies the LAST matching line, so walk the rules in order.
+        resolved = next(
+            (eol for pattern, eol in reversed(rules) if fnmatch.fnmatch(name, pattern)),
+            "",
+        )
+        if resolved == "crlf" and not crlf_exempt(path):
+            problems.append(
+                f"{path}: the declaration resolves to eol=crlf; every tracked "
+                "path must check out LF"
+            )
+    return problems
+
+
 def audit(root: Path, eol_output: str, staged_attrs: str | None) -> tuple[int, list[str]]:
     """Return ``(exit_code, messages)`` for the tree rooted at *root*.
 
@@ -231,6 +285,14 @@ def audit(root: Path, eol_output: str, staged_attrs: str | None) -> tuple[int, l
         problems = [
             f"{label} .gitattributes does not declare: {rule}"
             for rule in missing_rules(text)
+        ] + problems
+        # The resolved-attribute pass above reads the WORKTREE declaration, so
+        # the staged copy needs its own resolution to catch an override that
+        # only exists in the index.
+        paths = [path for _, _, path in
+                 (parse_eol_line(line) or ("", "", "") for line in split_entries(eol_output))]
+        problems = [
+            f"staged {finding}" for finding in staged_crlf_problems(text, paths)
         ] + problems
     if problems:
         return 1, problems
