@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.0.12
+version: 1.0.13
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -33,7 +33,7 @@ Do **not** load this skill when the user has already named a specific subsystem 
 
 Before walking the flowchart, capture the machine-readable baseline — it routes whole branches by itself and exposes findings no symptom description mentions:
 
-- Headless / one-shot: `hermes guide` (all scopes) or `hermes guide <scope>`.
+- Headless / one-shot: `hermes guide` (all scopes) or `hermes guide <scope>`. On a degraded host where every launch takes minutes, add `--fast` — it runs in-process with no subprocess, so it still works while other `hermes` commands hang.
 - In-session: `/hermes-doctor` or `/hermes-doctor <scope>`.
 
 Route its `~`/`x`/`?` lines first:
@@ -42,6 +42,7 @@ Route its `~`/`x`/`?` lines first:
 |---|---|
 | `~ commands` (e.g. a skill slug shadowing a builtin) | diagnosing-commands |
 | `~ memories` (store near/over limit, undated entries) | diagnosing-memory |
+| `~ update` (lock owner alive, or dead owner with a free checkout) | diagnosing-cli-tui §1 stale-lock note |
 | `x config` | hermes-configuration-guide Step 0, then re-run the scope |
 | `x mcp` | diagnosing-mcp |
 | `x skills` | diagnosing-skills |
@@ -198,7 +199,7 @@ and a weak model regenerates the same output.
 
 ## 2. Symptom → Skill mapping table
 
-The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 68 rows from specific symptoms to the target skill. Load the matched skill directly.
+The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 69 rows from specific symptoms to the target skill. Load the matched skill directly.
 
 ## 3. Clarifying questions
 
@@ -264,4 +265,4 @@ When the triage skill routes to a diagnostic skill, the model reports findings u
 - **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
 - **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
-*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id). `x update` row + symptom-map stale-lock row point at the diagnosing-cli-tui §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py; rows re-checked 2026-10-16). §4 escalation rules moved to the canonical config-map list 2026-10-16 (verbatim move, pointer left behind). Routing additions verified 2026-10-16 (retry-loop vs wedge split to diagnosing-path; outdated-plugin `2 bad scope` → `hermes plugins update hermes-guide`). Re-verify before reuse.*
+*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id). `x update` row + symptom-map stale-lock row point at the diagnosing-cli-tui §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py; rows re-checked 2026-10-16). §4 escalation rules moved to the canonical config-map list 2026-10-16 (verbatim move, pointer left behind). Routing additions verified 2026-10-16 (retry-loop vs wedge split to diagnosing-path; outdated-plugin `2 bad scope` → `hermes plugins update hermes-guide`). `~ update` row, the `--fast` degraded-host clause, and the row count (re-counted: 69) added 2026-10-18. Re-verify before reuse.*

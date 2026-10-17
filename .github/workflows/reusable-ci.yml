@@ -238,7 +238,7 @@ jobs:
         run: python tools/test_exit_contract.py
 
       - name: Fast mode regression test
-        # Shim-loads checks.py with _run rigged to raise — no Hermes, no network.
+        # Shim-loads checks.py with _run recorded, not executed — one segment needs a hermes candidate.
         if: inputs.run-full-gate
         run: python tools/test_fast_mode.py
 

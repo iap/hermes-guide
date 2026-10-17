@@ -31,9 +31,9 @@ def _load_plugin():
     return hermes_guide, checks_mod
 
 
-def _run_expect_exit(plugin, checks_mod, envelope, expected, label):
+def _run_expect_exit(plugin, checks_mod, envelope, expected, label, fast=False):
     """Run _run_cli with a faked run_all; assert the SystemExit code."""
-    checks_mod.run_all = lambda scope=None: envelope
+    checks_mod.run_all = lambda scope=None, fast=False: envelope
     captured = {}
     code = None  # a normal return from _run_cli is itself a contract violation
 
@@ -48,7 +48,7 @@ def _run_expect_exit(plugin, checks_mod, envelope, expected, label):
     real_stdout = sys.stdout
     sys.stdout = _Out()
     try:
-        plugin._run_cli(type("Args", (), {"scope": None})())
+        plugin._run_cli(type("Args", (), {"scope": None, "fast": fast})())
     except SystemExit as e:
         code = e.code
     except Exception as exc:  # noqa: BLE001
@@ -90,6 +90,8 @@ def main() -> int:
     _run_expect_exit(plugin, checks_mod, broken, 1, "one broken -> exit 1")
     _run_expect_exit(plugin, checks_mod, informational, 0, "informational -> exit 0")
     _run_expect_exit(plugin, checks_mod, unknown, 1, "unknown -> exit 1")
+    _run_expect_exit(plugin, checks_mod, unknown, 1, "fast unknown -> exit 1", fast=True)
+    _run_expect_exit(plugin, checks_mod, healthy, 0, "fast healthy -> exit 0", fast=True)
 
     if failures:
         for f in failures:
