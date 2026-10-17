@@ -222,6 +222,30 @@ def main() -> int:
             after_files = sorted(p.name for p in Path(scratch).iterdir())
             expect("loader writes nothing", after_files, before_files)
 
+        # A `tools` package and submodules that were ALREADY imported belong to
+        # whoever imported us: loading must put them back, not drop them.
+        import types as _types
+
+        incumbent_pkg = _types.ModuleType("tools")
+        incumbent_pkg.marker = "original-package"
+        incumbent_child = _types.ModuleType("tools.skills_guard")
+        incumbent_child.marker = "original-child"
+        incumbent_pkg.skills_guard = incumbent_child
+        sys.modules["tools"] = incumbent_pkg
+        sys.modules["tools.skills_guard"] = incumbent_child
+        try:
+            mod.load_modules(payload)
+            expect("pre-existing tools package restored",
+                   getattr(sys.modules.get("tools"), "marker", None), "original-package")
+            expect("pre-existing submodule restored",
+                   getattr(sys.modules.get("tools.skills_guard"), "marker", None),
+                   "original-child")
+        finally:
+            sys.modules.pop("tools", None)
+            sys.modules.pop("tools.skills_guard", None)
+            sys.modules.pop("tools.plugin_guard", None)
+            sys.modules.pop("tools.plugin_guard_context", None)
+
         # 6. The pin must name a commit -------------------------------------
         expect("40-hex sha is a pin", mod.valid_pin("d" * 40), True)
         expect("uppercase sha is a pin", mod.valid_pin("D" * 40), True)

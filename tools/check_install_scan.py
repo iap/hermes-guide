@@ -86,23 +86,24 @@ def load_modules(sources: dict[str, list[str]]) -> dict[str, object]:
     """
     package = types.ModuleType("tools")
     package.__path__ = []  # type: ignore[attr-defined]
-    injected = {"tools": package}
-    saved = {name: sys.modules.get(name) for name in injected}
-    sys.modules["tools"] = package
+    names = ["tools"] + [path[:-3].replace("/", ".") for path in sources]
+    modules = {name: types.ModuleType(name) for name in names}
+    modules["tools"] = package
+    # Capture every name BEFORE injecting any of them: a pre-existing
+    # `tools` or `tools.skills_guard` belongs to whoever imported us, and the
+    # restore below has to put it back rather than drop it.
+    saved = {name: sys.modules.get(name) for name in names}
     try:
-        for path, lines in sources.items():
-            module_name = path[:-3].replace("/", ".")  # strip .py, / -> .
-            module = types.ModuleType(module_name)
-            module.__file__ = f"<pinned {path}>"
-            injected[module_name] = module
-            sys.modules[module_name] = module
-        for name in [n for n in injected if n != "tools"]:
+        sys.modules.update(modules)
+        for name in names:
+            if name == "tools":
+                continue
             path = _path_for(name)
             compiled = compile("\n".join(sources[path]), f"<pinned {path}>", "exec")
-            exec(compiled, injected[name].__dict__)  # noqa: S102 - pinned upstream code
-        return {n: m for n, m in injected.items() if n != "tools"}
+            exec(compiled, modules[name].__dict__)  # noqa: S102 - pinned upstream code
+        return {n: m for n, m in modules.items() if n != "tools"}
     finally:
-        for name, previous in {**saved, **{n: None for n in injected}}.items():
+        for name, previous in saved.items():
             if previous is None:
                 sys.modules.pop(name, None)
             else:
@@ -220,10 +221,11 @@ def main(argv: list[str]) -> int:
         assess_plugin(REPO, modules["tools.plugin_guard"]),
     ]
     code = max(r[0] for r in results)
+    prefixes = {0: "OK: ", 1: "FAIL: ", 2: "error: "}
     for result_code, messages in results:
         stream = sys.stdout if result_code == 0 else sys.stderr
         for message in messages:
-            print(("OK: " if result_code == 0 else "") + message, file=stream)
+            print(prefixes[result_code] + message, file=stream)
     if code == 1:
         print(
             "error: something in this repo cannot be installed on current "
