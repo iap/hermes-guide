@@ -2,6 +2,20 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.1 (2026-10-17)
+
+### Features
+
+- **tools**: guard the .gitattributes line-ending contract ([#278](https://github.com/iap/hermes-guide/pull/278))
+
+### Bug Fixes
+
+- **review**: v0.8.1 audit fixes
+
+### Chores
+
+- **repo**: pin LF line endings, add README concept banner ([#277](https://github.com/iap/hermes-guide/pull/277))
+
 ## v0.8.0 (2026-10-16)
 
 ### Features
