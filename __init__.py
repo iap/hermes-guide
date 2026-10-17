@@ -19,6 +19,7 @@ in-process at those boundaries, never executed).
 __version__ = "0.8.1"
 
 import logging
+import subprocess
 import sys
 from pathlib import Path
 
@@ -73,6 +74,8 @@ def _handle_doctor(raw_args):
     except ValueError as exc:
         # Slash commands have no exit-code contract; surface the error as text.
         return f"error: {exc}"
+    # Update notice on explicit invocation only — after the report is built.
+    _version_check()
     return text
 
 
@@ -89,6 +92,8 @@ def _run_cli(args):
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(2)
     print(text)
+    # Update notice on explicit invocation only — after the results are out.
+    _version_check()
     sys.exit(0 if exit_ok else 1)
 
 
@@ -115,7 +120,9 @@ def _version_check():
     Read-only: uses git ls-remote to query the remote without writing
     local refs. Fails silently when the plugin is not a git clone
     (e.g. copied) or when git is unavailable.
-    Rate-limited: runs at most once per process.
+    Rate-limited: runs at most once per process. Call sites are the two
+    explicit user-invoked surfaces only — `_run_cli` and `_handle_doctor`
+    (never a session boundary).
     """
     global _version_check_ran
     if _version_check_ran:
@@ -123,8 +130,6 @@ def _version_check():
     _version_check_ran = True
     try:
         import re
-        import subprocess
-        from pathlib import Path
 
         plugin_dir = Path(__file__).resolve().parent
         # Verify this is the root of the plugin's own clone
@@ -199,12 +204,13 @@ def _proactive_check(**_kwargs):
 
 
 def _proactive_check_start(**kwargs):
-    """Session-start boundary: drift checks plus the update check.
+    """Session-start boundary: drift checks only, no network.
 
-    The update check (`git ls-remote`, up to ~15 s on first run) runs here
-    only — not on session end — so closing a session never stalls on network.
+    The update check used to run here and could stall an opted-in session
+    start (its own comment measured ~15 s on the first run); it now runs on
+    explicit `hermes guide` / `/hermes-doctor` invocations instead, where the
+    notice lands after results print and can't delay a boundary.
     """
-    _version_check()
     _proactive_check(**kwargs)
 
 
