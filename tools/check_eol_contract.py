@@ -213,12 +213,19 @@ def crlf_exempt(path: str) -> bool:
     return path.casefold().endswith(CRLF_EXEMPT_SUFFIXES)
 
 
-def staged_crlf_problems(attrs_text: str, paths: list[str]) -> list[str]:
-    """Return findings for paths the DECLARATION alone sends to CRLF checkout.
+def staged_attr_problems(attrs_text: str, paths: list[str]) -> list[str]:
+    """Return findings for attributes the DECLARATION alone gets wrong.
 
     `git ls-files --eol` resolves attributes from the worktree `.gitattributes`,
     so it cannot see an override that exists only in the index -- the copy CI
-    checks out. This resolves the `eol` attribute from *attrs_text* directly.
+    checks out. This resolves `eol` and the text/binary state from *attrs_text*
+    itself.
+
+    Attribute semantics, which is where a naive resolver goes wrong: git
+    attributes are INDEPENDENT. Each is last-writer-wins among the lines that
+    actually mention it, and a later line that says nothing about `eol` leaves
+    an earlier `eol=crlf` in force. So the two attributes are tracked
+    separately, never as one "last matching line" record.
 
     Scope, deliberately narrow: patterns are matched against the basename with
     `fnmatch`, which is right for `*` and `*.ext` (git matches a pattern
@@ -227,32 +234,51 @@ def staged_crlf_problems(attrs_text: str, paths: list[str]) -> list[str]:
     anchored pattern is reported as unresolvable rather than assumed safe.
     """
     problems: list[str] = []
-    rules: list[tuple[str, str]] = []
+    eol_rules: list[tuple[str, str]] = []
+    text_rules: list[tuple[str, bool]] = []
     for line in attrs_text.splitlines():
         tokens = line.split()
         if not tokens or tokens[0].startswith("#"):
             continue
-        eol = next((t[4:] for t in tokens[1:] if t.startswith("eol=")), "")
-        rules.append((tokens[0], eol))
-        if "/" in tokens[0] and tokens[0] != "*":
+        pattern = tokens[0]
+        for token in tokens[1:]:
+            if token.startswith("eol="):
+                eol_rules.append((pattern, token[4:]))
+            elif token == "-text":
+                text_rules.append((pattern, False))
+            elif token == "text" or token.startswith("text="):
+                text_rules.append((pattern, True))
+            elif token == "binary":
+                # The macro expands to -diff -merge -text.
+                text_rules.append((pattern, False))
+        if "/" in pattern and pattern != "*":
             problems.append(
-                f".gitattributes pattern {tokens[0]!r} contains a slash; this "
-                "guard cannot resolve it against the tree, so its eol is "
-                "unverified"
+                f".gitattributes pattern {pattern!r} contains a slash; this "
+                "guard cannot resolve it against the tree, so its attributes "
+                "are unverified"
             )
-    if not rules:
+    if not eol_rules and not text_rules:
         return problems
-    for path in paths:
+
+    def last(rules: list[tuple[str, object]], path: str) -> object | None:
+        """Value from the LAST rule that both matches and sets the attribute."""
         name = path.rsplit("/", 1)[-1]
-        # git applies the LAST matching line, so walk the rules in order.
-        resolved = next(
-            (eol for pattern, eol in reversed(rules) if fnmatch.fnmatch(name, pattern)),
-            "",
-        )
-        if resolved == "crlf" and not crlf_exempt(path):
+        for pattern, value in reversed(rules):
+            if fnmatch.fnmatch(name, pattern):
+                return value
+        return None
+
+    for path in paths:
+        eol = last(eol_rules, path)
+        if eol == "crlf" and not crlf_exempt(path):
             problems.append(
                 f"{path}: the declaration resolves to eol=crlf; every tracked "
                 "path must check out LF"
+            )
+        if expects_binary(path) and last(text_rules, path) is not False:
+            problems.append(
+                f"{path}: the declaration does not mark it binary; add or keep "
+                "a `binary` rule for its type"
             )
     return problems
 
@@ -292,7 +318,7 @@ def audit(root: Path, eol_output: str, staged_attrs: str | None) -> tuple[int, l
         paths = [path for _, _, path in
                  (parse_eol_line(line) or ("", "", "") for line in split_entries(eol_output))]
         problems = [
-            f"staged {finding}" for finding in staged_crlf_problems(text, paths)
+            f"staged {finding}" for finding in staged_attr_problems(text, paths)
         ] + problems
     if problems:
         return 1, problems
