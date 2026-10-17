@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -45,6 +46,14 @@ FILE_RE = re.compile(r"`([^`*]*\.(?:json|yaml|yml|md|py|toml|lock|ts|tsx|js|jsx)
 COUNT_RE = re.compile(
     r"\(\s*(\d[\d,]*)\s*(?:lines?|files?|skills?|rows?|entries|checks?|tests?|cases?)\s*\)")
 COUNT_WINDOW = 60
+
+# A row claim about a file the skill ships: `references/map.md` - 69 rows.
+# Deliberately wider than COUNT_RE: the real claim is written with a dash, not
+# parentheses, which is exactly why the parenthesised form never caught it.
+# The window stops at a sentence break so a count in the NEXT sentence cannot
+# attach to a filename in this one.
+ROW_CLAIM_RE = re.compile(
+    r"`(?P<path>[A-Za-z0-9_./-]+\.md)`[^.\n]{0,40}?\b(?P<n>\d[\d,]*)\s+rows?\b")
 
 # Words that scope a claim to one context; their presence exempts the line.
 # Keep this list short and literal: every entry must be doing real work in
@@ -118,6 +127,57 @@ def verify(rows) -> tuple[list[str], str]:
     return failures, summary
 
 
+def data_rows(text: str) -> int | None:
+    """Number of Markdown table DATA rows, or None when there is no table.
+
+    Data rows are the pipe-led lines minus the header and the separator, which
+    is what a prose claim ("69 rows from specific symptoms") is counting.
+    """
+    lines = [ln for ln in text.splitlines() if ln.lstrip().startswith("|")]
+    if len(lines) < 2:
+        return None
+    body = [ln for ln in lines if not re.match(r"^\s*\|[\s:|-]+\|\s*$", ln)]
+    return max(len(body) - 1, 0)
+
+
+def referenced_row_claims(skills_dir: Path) -> list[tuple[str, int, str, int]]:
+    """(skill, line, relative-path, claimed-rows) for every row claim found."""
+    out: list[tuple[str, int, int, str, int]] = []
+    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+        skill = skill_md.parent.name
+        for i, line in enumerate(skill_md.read_text(encoding="utf-8").splitlines(), 1):
+            for m in ROW_CLAIM_RE.finditer(line):
+                out.append((skill, i, m.group("path"), int(m.group("n").replace(",", ""))))
+    return out
+
+
+def verify_referenced_counts(skills_dir: Path) -> tuple[list[str], str]:
+    """Check a claimed row count against the file the claim names.
+
+    The cross-skill check above cannot catch this class: it compares two
+    skills to each other, so a single stale number is perfectly consistent
+    with itself. `diagnosing-triage` shipped "69 rows" against a 70-row table
+    twice (68, then 69), and the parenthesis-only COUNT_RE never even saw the
+    claim because it is written with an em dash, not `(69 rows)`.
+    """
+    failures: list[str] = []
+    checked = 0
+    for skill, line, rel, claimed in referenced_row_claims(skills_dir):
+        target = skills_dir / skill / rel
+        if not target.is_file():
+            continue
+        actual = data_rows(target.read_text(encoding="utf-8"))
+        if actual is None:
+            continue
+        checked += 1
+        if actual != claimed:
+            failures.append(
+                "%s:%d: %s claims %d row(s) but the file has %d"
+                % (skill, line, rel, claimed, actual))
+    summary = "OK: %d referenced row count(s) match their file" % checked
+    return failures, summary
+
+
 def _selftest() -> int:
     assert _numbers_near_filename("`a.json` (3057 lines) x") == [("", "a.json", "3057")]
     assert _numbers_near_filename("POSIX `a.json` (1 lines) y") == []
@@ -140,6 +200,49 @@ def _selftest() -> int:
     # A count after a second filename belongs to the second file.
     assert _numbers_near_filename("`a.py` (10 lines), `b.py` (20 lines)") == [
         ("", "a.py", "10"), ("", "b.py", "20")]
+
+    # --- referenced-row claims: a count must match the file it names --------
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        skill = root / "diagnosing-x"
+        (skill / "references").mkdir(parents=True)
+        table = "| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n"
+        (skill / "references" / "map.md").write_text(table, encoding="utf-8")
+        (skill / "references" / "prose.md").write_text("no table here\n", encoding="utf-8")
+
+        def claim(text: str) -> None:
+            (skill / "SKILL.md").write_text(text, encoding="utf-8")
+
+        claim("See `references/map.md` — 2 rows of symptoms.\n")
+        fails, _ = verify_referenced_counts(root)
+        assert not fails, fails
+
+        # One row too few is the exact miss that shipped in v0.8.1.
+        claim("See `references/map.md` — 1 rows of symptoms.\n")
+        fails, _ = verify_referenced_counts(root)
+        assert len(fails) == 1 and "map.md" in fails[0], fails
+
+        # A file with no table is not a row claim: out of scope, not a failure.
+        claim("See `references/prose.md` — 9 rows of symptoms.\n")
+        fails, _ = verify_referenced_counts(root)
+        assert not fails, fails
+
+        # No count, no claim.
+        claim("See `references/map.md` for the full table.\n")
+        fails, _ = verify_referenced_counts(root)
+        assert not fails, fails
+
+        # A path that does not resolve is left alone rather than guessed at.
+        claim("See `references/gone.md` — 3 rows.\n")
+        fails, _ = verify_referenced_counts(root)
+        assert not fails, fails
+
+        # A claim in a different sentence must not attach: the window stops at
+        # a sentence break, so this 4 belongs to the next sentence.
+        claim("See `references/map.md` for details. The map has 4 rows.\n")
+        fails, _ = verify_referenced_counts(root)
+        assert not fails, fails
+
     print("OK: skill-consistency selftest")
     return 0
 
@@ -151,7 +254,10 @@ def main() -> int:
     if args.selftest:
         return _selftest()
     failures, summary = verify(collect())
+    row_failures, row_summary = verify_referenced_counts(SKILLS_DIR)
     print(summary)
+    print(row_summary)
+    failures += row_failures
     for f in failures:
         print("FAIL:", f)
     return 1 if failures else 0

@@ -1,7 +1,7 @@
 ---
 name: start
 description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, diagnostics, triage, routing]
@@ -47,8 +47,10 @@ Run the health check and read its lines:
 
 - Terminal: `hermes guide` (all scopes) or `hermes guide <scope>`.
   Exit codes: `0` healthy, `1` broken or unknown, `2` bad scope. Add `--fast`
-  on a degraded host where every launch takes minutes — it runs in-process
-  with no subprocess.
+  on a degraded host where every launch takes minutes: it collapses nine
+  launches into one, running the checks in-process with no subprocess. It does
+  not help when the CLI itself is wedged — the one remaining launch still pays
+  the startup cost, and then use the no-baseline route below.
 - In a session: `/hermes-doctor`, or `/hermes-doctor <scope>`.
 
 Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
@@ -118,4 +120,4 @@ full set.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill
   or the target playbook explicitly.
 
-*Facts (re-)verified 2026-10-17 against this repo's `checks.py` `_CHECKS` (nine scopes) and `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17 — `sessions` and `update` shipped earlier but were missing here. Re-verify before reuse.*
+*Facts (re-)verified 2026-10-17 against this repo's `checks.py` `_CHECKS` (nine scopes) and `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17; --fast clause states the wedge limit (it collapses nine launches into one, not zero) 2026-10-17 — `sessions` and `update` shipped earlier but were missing here. Re-verify before reuse.*
