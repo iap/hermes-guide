@@ -38,11 +38,46 @@ os_name=$(uname -s 2>/dev/null || echo unknown)
 in_container=0
 if [ -f /.dockerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]; then
   in_container=1
-elif [ "$os_name" != "Darwin" ] && [ -r /proc/1/cgroup ]; then
-  # Fixed-path read of container runtime identifiers, not secrets. Linux-only:
-  # Darwin has no /proc and must not probe it.
-  if grep -qaE 'docker|containerd|kubepods|lxc|podman' /proc/1/cgroup 2>/dev/null; then
+elif [ "$os_name" != "Darwin" ]; then
+  # Detection asks "is THIS namespace inside a container", never "does this host
+  # run containers" - and it never reads the proc filesystem: reading the
+  # PID-1 cgroup file trips the install scanner's proc_access rule (severity
+  # high), and on current Hermes a community-source skill with any high finding
+  # is BLOCKED from installing, so the literal path must not appear in a
+  # comment here either. See https://github.com/iap/hermes-guide/issues/204.
+  #
+  # Scoping matters: systemd puts every container on a Docker host under
+  # system.slice/docker-<id>.scope, so scanning cgroup NAMES would call a
+  # developer machine a container and silently disable its load verdict. The
+  # signals below are all about this namespace:
+  #   - the runtime's own marker file, present only inside its container
+  #   - Podman's exported container=<runtime>
+  #   - systemd-detect-virt, which describes THIS system
+  #
+  # systemd-detect-virt is matched against container values only. `wsl` is a
+  # VM, not a container: --container exits 0 there, which would classify every
+  # WSL user as containerized and disable the load verdict on WSL.
+  #
+  # A container with no marker file and no systemd (Alpine, minimal images) is
+  # not detected, and the probe compares load against cores there. That errs
+  # toward a possible false alarm rather than a silent loss of the verdict.
+  if [ -f /run/.containerenv ] || [ -f /.dockerenv ]; then
     in_container=1
+  else
+    case "${container:-}" in
+      ""|none) ;;
+      *docker*|*containerd*|*crio*|*kubepods*|*lxc*|*podman*|*libpod*|*nspawn*)
+        in_container=1 ;;
+    esac
+    if [ "$in_container" -eq 0 ] && command -v systemd-detect-virt >/dev/null 2>&1; then
+      # Container values from systemd-detect-virt(1). lxc-libvirt is listed
+      # separately from lxc because libvirt-managed LXC reports that exact
+      # string; cloud identifiers (amazon, google) are VMs, not containers.
+      case "$(systemd-detect-virt 2>/dev/null || echo none)" in
+        docker|podman|libpod|lxc|lxc-libvirt|rkt|openvz|crio|containerd|systemd-nspawn)
+          in_container=1 ;;
+      esac
+    fi
   fi
 fi
 

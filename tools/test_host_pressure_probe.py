@@ -57,6 +57,8 @@ def _fixture(
     stall_limit: str = "100000",
     memsize_mb: str = "4096",
     in_container: bool = False,
+    virt: str | None = None,
+    container_env: str | None = None,
 ) -> dict:
     """Run the real probe with a stubbed host. Returns stdout + exit code."""
     td = Path(tempfile.mkdtemp(prefix="hpp-fixture-"))
@@ -138,6 +140,13 @@ def _fixture(
         # A real detection signal the probe already reads, so this exercises the
         # shipped guard rather than a test-only hook.
         env["KUBERNETES_SERVICE_HOST"] = "10.0.0.1"
+
+    # systemd-detect-virt describes THIS system, so it is the scoped signal:
+    # stubbed per case rather than read from the host running the tests.
+    if virt is not None:
+        _stub(bindir, "systemd-detect-virt", f'echo "{virt}"')
+    if container_env is not None:
+        env["container"] = container_env
 
     proc = subprocess.run(
         ["bash", str(PROBE)], capture_output=True, text=True, env=env, timeout=120
@@ -522,6 +531,52 @@ def main() -> int:
                  states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
                  in_container=True)
     _check("container: same numbers do NOT report load pressure", f["rc"] == 0, f"rc={f['rc']}")
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # systemd-detect-virt describes THIS system, so it is the scoped signal:
+    # container values detect, VMs and bare metal must not, or the load verdict
+    # would be silently disabled on exactly the hosts that run containers.
+    # lxc-libvirt is separate from lxc: libvirt-managed LXC reports that exact
+    # string, and matching only `lxc` missed it.
+    for value in ("docker", "podman", "libpod", "lxc", "lxc-libvirt", "rkt",
+                  "openvz", "crio", "containerd", "systemd-nspawn"):
+        f = _fixture(os_name="Linux", cores="2", load="20",
+                     top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                     virt=value)
+        _check(f"systemd-detect-virt={value} detects container",
+               "container detected" in f["out"], f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
+
+    for value in ("none", "kvm", "qemu", "wsl", "vmware", "oracle", "microsoft",
+                  "amazon", "google"):
+        f = _fixture(os_name="Linux", cores="2", load="20",
+                     top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                     virt=value)
+        _check(f"systemd-detect-virt={value} is NOT a container",
+               "container detected" not in f["out"], f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
+
+    # An inherited $container that names no runtime (Podman sets
+    # container=podman; other software may set container=none) must not fake a
+    # container and suppress the load verdict.
+    for value in ("none", "0", ""):
+        f = _fixture(os_name="Linux", cores="2", load="20",
+                     top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                     virt="none", container_env=value)
+        _check(f"container={value!r} does not fake a container",
+               "container detected" not in f["out"], f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
+
+    # Podman's own value does name a runtime, so it must be honoured.
+    f = _fixture(os_name="Linux", cores="2", load="20",
+                 top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                 virt="none", container_env="podman")
+    _check("container=podman is honoured", "container detected" in f["out"], f"rc={f['rc']}")
+    shutil.rmtree(f["td"], ignore_errors=True)
     _check("container: says the two scopes differ",
            "host-wide" in f["out"] and "different scopes" in f["out"], f["out"][:400])
     _check("container: no per-core HIGH-load callout",
