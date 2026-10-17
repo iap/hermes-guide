@@ -369,10 +369,14 @@ jobs:
         run: |
           # Offline parser regression first (no clone needed), then the real check.
           python3 tools/check_citation_integrity.py --selftest
-          # Use the already-cloned Hermes install (v2026.9.24) as the citation
-          # source. No separate clone needed -- the install step already has it.
-          # Use --rev HEAD since the shallow clone doesn't have commit objects.
-          python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent" --rev HEAD
+          # The already-cloned Hermes install (v2026.9.24) is the --src tree;
+          # no separate clone needed. The shallow clone has no commit objects,
+          # so the declared baseline revision is fetched into it (depth 1),
+          # and the check runs with the script's DEFAULT revision — which is
+          # the baseline file, not --rev HEAD: the install tree is a month
+          # behind the pin, and validating cites there defeats the contract.
+          git -C "$RUNNER_TEMP/hermes-agent" fetch --depth 1 origin "$(cat .github/upstream-drift.baseline)"
+          python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent"
 
       - name: Skill provenance footer guard
         # Requires a dated upstream-anchored footer per skill.
