@@ -57,7 +57,7 @@ def _fixture(
     stall_limit: str = "100000",
     memsize_mb: str = "4096",
     in_container: bool = False,
-    cgroup_dirs: list[str] | None = None,
+    virt: str | None = None,
     container_env: str | None = None,
 ) -> dict:
     """Run the real probe with a stubbed host. Returns stdout + exit code."""
@@ -141,16 +141,10 @@ def _fixture(
         # shipped guard rather than a test-only hook.
         env["KUBERNETES_SERVICE_HOST"] = "10.0.0.1"
 
-    # The container-detection branches that read the filesystem need a
-    # directory to read. HERMES_PROBE_CGROUP_ROOT is the probe's own
-    # override-with-a-real-default knob, in the same spirit as
-    # HERMES_PROBE_STALL_LIMIT above: unset in production, it points at the
-    # real /sys/fs/cgroup.
-    if cgroup_dirs is not None:
-        cg = td / "cgroup"
-        for entry in cgroup_dirs:
-            (cg / entry).mkdir(parents=True, exist_ok=True)
-        env["HERMES_PROBE_CGROUP_ROOT"] = str(cg)
+    # systemd-detect-virt describes THIS system, so it is the scoped signal:
+    # stubbed per case rather than read from the host running the tests.
+    if virt is not None:
+        _stub(bindir, "systemd-detect-virt", f'echo "{virt}"')
     if container_env is not None:
         env["container"] = container_env
 
@@ -541,30 +535,27 @@ def main() -> int:
 
     # Container detection by cgroup NAME, the branch that replaced the proc
     # read. A real runtime name appears as a path component
-    # (system.slice/docker-<id>.scope, kubepods.slice/...), not in file
-    # contents, so the fixture stages directories and no file mentions it.
-    for label, dirs in (
-        ("docker scope", ["system.slice/docker-abc123.scope"]),
-        ("kubepods slice", ["kubepods.slice/kubepods-besteffort/pod1234"]),
-        ("crio scope", ["system.slice/crio-9f2a.scope"]),
-    ):
+    # systemd-detect-virt describes THIS system, so it is the scoped signal:
+    # container values detect, VMs and bare metal must not, or the load verdict
+    # would be silently disabled on exactly the hosts that run containers.
+    for value in ("docker", "podman", "libpod", "lxc", "rkt", "crio",
+                  "containerd", "systemd-nspawn"):
         f = _fixture(os_name="Linux", cores="2", load="20",
                      top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
                      states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
-                     cgroup_dirs=dirs)
-        _check(f"cgroup name detects container ({label})",
+                     virt=value)
+        _check(f"systemd-detect-virt={value} detects container",
                "container detected" in f["out"], f"rc={f['rc']}")
         shutil.rmtree(f["td"], ignore_errors=True)
 
-    # ...and a cgroup tree with no runtime name must NOT be read as a
-    # container, or the load verdict would be silently disabled everywhere.
-    f = _fixture(os_name="Linux", cores="2", load="20",
-                 top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
-                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
-                 cgroup_dirs=["system.slice/user.slice", "init.scope"])
-    _check("cgroup tree without a runtime name is NOT a container",
-           "container detected" not in f["out"], f"rc={f['rc']}")
-    shutil.rmtree(f["td"], ignore_errors=True)
+    for value in ("none", "kvm", "qemu", "wsl", "vmware", "oracle", "microsoft"):
+        f = _fixture(os_name="Linux", cores="2", load="20",
+                     top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                     virt=value)
+        _check(f"systemd-detect-virt={value} is NOT a container",
+               "container detected" not in f["out"], f"rc={f['rc']}")
+        shutil.rmtree(f["td"], ignore_errors=True)
 
     # An inherited $container that names no runtime (Podman sets
     # container=podman; other software may set container=none) must not fake a
@@ -573,7 +564,7 @@ def main() -> int:
         f = _fixture(os_name="Linux", cores="2", load="20",
                      top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
                      states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
-                     cgroup_dirs=["system.slice/user.slice"], container_env=value)
+                     virt="none", container_env=value)
         _check(f"container={value!r} does not fake a container",
                "container detected" not in f["out"], f"rc={f['rc']}")
         shutil.rmtree(f["td"], ignore_errors=True)
@@ -582,7 +573,7 @@ def main() -> int:
     f = _fixture(os_name="Linux", cores="2", load="20",
                  top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
                  states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
-                 cgroup_dirs=["system.slice/user.slice"], container_env="podman")
+                 virt="none", container_env="podman")
     _check("container=podman is honoured", "container detected" in f["out"], f"rc={f['rc']}")
     shutil.rmtree(f["td"], ignore_errors=True)
     _check("container: says the two scopes differ",

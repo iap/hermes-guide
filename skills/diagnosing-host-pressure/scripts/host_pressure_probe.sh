@@ -39,46 +39,41 @@ in_container=0
 if [ -f /.dockerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]; then
   in_container=1
 elif [ "$os_name" != "Darwin" ]; then
-  # Detection reads the runtimes' marker files and cgroup NAMES, never the
-  # proc filesystem: reading the PID-1 cgroup file trips the install scanner's
-  # proc_access rule (severity high), and on current Hermes a community-source
-  # skill with any high finding is BLOCKED from installing - so the literal
-  # path must not appear in a comment here either. See
-  # https://github.com/iap/hermes-guide/issues/204.
+  # Detection asks "is THIS namespace inside a container", never "does this host
+  # run containers" - and it never reads the proc filesystem: reading the
+  # PID-1 cgroup file trips the install scanner's proc_access rule (severity
+  # high), and on current Hermes a community-source skill with any high finding
+  # is BLOCKED from installing, so the literal path must not appear in a
+  # comment here either. See https://github.com/iap/hermes-guide/issues/204.
   #
-  # The runtime name lives in the cgroup PATH (`/system.slice/docker-<id>.scope`,
-  # `/kubepods.slice/...`), so the check enumerates entry NAMES at depth 1-2.
-  # Grepping file CONTENTS instead misses a real container: its files do not
-  # spell out "docker", and a content match is a false signal.
+  # Scoping matters: systemd puts every container on a Docker host under
+  # system.slice/docker-<id>.scope, so scanning cgroup NAMES would call a
+  # developer machine a container and silently disable its load verdict. The
+  # signals below are all about this namespace:
+  #   - the runtime's own marker file, present only inside its container
+  #   - Podman's exported container=<runtime>
+  #   - systemd-detect-virt, which describes THIS system
   #
-  # Deliberately NOT using systemd-detect-virt --container: verified on a
-  # WSL2 host it exits 0 (bare, it reports "wsl"), which would classify every
-  # WSL user as containerized and silently disable the load verdict there.
+  # systemd-detect-virt is matched against container values only. `wsl` is a
+  # VM, not a container: --container exits 0 there, which would classify every
+  # WSL user as containerized and disable the load verdict on WSL.
   #
-  # A stale container cgroup left on a host that used to run one can make the
-  # name check say "container". That errs toward refusing the load comparison,
-  # which is the safe direction: the probe declines to compare two scopes
-  # rather than inventing a verdict from mismatched units.
-  if [ -f /run/.containerenv ]; then
+  # A container with no marker file and no systemd (Alpine, minimal images) is
+  # not detected, and the probe compares load against cores there. That errs
+  # toward a possible false alarm rather than a silent loss of the verdict.
+  if [ -f /run/.containerenv ] || [ -f /.dockerenv ]; then
     in_container=1
   else
-    # Podman exports container=podman; ignore `none` and anything that does
-    # not name a runtime, so an inherited variable cannot fake a container.
     case "${container:-}" in
       ""|none) ;;
       *docker*|*containerd*|*crio*|*kubepods*|*lxc*|*podman*|*libpod*|*nspawn*)
         in_container=1 ;;
     esac
-    if [ "$in_container" -eq 0 ]; then
-      cgroup_root="${HERMES_PROBE_CGROUP_ROOT:-/sys/fs/cgroup}"
-      for cg_entry in "$cgroup_root"/* "$cgroup_root"/*/*; do
-        [ -d "$cg_entry" ] || continue
-        case "${cg_entry##*/}" in
-          *docker*|*containerd*|*crio*|*kubepods*|*lxc*|*podman*|*libpod*|*nspawn*)
-            in_container=1
-            break ;;
-        esac
-      done
+    if [ "$in_container" -eq 0 ] && command -v systemd-detect-virt >/dev/null 2>&1; then
+      case "$(systemd-detect-virt 2>/dev/null || echo none)" in
+        docker|podman|libpod|lxc|rkt|crio|containerd|systemd-nspawn)
+          in_container=1 ;;
+      esac
     fi
   fi
 fi
