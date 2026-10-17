@@ -375,7 +375,10 @@ jobs:
           # and the check runs with the script's DEFAULT revision — which is
           # the baseline file, not --rev HEAD: the install tree is a month
           # behind the pin, and validating cites there defeats the contract.
-          git -C "$RUNNER_TEMP/hermes-agent" fetch --depth 1 origin "$(cat .github/upstream-drift.baseline)"
+          # The pin line is read via the script's own encoding rule (
+          # utf-8-sig + strip): the committed file has carried a BOM.
+          pin="$(python3 -c "import pathlib; print(pathlib.Path('.github/upstream-drift.baseline').read_text(encoding='utf-8-sig').strip())")"
+          git -C "$RUNNER_TEMP/hermes-agent" fetch --depth 1 origin "$pin"
           python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent"
 
       - name: Skill provenance footer guard
