@@ -171,6 +171,16 @@ jobs:
           python tests/check_scanner_hygiene.py --selftest
           python tests/check_scanner_hygiene.py
 
+      - name: Line-ending contract guard
+        # `.gitattributes` is a declaration nothing else verifies, so a
+        # loosened rule would only surface as a Windows CRLF diff or a shell
+        # script that stopped executing. Reads the declaration plus
+        # `git ls-files --eol`; no network, no Hermes, so fast tier. The
+        # regression test runs the fixtures AND a live audit of this checkout.
+        run: |
+          python tools/check_eol_contract.py
+          python tools/test_check_eol_contract.py
+
       - name: Tool coverage guard
         # Stdlib only, so it runs in the fast tier. Fails if a tools/ guard or
         # regression test is never referenced by a workflow -- unwired coverage
