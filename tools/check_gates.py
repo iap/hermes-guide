@@ -40,6 +40,7 @@ _GATES: dict[str, str] = {
     "check_issue_templates.py": "reads .github/ISSUE_TEMPLATE/ and the docs beside it",
     "check_no_mutation.py": "AST parse; no imports executed",
     "check_scanner_hygiene.py": "regex over skills text; mirrors upstream guard patterns",
+    "check_eol_contract.py": "reads .gitattributes plus `git ls-files --eol`; no network",
 }
 
 # Flags a gate needs to stay read-only. Bare `gen_changelog.py` REWRITES
@@ -54,7 +55,7 @@ _QUICK = ("test_skill_counts.py", "render_docs.py", "check_skill_provenance.py")
 
 _USAGE = (
     "run the hermetic gate tier (generated docs, counts, routing, provenance, "
-    "self-claim, tone, changelog, read-only)"
+    "self-claim, tone, changelog, read-only, line endings)"
 )
 
 # Gates CI runs that this tier leaves out, and the constraint that excludes it.

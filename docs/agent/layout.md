@@ -17,6 +17,7 @@ tracked top-level path and every `.github/` file.
 | `plugin-skills/<name>/SKILL.md` | Skills the plugin registers itself via `ctx.register_skill` — currently the `start` router. Outside `skills/` on purpose: the tap inventory, generated counts, and install loop stay exact |
 | `tools/check_*.py` | Guard linters — every one is a machine gate with an exit code |
 | `tools/check_doc_style.py` | Tone guard: emoji outside Python string literals, filler phrases in Markdown prose |
+| `tools/check_eol_contract.py` | Line-ending guard: the `.gitattributes` rules the tracked tree depends on, plus `git ls-files --eol` proving the index is LF and `assets/` is binary |
 | `tools/check_issue_templates.py` | Reporter-surface guard: issue-template schema, and docs that promise a route the chooser does not offer |
 | `tools/check_skill_dogfood.py` | Read-only live-install smoke test: version, config path, skills, plugins, doctor |
 | `tools/test_*.py` | Regression suites for the plugin and for `tools/` itself |
