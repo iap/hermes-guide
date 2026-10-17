@@ -14,35 +14,55 @@ Two layers are checked, because either can rot on its own:
    present. Deliberately a short list: `*.bat`/`*.cmd`/`*.ps1` CRLF rules are
    documented but NOT required, because no tracked file uses them and a
    requirement with no dependent file is a test of the file's own text.
-2. **The index.** `git ls-files --eol` must report `i/lf` for every tracked
-   text path and `i/-text` for everything under `assets/`. The index is the
-   state that gets committed; the worktree column is deliberately ignored,
-   since a CRLF worktree on Windows is expected and harmless.
+2. **The resolved attributes plus the index**, from `git ls-files --eol`.
 
-`i/none` is accepted for text: git reports it for the BOM-prefixed
-`.github/upstream-drift.baseline`, which is text and correctly LF-clean.
+Layer 2 is defence in depth, not the primary detector, and the reason is worth
+stating so nobody over-trusts it: while `text=auto eol=lf` holds, git
+NORMALIZES on `git add`, so a CRLF file is stored as `i/lf` and no CRLF index
+entry can exist to find (verified: a hand-written CRLF blob adds as `i/lf`).
+What layer 2 actually catches is:
+
+  * a dropped `binary` rule -- git's own content heuristic keeps the JPEG at
+    `i/-text` either way, so only the resolved-attribute column flips
+    (`attr/-text` -> `attr/text=auto eol=lf`) and that is what is compared;
+  * a text path git classified as binary (a stray CR or a NUL byte);
+  * an asset that became text in the index;
+  * `i/mixed`, and `i/crlf` once `eol=lf` has been dropped.
+
+`i/none` is accepted for text: git reports it when a blob has no line
+terminator at all (an empty file, or a single line with no trailing newline --
+`.github/upstream-drift.baseline` is one). It cannot hide CRLF, because CRLF
+implies a terminator, and a terminator makes git report `i/lf` or `i/crlf`.
 
 Unusable input is reported, never skipped: a missing or undecodable
-`.gitattributes`, a failed `git ls-files`, or empty output all exit 2.
+`.gitattributes`, a failed `git ls-files`, empty output, and any row without
+git's TAB path separator all exit 2. That last one matters: the attribute
+column carries two tokens (`text=auto eol=lf`), so an untabbed row cannot be
+split safely -- guessing would report the wrong path, and skipping would turn
+a future git format change into an all-green run.
 
 Usage:
     python tools/check_eol_contract.py            # check the repo
 
-Exit codes: 0 clean, 1 contract violated, 2 unusable input (git/`.gitattributes`).
+Exit codes: 0 clean, 1 contract violated, 2 unusable input (git/`.gitattributes`/format).
 """
 
 from __future__ import annotations
 
 import argparse
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-# Paths under this prefix must be binary in the index.
+# Paths under this prefix are expected to be binary whatever their suffix.
 BINARY_PREFIX = "assets/"
+
+# Suffixes `.gitattributes` marks `binary`. A declared type is expected to be
+# binary wherever it lives, so adding `docs/diagram.png` does not need a guard
+# edit. Case-folded: a Windows checkout can commit either casing.
+BINARY_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico", ".pdf", ".zip")
 
 # Rule lines the tracked tree depends on, as ordered token prefixes. A line
 # satisfies a requirement when its tokens start with the requirement, so extra
@@ -55,11 +75,11 @@ REQUIRED_RULES: tuple[tuple[str, ...], ...] = (
 )
 
 # `git ls-files --eol` columns: index EOL, worktree EOL, resolved attributes,
-# then the path — which may contain spaces, so it is the last field.
-_EOL_LINE = re.compile(r"^(?P<index>\S+)\s+\S+\s+\S+\s+(?P<path>\S.*?)\s*$")
+# then the path. The first three are whitespace-separated (the attribute column
+# is `attr/text=auto eol=lf`, two tokens) and the path follows a TAB.
+_EOL_ATTR_NO_TEXT = "-text"
 
-# Index states acceptable for a text path. `i/crlf` and `i/mixed` are the
-# violations; `i/none` is git's report for text it cannot line-classify.
+# Index states acceptable for a text path.
 _TEXT_INDEX_OK = ("i/lf", "i/none")
 
 _BINARY_INDEX = "i/-text"
@@ -92,32 +112,72 @@ def missing_rules(text: str) -> list[str]:
     return missing
 
 
-def eol_problems(eol_output: str) -> tuple[list[str], int]:
-    """Return ``(problems, tracked_count)`` for `git ls-files --eol` output.
+def parse_eol_line(line: str) -> tuple[str, str, str] | None:
+    """Return ``(index_eol, attr, path)``, or None when the row is unusable.
 
-    Unparseable lines are ignored rather than failed: the column layout is a
-    git implementation detail, and a new column must not turn every clone into
-    a red build. Empty output is handled by the caller as unusable input.
+    A row without git's TAB path separator returns None rather than a guess:
+    the attribute column holds two tokens, so whitespace alone cannot say
+    where the path begins.
+    """
+    info, tab, path = line.partition("\t")
+    if not tab:
+        return None
+    fields = info.split()
+    if len(fields) < 3:
+        return None
+    return fields[0], fields[2], path.strip()
+
+
+def expects_binary(path: str) -> bool:
+    """True when *path* must be binary: under assets/, or a declared type."""
+    if path.startswith(BINARY_PREFIX):
+        return True
+    return path.casefold().endswith(BINARY_SUFFIXES)
+
+
+def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
+    """Return ``(problems, tracked_count, unusable)`` for ls-files --eol output.
+
+    A row that cannot be parsed lands in `unusable` rather than being dropped:
+    see the module docstring for why a silent skip is worse than a red build.
     """
     problems: list[str] = []
+    unusable: list[str] = []
     tracked = 0
     for line in eol_output.splitlines():
         if not line.strip():
             continue
-        match = _EOL_LINE.match(line)
-        if match is None:
+        parsed = parse_eol_line(line)
+        if parsed is None:
+            unusable.append(f"cannot tell where the path starts in: {line.strip()!r}")
             continue
-        index, path = match["index"], match["path"]
+        index, attr, path = parsed
         tracked += 1
-        if path.startswith(BINARY_PREFIX):
+        if expects_binary(path):
             if index != _BINARY_INDEX:
                 problems.append(
-                    f"{path}: index EOL is {index}, expected {_BINARY_INDEX} "
-                    "(mark the asset binary in .gitattributes)"
+                    f"{path}: index EOL is {index}, expected {_BINARY_INDEX}"
+                )
+            elif _EOL_ATTR_NO_TEXT not in attr:
+                problems.append(
+                    f"{path}: attribute is {attr!r}, expected a `binary` "
+                    f"(or -text) rule; git keeps the blob binary by content "
+                    f"heuristic alone, which is not a declaration"
+                )
+        elif index == _BINARY_INDEX:
+            # Binary because a rule says so (`attr/-text`) is a declaration and
+            # is accepted even for a type this guard has never heard of, so
+            # adding `docs/demo.webm` with its own `binary` rule needs no guard
+            # edit. Binary with only `attr/text=auto eol=lf` is git's content
+            # heuristic -- a stray CR or a NUL byte in what should be text.
+            if _EOL_ATTR_NO_TEXT not in attr:
+                problems.append(
+                    f"{path}: git treats this text path as binary ({attr}); "
+                    "check for a stray CR or a NUL byte"
                 )
         elif index not in _TEXT_INDEX_OK:
             problems.append(f"{path}: index EOL is {index}, expected i/lf")
-    return problems, tracked
+    return problems, tracked, unusable
 
 
 def audit(root: Path, eol_output: str) -> tuple[int, list[str]]:
@@ -128,15 +188,19 @@ def audit(root: Path, eol_output: str) -> tuple[int, list[str]]:
     if not eol_output.strip():
         return 2, ["empty `git ls-files --eol` output (git failed or the tree is empty)"]
 
-    problems = [f".gitattributes does not declare: {rule}" for rule in missing_rules(text)]
-    eol_found, tracked = eol_problems(eol_output)
-    problems.extend(eol_found)
+    problems, tracked, unusable = eol_problems(eol_output)
+    if unusable:
+        return 2, unusable + [
+            "refusing to guess the column layout; `git ls-files --eol` no longer "
+            "separates the path with a TAB, so this guard cannot read it"
+        ]
 
+    problems = [f".gitattributes does not declare: {rule}" for rule in missing_rules(text)] + problems
     if problems:
         return 1, problems
     return 0, [
         f"LF index contract holds across {tracked} tracked path(s); "
-        f"{BINARY_PREFIX} stays binary"
+        f"{BINARY_PREFIX} and declared binary types stay binary"
     ]
 
 

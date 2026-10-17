@@ -127,7 +127,20 @@ def main() -> int:
         _tree(crlf)
         code, messages = mod.audit(crlf, CLEAN_EOL.replace("i/lf    w/crlf", "i/crlf  w/crlf"))
         expect("CRLF in index exit code", code, 1)
-        expect("CRLF in index names the path", any("README.md" in m for m in messages), True)
+        # Exact message, not a substring: the attr column carries TWO tokens
+        # (`text=auto eol=lf`), so a naive whitespace split files the path as
+        # "eol=lf <TAB>README.md". Real git separates the path with a TAB.
+        expect("CRLF message is exact", messages[:1],
+               ["README.md: index EOL is i/crlf, expected i/lf"])
+
+        # A line without git's TAB separator cannot be split safely: the attr
+        # column carries two tokens (`text=auto eol=lf`), so the path start is
+        # genuinely ambiguous. Refusing to guess is the honest outcome -- a
+        # silent mis-parse would report the wrong path, and a silent skip would
+        # turn a future git format change into an all-green run.
+        code, messages = mod.audit(crlf, "i/crlf w/crlf attr/text=auto eol=lf skills/a.md\n")
+        expect("untabbed line is unusable input", code, 2)
+        expect("untabbed line names the cause", any("path" in m for m in messages), True)
 
         mixed = base / "mixed"
         mixed.mkdir()
@@ -144,6 +157,66 @@ def main() -> int:
         expect("text-mode asset exit code", code, 1)
         expect("text-mode asset names the path", any("assets/banner.jpg" in m for m in messages), True)
 
+        # git's content heuristic keeps a JPEG at i/-text even after the
+        # `binary` rule is deleted, so the INDEX column cannot see a dropped
+        # rule -- the resolved ATTR column can (attr flips to text=auto).
+        # Without this case the guard would pass a repo that lost the rule.
+        dropped_rule = base / "dropped_rule"
+        dropped_rule.mkdir()
+        _tree(dropped_rule)
+        code, messages = mod.audit(
+            dropped_rule, CLEAN_EOL.replace("attr/-text           ", "attr/text=auto eol=lf ")
+        )
+        expect("dropped binary rule exit code", code, 1)
+        expect("dropped binary rule cites the attribute", any("attr" in m for m in messages), True)
+
+        # A declared binary type outside assets/ (a diagram under docs/) is
+        # legitimate: binary expectation follows the declared suffix, not the
+        # directory, so a real asset addition does not need a guard edit.
+        docs_png = base / "docs_png"
+        docs_png.mkdir()
+        _tree(docs_png)
+        code, _ = mod.audit(docs_png, CLEAN_EOL + "i/-text w/-text attr/-text            \tdocs/diagram.png\n")
+        expect("declared binary type outside assets/", code, 0)
+
+        # ...but only while the rule exists, which the declaration layer checks.
+        png_rule = base / "png_rule"
+        png_rule.mkdir()
+        _tree(png_rule)
+        code, messages = mod.audit(
+            png_rule,
+            CLEAN_EOL + "i/-text w/-text attr/-text            \tdocs/diagram.png\n",
+        )
+        expect("declared binary type with rule", code, 0)
+        if code != 0:
+            failures.append(f"declared binary type with rule messages: {messages}")
+
+        # A text path git classified as binary (a stray CR or a NUL byte makes
+        # it look binary) is a finding, and the message must say so: "expected
+        # i/lf" alone reads as a mystery.
+        looks_binary = base / "looks_binary"
+        looks_binary.mkdir()
+        _tree(looks_binary)
+        code, messages = mod.audit(
+            looks_binary, "i/-text w/-text attr/text=auto eol=lf \tskills/x/y.md\n"
+        )
+        expect("text path marked binary exit code", code, 1)
+        expect("text path marked binary is explained", any("binary" in m for m in messages), True)
+
+        # ...but a binary type this guard has never heard of, declared in
+        # .gitattributes, is legitimate and must not need a guard edit to be
+        # added to the tree. `docs/demo.webm` is the shape: the declaration is
+        # what matters, not the guard's suffix list.
+        unlisted = base / "unlisted"
+        unlisted.mkdir()
+        _tree(unlisted, attrs=GOOD_ATTRS + "*.webm binary\n")
+        code, messages = mod.audit(
+            unlisted, CLEAN_EOL + "i/-text w/-text attr/-text            \tdocs/demo.webm\n"
+        )
+        expect("declared unlisted binary type", code, 0)
+        if code != 0:
+            failures.append(f"declared unlisted binary messages: {messages}")
+
         # A worktree-only CRLF is not a finding: the index is what gets committed.
         code, _ = mod.audit(clean, CLEAN_EOL.replace("i/lf    w/crlf", "i/lf    w/crlf"))
         expect("worktree CRLF tolerated", code, 0)
@@ -158,10 +231,9 @@ def main() -> int:
         expect("spaced path violation reported", code, 1)
         expect("spaced path preserved", any("a file with spaces.md" in m for m in messages), True)
 
-        # Unparseable lines are ignored, but empty output is unusable input:
-        # a git failure must never read as a clean scan.
-        code, _ = mod.audit(clean, "garbage without fields\n")
-        expect("unparseable line ignored", code, 0)
+        # An untabbed junk line is unusable input too, not a silent skip.
+        code, messages = mod.audit(clean, "garbage without fields\n")
+        expect("untabbed junk is unusable input", code, 2)
         expect("empty eol output", mod.audit(clean, "")[0], 2)
 
         # 3. This repo, live --------------------------------------------------
