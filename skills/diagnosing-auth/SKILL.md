@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source') — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.9
+version: 1.2.10
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -16,7 +16,7 @@ Goal: reduce any "… found in any source" / GitHub 401 / rate-limit failure on 
 
 | Where | Current message | Source |
 |---|---|---|
-| Skill *name* lookup fails | `No skill named '<name>' found in any source.` | `hermes_cli/skills_hub.py:219` |
+| Skill *name* lookup fails | `No skill named '<name>' found in any source.` | `hermes_cli/skills_hub.py::_resolve_short_name` |
 | Identifier / inspect / tap resolution fails | `Could not find '<identifier>' in any source.` | `hermes_cli/skills_hub.py:463` |
 
 These strings are **what the adapter prints when a lookup finds nothing** — auth is the most common cause, but not the only one. Keep this skill's triage order (§4): **probe auth first** — resolve the method, then probe that token (a dead high-priority token degrades every source adapter to "not found" at once, so it is the cheapest thing to rule out; the signature is *all* sources failing, not one). Only when the probe answers 200 and installs still fail does the cause move to non-auth territory: the identifier's source scope, repository access restrictions, or a scanner verdict. Do not replace credentials blindly — and do not skip the probe to chase the identifier either.
@@ -91,8 +91,8 @@ Comment out or delete both the `GITHUB_TOKEN` and `GH_TOKEN` lines in `$HERMES_H
 ### References
 - `$HERMES_HOME/.env` — the dead `GITHUB_TOKEN` line
 - `tools/skills_hub_github.py` — `_resolve_token` priority order (pat → gh-cli → github-app → anonymous)
-- `hermes_cli/skills_hub.py:219` — the "found in any source" error string
+- `hermes_cli/skills_hub.py::_resolve_short_name` — the "found in any source" error string
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/skills_hub_github.py` (`_resolve_token`, `_try_pat`, `_try_gh_cli`, `is_authenticated`), `hermes_cli/skills_hub.py` (error strings), `agent/secret_scope.py`; plus the issue tracker (#98725 open). Module paths and error strings changed since the previous revision — the mechanism did not. Re-checked 2026-10-12 against upstream main (`53bc70c5`): #98725 closed, dead tokens are rejected with fall-through (see the `reject` helper in `tools/skills_hub_github.py`); error strings re-anchored. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/skills_hub_github.py` (`_resolve_token`, `_try_pat`, `_try_gh_cli`, `is_authenticated`), `hermes_cli/skills_hub.py` (error strings), `agent/secret_scope.py`; plus the issue tracker (#98725 open). Module paths and error strings changed since the previous revision — the mechanism did not. Re-checked 2026-10-12 against upstream main (`53bc70c5`): #98725 closed, dead tokens are rejected with fall-through (see the `reject` helper in `tools/skills_hub_github.py`); error strings re-anchored. Re-anchored 2026-10-17 against upstream `d97007c32` (baseline re-pin): the string moved again with main — both name-lookup citations converted to the `_resolve_short_name` symbol form (the string lives in that function; line-cite drift twice in a month ended it). Re-verify before reuse.*
