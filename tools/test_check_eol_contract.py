@@ -64,8 +64,13 @@ def _tree(root: Path, *, attrs: str | None = GOOD_ATTRS) -> Path:
     return root
 
 
+def audit(root: Path, eol: str = CLEAN_EOL, staged: str | None = GOOD_ATTRS) -> tuple[int, list[str]]:
+    """Call the guard with both declarations; `None` means unreadable."""
+    return mod.audit(root, eol, staged)
+
+
 def _fixture(root: Path, **kwargs: str | None) -> tuple[int, list[str]]:
-    return mod.audit(_tree(root, **kwargs), CLEAN_EOL)
+    return audit(_tree(root, **kwargs), CLEAN_EOL)
 
 
 def main() -> int:
@@ -128,13 +133,13 @@ def main() -> int:
         undecodable.mkdir()
         _tree(undecodable)
         (undecodable / ".gitattributes").write_bytes(b"* text=auto eol=lf\xff\n")
-        expect("undecodable .gitattributes", mod.audit(undecodable, CLEAN_EOL)[0], 2)
+        expect("undecodable .gitattributes", audit(undecodable, CLEAN_EOL)[0], 2)
 
         # 2. Index state ------------------------------------------------------
         crlf = base / "crlf"
         crlf.mkdir()
         _tree(crlf)
-        code, messages = mod.audit(crlf, CLEAN_EOL.replace("i/lf    w/crlf", "i/crlf  w/crlf"))
+        code, messages = audit(crlf, CLEAN_EOL.replace("i/lf    w/crlf", "i/crlf  w/crlf"))
         expect("CRLF in index exit code", code, 1)
         # Exact message, not a substring: the attr column carries TWO tokens
         # (`text=auto eol=lf`), so a naive whitespace split files the path as
@@ -147,20 +152,20 @@ def main() -> int:
         # genuinely ambiguous. Refusing to guess is the honest outcome -- a
         # silent mis-parse would report the wrong path, and a silent skip would
         # turn a future git format change into an all-green run.
-        code, messages = mod.audit(crlf, _z("i/crlf w/crlf attr/text=auto eol=lf skills/a.md"))
+        code, messages = audit(crlf, _z("i/crlf w/crlf attr/text=auto eol=lf skills/a.md"))
         expect("untabbed line is unusable input", code, 2)
         expect("untabbed line names the cause", any("path" in m for m in messages), True)
 
         mixed = base / "mixed"
         mixed.mkdir()
         _tree(mixed)
-        code, _ = mod.audit(mixed, CLEAN_EOL.replace("i/lf    w/crlf", "i/mixed w/crlf"))
+        code, _ = audit(mixed, CLEAN_EOL.replace("i/lf    w/crlf", "i/mixed w/crlf"))
         expect("mixed EOL in index exit code", code, 1)
 
         textified_asset = base / "textified_asset"
         textified_asset.mkdir()
         _tree(textified_asset)
-        code, messages = mod.audit(
+        code, messages = audit(
             textified_asset, CLEAN_EOL.replace("i/-text w/-text attr/-text", "i/lf    w/crlf  attr/text")
         )
         expect("text-mode asset exit code", code, 1)
@@ -173,7 +178,7 @@ def main() -> int:
         dropped_rule = base / "dropped_rule"
         dropped_rule.mkdir()
         _tree(dropped_rule)
-        code, messages = mod.audit(
+        code, messages = audit(
             dropped_rule, CLEAN_EOL.replace("attr/-text           ", "attr/text=auto eol=lf ")
         )
         expect("dropped binary rule exit code", code, 1)
@@ -187,7 +192,7 @@ def main() -> int:
         tiny = base / "tiny"
         tiny.mkdir()
         _tree(tiny)
-        code, messages = mod.audit(
+        code, messages = audit(
             tiny, CLEAN_EOL.replace(
                 "i/-text w/-text attr/-text           \tassets/banner.jpg",
                 "i/none  w/none  attr/-text           \tassets/tiny.jpg",
@@ -204,7 +209,7 @@ def main() -> int:
         override = base / "override"
         override.mkdir()
         _tree(override, attrs=GOOD_ATTRS + "*.sh text eol=crlf\n")
-        code, messages = mod.audit(
+        code, messages = audit(
             override,
             CLEAN_EOL.replace(
                 "i/lf    w/lf    attr/text eol=lf      \tskills/probe.sh",
@@ -222,7 +227,7 @@ def main() -> int:
         accented = base / "accented"
         accented.mkdir()
         _tree(accented)
-        code, messages = mod.audit(
+        code, messages = audit(
             accented,
             _z("i/lf    w/crlf  attr/text=auto eol=lf \tassets/caf\u00e9.jpg"),
         )
@@ -235,14 +240,14 @@ def main() -> int:
         docs_png = base / "docs_png"
         docs_png.mkdir()
         _tree(docs_png)
-        code, _ = mod.audit(docs_png, CLEAN_EOL + _z("i/-text w/-text attr/-text           \tdocs/diagram.png"))
+        code, _ = audit(docs_png, CLEAN_EOL + _z("i/-text w/-text attr/-text           \tdocs/diagram.png"))
         expect("declared binary type outside assets/", code, 0)
 
         # ...but only while the rule exists, which the declaration layer checks.
         png_rule = base / "png_rule"
         png_rule.mkdir()
         _tree(png_rule)
-        code, messages = mod.audit(
+        code, messages = audit(
             png_rule,
             CLEAN_EOL + _z("i/-text w/-text attr/-text           \tdocs/diagram.png"),
         )
@@ -256,7 +261,7 @@ def main() -> int:
         looks_binary = base / "looks_binary"
         looks_binary.mkdir()
         _tree(looks_binary)
-        code, messages = mod.audit(
+        code, messages = audit(
             looks_binary, _z("i/-text w/-text attr/text=auto eol=lf \tskills/x/y.md")
         )
         expect("text path marked binary exit code", code, 1)
@@ -269,7 +274,7 @@ def main() -> int:
         unlisted = base / "unlisted"
         unlisted.mkdir()
         _tree(unlisted, attrs=GOOD_ATTRS + "*.webm binary\n")
-        code, messages = mod.audit(
+        code, messages = audit(
             unlisted, CLEAN_EOL + _z("i/-text w/-text attr/-text           \tdocs/demo.webm")
         )
         expect("declared unlisted binary type", code, 0)
@@ -277,32 +282,63 @@ def main() -> int:
             failures.append(f"declared unlisted binary messages: {messages}")
 
         # A worktree-only CRLF is not a finding: the index is what gets committed.
-        code, _ = mod.audit(clean, CLEAN_EOL.replace("i/lf    w/crlf", "i/lf    w/crlf"))
+        code, _ = audit(clean, CLEAN_EOL.replace("i/lf    w/crlf", "i/lf    w/crlf"))
         expect("worktree CRLF tolerated", code, 0)
 
         # Paths with spaces survive parsing (the path is the last field).
         spaced = base / "spaced"
         spaced.mkdir()
         _tree(spaced)
-        code, messages = mod.audit(
+        code, messages = audit(
             spaced, _z("i/crlf w/crlf attr/text \tdocs/a file with spaces.md")
         )
         expect("spaced path violation reported", code, 1)
         expect("spaced path preserved", any("a file with spaces.md" in m for m in messages), True)
 
         # An untabbed junk line is unusable input too, not a silent skip.
-        code, messages = mod.audit(clean, _z("garbage without fields"))
+        code, messages = audit(clean, _z("garbage without fields"))
         expect("untabbed junk is unusable input", code, 2)
-        expect("empty eol output", mod.audit(clean, "")[0], 2)
+        expect("empty eol output", audit(clean, "")[0], 2)
 
-        # 3. This repo, live --------------------------------------------------
+        # 3. Staged vs worktree declaration ---------------------------------
+        # The guard reads EOL state from the index, so the declaration it
+        # judges must be the index's too: a rule removed from the index but
+        # restored in the worktree is what CI will see, and the local gate must
+        # not call that clean.
+        staged_gap = base / "staged_gap"
+        staged_gap.mkdir()
+        _tree(staged_gap)
+        code, messages = audit(
+            staged_gap, CLEAN_EOL, GOOD_ATTRS.replace("*.sh text eol=lf\n", "")
+        )
+        expect("staged rule removal exit code", code, 1)
+        expect("staged rule removal names the source", any("staged" in m for m in messages), True)
+
+        worktree_gap = base / "worktree_gap"
+        worktree_gap.mkdir()
+        _tree(worktree_gap, attrs=GOOD_ATTRS.replace("*.sh text eol=lf\n", ""))
+        code, messages = audit(worktree_gap, CLEAN_EOL, GOOD_ATTRS)
+        expect("worktree rule removal exit code", code, 1)
+        expect("worktree rule removal names the source", any("worktree" in m for m in messages), True)
+
+        # An index the guard cannot read is unusable input, not a clean scan.
+        unreadable_index = base / "unreadable_index"
+        unreadable_index.mkdir()
+        _tree(unreadable_index)
+        expect("unreadable staged declaration", audit(unreadable_index, CLEAN_EOL, None)[0], 2)
+
+        # 4. This repo, live --------------------------------------------------
         proc = subprocess.run(
-            ["git", "ls-files", "--eol"], cwd=REPO, capture_output=True, text=True, check=False
+            ["git", "ls-files", "--eol", "-z"], cwd=REPO, capture_output=True, text=True, check=False
         )
         if proc.returncode != 0:
             failures.append(f"live: git ls-files --eol failed: {proc.stderr.strip()}")
+            staged_text, staged_problem = None, "git ls-files --eol failed"
         else:
-            code, messages = mod.audit(REPO, proc.stdout)
+            staged_text, staged_problem = mod.staged_attributes(REPO)
+            if staged_problem:
+                failures.append(f"live: {staged_problem}")
+            code, messages = audit(REPO, proc.stdout, staged_text)
             expect("live repo exit code", code, 0)
             if code != 0:
                 failures.append(f"live repo messages: {messages}")

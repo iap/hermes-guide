@@ -203,11 +203,20 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
     return problems, tracked, unusable
 
 
-def audit(root: Path, eol_output: str) -> tuple[int, list[str]]:
-    """Return ``(exit_code, messages)`` for the tree rooted at *root*."""
-    text = read(root / ".gitattributes")
-    if text is None:
+def audit(root: Path, eol_output: str, staged_attrs: str | None) -> tuple[int, list[str]]:
+    """Return ``(exit_code, messages)`` for the tree rooted at *root*.
+
+    Both declarations are judged: the worktree one, and the one in the index.
+    The EOL state comes from the index, so a rule removed from the index but
+    restored in the worktree is exactly the case the local gate must not call
+    clean -- that is the tree CI will check out. *staged_attrs* of None means
+    the index copy could not be read, which is unusable input.
+    """
+    worktree_attrs = read(root / ".gitattributes")
+    if worktree_attrs is None:
         return 2, ["cannot read .gitattributes"]
+    if staged_attrs is None:
+        return 2, ["cannot read the staged .gitattributes from the index"]
     if not eol_output.strip():
         return 2, ["empty `git ls-files --eol` output (git failed or the tree is empty)"]
 
@@ -218,13 +227,35 @@ def audit(root: Path, eol_output: str) -> tuple[int, list[str]]:
             "separates the path with a TAB, so this guard cannot read it"
         ]
 
-    problems = [f".gitattributes does not declare: {rule}" for rule in missing_rules(text)] + problems
+    for label, text in (("worktree", worktree_attrs), ("staged", staged_attrs)):
+        problems = [
+            f"{label} .gitattributes does not declare: {rule}"
+            for rule in missing_rules(text)
+        ] + problems
     if problems:
         return 1, problems
     return 0, [
         f"LF index contract holds across {tracked} tracked path(s); "
         f"{BINARY_PREFIX} and declared binary types stay binary"
     ]
+
+
+def staged_attributes(root: Path) -> tuple[str | None, str | None]:
+    """Return ``(text, problem)`` for the `.gitattributes` in the index."""
+    try:
+        proc = subprocess.run(
+            ["git", "show", ":.gitattributes"],
+            cwd=root, capture_output=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, f"cannot run git show :.gitattributes: {exc}"
+    if proc.returncode != 0:
+        detail = proc.stderr.decode("utf-8", "replace").strip() or str(proc.returncode)
+        return None, f"git show :.gitattributes failed: {detail}"
+    try:
+        return proc.stdout.decode("utf-8"), None
+    except UnicodeDecodeError as exc:
+        return None, f"staged .gitattributes is not UTF-8: {exc}"
 
 
 def ls_files_eol(root: Path) -> tuple[str | None, str | None]:
@@ -250,8 +281,12 @@ def main() -> int:
     if problem is not None:
         print(f"error: {problem}", file=sys.stderr)
         return 2
+    staged_attrs, problem = staged_attributes(REPO)
+    if problem is not None:
+        print(f"error: {problem}", file=sys.stderr)
+        return 2
 
-    code, messages = audit(REPO, eol_output or "")
+    code, messages = audit(REPO, eol_output or "", staged_attrs)
     if code == 0:
         print(f"OK: {messages[0]}")
         return 0
