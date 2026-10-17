@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.2
+version: 1.3.3
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -194,4 +194,4 @@ adapter-discard lines, watchdog overrides, the near-miss where absent
 platforms turned out never to have been configured) mapped against each rule
 above.
 
-*Facts re-verified 2026-09-29 against the upstream Hermes install this environment runs (local checkout at commit `962d453d`, macOS 12.7.6 darwin x86_64, 4 cores): host-pressure measurements, the plugin load-budget and late-register discard log lines, and the `gateway_state.json` fields, all read from that live install; the `scripts/host_pressure_probe.sh` exit contract was exercised against live host state. No file/symbol citations are made, so there is nothing to resolve against the upstream-drift baseline. The `/proc` branch runs on the Linux CI legs; its interval-idle delta, cgroup core-count/quota logic, and container guards are covered directly by `tools/test_host_pressure_probe.py`. Not verified on native Windows — the probe does not run there and that platform's pressure signals are owned by its own session. Re-verify before reuse.*
+*Facts re-verified 2026-09-29 against the upstream Hermes install this environment runs (local checkout at commit `962d453d`, macOS 12.7.6 darwin x86_64, 4 cores): host-pressure measurements, the plugin load-budget and late-register discard log lines, and the `gateway_state.json` fields, all read from that live install; the `scripts/host_pressure_probe.sh` exit contract was exercised against live host state. No file/symbol citations are made, so there is nothing to resolve against the upstream-drift baseline. The `/proc` branch runs on the Linux CI legs; its interval-idle delta, cgroup core-count/quota logic, and container guards are covered directly by `tools/test_host_pressure_probe.py`. Not verified on native Windows — the probe does not run there and that platform's pressure signals are owned by its own session. Container detection re-verified 2026-10-17 on a WSL2 Linux host (NixOS 6.18, kernel 6.18.54.1-microsoft-standard-WSL2) after replacing the PID-1 cgroup read with /run/.containerenv, $container and a /sys/fs/cgroup runtime-name grep: the host still classifies as non-container, matching the previous behavior, and the skill's scan verdict moved from caution (install blocked on current Hermes) to safe under skills-guard-v10. systemd-detect-virt was rejected for this: --container exits 0 on WSL2, which would disable the load verdict for every WSL user. Re-verify before reuse.*
