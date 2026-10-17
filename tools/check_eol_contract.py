@@ -14,20 +14,23 @@ Two layers are checked, because either can rot on its own:
    present. Deliberately a short list: `*.bat`/`*.cmd`/`*.ps1` CRLF rules are
    documented but NOT required, because no tracked file uses them and a
    requirement with no dependent file is a test of the file's own text.
-2. **The resolved attributes plus the index**, from `git ls-files --eol`.
+2. **The resolved attributes**, from `git ls-files --eol -z`.
 
-Layer 2 is defence in depth, not the primary detector, and the reason is worth
-stating so nobody over-trusts it: while `text=auto eol=lf` holds, git
-NORMALIZES on `git add`, so a CRLF file is stored as `i/lf` and no CRLF index
-entry can exist to find (verified: a hand-written CRLF blob adds as `i/lf`).
-What layer 2 actually catches is:
+Both declarations (worktree and staged) are checked for layer 1. Layer 2 is
+defence in depth, not the primary detector, and the reason is worth stating so
+nobody over-trusts it: while `text=auto eol=lf` holds, git NORMALIZES on
+`git add`, so a CRLF file is stored as `i/lf` and no CRLF index entry can exist
+to find (verified: a hand-written CRLF blob adds as `i/lf`). What layer 2
+actually catches is:
 
   * a dropped `binary` rule -- git's own content heuristic keeps the JPEG at
     `i/-text` either way, so only the resolved-attribute column flips
     (`attr/-text` -> `attr/text=auto eol=lf`) and that is what is compared;
   * a text path git classified as binary (a stray CR or a NUL byte);
   * an asset that became text in the index;
-  * `i/mixed`, and `i/crlf` once `eol=lf` has been dropped.
+  * `i/mixed`, and `i/crlf` once `eol=lf` has been dropped;
+  * any tracked path resolving to `eol=crlf`, which is how a later rule that
+    overrides `eol=lf` shows up while the index stays LF.
 
 `i/none` is accepted for text: git reports it when a blob has no line
 terminator at all (an empty file, or a single line with no trailing newline --
@@ -35,11 +38,21 @@ terminator at all (an empty file, or a single line with no trailing newline --
 implies a terminator, and a terminator makes git report `i/lf` or `i/crlf`.
 
 Unusable input is reported, never skipped: a missing or undecodable
-`.gitattributes`, a failed `git ls-files`, empty output, and any row without
-git's TAB path separator all exit 2. That last one matters: the attribute
-column carries two tokens (`text=auto eol=lf`), so an untabbed row cannot be
-split safely -- guessing would report the wrong path, and skipping would turn
-a future git format change into an all-green run.
+`.gitattributes`, an unreadable staged copy, a failed `git ls-files`, empty
+output, and any row without git's TAB path separator all exit 2. That last one
+matters: the attribute column carries two tokens (`text=auto eol=lf`), so an
+untabbed row cannot be split safely -- guessing would report the wrong path, and
+skipping would turn a future git format change into an all-green run.
+
+Known boundary, stated rather than hidden: an override that exists ONLY in the
+index, with the worktree copy clean, is not detected for its attribute VALUE.
+`git ls-files --eol` resolves attributes against the worktree `.gitattributes`,
+so it reports the clean value while CI would check out the staged one. Closing
+that needs a second, partial implementation of git's attribute precedence, and
+this guard deliberately does not carry one -- git is the authority for what its
+own attributes resolve to, and an earlier version of this file proved how much
+surface a partial copy of that logic acquires. Covering it would mean deleting
+the rule from the index and the worktree at once, or trusting CI.
 
 Usage:
     python tools/check_eol_contract.py            # check the repo
@@ -50,7 +63,6 @@ Exit codes: 0 clean, 1 contract violated, 2 unusable input (git/`.gitattributes`
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import subprocess
 import sys
 from pathlib import Path
@@ -173,7 +185,7 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
         # leaves an LF index and a CRLF checkout. Only the resolved attribute
         # shows the override, which is why no tracked path outside the declared
         # CRLF script types may resolve to one.
-        if _EOL_CRLF in attr and not path.casefold().endswith(CRLF_EXEMPT_SUFFIXES):
+        if _EOL_CRLF in attr and not crlf_exempt(path):
             problems.append(
                 f"{path}: resolves to {attr!r}; every tracked path must check "
                 "out LF, so no rule may set eol=crlf"
@@ -213,89 +225,6 @@ def crlf_exempt(path: str) -> bool:
     return path.casefold().endswith(CRLF_EXEMPT_SUFFIXES)
 
 
-def staged_attr_problems(attrs_text: str, paths: list[str]) -> list[str]:
-    """Return findings for attributes the DECLARATION alone gets wrong.
-
-    `git ls-files --eol` resolves attributes from the worktree `.gitattributes`,
-    so it cannot see an override that exists only in the index -- the copy CI
-    checks out. This resolves `eol` and the text/binary state from *attrs_text*
-    itself.
-
-    Attribute semantics, which is where a naive resolver goes wrong. Two rules,
-    both learned the hard way on this PR:
-
-    * Attributes are INDEPENDENT. Each is last-writer-wins among the lines that
-      actually mention it, so a later line that says nothing about `eol` leaves
-      an earlier `eol=crlf` in force. They are never tracked as one "last
-      matching line" record.
-    * The text attribute is THREE-state, not boolean: `text`/`text=auto` sets
-      it, `-text` (and the `binary` macro) unsets it, and `!text` resets it to
-      UNSPECIFIED, which hands the decision back to git's content heuristic.
-      An expected-binary path needs the unset state; unspecified is not a
-      declaration.
-
-    Scope, deliberately narrow: patterns are matched against the basename with
-    `fnmatch`, which is right for `*` and `*.ext` (git matches a pattern
-    without a slash against the basename at any depth) and wrong for a pattern
-    containing a slash, which is anchored at the .gitattributes directory. An
-    anchored pattern is reported as unresolvable rather than assumed safe.
-    """
-    problems: list[str] = []
-    eol_rules: list[tuple[str, str]] = []
-    # True = set, False = unset, None = unspecified (`!text`).
-    text_rules: list[tuple[str, bool | None]] = []
-    for line in attrs_text.splitlines():
-        tokens = line.split()
-        if not tokens or tokens[0].startswith("#"):
-            continue
-        pattern = tokens[0]
-        for token in tokens[1:]:
-            if token.startswith("eol="):
-                eol_rules.append((pattern, token[4:]))
-            elif token == "-text":
-                text_rules.append((pattern, False))
-            elif token == "!text":
-                text_rules.append((pattern, None))
-            elif token == "text" or token.startswith("text="):
-                text_rules.append((pattern, True))
-            elif token == "binary":
-                # The macro expands to -diff -merge -text.
-                text_rules.append((pattern, False))
-        if "/" in pattern and pattern != "*":
-            problems.append(
-                f".gitattributes pattern {pattern!r} contains a slash; this "
-                "guard cannot resolve it against the tree, so its attributes "
-                "are unverified"
-            )
-    if not eol_rules and not text_rules:
-        return problems
-
-    def last(rules: list[tuple[str, object]], path: str) -> object | None:
-        """Value from the LAST rule that both matches and sets the attribute."""
-        name = path.rsplit("/", 1)[-1]
-        for pattern, value in reversed(rules):
-            if fnmatch.fnmatch(name, pattern):
-                return value
-        return None
-
-    for path in paths:
-        eol = last(eol_rules, path)
-        if eol == "crlf" and not crlf_exempt(path):
-            problems.append(
-                f"{path}: the declaration resolves to eol=crlf; every tracked "
-                "path must check out LF"
-            )
-        if expects_binary(path) and last(text_rules, path) is not False:
-            state = {True: "set", None: "reset to unspecified"}.get(
-                last(text_rules, path), "unset"
-            )
-            problems.append(
-                f"{path}: the declaration leaves the text attribute {state}, "
-                "not binary; add or keep a `binary` rule for its type"
-            )
-    return problems
-
-
 def audit(root: Path, eol_output: str, staged_attrs: str | None) -> tuple[int, list[str]]:
     """Return ``(exit_code, messages)`` for the tree rooted at *root*.
 
@@ -324,14 +253,6 @@ def audit(root: Path, eol_output: str, staged_attrs: str | None) -> tuple[int, l
         problems = [
             f"{label} .gitattributes does not declare: {rule}"
             for rule in missing_rules(text)
-        ] + problems
-        # The resolved-attribute pass above reads the WORKTREE declaration, so
-        # the staged copy needs its own resolution to catch an override that
-        # only exists in the index.
-        paths = [path for _, _, path in
-                 (parse_eol_line(line) or ("", "", "") for line in split_entries(eol_output))]
-        problems = [
-            f"staged {finding}" for finding in staged_attr_problems(text, paths)
         ] + problems
     if problems:
         return 1, problems

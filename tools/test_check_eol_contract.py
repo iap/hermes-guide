@@ -349,69 +349,7 @@ def main() -> int:
         expect("CRLF on a .sh is still a finding",
                audit(win_script, CLEAN_EOL + _z("i/lf    w/crlf  attr/text eol=crlf    \tprobe.sh"))[0], 1)
 
-        # A CRLF override that exists ONLY in the staged declaration is what CI
-        # will check out, while `git ls-files --eol` resolves attributes from the
-        # worktree copy and reports the clean value. Both copies are therefore
-        # resolved independently.
-        staged_only = base / "staged_only"
-        staged_only.mkdir()
-        _tree(staged_only, attrs=GOOD_ATTRS + "*.sh text eol=crlf\n")
-        code, messages = audit(
-            staged_only, CLEAN_EOL, GOOD_ATTRS + "*.sh text eol=crlf\n"
-        )
-        expect("staged-only CRLF override exit code", code, 1)
-        expect("staged-only override names the source", any("staged" in m for m in messages), True)
-
-        # A pattern git resolves against the full path (`assets/**`) is outside
-        # this resolver's scope; it must not be silently treated as verified.
-        code, messages = audit(
-            staged_only, CLEAN_EOL, GOOD_ATTRS + "assets/** text eol=crlf\n"
-        )
-        expect("unresolved staged pattern is reported", code, 1)
-        expect("unresolved staged pattern is explained", any("cannot resolve" in m for m in messages), True)
-
-        # Attributes are independent in git: a later matching line that does not
-        # mention `eol` does NOT clear an earlier eol=crlf. A resolver that
-        # takes the last matching line wholesale hides the override.
-        later_unrelated = base / "later_unrelated"
-        later_unrelated.mkdir()
-        _tree(later_unrelated, attrs=GOOD_ATTRS + "*.sh text eol=crlf\n*.sh diff=bash\n")
-        code, messages = audit(later_unrelated, CLEAN_EOL, GOOD_ATTRS + "*.sh text eol=crlf\n*.sh diff=bash\n")
-        expect("later unrelated rule keeps the override", code, 1)
-        expect("later unrelated rule names the source", any("staged" in m for m in messages), True)
-
-        # Same shape for the binary attribute: a staged `*.jpg text` after the
-        # required `*.jpg binary` sends the banner out as text, and
-        # ls-files --eol resolves the WORKTREE copy so it cannot see it.
-        staged_text_rule = base / "staged_text_rule"
-        staged_text_rule.mkdir()
-        _tree(staged_text_rule)
-        code, messages = audit(
-            staged_text_rule, CLEAN_EOL, GOOD_ATTRS + "*.jpg text\n"
-        )
-        expect("staged binary override exit code", code, 1)
-        expect("staged binary override names the asset", any("assets/banner.jpg" in m for m in messages), True)
-
-        # ...and the declared binary rule in the index stays clean.
-        expect("staged binary rule is clean",
-               audit(staged_text_rule, CLEAN_EOL, GOOD_ATTRS + "*.jpg binary\n")[0], 0)
-
-        # `!text` is git's UNSPECIFIED reset, distinct from `-text` (unset) and `text`
-        # (set). A resolver that only knows the first two keeps the earlier
-        # `binary` in force and accepts a declaration that no longer protects
-        # the asset.
-        reset_rule = base / "reset_rule"
-        reset_rule.mkdir()
-        _tree(reset_rule)
-        code, messages = audit(reset_rule, CLEAN_EOL, GOOD_ATTRS + "*.jpg !text\n")
-        expect("staged !text reset exit code", code, 1)
-        expect("staged !text reset names the asset", any("assets/banner.jpg" in m for m in messages), True)
-
-        # ...and an explicit -text (or the binary macro) after a reset is fine.
-        expect("staged -text after reset is clean",
-               audit(reset_rule, CLEAN_EOL, GOOD_ATTRS + "*.jpg !text\n*.jpg binary\n")[0], 0)
-
-        # 4. This repo, live --------------------------------------------------
+        # 3. This repo, live --------------------------------------------------
         proc = subprocess.run(
             ["git", "ls-files", "--eol", "-z"], cwd=REPO, capture_output=True, text=True, check=False
         )
