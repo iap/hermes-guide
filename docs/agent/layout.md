@@ -24,6 +24,7 @@ tracked top-level path and every `.github/` file.
 | `tools/pr_metadata_labels.py` | PR label/priority parser shared by the labelling workflows |
 | `tests/check_scanner_hygiene.py` | Scanner-hygiene guard — lives under `tests/` (not `tools/`) because the upstream install scanner rates its literal attack-string fixtures dangerous outside a tests directory |
 | `docs/agent/` | On-demand agent/maintainer deep ops (this tree); not injected every turn |
+| `assets/` | Binary documentation assets referenced from README.md (concept banner); never edited by hand |
 | `docs/embedding.md` | Host-app integration guide — guarantee chain, bridge patterns, eval scenario |
 | `.github/workflows/reusable-ci.yml` | The CI body: ubuntu+windows × Python 3.11/3.12 matrix, all gates |
 | `.github/workflows/ci.yml` | Thin caller that triggers `reusable-ci.yml` and passes it `base-ref` / `run-full-gate` |
@@ -47,6 +48,7 @@ tracked top-level path and every `.github/` file.
 | `CHANGELOG.md` | Release history generated from conventional commits |
 | `LICENSE` | MIT |
 | `.gitignore` | The durable control for what never enters the index |
+| `.gitattributes` | LF-in-the-index contract for text plus `binary` marking for `assets/`; overrides a Windows clone's `core.autocrlf=true` |
 
 Keep the layout stable: plugin Python at the repo root, skills under
 `skills/<name>/`, plugin-registered skills under `plugin-skills/<name>/`
