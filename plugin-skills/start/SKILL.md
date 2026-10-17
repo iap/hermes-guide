@@ -118,4 +118,4 @@ full set.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill
   or the target playbook explicitly.
 
-*Facts (re-)verified 2026-10-18 against this repo's `checks.py` `_CHECKS` (nine scopes) and `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-18 — `sessions` and `update` shipped earlier but were missing here. Re-verify before reuse.*
+*Facts (re-)verified 2026-10-17 against this repo's `checks.py` `_CHECKS` (nine scopes) and `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17 — `sessions` and `update` shipped earlier but were missing here. Re-verify before reuse.*
