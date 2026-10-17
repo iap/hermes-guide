@@ -1,7 +1,7 @@
 ---
 name: start
 description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, diagnostics, triage, routing]
@@ -47,8 +47,12 @@ Run the health check and read its lines:
 
 - Terminal: `hermes guide` (all scopes) or `hermes guide <scope>`.
   Exit codes: `0` healthy, `1` broken or unknown, `2` bad scope. Add `--fast`
-  on a degraded host where every launch takes minutes — it runs in-process
-  with no subprocess.
+  on a degraded host where every launch takes minutes. The command is one CLI
+  process either way; what `--fast` removes is the per-check `hermes`
+  subprocess work (the config-path fallback, `hermes hooks doctor`), which on
+  such a host is where the minutes go. It does not help when the CLI itself
+  will not start — that launch still happens, so fall back to reading state
+  directly and routing by subsystem name (Step 2).
 - In a session: `/hermes-doctor`, or `/hermes-doctor <scope>`.
 
 Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
@@ -118,4 +122,4 @@ full set.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill
   or the target playbook explicitly.
 
-*Facts (re-)verified 2026-10-17 against this repo's `checks.py` `_CHECKS` (nine scopes) and `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17 — `sessions` and `update` shipped earlier but were missing here. Re-verify before reuse.*
+*Facts (re-)verified 2026-10-17 against this repo's `checks.py` `_CHECKS` (nine scopes) and `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17; --fast clause corrected 2026-10-17: it suppresses per-check hermes subprocesses, not the single CLI launch, and points at Step 2 rather than a no-baseline route that does not exist in this file — `sessions` and `update` shipped earlier but were missing here. Re-verify before reuse.*
