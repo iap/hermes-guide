@@ -184,7 +184,7 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
     for line in split_entries(eol_output):
         parsed = parse_eol_line(line)
         if parsed is None:
-            unusable.append(f"cannot tell where the path starts in: {line.strip()!r}")
+            unusable.append(f"cannot tell where the path starts in: {display(line.strip())!r}")
             continue
         index, attr, path = parsed
         tracked += 1
@@ -195,7 +195,7 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
         # CRLF script types may resolve to one.
         if _EOL_CRLF in attr and not crlf_exempt(path):
             problems.append(
-                f"{path}: resolves to {attr!r}; every tracked path must check "
+                f"{display(path)}: resolves to {attr!r}; every tracked path must check "
                 "out LF, so no rule may set eol=crlf"
             )
             continue
@@ -207,7 +207,7 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
             # a legitimate tiny asset.
             if _EOL_ATTR_NO_TEXT not in attr:
                 problems.append(
-                    f"{path}: attribute is {attr!r}, expected a `binary` "
+                    f"{display(path)}: attribute is {attr!r}, expected a `binary` "
                     f"(or -text) rule; git may keep the blob binary by content "
                     f"heuristic alone (index EOL {index}), which is not a "
                     "declaration"
@@ -220,12 +220,22 @@ def eol_problems(eol_output: str) -> tuple[list[str], int, list[str]]:
             # heuristic -- a stray CR or a NUL byte in what should be text.
             if _EOL_ATTR_NO_TEXT not in attr:
                 problems.append(
-                    f"{path}: git treats this text path as binary ({attr}); "
+                    f"{display(path)}: git treats this text path as binary ({attr}); "
                     "check for a stray CR or a NUL byte"
                 )
         elif index not in _TEXT_INDEX_OK:
-            problems.append(f"{path}: index EOL is {index}, expected i/lf")
+            problems.append(f"{display(path)}: index EOL is {index}, expected i/lf")
     return problems, tracked, unusable
+
+
+def display(path: str) -> str:
+    """Render *path* for a message without emitting a raw surrogate.
+
+    stdout is decoded losslessly (see `ls_files_eol`), so a path carrying bytes
+    the console encoding cannot represent holds lone surrogates. Printing one
+    raises, so they are shown as escapes instead.
+    """
+    return path.encode("utf-8", "backslashreplace").decode("utf-8", "replace")
 
 
 def crlf_exempt(path: str) -> bool:
@@ -298,16 +308,19 @@ def staged_attributes(root: Path) -> tuple[str | None, str | None]:
 def ls_files_eol(root: Path) -> tuple[str | None, str | None]:
     """Return ``(output, problem)`` for `git ls-files --eol` in *root*."""
     try:
+        # Bytes, not text=True: the locale encoding must not decide whether a
+        # non-ASCII path decodes. surrogateescape is lossless, so a path git
+        # reported verbatim survives comparison unchanged.
         proc = subprocess.run(
             ["git", "ls-files", "--eol", "-z"],
-            cwd=root, capture_output=True, text=True, timeout=60,
+            cwd=root, capture_output=True, timeout=60,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return None, f"cannot run git ls-files --eol: {exc}"
     if proc.returncode != 0:
-        detail = proc.stderr.strip() or str(proc.returncode)
+        detail = proc.stderr.decode("utf-8", "replace").strip() or str(proc.returncode)
         return None, f"git ls-files --eol failed: {detail}"
-    return proc.stdout, None
+    return proc.stdout.decode("utf-8", "surrogateescape"), None
 
 
 def main() -> int:

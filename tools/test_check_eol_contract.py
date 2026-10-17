@@ -299,6 +299,17 @@ def main() -> int:
         expect("untabbed junk is unusable input", code, 2)
         expect("empty eol output", audit(clean, "")[0], 2)
 
+        # A path byte sequence the locale cannot decode must not crash the guard
+        # or leak a raw surrogate into a message. `text=True` decodes with the
+        # locale encoding, so on a cp1252 Windows host this raised; stdout is
+        # therefore decoded losslessly (surrogateescape) and rendered safely.
+        undecodable = base / "undecodable_path"
+        undecodable.mkdir()
+        _tree(undecodable)
+        code, messages = audit(undecodable, _z("i/crlf w/crlf attr/text \tassets/bad\udcff.jpg"))
+        expect("undecodable path byte exit code", code, 1)
+        expect("undecodable path byte is rendered safely",
+               any(all(not (0xDC80 <= ord(ch) <= 0xDCFF) for ch in m) for m in messages), True)
         # 3. Staged vs worktree declaration ---------------------------------
         # The guard reads EOL state from the index, so the declaration it
         # judges must be the index's too: a rule removed from the index but
@@ -380,17 +391,15 @@ def main() -> int:
                audit(win_script, CLEAN_EOL + _z("i/lf    w/crlf  attr/text eol=crlf    \tprobe.sh"))[0], 1)
 
         # 3. This repo, live --------------------------------------------------
-        proc = subprocess.run(
-            ["git", "ls-files", "--eol", "-z"], cwd=REPO, capture_output=True, text=True, check=False
-        )
-        if proc.returncode != 0:
-            failures.append(f"live: git ls-files --eol failed: {proc.stderr.strip()}")
-            staged_text, staged_problem = None, "git ls-files --eol failed"
+        live_eol, live_problem = mod.ls_files_eol(REPO)
+        if live_problem is not None:
+            failures.append(f"live: {live_problem}")
+            staged_text, staged_problem = None, live_problem
         else:
             staged_text, staged_problem = mod.staged_attributes(REPO)
             if staged_problem:
                 failures.append(f"live: {staged_problem}")
-            code, messages = audit(REPO, proc.stdout, staged_text)
+            code, messages = audit(REPO, live_eol or "", staged_text)
             expect("live repo exit code", code, 0)
             if code != 0:
                 failures.append(f"live repo messages: {messages}")
