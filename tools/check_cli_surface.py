@@ -456,6 +456,80 @@ def _sample(options: set[str], want: str, limit: int = 8) -> str:
     return ", ".join(close + rest[: max(0, limit - len(close))]) or "(none)"
 
 
+# --- registry mirror --------------------------------------------------------
+
+def _check_labels(checks_src: str) -> list[str]:
+    """Label strings from the checks.py ``_CHECKS = [...]`` block (text read)."""
+    m = re.search(r"(?ms)^_CHECKS = \[(.*?)^\]", checks_src)
+    if m is None:
+        return []
+    return re.findall(r"\(\s*[\"']([a-z][a-z_-]*)[\"']\s*,\s*[A-Za-z_]\w*\s*\)", m.group(1))
+
+
+def _setup_cli_flags(init_src: str) -> set[str]:
+    """All option names (dash-prefixed) _setup_cli registers.
+
+    One add_argument call may register aliases (`add_argument("--fast",
+    "--quick")` counts both); only kwarg strings (action=, help text)
+    follow the option names, so the walk below consumes consecutive
+    comma-separated quoted dash-words and stops at the first kwarg.
+    """
+    m = re.search(r"(?ms)^def _setup_cli\(.*?(?=\ndef |\Z)", init_src)
+    if m is None:
+        return set()
+    names: set[str] = set()
+    name_re = re.compile(r"\s*[\"'](-[\w-]+)[\"']\s*(,)?")
+    for call in re.finditer(r"add_argument\(\s*", m.group(0)):
+        pos: int | None = call.end()
+        while pos is not None:
+            hit = name_re.match(m.group(0), pos)
+            if hit is None:
+                break
+            names.add(hit.group(1))
+            pos = hit.end() if hit.group(2) else None
+    return names
+
+
+def mirror_errors(
+        labels: list[str], setup_flags: set[str],
+        scopes: set[str], flags: set[str]) -> list[str]:
+    """Drift between the PLUGIN_COMMANDS mirror and its two sources.
+
+    The PLUGIN_COMMANDS comment promises: scopes mirror checks._CHECKS and
+    flags mirror _setup_cli, updated together. This enforces the promise in
+    both directions so a renamed or newly added check cannot keep passing
+    the guard against a stale mirror — and so a scope the CLI stopped
+    having cannot still bless skill cites.
+    """
+    errs: list[str] = []
+    extra = sorted(scopes - set(labels))
+    missing = sorted(set(labels) - scopes)
+    if extra:
+        errs.append("PLUGIN_COMMANDS mirrors unknown scope(s): %s "
+                    "(no matching checks._CHECKS label)" % ", ".join(extra))
+    if missing:
+        errs.append("checks._CHECKS label(s) absent from the PLUGIN_COMMANDS "
+                    "mirror: %s" % ", ".join(missing))
+    for have, want, msg in ((flags, setup_flags,
+                             "PLUGIN_COMMANDS flag(s) not added by _setup_cli: %s"),
+                            (setup_flags, flags,
+                             "_setup_cli flag(s) not mirrored in PLUGIN_COMMANDS: %s")):
+        if want - have:
+            errs.append(msg % ", ".join(sorted(want - have)))
+    return errs
+
+
+def sync_failures() -> list[str]:
+    """Static mirror cross-check; runs without a live hermes binary."""
+    checks_src = (REPO / "checks.py").read_text(encoding="utf-8")
+    init_src = (REPO / "__init__.py").read_text(encoding="utf-8")
+    entry = PLUGIN_COMMANDS.get("guide")
+    if entry is None:
+        return ["PLUGIN_COMMANDS has no 'guide' entry — `hermes guide` unverified"]
+    return mirror_errors(_check_labels(checks_src), _setup_cli_flags(init_src),
+                         entry[0], entry[1])
+
+
 def _selftest() -> int:
     top = "usage: hermes [-h] {config,skills,auth} ...\n  config  C\n  skills  S\noptions:\n  -h\n  --yes\n"
     four = "positional arguments:\n  <command>  C\n    chat                Interactive\n    model               Select\n                        model fails\n"
@@ -505,16 +579,57 @@ def _selftest() -> int:
     optvals = ("usage: hermes x [-h] [--source {all,hub}] ...\n"
                "  other  O\n")
     assert _usage_names(optvals) == set()
+    # Registry mirror: PLUGIN_COMMANDS <-> checks._CHECKS / _setup_cli.
+    assert mirror_errors(["config"], {"--fast"}, {"config"}, {"--fast"}) == []
+    err = mirror_errors(["config", "artifacts"], {"--fast"}, {"config"}, {"--fast"})
+    assert len(err) == 1 and "_CHECKS" in err[0]
+    err = mirror_errors(["config"], {"--fast"}, {"config", "memories"}, {"--fast"})
+    assert len(err) == 1 and "mirrors unknown scope" in err[0]
+    err = mirror_errors(["config"], {"--slow"}, {"config"}, {"--fast"})
+    assert len(err) == 2 and "--slow" in err[0] and "--fast" in err[1]
+    csrc = ('x = 0\n_CHECKS = [\n    ("config", check_config_parses),\n'
+            '    # interleaved comment\n    ("memories", check_memory_hygiene),\n]\n')
+    assert _check_labels(csrc) == ["config", "memories"]
+    assert _check_labels("def f():\n    return []\n") == []
+    isrc = ("def _setup_cli(sp):\n    sp.add_argument(\n        '--fast',\n"
+            "        action='store_true')\n\ndef later():\n    pass\n")
+    assert _setup_cli_flags(isrc) == {'--fast'}
+    assert _setup_cli_flags("def other(sp):\n    sp.add_argument('--x')\n") == set()
+    isrc2 = ("def _setup_cli(sp):\n    sp.add_argument(\n"
+             "        '--fast', '--quick',\n"
+             "        action='store_true')\n\ndef later():\n    pass\n")
+    assert _setup_cli_flags(isrc2) == {'--fast', '--quick'}
+    csrc2 = ('_CHECKS = [\n    ("config", check_config_parses),\n'
+             '    ("sessions", audit_session_health),\n]\n')
+    assert _check_labels(csrc2) == ["config", "sessions"]
+
     print("OK: cli-surface selftest")
     return 0
+
+
+def _report_sync() -> list[str]:
+    """Compare PLUGIN_COMMANDS with its two sources in the real tree."""
+    sync = sync_failures()
+    for m in sync:
+        print("FAIL:", m)
+    if not sync:
+        print("OK: PLUGIN_COMMANDS mirror matches checks._CHECKS and _setup_cli")
+    return sync
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--check-mirror", action="store_true",
+                    help="only verify the PLUGIN_COMMANDS mirror against its "
+                         "sources (pure file reads; no live hermes needed)")
     args = ap.parse_args()
+    if args.check_mirror:
+        return 1 if _report_sync() else 0
+    rc = _selftest() if args.selftest else 0
+    sync = _report_sync()
     if args.selftest:
-        return _selftest()
+        return 1 if rc or sync else 0
     failures, summary = verify(collect())
     print(summary)
     for f in failures:
@@ -526,7 +641,7 @@ def main() -> int:
     exe = shutil.which("hermes")
     if exe:
         print("hermes under check: %s" % exe)
-    return 1 if failures else 0
+    return 1 if failures or sync else 0
 
 
 if __name__ == "__main__":
