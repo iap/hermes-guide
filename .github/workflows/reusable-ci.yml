@@ -388,6 +388,24 @@ jobs:
           git -C "$RUNNER_TEMP/hermes-agent" fetch --depth 1 origin "$pin"
           python3 tools/check_citation_integrity.py --src "$RUNNER_TEMP/hermes-agent"
 
+      - name: Install-scan parity (upstream scanner, real rules)
+        # The scanner-hygiene guard under tests/ is a hand-maintained MIRROR of
+        # a few upstream rules, so a scanner escalation cannot fail it. This
+        # runs upstream's real tools/skills_guard.py - at the pinned baseline
+        # revision, same discipline as the citations above - over every skill at
+        # community trust, which is what a tap install resolves to. It asserts
+        # the property users feel: should_allow_install() must be true. Without
+        # it, diagnosing-host-pressure stayed un-installable for months with
+        # every gate green (issue #204).
+        #
+        # This EXECUTES upstream code, which the citation check does not. The
+        # pin is what bounds that: a specific revision from a checkout already
+        # cloned by the install step, never "main".
+        if: runner.os == 'Linux' && matrix.python-version == '3.11' && inputs.run-full-gate
+        run: |
+          python3 tools/check_install_scan.py --src "$RUNNER_TEMP/hermes-agent"
+          python3 tools/test_check_install_scan.py
+
       - name: Skill provenance footer guard
         # Requires a dated upstream-anchored footer per skill.
         run: |
