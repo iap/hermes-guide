@@ -120,24 +120,71 @@ def skill_dirs(skills_dir: Path) -> list[Path]:
             if d.is_dir() and (d / "SKILL.md").is_file()]
 
 
+def _interface_gaps(obj, *names: str) -> list[str]:
+    """Names *obj* does not actually provide.
+
+    Functions must be callable and version attributes must be a non-empty
+    string: a module that defines `SCANNER_VERSION = None` passes a bare
+    `hasattr`, and reporting "all skills install clean (scanner None)" is worse
+    than reporting nothing, because it reads like a verdict.
+    """
+    gaps = []
+    for name in names:
+        value = getattr(obj, name, None)
+        if callable(value):
+            continue
+        if isinstance(value, str) and value.strip():
+            continue
+        gaps.append(name)
+    return gaps
+
+
+def _unusable(message: str) -> tuple[int, list[str]]:
+    return 2, [message]
+
+
+def _call(fn, *args, **kwargs):
+    """Call an upstream scanner entry point, or explain why it could not be.
+
+    Upstream code moves; this check runs against it on every CI run. A renamed
+    parameter or a changed return type must read as unusable input, never as a
+    clean scan - "all skills install clean" from a scanner we did not actually
+    understand is precisely the failure this check exists to prevent.
+    """
+    try:
+        return fn(*args, **kwargs), None
+    except Exception as exc:  # noqa: BLE001 - any upstream error is unusable input
+        return None, f"{getattr(fn, '__name__', 'scanner')} failed: {exc!r}"
+
+
 def assess_skills(skills_dir: Path, scanner) -> tuple[int, list[str]]:
     """Return ``(exit_code, messages)`` for every skill against *scanner*."""
+    gaps = _interface_gaps(scanner, "scan_skill", "should_allow_install", "SCANNER_VERSION")
+    if gaps:
+        return _unusable("upstream skills_guard does not provide "
+                         + ", ".join(gaps) + "; cannot judge installability")
     dirs = skill_dirs(skills_dir)
     if not dirs:
-        return 2, [f"no skills found under {skills_dir}"]
+        return _unusable(f"no skills found under {skills_dir}")
     blocked: list[str] = []
     findings = 0
     for skill in dirs:
-        result = scanner.scan_skill(skill, source=INSTALL_SOURCE)
+        result, problem = _call(scanner.scan_skill, skill, source=INSTALL_SOURCE)
+        if problem:
+            return _unusable(problem)
+        if not hasattr(result, "findings") or not hasattr(result, "verdict"):
+            return _unusable(
+                f"scan_skill returned {type(result).__name__} without findings/verdict; "
+                "the scanner API changed")
         allowed, reason = scanner.should_allow_install(result)
-        found = list(getattr(result, "findings", ()))
+        found = list(result.findings)
         findings += len(found)
         if not allowed:
             detail = ", ".join(
                 f"{f.pattern_id}/{f.severity} {f.file}:{f.line}" for f in found
             ) or reason
             blocked.append(f"{skill.name}: {reason} [{detail}]")
-    version = getattr(scanner, "SCANNER_VERSION", "unknown")
+    version = scanner.SCANNER_VERSION
     if blocked:
         return 1, [
             f"{len(blocked)}/{len(dirs)} skill(s) would be BLOCKED on install "
@@ -152,20 +199,26 @@ def assess_skills(skills_dir: Path, scanner) -> tuple[int, list[str]]:
 
 def assess_plugin(repo_root: Path, guard) -> tuple[int, list[str]]:
     """Return ``(exit_code, messages)`` for the plugin surface."""
-    scan = getattr(guard, "scan_plugin", None)
-    allow = getattr(guard, "should_allow_plugin_install", None)
-    if scan is None or allow is None:
-        return 2, ["upstream plugin_guard exposes no scan_plugin/should_allow_plugin_install"]
-    result = scan(repo_root, source=PLUGIN_SOURCE)
-    allowed, reason = allow(result)
-    version = getattr(guard, "PLUGIN_SCANNER_VERSION", "unknown")
+    gaps = _interface_gaps(guard, "scan_plugin", "should_allow_plugin_install",
+                           "PLUGIN_SCANNER_VERSION")
+    if gaps:
+        return _unusable("upstream plugin_guard does not provide "
+                         + ", ".join(gaps) + "; cannot judge the plugin install")
+    scan, problem = _call(guard.scan_plugin, repo_root, source=PLUGIN_SOURCE)
+    if problem:
+        return _unusable(problem)
+    if not hasattr(scan, "findings") or not hasattr(scan, "verdict"):
+        return _unusable(
+            f"scan_plugin returned {type(scan).__name__} without findings/verdict; "
+            "the scanner API changed")
+    allowed, reason = guard.should_allow_plugin_install(scan)
+    version = guard.PLUGIN_SCANNER_VERSION
     if allowed:
-        found = list(getattr(result, "findings", ()))
+        found = list(scan.findings)
         return 0, [f"plugin installs clean under {version} "
                    f"({len(found)} finding(s), none blocking)"]
     detail = ", ".join(
-        f"{f.pattern_id}/{f.severity} {f.file}:{f.line}"
-        for f in getattr(result, "findings", ())
+        f"{f.pattern_id}/{f.severity} {f.file}:{f.line}" for f in scan.findings
     ) or reason
     return 1, [f"plugin would be BLOCKED on install ({version}): {reason} [{detail}]"]
 
