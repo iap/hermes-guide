@@ -57,3 +57,33 @@ jobs:
       # runner and is unaffected. Inheriting would hand every repository and
       # organization secret to a workflow whose source a same-repository PR can
       # change, so dropping the line costs nothing and removes that path.
+
+  # The single stable context branch protection requires. The matrix legs report
+  # under names that encode the matrix ("plugin / plugin (ubuntu-24.04, 3.11)"),
+  # so a required-status-check list naming them is brittle in both directions:
+  # adding a Python version to the matrix leaves the new leg unguarded, and
+  # dropping one leaves a required context that never reports and blocks every
+  # merge until a maintainer edits the rules. This job collapses the whole CI
+  # workflow -- matrix legs plus the legacy-mac hermetic tier, which the reusable
+  # workflow owns -- into one context, so protection names one thing and the
+  # matrix stays free to change.
+  gate:
+    name: gate
+    needs: [plugin]
+    # always(): a required check must report even when an upstream leg failed.
+    # Without it a red matrix would SKIP this job, and branch protection would see
+    # a missing check instead of a failing one -- which reads as satisfied.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every CI leg succeeded
+        env:
+          PLUGIN_RESULT: ${{ needs.plugin.result }}
+        run: |
+          echo "plugin (matrix + legacy-mac): $PLUGIN_RESULT"
+          if [ "$PLUGIN_RESULT" != "success" ]; then
+            echo "::error::CI leg did not succeed: $PLUGIN_RESULT"
+            exit 1
+          fi
+          echo "OK: all CI legs passed"
