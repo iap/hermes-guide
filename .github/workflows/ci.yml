@@ -76,6 +76,12 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Job-level permissions REPLACE the workflow-level `contents: read`, so this
+    # job holds only what it needs. It checks out nothing, so `contents` is not
+    # granted at all -- least privilege, and it cannot be widened later by
+    # accident.
+    permissions:
+      statuses: write
     steps:
       - name: Every CI leg succeeded
         env:
@@ -87,3 +93,39 @@ jobs:
             exit 1
           fi
           echo "OK: all CI legs passed"
+
+      # The check run above is necessary but NOT sufficient: this repo's ruleset
+      # does not accept a required_status_checks entry satisfied by a GitHub
+      # Actions CHECK RUN under that name. Verified on PR #291 by bisecting the
+      # live ruleset -- with only `gate` required the PR stayed BLOCKED with the
+      # check run green, and the same context published as a COMMIT STATUS made
+      # it CLEAN. CodeQL, which reports from the github-advanced-security app,
+      # satisfies its entry as a check run, so the difference is workflow check
+      # runs specifically. #290 added this publisher, then removed it as "dead
+      # weight" after re-diagnosing the blockage as a review thread; that
+      # re-diagnosis was wrong, and removing the publisher reintroduced the
+      # block. Both must exist: the check run is what a human reads, this status
+      # is what the ruleset evaluates.
+      #
+      # always(): publish failure too. A required context that stays missing when
+      # the legs are red reads to branch protection as never-reported, not failed.
+      - name: Publish the gate verdict as a commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_RESULT: ${{ needs.plugin.result }}
+          # On pull_request, github.sha is the temporary MERGE commit, but the
+          # ruleset evaluates the PR HEAD commit -- a status on the merge preview
+          # would never satisfy the requirement. Fall back to github.sha for push
+          # and merge_group, where there is no pull_request object.
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          state=success
+          if [ "$PLUGIN_RESULT" != "success" ]; then
+            state=failure
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA" -X POST \
+            -f state="$state" \
+            -f context=gate \
+            -f description="plugin (matrix + legacy-mac): $PLUGIN_RESULT"
+          echo "published gate=$state on $TARGET_SHA"
