@@ -2,6 +2,28 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.2 (2026-10-18)
+
+### Bug Fixes
+
+- **plugin**: anchor the version floor; update notice off the session boundary ([#284](https://github.com/iap/hermes-guide/pull/284))
+- **host-pressure**: detect containers without reading the proc filesystem ([#282](https://github.com/iap/hermes-guide/pull/282))
+- **tools**: enforce the PLUGIN_COMMANDS mirror in both directions ([#281](https://github.com/iap/hermes-guide/pull/281))
+- **skills**: correct the symptom-map row count and enforce it with a guard ([#280](https://github.com/iap/hermes-guide/pull/280))
+
+### Documentation
+
+- **assets**: swap hero to terminal-interact ([#287](https://github.com/iap/hermes-guide/pull/287))
+- **ops**: gh api comment bodies via --input ([#286](https://github.com/iap/hermes-guide/pull/286))
+
+### CI
+
+- **tools**: enforce install-scan parity with upstream's real scanner ([#285](https://github.com/iap/hermes-guide/pull/285))
+
+### Chores
+
+- **upstream**: re-pin the drift baseline to the Oct-13 sync tip (f97608f -> d97007c32) ([#283](https://github.com/iap/hermes-guide/pull/283))
+
 ## v0.8.1 (2026-10-17)
 
 ### Features
