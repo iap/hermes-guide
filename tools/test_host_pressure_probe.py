@@ -27,6 +27,9 @@ REPO = Path(__file__).resolve().parent.parent
 PROBE = REPO / "skills" / "diagnosing-host-pressure" / "scripts" / "host_pressure_probe.sh"
 
 _RESULTS: list[tuple[str, bool, str]] = []
+# Case groups passed over because this host cannot stage them. Reported in the
+# summary: a bare "OK: 70/70" reads as a full pass while 25 cases never ran.
+_SKIPPED: list[str] = []
 
 
 def _check(name: str, ok: bool, detail: str = "") -> None:
@@ -414,6 +417,7 @@ def main() -> int:
         _check("74.84% idle parsed whole, not 84", "74.84" in f["out"], f["out"][:200])
         shutil.rmtree(f["td"], ignore_errors=True)
     else:
+        _SKIPPED.append("macOS fixture cases")
         print("  skip  macOS fixture cases (not a Darwin host)")
 
     # Linux: sysctl is present (procps ships it) but has no vm.loadavg key. The
@@ -446,6 +450,7 @@ def main() -> int:
                "CUMULATIVE since boot" not in f["out"], f["out"][:300])
         shutil.rmtree(f["td"], ignore_errors=True)
     else:
+        _SKIPPED.append("Linux /proc cases")
         print("  skip  Linux /proc cases (no /proc on this host)")
 
     probe_src = PROBE.read_text()
@@ -599,6 +604,7 @@ def main() -> int:
                "HIGH load" not in f["out"], f["out"][:400])
         shutil.rmtree(f["td"], ignore_errors=True)
     else:
+        _SKIPPED.append("container-scope detection cases")
         print("  skip  container-scope detection cases (no /proc/loadavg on this host)")
 
     # Container: the swap figure is the HOST's /proc/meminfo; heavy occupancy
@@ -668,10 +674,13 @@ def main() -> int:
            "*[!0-9]*) cores" in probe_src)
 
     bad = [n for n, ok, _ in _RESULTS if not ok]
-    print(f"\nOK: {len(_RESULTS) - len(bad)}/{len(_RESULTS)} passed" if not bad
-          else f"\nFAIL: {len(bad)}/{len(_RESULTS)} failed")
+    skipped = f", {len(_SKIPPED)} case group(s) skipped" if _SKIPPED else ""
+    print(f"\nOK: {len(_RESULTS) - len(bad)}/{len(_RESULTS)} passed{skipped}" if not bad
+          else f"\nFAIL: {len(bad)}/{len(_RESULTS)} failed{skipped}")
     for n in bad:
         print(f"  - {n}")
+    for s in _SKIPPED:
+        print(f"  - skipped: {s}")
     return 1 if bad else 0
 
 
