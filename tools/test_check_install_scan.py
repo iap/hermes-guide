@@ -129,6 +129,42 @@ class BlankVersionScanner(FakeScanner):
     SCANNER_VERSION = ""
 
 
+class RaisingDecision(FakeScanner):
+    """Upstream made the decision call raise."""
+
+    def should_allow_install(self, result, force: bool = False):
+        raise RuntimeError("upstream changed this to a generator")
+
+
+class SingleValueDecision(FakeScanner):
+    """Upstream made the decision call return one value, not a pair."""
+
+    def should_allow_install(self, result, force: bool = False):
+        return True
+
+
+class StringVerdict(FakeScanner):
+    """Upstream made the verdict a string instead of a bool."""
+
+    def should_allow_install(self, result, force: bool = False):
+        return "allow", "ok"
+
+
+class RenamedFindingFields(FakeScanner):
+    """Upstream renamed the Finding fields; a blocked skill must still report."""
+
+    def scan_skill(self, path: Path, source: str = "community"):
+        if path.name == "beta":
+            # A finding object with none of the fields this check reads.
+            return FakeResult([object()], "caution")
+        return FakeResult([], "safe")
+
+    def should_allow_install(self, result, force: bool = False):
+        if result.verdict == "safe":
+            return True, "Allowed"
+        return False, "Blocked (community source + caution verdict, 1 findings)"
+
+
 class DriftedPlugin(FakeGuard):
     """Upstream changed scan_plugin's signature."""
 
@@ -259,6 +295,19 @@ def main() -> int:
                mod.assess_skills(skills, VersionlessScanner())[0], 2)
         expect("a scanner with an empty version is unusable",
                mod.assess_skills(skills, BlankVersionScanner())[0], 2)
+        # A crash here would exit 1 - the code reserved for "blocked" - and read
+        # as a policy verdict instead of unusable input.
+        expect("raising decision is unusable",
+               mod.assess_skills(skills, RaisingDecision())[0], 2)
+        expect("single-value decision is unusable",
+               mod.assess_skills(skills, SingleValueDecision())[0], 2)
+        expect("string verdict is unusable",
+               mod.assess_skills(skills, StringVerdict())[0], 2)
+        # A renamed Finding must degrade to "?" fields, not a traceback.
+        code, messages = mod.assess_skills(blocked, RenamedFindingFields())
+        expect("renamed finding fields still report", code, 1)
+        expect("renamed finding fields are marked unknown",
+               any("?/? ?:?" in m for m in messages), True)
         expect("plugin signature drift is unusable",
                mod.assess_plugin(base, DriftedPlugin())[0], 2)
         expect("opaque plugin scan result is unusable",

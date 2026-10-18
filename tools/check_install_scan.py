@@ -157,6 +157,36 @@ def _call(fn, *args, **kwargs):
         return None, f"{getattr(fn, '__name__', 'scanner')} failed: {exc!r}"
 
 
+def _decision(fn, result) -> tuple[tuple[bool, str] | None, str | None]:
+    """Call an upstream allow/deny entry point and validate its shape.
+
+    Unpacking an unexpected return value raises, and Python would exit 1 - the
+    code this check reserves for "something is blocked". An upstream API change
+    must exit 2 instead, or a crash reads as a policy verdict.
+    """
+    value, problem = _call(fn, result)
+    if problem:
+        return None, problem
+    if not isinstance(value, tuple) or len(value) != 2:
+        return None, (f"{getattr(fn, '__name__', 'scanner')} returned "
+                      f"{type(value).__name__}, expected (allowed, reason)")
+    allowed, reason = value
+    if not isinstance(allowed, bool):
+        return None, (f"{getattr(fn, '__name__', 'scanner')} returned "
+                      f"{allowed!r} as the verdict, expected a bool")
+    return (allowed, str(reason)), None
+
+
+def _describe(finding) -> str:
+    """Render one finding without trusting upstream's field names."""
+    return "{}/{} {}:{}".format(
+        getattr(finding, "pattern_id", "?"),
+        getattr(finding, "severity", "?"),
+        getattr(finding, "file", "?"),
+        getattr(finding, "line", "?"),
+    )
+
+
 def assess_skills(skills_dir: Path, scanner) -> tuple[int, list[str]]:
     """Return ``(exit_code, messages)`` for every skill against *scanner*."""
     gaps = _interface_gaps(scanner, "scan_skill", "should_allow_install", "SCANNER_VERSION")
@@ -176,13 +206,14 @@ def assess_skills(skills_dir: Path, scanner) -> tuple[int, list[str]]:
             return _unusable(
                 f"scan_skill returned {type(result).__name__} without findings/verdict; "
                 "the scanner API changed")
-        allowed, reason = scanner.should_allow_install(result)
+        decision, problem = _decision(scanner.should_allow_install, result)
+        if problem:
+            return _unusable(problem)
+        allowed, reason = decision
         found = list(result.findings)
         findings += len(found)
         if not allowed:
-            detail = ", ".join(
-                f"{f.pattern_id}/{f.severity} {f.file}:{f.line}" for f in found
-            ) or reason
+            detail = ", ".join(_describe(f) for f in found) or reason
             blocked.append(f"{skill.name}: {reason} [{detail}]")
     version = scanner.SCANNER_VERSION
     if blocked:
@@ -211,15 +242,16 @@ def assess_plugin(repo_root: Path, guard) -> tuple[int, list[str]]:
         return _unusable(
             f"scan_plugin returned {type(scan).__name__} without findings/verdict; "
             "the scanner API changed")
-    allowed, reason = guard.should_allow_plugin_install(scan)
+    decision, problem = _decision(guard.should_allow_plugin_install, scan)
+    if problem:
+        return _unusable(problem)
+    allowed, reason = decision
     version = guard.PLUGIN_SCANNER_VERSION
     if allowed:
         found = list(scan.findings)
         return 0, [f"plugin installs clean under {version} "
                    f"({len(found)} finding(s), none blocking)"]
-    detail = ", ".join(
-        f"{f.pattern_id}/{f.severity} {f.file}:{f.line}" for f in scan.findings
-    ) or reason
+    detail = ", ".join(_describe(f) for f in scan.findings) or reason
     return 1, [f"plugin would be BLOCKED on install ({version}): {reason} [{detail}]"]
 
 
@@ -269,10 +301,17 @@ def main(argv: list[str]) -> int:
         print(f"error: cannot load the upstream scanners: {exc!r}", file=sys.stderr)
         return 2
 
-    results = [
-        assess_skills(SKILLS_DIR, modules["tools.skills_guard"]),
-        assess_plugin(REPO, modules["tools.plugin_guard"]),
-    ]
+    # Belt and braces: an upstream API change we did not anticipate must still
+    # exit 2, never 1. Exit 1 is reserved for a real "blocked install" verdict,
+    # and a traceback would masquerade as one.
+    try:
+        results = [
+            assess_skills(SKILLS_DIR, modules["tools.skills_guard"]),
+            assess_plugin(REPO, modules["tools.plugin_guard"]),
+        ]
+    except Exception as exc:  # noqa: BLE001 - any unexpected upstream shape
+        print(f"error: unexpected failure while scanning: {exc!r}", file=sys.stderr)
+        return 2
     code = max(r[0] for r in results)
     prefixes = {0: "OK: ", 1: "FAIL: ", 2: "error: "}
     for result_code, messages in results:
