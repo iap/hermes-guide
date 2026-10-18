@@ -2,7 +2,7 @@
 
 > **Package / slug:** `hermes-guide` · **Catalog:** curated Hermes plugin catalog (community tier)
 
-![hermes-guide concept illustration](assets/terminal-interact.png)
+![hermes-guide concept illustration](assets/terminal-interact.webp)
 
 Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
