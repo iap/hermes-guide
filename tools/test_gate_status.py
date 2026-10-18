@@ -28,6 +28,11 @@ Behavioral half -- the step's real shell body, executed against a stubbed
 6. ``PLUGIN_RESULT=failure`` posts ``state=failure`` -- a gate that only ever
    reports success is worse than no gate.
 
+The behavioral half is POSIX-only (it writes a ``#!/bin/sh`` stub and execs
+bash), so cases 5 and 6 SKIP where ``os.name != "posix"`` and the five static
+checks still run. Windows runners do ship bash, so probing for bash alone is
+not a sufficient guard.
+
 Stdlib-only (regex over the workflow text, no PyYAML), and no network: ``gh``
 is a stub on PATH that records its argv.
 
@@ -159,13 +164,16 @@ def main() -> int:
         script,
     )
 
-    # The behavioral half needs bash to run the step's own shell body. Windows
-    # runners have no bash, so the CI step is Linux-gated; skip loudly rather
-    # than fail here, so a local Windows run stays useful.
-    if shutil.which("bash") is None:
-        print("  skip  success posts state=success to the target SHA (no bash)")
-        print("  skip  failure posts state=failure (never a silent success) (no bash)")
-        _SKIPPED = 2
+    # The behavioral half writes a `#!/bin/sh` stub onto PATH and execs bash --
+    # POSIX by construction. Windows runners DO ship bash (Git for Windows puts
+    # bash.exe on PATH), so probing for bash is not enough: there the stub
+    # cannot execute and both cases fail with "<script exited 1>". Gate on the
+    # platform, not on bash availability.
+    if os.name != "posix" or shutil.which("bash") is None:
+        reason = "not POSIX" if os.name != "posix" else "no bash"
+        print(f"  skip  success posts state=success to the target SHA ({reason})")
+        print(f"  skip  failure posts state=failure (never a silent success) ({reason})")
+        _SKIPPED = f"2 ({reason})"
     else:
         ok_argv = post_once(script, "success")
         check(
@@ -184,7 +192,7 @@ def main() -> int:
 
     bad = [n for n, ok, _ in _RESULTS if not ok]
     ran = len(_RESULTS)
-    note = f" ({_SKIPPED} skipped: no bash)" if _SKIPPED else ""
+    note = f", {_SKIPPED} skipped" if _SKIPPED else ""
     print(
         f"\nOK: {ran - len(bad)}/{ran} passed{note}"
         if not bad

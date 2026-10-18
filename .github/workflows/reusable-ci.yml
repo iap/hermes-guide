@@ -189,11 +189,11 @@ jobs:
         # drift in the context name, state, or target SHA fails here instead of
         # silently unmergeing the repository.
         # Cross-platform: `python`, not `python3`, matching every other
-        # Windows-capable step. The behavioral half needs bash, so the test
-        # SKIPS those two cases where bash is absent (Windows) and still asserts
-        # the static contract -- 5 of 7. Gating the whole step to Linux instead
-        # would hide the static half from Windows for no added signal, since it
-        # asserts on the same file text either way.
+        # Windows-capable step. The behavioral half is POSIX-only (it writes a
+        # #!/bin/sh stub and execs bash), so the test SKIPS those two cases on
+        # Windows and still asserts the static contract -- 5 of 7. Gating the
+        # whole step to Linux instead would hide the static half from Windows
+        # for no added signal, since it asserts on the same file text either way.
         run: python tools/test_gate_status.py
 
       - name: Tool coverage guard
