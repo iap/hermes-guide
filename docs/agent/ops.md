@@ -142,6 +142,52 @@ with the verification line (tests, gates, mypy/CI as applicable):
   - <finding> (<why it stands>)
   Verification: <tests x/y, gates, mypy/CI>
 
+## Branch protection
+
+`master` is gated by a **ruleset** named `Master` (target `branch`, condition
+`refs/heads/master`), not by the older branch-protection API. Two required
+status-check contexts gate every merge: **`CodeQL`** and **`gate`** — and they
+are satisfied by *different* reporters, which is the trap this section exists to
+name. The rest of the ruleset is policy, not checks. Inspect it with:
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$REPO/rulesets" --jq '.[] | {name,target,enforcement,bypass_actors}'
+gh api "repos/$REPO/rulesets/<id>" --jq '.rules[] | {type}'
+```
+
+- **The required `gate` context is a commit _status_, not a check run.** The
+  ruleset's `required_status_checks` entry named `gate` is satisfied only by a
+  commit status carrying that context; a GitHub Actions check run of the same
+  name does **not** satisfy it (#292, proven by bisecting the live ruleset on
+  #291). `CodeQL` is the opposite: it reports from the `github-advanced-security`
+  app and satisfies its entry as a check run. `ci.yml` therefore does both for
+  the gate — the `gate` job (a check run, what a human reads) collapses the whole
+  reusable workflow, every matrix leg plus the `legacy-mac` tier, into one
+  verdict, and a publish step posts `context=gate` as a commit status, which is
+  why that job holds `permissions: statuses: write`. The matrix legs still
+  publish under their own names; they are simply not required. Requiring those
+  names individually (`plugin / plugin (ubuntu-24.04, 3.11)`) is the failure mode
+  #290 removed: adding a Python version left the new leg unguarded, and dropping
+  one left a required context that never reports and blocks every merge until a
+  maintainer edits the rules. **The context name is the interface**: renaming the
+  `gate` job alone is safe, but changing the status context, or dropping the
+  publish step, blocks every merge — change either together with the ruleset.
+- **Thread resolution is also a rule — and it was _not_ what blocked #290.** The
+  ruleset sets `required_review_thread_resolution` with
+  `required_approving_review_count: 0`, so no human approval is required yet a
+  single unresolved bot thread does block a merge. #290 was misread twice through
+  this lens; the bisect on #291 showed the real cause was the absent `gate`
+  **status**, not a thread. Read `mergeStateStatus` and name the failing
+  requirement before blaming a thread — and never clear a block by resolving a
+  thread nobody answered; reply with evidence, then resolve.
+- **The maintainer holds a scoped bypass.** A single `User` bypass actor with
+  `bypass_mode: pull_request` lets the maintainer merge a PR past an unresolved
+  thread. It is pull-request-scoped on purpose: it does not open a path around
+  `required_signatures` or `non_fast_forward` for a direct push to `master`. It
+  is a stuck-thread escape hatch, not a way past triage — resolve or decline the
+  thread with evidence first, as the pre-merge cross-check requires.
+
 ## Delegation (swarm and second opinions)
 
 Delegate when tasks are independent (parallel workstreams), verification must
