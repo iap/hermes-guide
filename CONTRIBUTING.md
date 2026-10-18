@@ -370,6 +370,7 @@ fail-closed backstop.
 
 Do not regenerate the changelog on the tag push. The section generated there
 cannot reach master — master takes no direct push, a `GITHUB_TOKEN`-created PR
-triggers no workflows (so its required CodeQL check never reports), and this repo
+triggers no workflows (so neither required context, `CodeQL` nor the `gate`
+status, ever reports), and this repo
 has no PAT or App token. That is how v0.7.1 shipped with its section stranded on
 an unmerged `changelog-update-v0.7.1` branch.
