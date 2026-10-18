@@ -55,6 +55,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import traceback
 import types
 from pathlib import Path
 
@@ -255,6 +256,16 @@ def assess_plugin(repo_root: Path, guard) -> tuple[int, list[str]]:
     return 1, [f"plugin would be BLOCKED on install ({version}): {reason} [{detail}]"]
 
 
+def _traceback_text() -> str:
+    """The active traceback, for a failure we did not anticipate.
+
+    For an unforeseen upstream shape this is the only thing that says which
+    scanner call broke, so it travels with the exit-2 verdict instead of being
+    swallowed into a one-line repr.
+    """
+    return "".join(traceback.format_exception(*sys.exc_info()))
+
+
 def valid_pin(rev: str) -> bool:
     """A pin must name a commit. `git show :<path>` means the INDEX, which
     would silently scan whatever is checked out instead of the pinned rules."""
@@ -303,7 +314,9 @@ def main(argv: list[str]) -> int:
 
     # Belt and braces: an upstream API change we did not anticipate must still
     # exit 2, never 1. Exit 1 is reserved for a real "blocked install" verdict,
-    # and a traceback would masquerade as one.
+    # and a traceback would masquerade as one. The traceback itself is kept,
+    # because for an unforeseen failure it is the only thing that says which
+    # scanner call broke and where.
     try:
         results = [
             assess_skills(SKILLS_DIR, modules["tools.skills_guard"]),
@@ -311,6 +324,7 @@ def main(argv: list[str]) -> int:
         ]
     except Exception as exc:  # noqa: BLE001 - any unexpected upstream shape
         print(f"error: unexpected failure while scanning: {exc!r}", file=sys.stderr)
+        print(_traceback_text(), file=sys.stderr, end="")
         return 2
     code = max(r[0] for r in results)
     prefixes = {0: "OK: ", 1: "FAIL: ", 2: "error: "}

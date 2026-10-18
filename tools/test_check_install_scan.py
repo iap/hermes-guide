@@ -356,6 +356,16 @@ def main() -> int:
                          "tools.plugin_guard_context"):
                 sys.modules.pop(name, None)
 
+        # 4c. An unforeseen failure must keep its traceback: for an upstream API
+        # change nobody predicted, that is the only thing saying which call broke.
+        try:
+            raise ValueError("upstream shape nobody predicted")
+        except ValueError:
+            captured = mod._traceback_text()
+        expect("traceback names the exception type", "ValueError" in captured, True)
+        expect("traceback names the raising line", "raise ValueError" in captured, True)
+        expect("traceback is multi-line", len(captured.strip().splitlines()) > 2, True)
+
         # 6. The pin must name a commit -------------------------------------
         expect("40-hex sha is a pin", mod.valid_pin("d" * 40), True)
         expect("uppercase sha is a pin", mod.valid_pin("D" * 40), True)
