@@ -76,12 +76,6 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Job-level permissions REPLACE the workflow-level block, so contents: read
-    # is repeated here. statuses: write is what the publish step below needs and
-    # is scoped to this one job.
-    permissions:
-      contents: read
-      statuses: write
     steps:
       - name: Every CI leg succeeded
         env:
@@ -93,30 +87,3 @@ jobs:
             exit 1
           fi
           echo "OK: all CI legs passed"
-
-      # The Master ruleset gates on commit statuses, not on Actions check runs:
-      # requiring a check run by name left this repository permanently blocked in
-      # testing, while the same name as a status context merged cleanly. So the
-      # verdict is republished as a status context here. The check run of the
-      # same name still appears in the PR checks list; this step is what the
-      # ruleset sees. `always()` so a failed matrix still reports a failing
-      # status rather than leaving the required context absent.
-      - name: Publish the gate status
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          # On pull_request the branch tip is the head SHA; push and merge_group
-          # have no pull_request object, so github.sha is the right target.
-          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          PLUGIN_RESULT: ${{ needs.plugin.result }}
-        run: |
-          if [ "$PLUGIN_RESULT" = "success" ]; then
-            state=success
-            desc="all CI legs passed"
-          else
-            state=failure
-            desc="CI leg: $PLUGIN_RESULT"
-          fi
-          gh api -X POST "repos/$REPO/statuses/$SHA" \
-            -f state="$state" -f context="gate" -f description="$desc"
