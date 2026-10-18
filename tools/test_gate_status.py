@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -158,25 +159,36 @@ def main() -> int:
         script,
     )
 
-    ok_argv = post_once(script, "success")
-    check(
-        "success posts state=success to the target SHA",
-        "state=success" in ok_argv and "-f context=gate " in ok_argv
-        and "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" in ok_argv,
-        ok_argv,
-    )
-    bad_argv = post_once(script, "failure")
-    check(
-        "failure posts state=failure (never a silent success)",
-        "state=failure" in bad_argv and "-f context=gate " in bad_argv,
-        bad_argv,
-    )
+    # The behavioral half needs bash to run the step's own shell body. Windows
+    # runners have no bash, so the CI step is Linux-gated; skip loudly rather
+    # than fail here, so a local Windows run stays useful.
+    if shutil.which("bash") is None:
+        print("  skip  success posts state=success to the target SHA (no bash)")
+        print("  skip  failure posts state=failure (never a silent success) (no bash)")
+        _SKIPPED = 2
+    else:
+        ok_argv = post_once(script, "success")
+        check(
+            "success posts state=success to the target SHA",
+            "state=success" in ok_argv and "-f context=gate " in ok_argv
+            and "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" in ok_argv,
+            ok_argv,
+        )
+        bad_argv = post_once(script, "failure")
+        check(
+            "failure posts state=failure (never a silent success)",
+            "state=failure" in bad_argv and "-f context=gate " in bad_argv,
+            bad_argv,
+        )
+        _SKIPPED = 0
 
     bad = [n for n, ok, _ in _RESULTS if not ok]
+    ran = len(_RESULTS)
+    note = f" ({_SKIPPED} skipped: no bash)" if _SKIPPED else ""
     print(
-        f"\nOK: {len(_RESULTS) - len(bad)}/{len(_RESULTS)} passed"
+        f"\nOK: {ran - len(bad)}/{ran} passed{note}"
         if not bad
-        else f"\nFAIL: {len(bad)}/{len(_RESULTS)} failed"
+        else f"\nFAIL: {len(bad)}/{ran} failed{note}"
     )
     for n in bad:
         print(f"  - {n}")

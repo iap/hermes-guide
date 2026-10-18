@@ -76,9 +76,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     # Windows runs the same steps except mypy, the plugin doctor, the tap smoke
-    # test, the host-pressure probe, and the CLI-resolution test, which stay
-    # Linux-gated (POSIX /tmp workaround, no bash on Windows, and
-    # Hermes-on-Windows CI unexplored upstream).
+    # test, the host-pressure probe, the CLI-resolution test, and the gate-status
+    # regression, which stay Linux-gated (POSIX /tmp workaround, no bash on
+    # Windows, and Hermes-on-Windows CI unexplored upstream).
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -187,7 +187,10 @@ jobs:
         # not satisfy it (#292). Stdlib only: parses this repo's ci.yml and runs
         # the step's real shell body against a stubbed `gh`, so a one-character
         # drift in the context name, state, or target SHA fails here instead of
-        # silently unmergeing the repository. No network, so fast tier.
+        # silently unmergeing the repository.
+        # Linux-gated: the behavioral half executes that shell body, and Windows
+        # has no bash (the test skips loudly there, but a skip is not coverage).
+        if: runner.os == 'Linux' && inputs.run-full-gate
         run: python3 tools/test_gate_status.py
 
       - name: Tool coverage guard
