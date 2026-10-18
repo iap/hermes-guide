@@ -142,6 +142,44 @@ with the verification line (tests, gates, mypy/CI as applicable):
   - <finding> (<why it stands>)
   Verification: <tests x/y, gates, mypy/CI>
 
+## Branch protection
+
+`master` is gated by a **ruleset** named `Master` (target `branch`, condition
+`refs/heads/master`), not by the older branch-protection API. Two required
+status-check contexts gate every merge: **`CodeQL`** and **`gate`**. The rest of
+the ruleset is policy, not checks. Inspect it with:
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$REPO/rulesets" --jq '.[] | {name,target,enforcement,bypass_actors}'
+gh api "repos/$REPO/rulesets/<id>" --jq '.rules[] | {type}'
+```
+
+- **`gate` is the only context the ruleset requires from CI**, and its name is
+  an interface between `ci.yml` and the ruleset. It is the `gate` job in
+  `.github/workflows/ci.yml`, which collapses the whole reusable workflow — every
+  matrix leg plus the `legacy-mac` tier — into one verdict. The matrix legs still
+  publish under their own names; they are simply not required. Requiring those
+  names individually (`plugin / plugin (ubuntu-24.04, 3.11)`) is the failure mode
+  #290 removed: adding a Python version left the new leg unguarded, and dropping
+  one left a required context that never reports and blocks every merge until a
+  maintainer edits the rules. **Renaming or removing that job blocks every
+  merge** — change it and the ruleset in the same action.
+- **Thread resolution is the rule that surprises you, not a failed check.** The
+  ruleset sets `required_review_thread_resolution` with
+  `required_approving_review_count: 0`, so no human approval is required but a
+  single unresolved bot thread does block the merge. While landing #290 this was
+  misread twice as a status-check mismatch (once for a check-run context, once
+  for a commit-status context); the cause was an unresolved review thread. Read
+  `mergeStateStatus` before blaming a context name, and fix it through the triage
+  loop above.
+- **The maintainer holds a scoped bypass.** A single `User` bypass actor with
+  `bypass_mode: pull_request` lets the maintainer merge a PR past an unresolved
+  thread. It is pull-request-scoped on purpose: it does not open a path around
+  `required_signatures` or `non_fast_forward` for a direct push to `master`. It
+  is a stuck-thread escape hatch, not a way past triage — resolve or decline the
+  thread with evidence first, as the pre-merge cross-check requires.
+
 ## Delegation (swarm and second opinions)
 
 Delegate when tasks are independent (parallel workstreams), verification must
