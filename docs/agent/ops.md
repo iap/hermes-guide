@@ -173,6 +173,18 @@ gh api "repos/$REPO/rulesets/<id>" --jq '.rules[] | {type}'
   maintainer edits the rules. **The context name is the interface**: renaming the
   `gate` job alone is safe, but changing the status context, or dropping the
   publish step, blocks every merge — change either together with the ruleset.
+- **Two kinds of PR can never satisfy `gate`, and both are structural, not
+  flaky.** A PR from a **fork** gets a read-only `GITHUB_TOKEN` on
+  `pull_request` — GitHub downgrades it for every fork run — so the publish
+  step's `POST` is refused, the status never appears, and the merge sits
+  `BLOCKED` with every leg green. The same holds for a PR that triggers no
+  `ci.yml` run at all, e.g. a `GITHUB_TOKEN`-authored PR (the case
+  CONTRIBUTING.md's changelog note describes). Retrying changes nothing: the
+  context cannot report. Landing one means the maintainer's
+  pull-request-scoped bypass — a listed actor may merge a PR past the rules,
+  unreported required checks included — or, if external forks ever matter,
+  replacing the in-job publisher with a trusted `workflow_run` publisher that
+  posts the status from the base repository.
 - **Thread resolution is also a rule — and it was _not_ what blocked #290.** The
   ruleset sets `required_review_thread_resolution` with
   `required_approving_review_count: 0`, so no human approval is required yet a
