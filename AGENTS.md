@@ -64,7 +64,7 @@ python tools/check_skill_version_bump.py origin/master
 python tools/check_skill_provenance.py
 ```
 
-CI adds `tools/test_*.py`, citation integrity, mypy, and bandit. Skip → say
+CI adds `tools/test_*.py`, citation integrity, install-scan parity, mypy, and bandit. Skip → say
 `not run` in the PR validation table. Full testing/security/git rules:
 [docs/agent/ops.md](docs/agent/ops.md).
 
