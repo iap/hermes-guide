@@ -181,6 +181,15 @@ jobs:
           python tools/check_eol_contract.py
           python tools/test_check_eol_contract.py
 
+      - name: Gate status contract regression
+        # The `gate` context is what branch protection requires, but the commit
+        # STATUS is what the ruleset evaluates -- a check run of that name does
+        # not satisfy it (#292). Stdlib only: parses this repo's ci.yml and runs
+        # the step's real shell body against a stubbed `gh`, so a one-character
+        # drift in the context name, state, or target SHA fails here instead of
+        # silently unmergeing the repository. No network, so fast tier.
+        run: python3 tools/test_gate_status.py
+
       - name: Tool coverage guard
         # Stdlib only, so it runs in the fast tier. Fails if a tools/ guard or
         # regression test is never referenced by a workflow -- unwired coverage
