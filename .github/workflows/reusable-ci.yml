@@ -156,6 +156,17 @@ jobs:
           python tools/check_issue_templates.py --selftest
           python tools/check_issue_templates.py
 
+      - name: Scope-enumeration guard
+        # The plugin's health-check scopes live in checks.py `_CHECKS`. Three
+        # hand-written restatements of that set cannot be generated: plugin.yaml
+        # prints through `hermes plugins info`, and README/router-skill prose
+        # sits outside a BEGIN/END GENERATED block. This guard reads all three.
+        # They drifted twice: the router skill was corrected seven to nine on
+        # 2026-10-17 while plugin.yaml kept the stale seven. Pure reads, fast tier.
+        run: |
+          python tools/check_scope_enumeration.py --selftest
+          python tools/check_scope_enumeration.py
+
       - name: No-mutation guard
         run: |
           python tools/check_no_mutation.py --selftest

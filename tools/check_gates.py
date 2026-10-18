@@ -38,6 +38,7 @@ _GATES: dict[str, str] = {
     "check_version_consistency.py": "compares manifest/entrypoint literals",
     "gen_changelog.py": "reads CHANGELOG.md, plugin.yaml and `git tag --list`; no writes",
     "check_issue_templates.py": "reads .github/ISSUE_TEMPLATE/ and the docs beside it",
+    "check_scope_enumeration.py": "ast read of checks.py plus three prose files; no network",
     "check_no_mutation.py": "AST parse; no imports executed",
     "check_scanner_hygiene.py": "regex over skills text; mirrors upstream guard patterns",
     "check_eol_contract.py": "reads .gitattributes plus `git ls-files --eol`; no network",
