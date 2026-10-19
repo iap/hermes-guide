@@ -48,17 +48,22 @@ _NUM_WORDS = (
     "twenty-two"
 ).split()
 
-_COUNT_CHECKS = re.compile(r"(?i)\b([a-z]+(?:-[a-z]+)?)\s+checks\b")
-_COUNT_SCOPES = re.compile(r"(?i)\b([a-z]+(?:-[a-z]+)?)\s+scopes\b")
+_COUNT_NOUN = re.compile(r"(?i)\b(checks?|scopes?)\b")
+# Count phrasing varies: "all nine checks" and "nine read-only health checks"
+# both appear in this repo. So anchor on the noun and look back a few tokens
+# for the nearest spelled number. Requiring adjacency would miss the qualified
+# form; allowing inner words greedily would let "all" shadow "nine".
+_WORD = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)?")
+_LOOKBACK = 4
 # The list wraps across lines, so capture the paragraph, not the line.
 _SCOPES_BLOCK = re.compile(r"(?is)\bValid scopes:(.*?)(?:\n[ \t]*\n|\Z)")
 _BACKTICK = re.compile(r"`([^`]+)`")
-
-# A label whose human spelling in plugin.yaml prose is not the label itself.
-_ALIASES = {
-    "config": re.compile(r"(?i)\bconfig(?:uration)?\b"),
-    "mcp": re.compile(r"(?i)\bmcp\b"),
-}
+# The catalog's scope list is the folded `description:` scalar. Searching the
+# whole manifest would let the unrelated `config_schema:` key satisfy the
+# `config` label, so scope the read to that block.
+_DESCRIPTION = re.compile(
+    r"(?m)^description:[ \t]*[>|]?[-+]?[ \t]*\n((?:[ \t]+.*(?:\n|\Z))+)"
+)
 
 
 def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
@@ -90,30 +95,42 @@ def _read(path: Path) -> str:
 
 
 def count_problems(text: str, expected: str, kind: str, where: str) -> list[str]:
-    """Flag any `"<count-word> checks|scopes"` whose number is not `expected`."""
-    pattern = _COUNT_CHECKS if kind == "checks" else _COUNT_SCOPES
+    """Flag a spelled count before "checks"/"scopes" that is not `expected`.
+
+    Only the nearest spelled number in the ``_LOOKBACK`` words preceding the
+    noun is judged, and only when it is in the number vocabulary — so
+    "read-only health checks" carries no count and is ignored.
+    """
     problems = []
-    for match in pattern.finditer(text):
-        word = match.group(1).lower()
-        if word in _NUM_WORDS and word != expected:
+    singular = kind.rstrip("s")
+    for match in _COUNT_NOUN.finditer(text):
+        if not match.group(1).lower().startswith(singular):
+            continue
+        window = text[max(0, match.start() - 60):match.start()]
+        tokens = _WORD.findall(window)[-_LOOKBACK:]
+        nearest = next((t for t in reversed(tokens) if t.lower() in _NUM_WORDS), None)
+        if nearest and nearest.lower() != expected:
             problems.append(
-                f'{where}: says "{word} {kind}", but _CHECKS has {expected} '
-                f'— correct the count or split the list'
+                f'{where}: says "{nearest} {kind}", but _CHECKS has {expected} '
+                f"— correct the count or split the list"
             )
     return problems
 
 
 def plugin_yaml_problems(labels: list[str], text: str) -> list[str]:
-    """Every scope must be named in the catalog description.
+    """Every scope must be named inside the description block, not the file.
 
     If the description ever stops enumerating the scopes, drop this assertion
     rather than the list — an unenumerated description cannot drift, but it
     also tells the catalog reader less.
     """
+    match = _DESCRIPTION.search(text)
+    if not match:
+        return ["plugin.yaml: no folded `description:` block found"]
+    body = match.group(1)
     problems = []
     for label in labels:
-        pattern = _ALIASES.get(label, re.compile(rf"(?i)\b{re.escape(label)}\b"))
-        if not pattern.search(text):
+        if not re.search(rf"(?i)\b{re.escape(label)}\b", body):
             problems.append(
                 f"plugin.yaml: the description never names the `{label}` scope"
             )
@@ -163,15 +180,25 @@ def _collect() -> list[str]:
 
 def selftest() -> int:
     labels = ["config", "mcp", "skills"]
-    all_named = "checks across config, MCP servers, skills"
+
+    def manifest(scope_line: str) -> str:
+        return (
+            "name: hermes-guide\n"
+            "description: >-\n"
+            "  Executable diagnostics for Hermes configuration.\n"
+            f"{scope_line}\n"
+            "manifest_version: 1\n"
+        )
+
+    enumerated = manifest("  Deterministic health checks across config, MCP servers, skills.")
+    # "Hermes configuration" in the intro must NOT satisfy the `config` scope.
+    intro_only = manifest("  Deterministic health checks across MCP servers, skills.")
+
     # (name, problems the guard should return, should it return any at all)
     cases: list[tuple[str, list[str], bool]] = [
-        ("plugin: every label named", plugin_yaml_problems(labels, all_named), False),
-        (
-            "plugin: a label missing",
-            plugin_yaml_problems(labels, "checks across config and skills"),
-            True,
-        ),
+        ("plugin: every label named", plugin_yaml_problems(labels, enumerated), False),
+        ("plugin: a label dropped from the list", plugin_yaml_problems(labels, intro_only), True),
+        ("plugin: no description block", plugin_yaml_problems(labels, "name: x\n"), True),
         (
             "router: list matches",
             router_skill_problems(labels, "Valid scopes: `config`, `mcp`,\n`skills`.\n\nNext."),
@@ -183,17 +210,27 @@ def selftest() -> int:
             True,
         ),
         (
-            "count: correct",
+            "count: adjacent, correct",
             count_problems("runs all nine checks in-process", "nine", "checks", "README.md"),
             False,
         ),
         (
-            "count: stale",
+            "count: adjacent, stale",
             count_problems("runs all seven checks in-process", "nine", "checks", "README.md"),
             True,
         ),
         (
-            "count: a non-number adjective is ignored",
+            "count: qualified, stale",
+            count_problems("seven read-only health checks", "nine", "checks", "README.md"),
+            True,
+        ),
+        (
+            "count: qualified, correct",
+            count_problems("nine read-only health checks", "nine", "checks", "README.md"),
+            False,
+        ),
+        (
+            "count: an adjective-only phrase carries no count",
             count_problems("read-only health checks across", "nine", "checks", "README.md"),
             False,
         ),
