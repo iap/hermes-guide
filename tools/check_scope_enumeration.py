@@ -55,15 +55,21 @@ _COUNT_NOUN = re.compile(r"(?i)\b(checks?|scopes?)\b")
 # form; allowing inner words greedily would let "all" shadow "nine".
 _WORD = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)?")
 _LOOKBACK = 4
-# The list wraps across lines, so capture the paragraph, not the line.
+# A count belongs to the sentence holding its noun: "Twenty-two skills. Checks
+# are read-only." must not read "twenty-two" as a check count.
+_CLAUSE_END = re.compile(r"[.!?;\n]")
+# The router skill wraps its list across lines, so capture the paragraph.
 _SCOPES_BLOCK = re.compile(r"(?is)\bValid scopes:(.*?)(?:\n[ \t]*\n|\Z)")
 _BACKTICK = re.compile(r"`([^`]+)`")
-# The catalog's scope list is the folded `description:` scalar. Searching the
-# whole manifest would let the unrelated `config_schema:` key satisfy the
-# `config` label, so scope the read to that block.
+# The catalog's list is the folded `description:` scalar; searching the whole
+# manifest would let the unrelated `config_schema:` key supply `config`.
 _DESCRIPTION = re.compile(
     r"(?m)^description:[ \t]*[>|]?[-+]?[ \t]*\n((?:[ \t]+.*(?:\n|\Z))+)"
 )
+# The catalog enumerates scopes as backticked labels after "checks across", to
+# the sentence end. Comparing that run — not the prose — is what stops "checks
+# config files" from passing as a listing of the `config` scope.
+_ENUM = re.compile(r"(?i)\bchecks across\s+([^.;]+)")
 
 
 def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
@@ -98,16 +104,17 @@ def count_problems(text: str, expected: str, kind: str, where: str) -> list[str]
     """Flag a spelled count before "checks"/"scopes" that is not `expected`.
 
     Only the nearest spelled number in the ``_LOOKBACK`` words preceding the
-    noun is judged, and only when it is in the number vocabulary — so
-    "read-only health checks" carries no count and is ignored.
+    noun — and only within the noun's own sentence — is judged, and only when it
+    is in the number vocabulary. So "read-only health checks" carries no count
+    and is ignored, and a number in an earlier sentence is not mistaken for one.
     """
     problems = []
     singular = kind.rstrip("s")
     for match in _COUNT_NOUN.finditer(text):
         if not match.group(1).lower().startswith(singular):
             continue
-        window = text[max(0, match.start() - 60):match.start()]
-        tokens = _WORD.findall(window)[-_LOOKBACK:]
+        segment = _CLAUSE_END.split(text[:match.start()])[-1]
+        tokens = _WORD.findall(segment)[-_LOOKBACK:]
         nearest = next((t for t in reversed(tokens) if t.lower() in _NUM_WORDS), None)
         if nearest and nearest.lower() != expected:
             problems.append(
@@ -117,32 +124,8 @@ def count_problems(text: str, expected: str, kind: str, where: str) -> list[str]
     return problems
 
 
-def plugin_yaml_problems(labels: list[str], text: str) -> list[str]:
-    """Every scope must be named inside the description block, not the file.
-
-    If the description ever stops enumerating the scopes, drop this assertion
-    rather than the list — an unenumerated description cannot drift, but it
-    also tells the catalog reader less.
-    """
-    match = _DESCRIPTION.search(text)
-    if not match:
-        return ["plugin.yaml: no folded `description:` block found"]
-    body = match.group(1)
-    problems = []
-    for label in labels:
-        if not re.search(rf"(?i)\b{re.escape(label)}\b", body):
-            problems.append(
-                f"plugin.yaml: the description never names the `{label}` scope"
-            )
-    return problems
-
-
-def router_skill_problems(labels: list[str], text: str) -> list[str]:
-    """The `Valid scopes:` backtick run must equal the `_CHECKS` label set."""
-    match = _SCOPES_BLOCK.search(text)
-    if not match:
-        return [f"{ROUTER_SKILL.name}: no 'Valid scopes:' block found"]
-    listed = _BACKTICK.findall(match.group(1))
+def _set_problems(labels: list[str], listed: list[str], where: str) -> list[str]:
+    """Compare a backticked run to `_CHECKS` in both directions."""
     missing = [label for label in labels if label not in listed]
     extra = [label for label in listed if label not in labels]
     if not missing and not extra:
@@ -152,10 +135,37 @@ def router_skill_problems(labels: list[str], text: str) -> list[str]:
         detail.append(f"missing {missing}")
     if extra:
         detail.append(f"unknown {extra}")
-    return [
-        f"plugin-skills/start/SKILL.md: the 'Valid scopes:' list does not match "
-        f"_CHECKS ({'; '.join(detail)})"
-    ]
+    return [f"{where}: the scope list does not match _CHECKS ({'; '.join(detail)})"]
+
+
+def plugin_yaml_problems(labels: list[str], text: str) -> list[str]:
+    """The description's backticked scope run must equal the `_CHECKS` set.
+
+    If the description ever stops enumerating the scopes, drop this assertion
+    rather than the list — an unenumerated description cannot drift, but it
+    also tells the catalog reader less.
+
+    Note the catalog labels are the identifiers (`mcp`), not the old prose
+    names ("MCP servers"): a run can be compared as a set, whereas prose cannot
+    — a whole-description search accepted "checks config files" as a listing of
+    the `config` scope, and could never reject an unsupported extra scope.
+    """
+    block = _DESCRIPTION.search(text)
+    if not block:
+        return ["plugin.yaml: no folded `description:` block found"]
+    enum = _ENUM.search(block.group(1))
+    if not enum:
+        return ["plugin.yaml: no 'checks across ...' scope list in the description"]
+    return _set_problems(labels, _BACKTICK.findall(enum.group(1)), "plugin.yaml description")
+
+
+def router_skill_problems(labels: list[str], text: str) -> list[str]:
+    """The `Valid scopes:` backtick run must equal the `_CHECKS` label set."""
+    match = _SCOPES_BLOCK.search(text)
+    if not match:
+        return [f"{ROUTER_SKILL.name}: no 'Valid scopes:' block found"]
+    where = "plugin-skills/start/SKILL.md 'Valid scopes:'"
+    return _set_problems(labels, _BACKTICK.findall(match.group(1)), where)
 
 
 def _collect() -> list[str]:
@@ -190,14 +200,18 @@ def selftest() -> int:
             "manifest_version: 1\n"
         )
 
-    enumerated = manifest("  Deterministic health checks across config, MCP servers, skills.")
-    # "Hermes configuration" in the intro must NOT satisfy the `config` scope.
-    intro_only = manifest("  Deterministic health checks across MCP servers, skills.")
+    enumerated = manifest("  Deterministic health checks across `config`, `mcp`, `skills`.")
+    # Prose naming a scope must NOT stand in for listing it: "config files" in
+    # the intro cannot satisfy a list that omits `config`.
+    prose_only = manifest("  Reads config files. Health checks across `mcp`, `skills`.")
+    # An unsupported extra scope must fail, not pass.
+    with_extra = manifest("  Health checks across `config`, `mcp`, `skills`, `tokens`.")
 
     # (name, problems the guard should return, should it return any at all)
     cases: list[tuple[str, list[str], bool]] = [
-        ("plugin: every label named", plugin_yaml_problems(labels, enumerated), False),
-        ("plugin: a label dropped from the list", plugin_yaml_problems(labels, intro_only), True),
+        ("plugin: every label listed", plugin_yaml_problems(labels, enumerated), False),
+        ("plugin: a label dropped from the list", plugin_yaml_problems(labels, prose_only), True),
+        ("plugin: an extra unsupported label", plugin_yaml_problems(labels, with_extra), True),
         ("plugin: no description block", plugin_yaml_problems(labels, "name: x\n"), True),
         (
             "router: list matches",
@@ -232,6 +246,11 @@ def selftest() -> int:
         (
             "count: an adjective-only phrase carries no count",
             count_problems("read-only health checks across", "nine", "checks", "README.md"),
+            False,
+        ),
+        (
+            "count: a number in an earlier sentence is not this noun's count",
+            count_problems("Twenty-two skills. Checks are read-only.", "nine", "checks", "README.md"),
             False,
         ),
     ]
