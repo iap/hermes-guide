@@ -1084,7 +1084,192 @@ def _collect_plugin_ids(root, prefix, depth, skip_names, seen, by_dir=None):
         _collect_plugin_ids(dpath, sub_prefix, depth + 1, set(), seen, by_dir)
 
 
-def check_plugins():
+
+def _upstream_manifests(home):
+    """Directory manifests from Hermes' own discovery, or None when unavailable.
+
+    ``collect_directory_manifests()`` is the loader's import-free scan: it
+    applies the real bundled skip set and the real user scan, and every
+    manifest carries ``name``/``key``/``kind``/``source``/``path``. Using it
+    keeps `plugins.enabled` judged against what Hermes actually discovers
+    instead of a second, drift-prone copy of that logic.
+
+    Only when the loader's home is OUR home: a test or profile whose config
+    is stubbed would otherwise be judged against another profile's plugins.
+    On that mismatch (and when the module is absent, as in unit tests) the
+    caller falls back to the mirror, which cannot infer ``kind`` — the
+    upstream path is the one that knows an exclusive provider from a
+    standalone plugin.
+    """
+    try:
+        from hermes_cli.plugins_discovery import collect_directory_manifests  # type: ignore[import-not-found]
+        from hermes_constants import get_hermes_home
+
+        if os.path.realpath(str(get_hermes_home())) != os.path.realpath(home):
+            return None
+        return list(collect_directory_manifests())
+    except Exception:
+        return None
+
+
+
+def _skipped_category_ids(bundled_root):
+    """Map ids under the bundled sub-category dirs to their category name.
+
+    Upstream excludes these dirs from `collect_directory_manifests()`, so a
+    manifest under one is absent from the manifest list even though the
+    directory exists. Reading just these dirs names the real activation path
+    instead of reporting the plugin as missing.
+    """
+    found: dict[str, str] = {}
+    if not bundled_root:
+        return found
+    for category in constants.PLUGIN_SUBCATEGORY_DIRS:
+        category_dir = os.path.join(bundled_root, category)
+        if not os.path.isdir(category_dir):
+            continue
+        ids: set[str] = set()
+        _collect_plugin_ids(category_dir, category, 1, set(), ids)
+        for ident in ids:
+            found.setdefault(ident, category)
+    return found
+
+
+def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_root):
+    """Judge `plugins.enabled` against the loader's own manifests.
+
+    A resolved manifest is not the same as a usable entry: `exclusive` and
+    `model-provider` kinds are selected by their category, and a bundled
+    `backend`/`platform` loads without an entry. Those cases must not be
+    reported healthy (the entry is inert) or missing (the manifest exists).
+    """
+    by_id = {}
+    user_ids = set()
+    for manifest in manifests:
+        name = getattr(manifest, "name", None)
+        key = getattr(manifest, "key", None)
+        for ident in {name, key} - {None}:
+            by_id[ident] = manifest
+        if getattr(manifest, "source", "") != "bundled":
+            user_ids.update({name, key} - {None})
+
+    skipped_ids = None  # scanned on first unresolved id, not on every run
+
+    broken = []
+    notes = []
+    advisories = []
+    bundled_only = []
+    for name in sorted(enabled):
+        if name in constants.PLUGIN_SUBCATEGORY_DIRS:
+            # Parity with the mirror below: a bare sub-category name is not a
+            # plugin id — those dirs use their own selection keys.
+            continue
+        if name in disabled:
+            continue  # Hermes' disabled deny-list wins over enabled
+        manifest = by_id.get(name)
+        if manifest is None:
+            if skipped_ids is None:
+                skipped_ids = _skipped_category_ids(bundled_root)
+            category = skipped_ids.get(name)
+            if category:
+                broken.append(
+                    f"`{name}` is a plugin under `plugins/{category}/`; it activates "
+                    "via that category's selection key, not plugins.enabled"
+                )
+            else:
+                broken.append(
+                    f"`{name}` is enabled but no matching plugin manifest was found"
+                )
+            continue
+        kind = getattr(manifest, "kind", "") or ""
+        source = getattr(manifest, "source", "")
+        if kind == "exclusive":
+            broken.append(
+                f"`{name}` is an exclusive {source} plugin; it activates via its "
+                "category's selection key (for example memory.provider), not "
+                f"`{constants.CONFIG_PLUGINS_SECTION}.{constants.CONFIG_PLUGINS_ENABLED}`"
+            )
+        elif kind == "model-provider":
+            advisories.append(
+                f"`{name}` is a model provider; it is selected by provider config "
+                "or --provider, not plugins.enabled"
+            )
+        elif source == "bundled" and kind in {"backend", "platform"}:
+            advisories.append(
+                f"`{name}` is a bundled {kind}; it loads without a plugins.enabled entry"
+            )
+        elif name not in user_ids:
+            # Resolves via the bundled dir only: absent from the user plugins
+            # dir by design. Named explicitly so neither users nor models
+            # misdiagnose it as missing.
+            bundled_only.append(name)
+
+    notes.extend(_user_dir_notes(manifests, plugins_root, enabled, disabled))
+
+    if bundled_only:
+        names = ", ".join(f"`{n}`" for n in bundled_only)
+        verb = "resolves" if len(bundled_only) == 1 else "resolve"
+        bundled_note = [
+            f"{names} {verb} via the bundled plugins dir "
+            "(absent from the user plugins dir — expected)"
+        ]
+    else:
+        bundled_note = []
+    if broken:
+        return {
+            "status": "broken",
+            "reason": f"{len(broken)} enabled plugin(s) missing or broken",
+            "detail": broken + notes + advisories + bundled_note,
+        }
+    if notes:
+        return {
+            "status": "informational",
+            "reason": f"{len(notes)} plugin(s) not enabled",
+            "detail": notes + advisories + bundled_note,
+        }
+    if advisories:
+        return {
+            "status": "informational",
+            "reason": f"{len(advisories)} plugin activation note(s)",
+            "detail": advisories + bundled_note,
+        }
+    if bundled_note:
+        return {
+            "status": "informational",
+            "reason": "enabled plugins resolve via the bundled dir",
+            "detail": bundled_note,
+        }
+    return {
+        "status": "healthy",
+        "reason": "plugins consistent with enable list",
+        "detail": sorted(enabled),
+    }
+
+
+def _user_dir_notes(manifests, plugins_root, enabled, disabled):
+    """Manifest-bearing top-level user-dir plugins that are neither enabled nor disabled."""
+    notes = []
+    seen = set()
+    for manifest in manifests:
+        if getattr(manifest, "source", "") != "user":
+            continue
+        path = getattr(manifest, "path", "") or ""
+        if os.path.dirname(os.path.abspath(path)) != os.path.abspath(plugins_root):
+            continue
+        name = getattr(manifest, "name", None)
+        key = getattr(manifest, "key", None)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        # Both identifiers gate the plugin: a directory-derived key can be the
+        # string in `plugins.enabled` even when it differs from the name.
+        if (name not in enabled and key not in enabled
+                and name not in disabled and key not in disabled):
+            notes.append(f"`{name}` discovered but not enabled (opt-in)")
+    return notes
+
+
+def check_plugins(manifests=None):
     path, data = _read_config()
     home = _hermes_home()
     if not path or data is None or not home:
@@ -1107,6 +1292,18 @@ def check_plugins():
     disabled = _as_name_set(plugins_cfg.get(constants.CONFIG_PLUGINS_DISABLED))
 
     plugins_root = os.path.join(home, "plugins")
+
+    # Prefer the loader's own discovery when it is importable (the normal
+    # in-session case): it carries `kind` and `source`, which `plugin.yaml`
+    # alone cannot provide — bundled memory providers declare no `kind:` and
+    # upstream derives `exclusive` from their source. The local mirror below
+    # stays as the fallback for unit tests and builds without the module.
+    upstream = manifests if manifests is not None else _upstream_manifests(home)
+    if upstream is not None:
+        return _plugins_from_manifests(
+            upstream, enabled, disabled, plugins_root, _bundled_plugins_dir()
+        )
+
     skip = set(constants.PLUGIN_SUBCATEGORY_DIRS)
 
     # Collect every plugin the loader can see — the user dir *and* the bundled
