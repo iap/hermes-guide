@@ -56,8 +56,10 @@ _COUNT_NOUN = re.compile(r"(?i)\b(checks?|scopes?)\b")
 _WORD = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)?")
 _LOOKBACK = 4
 # A count belongs to the sentence holding its noun: "Twenty-two skills. Checks
-# are read-only." must not read "twenty-two" as a check count.
-_CLAUSE_END = re.compile(r"[.!?;\n]")
+# are read-only." must not read "twenty-two" as a check count. A soft Markdown
+# wrap is not a boundary, so a stale count wrapped as "seven read-only health\n
+# checks" is still caught.
+_CLAUSE_END = re.compile(r"[.!?;]")
 # The router skill wraps its list across lines, so capture the paragraph.
 _SCOPES_BLOCK = re.compile(r"(?is)\bValid scopes:(.*?)(?:\n[ \t]*\n|\Z)")
 _BACKTICK = re.compile(r"`([^`]+)`")
@@ -66,10 +68,13 @@ _BACKTICK = re.compile(r"`([^`]+)`")
 _DESCRIPTION = re.compile(
     r"(?m)^description:[ \t]*[>|]?[-+]?[ \t]*\n((?:[ \t]+.*(?:\n|\Z))+)"
 )
-# The catalog enumerates scopes as backticked labels after "checks across", to
-# the sentence end. Comparing that run — not the prose — is what stops "checks
-# config files" from passing as a listing of the `config` scope.
-_ENUM = re.compile(r"(?i)\bchecks across\s+([^.;]+)")
+# The catalog enumerates scopes as a backticked, comma/and-separated run after
+# "checks across". Capture the run itself — not the rest of the sentence — so a
+# scope dropped from the list cannot be rescued by a later backticked mention
+# in the same sentence (e.g. "…`update`, plus a `config` playbook.").
+_LABEL = r"`[^`]+`"
+_SEP = r"(?:\s*,\s*(?:and\s+)?|\s+and\s+)"
+_ENUM = re.compile(rf"(?i)\bchecks across\s+({_LABEL}(?:{_SEP}{_LABEL})*)")
 
 
 def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
@@ -106,7 +111,8 @@ def count_problems(text: str, expected: str, kind: str, where: str) -> list[str]
     Only the nearest spelled number in the ``_LOOKBACK`` words preceding the
     noun — and only within the noun's own sentence — is judged, and only when it
     is in the number vocabulary. So "read-only health checks" carries no count
-    and is ignored, and a number in an earlier sentence is not mistaken for one.
+    and is ignored, a number in an earlier sentence is not mistaken for one, and
+    a phrase a Markdown renderer soft-wraps is still read as one phrase.
     """
     problems = []
     singular = kind.rstrip("s")
@@ -206,12 +212,15 @@ def selftest() -> int:
     prose_only = manifest("  Reads config files. Health checks across `mcp`, `skills`.")
     # An unsupported extra scope must fail, not pass.
     with_extra = manifest("  Health checks across `config`, `mcp`, `skills`, `tokens`.")
+    # A backticked mention AFTER the list must not rescue a dropped label.
+    rescued = manifest("  Health checks across `mcp`, `skills`, plus a `config` playbook.")
 
     # (name, problems the guard should return, should it return any at all)
     cases: list[tuple[str, list[str], bool]] = [
         ("plugin: every label listed", plugin_yaml_problems(labels, enumerated), False),
         ("plugin: a label dropped from the list", plugin_yaml_problems(labels, prose_only), True),
         ("plugin: an extra unsupported label", plugin_yaml_problems(labels, with_extra), True),
+        ("plugin: a dropped label later in the sentence", plugin_yaml_problems(labels, rescued), True),
         ("plugin: no description block", plugin_yaml_problems(labels, "name: x\n"), True),
         (
             "router: list matches",
@@ -252,6 +261,11 @@ def selftest() -> int:
             "count: a number in an earlier sentence is not this noun's count",
             count_problems("Twenty-two skills. Checks are read-only.", "nine", "checks", "README.md"),
             False,
+        ),
+        (
+            "count: a soft-wrapped phrase is still one phrase",
+            count_problems("seven read-only health\nchecks", "nine", "checks", "README.md"),
+            True,
         ),
     ]
     failures = 0
