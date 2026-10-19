@@ -93,8 +93,12 @@ def body_problem(text: str) -> str:
 
     ``body:`` with nothing under it and ``body: []`` declare no inputs and are
     reported; a form that renders nothing is the defect this guard exists to
-    catch. Inputs are the indented block that follows the key, or a non-empty
-    inline flow sequence -- ``body: [type: textarea]`` is YAML, however unusual.
+    catch. Inputs are the block that follows the key -- an indented mapping or
+    sequence, or a sequence at the key's own indentation, which is valid YAML --
+    or a non-empty inline flow sequence.
+
+    A trailing YAML comment is stripped before the empty-sequence test, so
+    ``body: [] # later`` is still empty, and a comment line is not an input.
     """
     lines = text.splitlines()
     for index, line in enumerate(lines):
@@ -103,20 +107,32 @@ def body_problem(text: str) -> str:
         match = _BODY_KEY_RE.match(line)
         if not match:
             continue
-        rest = match.group(1).strip()
-        if rest and not rest.startswith("#"):
+        rest = _inline_value(match.group(1))
+        if rest:
             if rest.startswith("[") and rest.replace(" ", "") == "[]":
                 return _BODY_EMPTY
             return ""
-        # No inline value: the inputs are the indented block that follows.
+        # No inline value: the inputs are the block that follows. A sequence
+        # item may sit at the key's own indentation (valid YAML), and a comment
+        # line is not an input.
         for nxt in lines[index + 1:]:
-            if not nxt.strip():
+            stripped = nxt.strip()
+            if not stripped or stripped.startswith("#"):
                 continue
-            if nxt[:1].isspace():
+            if nxt[:1].isspace() or stripped.startswith("- "):
                 return ""
             break
         return _BODY_EMPTY
     return _BODY_EMPTY
+
+
+def _inline_value(raw: str) -> str:
+    """The inline value of a ``key:`` line, with a trailing YAML comment removed.
+
+    A ``#`` starts a comment only when preceded by whitespace, so ``[#]`` is
+    data while ``[] # later`` is an empty sequence plus a comment.
+    """
+    return re.split(r"[ \t]+#", raw.strip(), maxsplit=1)[0].rstrip()
 
 
 def top_scalar(text: str, key: str) -> str | None:
@@ -527,6 +543,16 @@ def selftest() -> int:
         # The same flaw on the `body` key would hide a missing body.
         ({"config.yml": link, "bug-report.yml": 'name: B\ndescription: d\nbody":\n  - type: textarea\n    id: x\n'}, {},
          ["missing or empty 'body'"]),
+        # --- a trailing comment is not an input, and not an escape either ---
+        # `body: [] # later` is an empty sequence plus a comment.
+        ({"config.yml": link, "bug-report.yml": _form("B", "d", body="body: [] # later\n")}, {},
+         ["missing or empty 'body'"]),
+        # An indented comment under `body:` is not an input.
+        ({"config.yml": link, "bug-report.yml": _form("B", "d", body="body:\n  # add inputs later\n")}, {},
+         ["missing or empty 'body'"]),
+        # A sequence at the key's own indentation is valid YAML, so it IS inputs.
+        ({"config.yml": link, "bug-report.yml": _form("B", "d", body="body:\n- type: textarea\n  id: x\n")}, {},
+         []),
     ]
 
     failures = 0
