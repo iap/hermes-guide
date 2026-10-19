@@ -72,8 +72,22 @@ PLUGIN_SUBCATEGORY_DIRS = (
     # not plugins.enabled. Verified against upstream plugins/ directory.
     # NOTE: hermes-achievements and kanban are NOT subcategories — they contain
     # standalone plugins gated by plugins.enabled (verified by T-Rex in #74).
+    # Same for disk-cleanup, google_meet, security-guidance and teams_pipeline:
+    # each ships its own plugin.yaml at plugins/<name>/plugin.yaml, so the
+    # loader sees them as plugins, not as a provider directory.
+    # `observability` was listed here from v2026.9.11 until 2026-10-19 and is
+    # NOT upstream: `plugins/observability/` does not exist at baseline
+    # d97007c or at upstream main, and no commit in the fetched history ever
+    # added it. Dropped rather than kept as a harmless extra, because a pinned
+    # name that upstream never had is a fact the check cannot verify.
     "dashboard_auth",
-    "observability",
+    # computer_use: "Computer-use provider discovery", bundled
+    # `plugins/computer_use/<name>/` plus the built-in `cua` driver
+    # (plugins/computer_use/__init__.py). No plugin.yaml, own selection key --
+    # same shape as the entries above. Without this the scan collected
+    # `computer_use/cua` as a discoverable plugin id, so a stale
+    # `plugins.enabled: [cua]` resolved as valid instead of being flagged.
+    "computer_use",
 )
 
 # Filesystem names owned by the Hermes layout (rename upstream -> edit here).

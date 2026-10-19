@@ -207,6 +207,44 @@ def git_log(repo_dir: str, ref_range: str, watched: list[str] | None = None) -> 
     return records
 
 
+def verify_subcategory_dirs(repo_dir: str, head: str) -> tuple[list[str], str | None]:
+    """Every pinned plugin sub-category dir must exist upstream as a DIRECTORY.
+
+    `PLUGIN_SUBCATEGORY_DIRS` is a skip set, so a stale name is silently
+    harmless -- nothing to skip -- while a name upstream never had hides the
+    fact that the list is unverified. `observability` sat there from v2026.9.11
+    until 2026-10-19 with no corresponding `plugins/observability/` at the
+    baseline or at main, and no DRIFT_FACTS entry covered a directory listing,
+    so nothing would ever have flagged it.
+
+    One direction only, deliberately: every pinned name must be a real upstream
+    directory. The reverse cannot be asserted -- `kanban` and
+    `hermes-achievements` are directories without a `plugin.yaml` that are
+    standalone plugins, not provider sub-categories, so "no plugin.yaml" would
+    misfire on them.
+
+    `-d` matters: without it a same-named FILE or SYMLINK would satisfy the
+    comparison while the documented directory layout is gone.
+
+    Returns `(mismatches, error)`. A lookup failure is an error, NOT a
+    mismatch: main must abort rather than file a drift issue it cannot
+    substantiate, which would occupy the shared dedup title and mask real
+    drift until closed.
+    """
+    listing, err, code = git(repo_dir, "ls-tree", "-d", "--name-only", f"{head}:plugins/")
+    if code != 0:
+        return [], f"could not list upstream plugins/: {err or 'unknown error'}"
+    upstream = {ln.strip() for ln in listing.splitlines() if ln.strip()}
+    missing = sorted(set(constants.PLUGIN_SUBCATEGORY_DIRS) - upstream)
+    if not missing:
+        return [], None
+    return [
+        f"plugin sub-category dirs: constants.PLUGIN_SUBCATEGORY_DIRS pins "
+        f"{missing}, which is not a directory under upstream plugins/ "
+        "(remove it, and update skills/diagnosing-plugins/SKILL.md)"
+    ], None
+
+
 def verify_facts(repo_dir: str, head: str) -> list[str]:
     """Extract each watched fact from upstream HEAD and flag any mismatch."""
     mismatches = []
@@ -555,6 +593,14 @@ def main() -> int:
         return 1
 
     fact_mismatches = verify_facts(repo_dir, head)
+    subcat_mismatches, subcat_error = verify_subcategory_dirs(repo_dir, head)
+    if subcat_error:
+        # Transport failure, not drift. Filing an issue here would occupy the
+        # shared dedup title with an unsubstantiated finding and mask every
+        # real drift alert until it is closed.
+        print(f"ERROR: plugin sub-category dirs: {subcat_error}", file=sys.stderr)
+        return 1
+    fact_mismatches += subcat_mismatches
     pin_mismatches, pin_error = verify_ci_pin()
 
     # Walk the same range at commit granularity so the issue body can name the

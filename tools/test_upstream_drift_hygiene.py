@@ -8,7 +8,10 @@ cannot suppress a real alert, (c) fail the run on transport failures, and
 the report sections without losing the footer, and (f) retry transient
 ls-remote failures — exit codes and transport exceptions — in the pin check,
 and (g) find the install pin wherever the workflow files keep it,
-ignoring unrelated or commented-out clones. Each case below pins one of those behaviors.
+ignoring unrelated or commented-out clones, and (h) require every pinned
+plugin sub-category to be a real upstream directory, treating a failed
+lookup as a transport error rather than a finding. Each case below pins one
+of those behaviors.
 
 No network, no `gh` CLI, no upstream clone: git/gh are monkeypatched.
 
@@ -620,6 +623,89 @@ def case_pin_sha_skips_tag_freshness(mod):
     print("OK: SHA pin skips tag freshness without error")
 
 
+def case_subcategory_dirs_clean(mod):
+    """Every pinned sub-category present as a directory upstream is not drift.
+
+    Also pins `-d`: without it a same-named FILE or symlink would satisfy the
+    comparison while the documented directory layout is gone.
+    """
+    pinned = list(mod.constants.PLUGIN_SUBCATEGORY_DIRS)
+    seen = []
+
+    def fake_git(repo_dir, *args):
+        seen.append(args)
+        return "\n".join(pinned) + "\n", "", 0
+
+    with mock.patch.object(mod, "git", fake_git):
+        mismatches, error = mod.verify_subcategory_dirs("/tmp/upstream", "deadbeef")
+
+    assert mismatches == [] and error is None, f"clean tree produced {mismatches!r} {error!r}"
+    assert seen and seen[0][:3] == ("ls-tree", "-d", "--name-only"), (
+        f"lookup must request only directory entries, saw {seen[0] if seen else None}")
+    print("OK: pinned sub-category dirs all present -> no drift, directories only")
+
+
+def case_subcategory_dirs_missing_is_finding(mod):
+    """A pinned name with no upstream directory is a finding, not an error."""
+    pinned = list(mod.constants.PLUGIN_SUBCATEGORY_DIRS)
+    gone = pinned[-1]
+    upstream = "\n".join(n for n in pinned if n != gone) + "\n"
+
+    with mock.patch.object(mod, "git", lambda *a: (upstream, "", 0)):
+        mismatches, error = mod.verify_subcategory_dirs("/tmp/upstream", "deadbeef")
+
+    assert error is None, f"a listed tree with a missing dir is drift, not an error: {error!r}"
+    assert len(mismatches) == 1 and gone in mismatches[0], (
+        f"expected a finding naming {gone!r}, got {mismatches!r}")
+    print("OK: a pinned sub-category absent upstream is reported as drift")
+
+
+def case_subcategory_dirs_lookup_error_is_not_drift(mod):
+    """A failed `ls-tree` is a transport error, never a fact finding.
+
+    Filing on it would occupy the shared dedup title with an unsubstantiated
+    finding and mask every real drift alert until it is closed.
+    """
+    with mock.patch.object(mod, "git", lambda *a: ("", "fatal: bad object", 128)):
+        mismatches, error = mod.verify_subcategory_dirs("/tmp/upstream", "deadbeef")
+
+    assert mismatches == [], f"a failed lookup must not become a finding: {mismatches!r}"
+    assert error and "could not list" in error, (
+        f"a failed lookup must surface an error: {error!r}")
+    print("OK: a failed sub-category lookup errors instead of filing")
+
+
+def case_subcategory_error_blocks_filing(mod):
+    """A sub-category lookup failure fails the run before any issue is filed."""
+    issue_calls = []
+
+    def fake_git(repo_dir, *args):
+        if args[:2] == ("rev-parse", "HEAD"):
+            return "abc1234567890def", "", 0
+        if args[:2] == ("log", "--format=%h %ci %s"):
+            return "abc1234 2026-09-11 fix(mcp): rename", "", 0
+        if args[:3] == ("ls-tree", "-d", "--name-only"):
+            return "", "fatal: bad object", 128
+        return "", "", 0
+
+    def fake_file_issue(repo, title, body, label):
+        issue_calls.append(title)
+        return 1
+
+    with mock.patch.object(mod, "clone_upstream", return_value="/tmp/fake-upstream"), \
+         mock.patch.object(mod, "git", fake_git), \
+         mock.patch.object(mod, "verify_facts", return_value=[]), \
+         mock.patch.object(mod, "verify_ci_pin", return_value=([], None)), \
+         mock.patch.object(mod, "scan_upstream_history", return_value=([], [])), \
+         mock.patch.object(mod, "_file_issue", fake_file_issue), \
+         mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "iap/hermes-guide"}):
+        rc = mod.main()
+
+    assert rc == 1, f"a sub-category lookup error must fail the run, got {rc}"
+    assert issue_calls == [], f"a lookup error must not file a drift issue: {issue_calls}"
+    print("OK: sub-category lookup failure fails the run without filing")
+
+
 def main() -> int:
     mod = _load_module()
     failures: list[str] = []
@@ -648,6 +734,10 @@ def main() -> int:
         case_pin_reads_fetch_sha,
         case_pin_mixed_forms_conflict,
         case_pin_sha_skips_tag_freshness,
+        case_subcategory_dirs_clean,
+        case_subcategory_dirs_missing_is_finding,
+        case_subcategory_dirs_lookup_error_is_not_drift,
+        case_subcategory_error_blocks_filing,
     )
     for case in cases:
         try:
