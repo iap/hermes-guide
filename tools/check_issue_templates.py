@@ -22,9 +22,11 @@ fixed schema is read directly: :func:`read_chooser` fails *closed* on any line
 it does not understand, and forms only need three top-level scalars, which
 :func:`top_scalar` reads without parsing the body at all.
 :func:`check_form_structure` adds the two shape facts a scalar read cannot
-see: the YAML block starts at the top of the file, and a ``body:`` is
-declared. No ``---`` fence is required -- GitHub issue forms are not fenced
-frontmatter, and this repo's three real forms carry none.
+see: the YAML block starts at the first content line, and the ``body`` key
+declares inputs. No ``---`` fence is required -- GitHub issue forms are not
+fenced frontmatter, and this repo's three real forms carry none. Keys are
+matched the way YAML spells them (``body:``, ``body :``, ``"body":``); a
+literal prefix would call a valid form missing a field.
 
 Scope: files in the issue-template directory only. Deliberately *not* a
 general "every filename in the docs exists" check -- the docs legitimately
@@ -68,9 +70,48 @@ _DOCS = ("CONTRIBUTING.md", "README.md", "AGENTS.md")
 # of the other spelling invisible to every check here.
 _FORMS = "*.y*ml"
 
-# A form's YAML block opens with a top-level key. A quoted or indented first
-# line is not one, which is how a stray preamble is told apart from a form.
-_TOP_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*:")
+# A form's YAML block opens with a top-level key. Matched the way YAML spells
+# one -- `name:`, `name :`, `"name":` -- because a quoted or space-separated key
+# is the same key to a parser, and this tier has no PyYAML to consult. A stray
+# preamble (`:::`, prose, an indented line) is not one.
+_TOP_KEY_RE = re.compile(r'^["\']?[A-Za-z_][A-Za-z0-9_-]*["\']?[ \t]*:')
+
+# The `body` key as YAML spells it: `body:`, `body :`, `"body":`, `'body':`.
+# Matched directly, not parsed: this tier is stdlib-only (no PyYAML in the fast
+# tier), and a literal `body:` prefix would call `body :` and `"body":` missing.
+_BODY_KEY_RE = re.compile(r'^["\']?body["\']?[ \t]*:[ \t]*(.*)$')
+_BODY_EMPTY = "missing or empty 'body' (the form would render no inputs)"
+
+
+def body_problem(text: str) -> str:
+    """The defect message for a form whose ``body`` declares no inputs, else ``''``.
+
+    ``body:`` with nothing under it and ``body: []`` declare no inputs and are
+    reported; a form that renders nothing is the defect this guard exists to
+    catch. Inputs are the indented block that follows the key, or a non-empty
+    inline flow sequence -- ``body: [type: textarea]`` is YAML, however unusual.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not line.strip() or line[:1].isspace() or line.lstrip().startswith("#"):
+            continue
+        match = _BODY_KEY_RE.match(line)
+        if not match:
+            continue
+        rest = match.group(1).strip()
+        if rest and not rest.startswith("#"):
+            if rest.startswith("[") and rest.replace(" ", "") == "[]":
+                return _BODY_EMPTY
+            return ""
+        # No inline value: the inputs are the indented block that follows.
+        for nxt in lines[index + 1:]:
+            if not nxt.strip():
+                continue
+            if nxt[:1].isspace():
+                return ""
+            break
+        return _BODY_EMPTY
+    return _BODY_EMPTY
 
 
 def top_scalar(text: str, key: str) -> str | None:
@@ -82,8 +123,14 @@ def top_scalar(text: str, key: str) -> str | None:
     A ``#`` preceded by whitespace starts a comment in YAML, so ``name: # fill
     this in`` is a null value -- PyYAML returns None for it, and this must too,
     or the guard accepts a form whose chooser entry GitHub will not render.
+
+    Matched the way YAML spells a key: ``name:``, ``name :``, and ``"name":``
+    are the same key to a parser. A literal-prefix match would call the last two
+    a missing field on a form that is valid.
     """
-    pattern = re.compile(rf"^{key}:[ \t]*(.*?)[ \t]*$")
+    pattern = re.compile(
+        rf'^["\']?{re.escape(key)}["\']?[ \t]*:[ \t]*(.*?)[ \t]*$'
+    )
     for line in text.splitlines():
         if not line or line[:1].isspace() or line.lstrip().startswith("#"):
             continue
@@ -173,14 +220,15 @@ def read_chooser(text: str) -> tuple[dict[str, Any], list[str]]:
 
 
 def check_form_structure(text: str) -> list[str]:
-    """A form is a YAML block that starts at the top of the file and declares ``body:``.
+    """A form is a YAML block that starts at the top of the file and declares inputs.
 
     GitHub parses an issue form as YAML followed by markdown, and the YAML block
     must begin at the top of the file. A stray line ahead of it -- a pasted
     heading, a stray fence, a copied preamble -- makes the whole file fail to
-    parse as a form, so the reporter gets nothing at all. A form with no
-    ``body:`` renders an empty page. Both are silent today: this guard reads
-    ``name``/``description`` from anywhere in the file, so either defect passes.
+    parse as a form, so the reporter gets nothing at all. A form whose ``body``
+    declares no inputs renders an empty page. Both are silent without these
+    checks: reading ``name``/``description`` from anywhere in the file accepts
+    either defect.
 
     No ``---`` fence is required: GitHub issue forms are not fenced
     frontmatter, and this repo's three real forms carry none.
@@ -198,11 +246,9 @@ def check_form_structure(text: str) -> list[str]:
             f"the form does not start with a top-level YAML key "
             f"(first content line is {first.strip()!r})"
         )
-    if not any(
-        not line[:1].isspace() and line.strip().startswith("body:")
-        for line in text.splitlines()
-    ):
-        problems.append("missing or empty 'body' (the form would render no inputs)")
+    problem = body_problem(text)
+    if problem:
+        problems.append(problem)
     return problems
 
 
@@ -445,6 +491,23 @@ def selftest() -> int:
         # form -- the guard must not read `name` from inside a broken file.
         ({"config.yml": link, "bug-report.yml": "::: not yaml\n" + bug_only}, {},
          ["does not start with a top-level YAML key"]),
+        # --- YAML spellings: the same key, so none of these is a defect ---
+        # `body :` and `"body":` are `body:` to a parser; a literal-prefix match
+        # would call a valid form missing a field.
+        ({"config.yml": link, "bug-report.yml": _form("B", "d", body="body :\n  - type: textarea\n    id: x\n")}, {},
+         []),
+        ({"config.yml": link, "bug-report.yml": _form("B", "d", body='"body":\n  - type: textarea\n    id: x\n')}, {},
+         []),
+        # `name :` and `"name":` are `name:` to a parser.
+        ({"config.yml": link, "bug-report.yml": "name : B\ndescription: d\nbody:\n  - type: textarea\n    id: x\n"}, {},
+         []),
+        ({"config.yml": link, "bug-report.yml": '"name": B\ndescription: d\nbody:\n  - type: textarea\n    id: x\n'}, {},
+         []),
+        # --- a `body` that declares no inputs IS a defect ---
+        ({"config.yml": link, "bug-report.yml": _form("B", "d", body="body:\n")}, {},
+         ["missing or empty 'body'"]),
+        ({"config.yml": link, "bug-report.yml": _form("B", "d", body="body: []\n")}, {},
+         ["missing or empty 'body'"]),
     ]
 
     failures = 0
