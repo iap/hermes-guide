@@ -25,10 +25,13 @@ parses SKILL.md / bundle files, and inspects state. One subcommand has a side
 effect worth naming: `hermes hooks doctor` — run by the explicit
 `/hermes-doctor` and `hermes guide` paths — executes each approved shell hook
 once with a synthetic payload. Proactive runs never execute hooks: they inspect
-hook configuration in-process (allowlist state, exec bit) instead. The opt-in
-`proactive` mode also runs a best-effort version check at most once per process,
-at the first proactive session boundary
-(`git ls-remote --tags origin`, no writes, fails silently). The only
+hook configuration in-process (allowlist state, exec bit) instead. An explicit
+`hermes guide` or `/hermes-doctor` run makes one further network call: a
+best-effort version check (`git ls-remote --tags origin`, no writes, fails
+silently), at most once per process, printed after the results. `hermes guide
+--fast` skips it, and the opt-in `proactive` mode makes no version check at all
+— it is kept off the session boundary so a slow network cannot delay a session
+start. The only
 plugin-scoped setting it declares is the opt-in `proactive` boolean (see
 `plugin.yaml` `config_schema`); it does not touch any other core Hermes config.
 

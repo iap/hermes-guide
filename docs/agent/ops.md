@@ -87,7 +87,7 @@ Git history walks on the Hermes checkout (`~/.hermes/hermes-agent`, ~1 GB across
 
 ### Inventory
 
-- `python tools/check_gates.py --list` — the hermetic tier (11 gates, no network/Hermes)
+- `python tools/check_gates.py --list` — the hermetic tier (12 gates, no network/Hermes)
 - `tools/check_tool_coverage.py` — enforces that every `tools/*.py` and `tests/*.py` is wired into a workflow `run:` block; fails if a test is dead
 - `tools/test_*.py` — behavioral regression suites, CI only (not in `check_gates.py`)
 

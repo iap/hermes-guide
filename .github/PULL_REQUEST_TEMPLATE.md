@@ -51,7 +51,7 @@ a merged PR claiming pending work misleads the next reader. -->
 
 | Check | Command | Result | Notes |
 |---|---|---|---|
-| Hermetic gates | `python tools/check_gates.py` | [x/y] | [aggregates all 11 hermetic gates — paste the `OK: x/y` line] |
+| Hermetic gates | `python tools/check_gates.py` | [x/y] | [aggregates all 12 hermetic gates — paste the `OK: x/y` line] |
 | Generated doc blocks | `python tools/render_docs.py` | [x/y] | [add/removed a skill? run `--write` first] |
 | Version bump | `python tools/check_skill_version_bump.py <base-ref>` | [x/y] | [paste the line] |
 | Syntax | `python -m py_compile __init__.py checks.py constants.py` | [x/y] | [paste the line] |
