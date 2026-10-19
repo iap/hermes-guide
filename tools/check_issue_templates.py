@@ -73,13 +73,18 @@ _FORMS = "*.y*ml"
 # A form's YAML block opens with a top-level key. Matched the way YAML spells
 # one -- `name:`, `name :`, `"name":` -- because a quoted or space-separated key
 # is the same key to a parser, and this tier has no PyYAML to consult. A stray
-# preamble (`:::`, prose, an indented line) is not one.
-_TOP_KEY_RE = re.compile(r'^["\']?[A-Za-z_][A-Za-z0-9_-]*["\']?[ \t]*:')
+# preamble (`:::`, prose, an indented line) is not one. Quotes must be a MATCHING
+# pair: `name":` is not the `name` key, and an independently-optional quote pair
+# would read it as one.
+_TOP_KEY_RE = re.compile(
+    r"""^(?:"[A-Za-z_][A-Za-z0-9_-]*"|'[A-Za-z_][A-Za-z0-9_-]*'|[A-Za-z_][A-Za-z0-9_-]*)[ \t]*:"""
+)
 
 # The `body` key as YAML spells it: `body:`, `body :`, `"body":`, `'body':`.
 # Matched directly, not parsed: this tier is stdlib-only (no PyYAML in the fast
 # tier), and a literal `body:` prefix would call `body :` and `"body":` missing.
-_BODY_KEY_RE = re.compile(r'^["\']?body["\']?[ \t]*:[ \t]*(.*)$')
+# Quotes must match, as in `_TOP_KEY_RE`.
+_BODY_KEY_RE = re.compile(r"""^(?:"body"|'body'|body)[ \t]*:[ \t]*(.*)$""")
 _BODY_EMPTY = "missing or empty 'body' (the form would render no inputs)"
 
 
@@ -126,10 +131,13 @@ def top_scalar(text: str, key: str) -> str | None:
 
     Matched the way YAML spells a key: ``name:``, ``name :``, and ``"name":``
     are the same key to a parser. A literal-prefix match would call the last two
-    a missing field on a form that is valid.
+    a missing field on a form that is valid, and an independently-optional quote
+    pair would call ``name":`` the ``name`` key -- so the quotes are a matching
+    pair, or absent.
     """
+    key_re = re.escape(key)
     pattern = re.compile(
-        rf'^["\']?{re.escape(key)}["\']?[ \t]*:[ \t]*(.*?)[ \t]*$'
+        rf"""^(?:"{key_re}"|'{key_re}'|{key_re})[ \t]*:[ \t]*(.*?)[ \t]*$"""
     )
     for line in text.splitlines():
         if not line or line[:1].isspace() or line.lstrip().startswith("#"):
@@ -507,6 +515,17 @@ def selftest() -> int:
         ({"config.yml": link, "bug-report.yml": _form("B", "d", body="body:\n")}, {},
          ["missing or empty 'body'"]),
         ({"config.yml": link, "bug-report.yml": _form("B", "d", body="body: []\n")}, {},
+         ["missing or empty 'body'"]),
+        # --- quotes must be a MATCHING pair ---
+        # `name":` is not the `name` key, so the form is missing the field
+        # GitHub needs for its chooser entry. It is also not a valid first-line
+        # key, so the structural check reports both.
+        ({"config.yml": link, "bug-report.yml": 'name": B\ndescription: d\nbody:\n  - type: textarea\n    id: x\n'}, {},
+         ["does not start with a top-level YAML key", "missing or empty 'name'"]),
+        ({"config.yml": link, "bug-report.yml": '"name\': B\ndescription: d\nbody:\n  - type: textarea\n    id: x\n'}, {},
+         ["does not start with a top-level YAML key", "missing or empty 'name'"]),
+        # The same flaw on the `body` key would hide a missing body.
+        ({"config.yml": link, "bug-report.yml": 'name: B\ndescription: d\nbody":\n  - type: textarea\n    id: x\n'}, {},
          ["missing or empty 'body'"]),
     ]
 
