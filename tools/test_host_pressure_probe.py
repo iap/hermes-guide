@@ -359,6 +359,10 @@ def main() -> int:
         print(f"error: missing probe {PROBE}", file=sys.stderr)
         return 1
 
+    if sys.platform == "win32":
+        print("SKIP: the probe fixtures drive a bash script and POSIX tools")
+        return 0
+
     print("idle-CPU parsing:")
     _selftest_parser()
     print("core-scaled load threshold:")
