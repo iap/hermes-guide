@@ -27,6 +27,9 @@ REPO = Path(__file__).resolve().parent.parent
 PROBE = REPO / "skills" / "diagnosing-host-pressure" / "scripts" / "host_pressure_probe.sh"
 
 _RESULTS: list[tuple[str, bool, str]] = []
+# Case groups passed over because this host cannot stage them. Reported in the
+# summary: a bare "OK: 70/70" reads as a full pass while 25 cases never ran.
+_SKIPPED: list[str] = []
 
 
 def _check(name: str, ok: bool, detail: str = "") -> None:
@@ -328,6 +331,19 @@ def _selftest_container_signals() -> None:
             _check(f"growth {a}->{b} -> {want} (both outcomes)", got == want, f"got {got!r}")
 
 
+def _has_proc() -> bool:
+    """Whether this host can stage the probe's Linux branch.
+
+    The container-detection fixtures stub uname to Linux, so the probe reads
+    `$load` from /proc/loadavg. The "container detected" message is gated on a
+    non-empty `$load` (host_pressure_probe.sh:191), so off-proc the detection
+    still fires correctly but the message never prints. That made 12 positive
+    assertions fail on macOS while the negative ones -- which assert the string
+    is ABSENT -- passed vacuously, so the block reported no signal at all.
+    """
+    return Path("/proc/loadavg").exists()
+
+
 def _on_darwin() -> bool:
     """The macOS fixtures stub sysctl/top/vm_stat, which do not exist on Linux.
 
@@ -401,6 +417,7 @@ def main() -> int:
         _check("74.84% idle parsed whole, not 84", "74.84" in f["out"], f["out"][:200])
         shutil.rmtree(f["td"], ignore_errors=True)
     else:
+        _SKIPPED.append("macOS fixture cases")
         print("  skip  macOS fixture cases (not a Darwin host)")
 
     # Linux: sysctl is present (procps ships it) but has no vm.loadavg key. The
@@ -433,6 +450,7 @@ def main() -> int:
                "CUMULATIVE since boot" not in f["out"], f["out"][:300])
         shutil.rmtree(f["td"], ignore_errors=True)
     else:
+        _SKIPPED.append("Linux /proc cases")
         print("  skip  Linux /proc cases (no /proc on this host)")
 
     probe_src = PROBE.read_text()
@@ -533,55 +551,61 @@ def main() -> int:
     _check("container: same numbers do NOT report load pressure", f["rc"] == 0, f"rc={f['rc']}")
     shutil.rmtree(f["td"], ignore_errors=True)
 
-    # systemd-detect-virt describes THIS system, so it is the scoped signal:
-    # container values detect, VMs and bare metal must not, or the load verdict
-    # would be silently disabled on exactly the hosts that run containers.
-    # lxc-libvirt is separate from lxc: libvirt-managed LXC reports that exact
-    # string, and matching only `lxc` missed it.
-    for value in ("docker", "podman", "libpod", "lxc", "lxc-libvirt", "rkt",
-                  "openvz", "crio", "containerd", "systemd-nspawn"):
+    # Container-scope cases that stub uname to Linux need a real /proc;
+    # see _has_proc().
+    if _has_proc():
+        # systemd-detect-virt describes THIS system, so it is the scoped signal:
+        # container values detect, VMs and bare metal must not, or the load verdict
+        # would be silently disabled on exactly the hosts that run containers.
+        # lxc-libvirt is separate from lxc: libvirt-managed LXC reports that exact
+        # string, and matching only `lxc` missed it.
+        for value in ("docker", "podman", "libpod", "lxc", "lxc-libvirt", "rkt",
+                      "openvz", "crio", "containerd", "systemd-nspawn"):
+            f = _fixture(os_name="Linux", cores="2", load="20",
+                         top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                         states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                         virt=value)
+            _check(f"systemd-detect-virt={value} detects container",
+                   "container detected" in f["out"], f"rc={f['rc']}")
+            shutil.rmtree(f["td"], ignore_errors=True)
+
+        for value in ("none", "kvm", "qemu", "wsl", "vmware", "oracle", "microsoft",
+                      "amazon", "google"):
+            f = _fixture(os_name="Linux", cores="2", load="20",
+                         top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                         states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                         virt=value)
+            _check(f"systemd-detect-virt={value} is NOT a container",
+                   "container detected" not in f["out"], f"rc={f['rc']}")
+            shutil.rmtree(f["td"], ignore_errors=True)
+
+        # An inherited $container that names no runtime (Podman sets
+        # container=podman; other software may set container=none) must not fake a
+        # container and suppress the load verdict.
+        for value in ("none", "0", ""):
+            f = _fixture(os_name="Linux", cores="2", load="20",
+                         top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
+                         states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
+                         virt="none", container_env=value)
+            _check(f"container={value!r} does not fake a container",
+                   "container detected" not in f["out"], f"rc={f['rc']}")
+            shutil.rmtree(f["td"], ignore_errors=True)
+
+        # Podman's own value does name a runtime, so it must be honoured.
         f = _fixture(os_name="Linux", cores="2", load="20",
                      top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
                      states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
-                     virt=value)
-        _check(f"systemd-detect-virt={value} detects container",
-               "container detected" in f["out"], f"rc={f['rc']}")
+                     virt="none", container_env="podman")
+        _check("container=podman is honoured", "container detected" in f["out"], f"rc={f['rc']}")
         shutil.rmtree(f["td"], ignore_errors=True)
-
-    for value in ("none", "kvm", "qemu", "wsl", "vmware", "oracle", "microsoft",
-                  "amazon", "google"):
-        f = _fixture(os_name="Linux", cores="2", load="20",
-                     top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
-                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
-                     virt=value)
-        _check(f"systemd-detect-virt={value} is NOT a container",
-               "container detected" not in f["out"], f"rc={f['rc']}")
+        _check("container: says the two scopes differ",
+               "host-wide" in f["out"] and "different scopes" in f["out"], f["out"][:400])
+        _check("container: no per-core HIGH-load callout",
+               "HIGH load" not in f["out"], f["out"][:400])
         shutil.rmtree(f["td"], ignore_errors=True)
-
-    # An inherited $container that names no runtime (Podman sets
-    # container=podman; other software may set container=none) must not fake a
-    # container and suppress the load verdict.
-    for value in ("none", "0", ""):
-        f = _fixture(os_name="Linux", cores="2", load="20",
-                     top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
-                     states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
-                     virt="none", container_env=value)
-        _check(f"container={value!r} does not fake a container",
-               "container detected" not in f["out"], f"rc={f['rc']}")
-        shutil.rmtree(f["td"], ignore_errors=True)
-
-    # Podman's own value does name a runtime, so it must be honoured.
-    f = _fixture(os_name="Linux", cores="2", load="20",
-                 top_line="CPU usage: 5.00% user, 10.00% sys, 85.00% idle",
-                 states=["S"] * 10, swapusage="total = 0.00M  used = 0.00M  free = 0.00M",
-                 virt="none", container_env="podman")
-    _check("container=podman is honoured", "container detected" in f["out"], f"rc={f['rc']}")
-    shutil.rmtree(f["td"], ignore_errors=True)
-    _check("container: says the two scopes differ",
-           "host-wide" in f["out"] and "different scopes" in f["out"], f["out"][:400])
-    _check("container: no per-core HIGH-load callout",
-           "HIGH load" not in f["out"], f["out"][:400])
-    shutil.rmtree(f["td"], ignore_errors=True)
+    else:
+        _SKIPPED.append("container-scope detection cases")
+        print("  skip  container-scope detection cases (no /proc/loadavg on this host)")
 
     # Container: the swap figure is the HOST's /proc/meminfo; heavy occupancy
     # must be reported, not escalated, when the container's own readings are
@@ -650,10 +674,13 @@ def main() -> int:
            "*[!0-9]*) cores" in probe_src)
 
     bad = [n for n, ok, _ in _RESULTS if not ok]
-    print(f"\nOK: {len(_RESULTS) - len(bad)}/{len(_RESULTS)} passed" if not bad
-          else f"\nFAIL: {len(bad)}/{len(_RESULTS)} failed")
+    skipped = f", {len(_SKIPPED)} case group(s) skipped" if _SKIPPED else ""
+    print(f"\nOK: {len(_RESULTS) - len(bad)}/{len(_RESULTS)} passed{skipped}" if not bad
+          else f"\nFAIL: {len(bad)}/{len(_RESULTS)} failed{skipped}")
     for n in bad:
         print(f"  - {n}")
+    for s in _SKIPPED:
+        print(f"  - skipped: {s}")
     return 1 if bad else 0
 
 
