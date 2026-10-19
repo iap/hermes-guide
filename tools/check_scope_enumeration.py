@@ -56,10 +56,11 @@ _COUNT_NOUN = re.compile(r"(?i)\b(checks?|scopes?)\b")
 _WORD = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)?")
 _LOOKBACK = 4
 # A count belongs to the sentence holding its noun: "Twenty-two skills. Checks
-# are read-only." must not read "twenty-two" as a check count. A soft Markdown
-# wrap is not a boundary, so a stale count wrapped as "seven read-only health\n
-# checks" is still caught.
-_CLAUSE_END = re.compile(r"[.!?;]")
+# are read-only." must not read "twenty-two" as a check count. Sentence
+# punctuation and a blank line (a paragraph break) bound the segment; a single
+# Markdown soft wrap does not, so a stale "seven read-only health\nchecks" is
+# still caught.
+_CLAUSE_END = re.compile(r"[.!?;]|\n[ \t]*\n")
 # The router skill wraps its list across lines, so capture the paragraph.
 _SCOPES_BLOCK = re.compile(r"(?is)\bValid scopes:(.*?)(?:\n[ \t]*\n|\Z)")
 _BACKTICK = re.compile(r"`([^`]+)`")
@@ -266,6 +267,11 @@ def selftest() -> int:
             "count: a soft-wrapped phrase is still one phrase",
             count_problems("seven read-only health\nchecks", "nine", "checks", "README.md"),
             True,
+        ),
+        (
+            "count: a paragraph break bounds the segment",
+            count_problems("Twenty-two skills\n\nChecks are read-only.", "nine", "checks", "README.md"),
+            False,
         ),
     ]
     failures = 0
