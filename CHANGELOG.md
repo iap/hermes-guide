@@ -2,6 +2,30 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.3 (2026-10-19)
+
+### Bug Fixes
+
+- **tools**: catch scope-list drift and correct the stale scope claims
+
+### Documentation
+
+- **ops**: record the PRs that can never satisfy the gate status ([#293](https://github.com/iap/hermes-guide/pull/293))
+- **ops**: record merge gating and branch protection ([#291](https://github.com/iap/hermes-guide/pull/291))
+
+### CI
+
+- **workflows**: republish the gate verdict as a commit status ([#292](https://github.com/iap/hermes-guide/pull/292))
+- **workflows**: add one aggregate gate context for branch protection
+
+### Chores
+
+- **assets**: swap hero PNG for WebP (-96%) ([#289](https://github.com/iap/hermes-guide/pull/289))
+
+### Tests
+
+- **probe**: skip container-scope cases where /proc does not exist ([#294](https://github.com/iap/hermes-guide/pull/294))
+
 ## v0.8.2 (2026-10-18)
 
 ### Bug Fixes
