@@ -143,10 +143,18 @@ def reset_clone_dir() -> None:
     """
     if not os.path.isdir(CLONE_DIR):
         return
+    # Restore owner rw on files and owner rwx on directories. `S_IWRITE` alone
+    # is 0o200, which on POSIX strips execute from a directory and makes it
+    # untraversable for the rmtree that follows.
     for root, dirs, files in os.walk(CLONE_DIR):
-        for name in dirs + files:
+        for name in files:
             try:
-                os.chmod(os.path.join(root, name), stat.S_IWRITE)
+                os.chmod(os.path.join(root, name), stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                pass
+        for name in dirs:
+            try:
+                os.chmod(os.path.join(root, name), stat.S_IRWXU)
             except OSError:
                 pass
     shutil.rmtree(CLONE_DIR)
