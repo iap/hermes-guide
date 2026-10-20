@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.12
+version: 1.1.13
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -32,7 +32,7 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 
 ## 2. How to inspect
 
-- `hermes mcp` — interactive picker showing each server's status (available / enabled / installed (disabled)).
+- `hermes mcp` — interactive picker showing each server's status (available / enabled / installed (disabled)); without a TTY it prints the same text dump instead of the picker (`run_picker()` gates on `sys.stdin.isatty()`), so no-TTY contexts still get status output — `hermes mcp catalog` is the explicit non-interactive form.
 - `hermes mcp configure <name>` — re-probe the server and re-pick its tools.
 - `hermes mcp login <name>` — run the OAuth flow and wait for it to complete.
 - In chat: `/reload-mcp` reloads from config; `/context` shows the MCP token share.
@@ -82,4 +82,4 @@ Edit `$HERMES_HOME/config.yaml` and change the server's `command` to an absolute
 
 ---
 
-*Facts re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `mcp__<server>__<tool>` naming and the per-server `mcp-<server>` toolset alias (`tools/mcp_tool_schema.py`, `tools/mcp_tool_registration.py`); the server field set and defaults (`tools/mcp_tool_common.py`, `tools/mcp_tool_discovery.py`, `hermes_cli/mcp_config.py`); `include`-wins filtering with fnmatch and the empty-list semantics (`tools/mcp_tool_registration.py`); recycling fields (`tools/mcp_tool.py`); `redirect_uri` (`tools/mcp_oauth.py`); the `install`/`configure`/`login` subcommands. Four previously asserted specifics could **not** be confirmed at current main and are now marked version-dependent instead of quoted as fact: the 30s reload window, `oauth.redirect_host`, the `elicitation` default, and the exact `connect_timeout` value. Re-checked 2026-10-12 against upstream main (`53bc70c5`): `_DEFAULT_CONNECT_TIMEOUT = 60` lives in `tools/mcp_tool.py:238` (consumed via discovery; line re-checked 2026-10-19 at upstream `86fa9e6`, moved from `:233`). Re-checked 2026-10-14 against the live install: absolute store-`npx` path resolves MCP spawn when PM node is unverifiable (stdio `env:` keys report `Auth: none`; `npx` still needs `node` on the spawned PATH). Verified 2026-10-15 against the installed source at `9bda154d` (v0.21.7): per-server `sampling:` block with `expose_client_tools` default false (`tools/mcp_tool_sampling.py`). Re-verify before reuse.*
+*Facts re-verified 2026-09-14 (corrective pass) against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `mcp__<server>__<tool>` naming and the per-server `mcp-<server>` toolset alias (`tools/mcp_tool_schema.py`, `tools/mcp_tool_registration.py`); the server field set and defaults (`tools/mcp_tool_common.py`, `tools/mcp_tool_discovery.py`, `hermes_cli/mcp_config.py`); `include`-wins filtering with fnmatch and the empty-list semantics (`tools/mcp_tool_registration.py`); recycling fields (`tools/mcp_tool.py`); `redirect_uri` (`tools/mcp_oauth.py`); the `install`/`configure`/`login` subcommands. Four previously asserted specifics could **not** be confirmed at current main and are now marked version-dependent instead of quoted as fact: the 30s reload window, `oauth.redirect_host`, the `elicitation` default, and the exact `connect_timeout` value. Re-checked 2026-10-12 against upstream main (`53bc70c5`): `_DEFAULT_CONNECT_TIMEOUT = 60` lives in `tools/mcp_tool.py:238` (consumed via discovery; line re-checked 2026-10-19 at upstream `86fa9e6`, moved from `:233`). Re-checked 2026-10-14 against the live install: absolute store-`npx` path resolves MCP spawn when PM node is unverifiable (stdio `env:` keys report `Auth: none`; `npx` still needs `node` on the spawned PATH). Verified 2026-10-15 against the installed source at `9bda154d` (v0.21.7): per-server `sampling:` block with `expose_client_tools` default false (`tools/mcp_tool_sampling.py`). Re-verified 2026-10-20 against the installed source at `dd519c74` (v0.22.2+1915): the `hermes mcp` picker gates on `sys.stdin.isatty()` and degrades to the catalog text dump instead of failing (`hermes_cli/mcp_picker.py::run_picker`), with `hermes mcp list`/`hermes mcp catalog` as explicit text forms (`hermes_cli/mcp_config.py::cmd_mcp_list`, `hermes_cli/mcp_picker.py::show_catalog`). Re-verify before reuse.*
