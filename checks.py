@@ -1256,6 +1256,12 @@ def _user_dir_notes(manifests, plugins_root, enabled, disabled):
         path = getattr(manifest, "path", "") or ""
         if os.path.dirname(os.path.abspath(path)) != os.path.abspath(plugins_root):
             continue
+        kind = getattr(manifest, "kind", "") or ""
+        if kind in {"exclusive", "model-provider"}:
+            # Selected by a category key (memory.provider, provider config),
+            # never by plugins.enabled; "opt-in" would tell the reader to
+            # enable something that cannot load that way.
+            continue
         name = getattr(manifest, "name", None)
         key = getattr(manifest, "key", None)
         if not name or name in seen:

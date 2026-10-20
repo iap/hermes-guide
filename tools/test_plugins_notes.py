@@ -151,6 +151,21 @@ def main(argv: list[str]) -> int:
         if "manifest-only-name" in joined:
             failures.append(f"enabled-by-key plugin noted as opt-in: {result!r}")
 
+        # (6c) an exclusive provider is never "opt-in".
+        exclusive = SimpleNamespace(
+            name="mem-quiet",
+            key="memory/mem-quiet",
+            kind="exclusive",
+            source="user",
+            path=str(plugins / "mem-quiet"),
+        )
+        _write(config, "plugins:\n  enabled: []\n  disabled: []\n")
+        checks._store().clear()
+        result = checks.check_plugins(manifests=[exclusive])
+        joined = " | ".join(str(d) for d in (result.get("detail") or []))
+        if "mem-quiet" in joined:
+            failures.append(f"exclusive provider noted as opt-in: {result!r}")
+
         # (6b) a bare sub-category name is not a plugin id on either path.
         _write(config, "plugins:\n  enabled: [memory]\n  disabled: []\n")
         checks._store().clear()
