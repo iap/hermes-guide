@@ -41,7 +41,7 @@ HEADER = "# Changelog\n\nAll notable changes to demo are documented here.\n\n"
 def _git(root: Path, *args: str) -> None:
     subprocess.run(
         ["git", *args], cwd=root, check=True,
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
         env={**os.environ,
              "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
              "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"},
@@ -123,12 +123,15 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _fixture(root)
-            _git(root, "config", "i18n.logOutputEncoding", "ISO-8859-1")
             msg = root / "msg.txt"
             msg.write_text("fix(api): café (#8)", encoding="utf-8")
             (root / "f.txt").write_text("x", encoding="utf-8")
             _git(root, "add", "f.txt")
             _git(root, "commit", "-F", "msg.txt")
+            # Set after the commit: the config only affects `git log` output,
+            # and applying it earlier makes git's own commit summary bytes
+            # non-UTF-8 in the helper's captured stdout.
+            _git(root, "config", "i18n.logOutputEncoding", "ISO-8859-1")
             code, out = _run(root, "--upcoming")
             if code != 0:
                 return f"--upcoming expected 0, got {code}: {out}"
