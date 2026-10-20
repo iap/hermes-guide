@@ -358,7 +358,12 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    changelog coverage, master CI, open `P1` issues, and commits since the last
    tag. It must run here — after the new version and section exist — not
    before the bump, where it would only re-verify the previous release.
-   Advisory only — the tag stays a human decision. Then push the tag
+   Advisory only — the tag stays a human decision. Before tagging, audit the one
+   drift direction the guard cannot see: compare
+   `git ls-tree -d --name-only <upstream-head>:plugins/` against
+   `PLUGIN_SUBCATEGORY_DIRS`. The guard proves every pinned name is real; only a
+   human notices a *new* upstream sub-category the pin omits (ops.md,
+   "Values that drift go in `constants.py`"). Then push the tag
    `v<plugin.yaml version>` to master; `release.yml` verifies the tag matches
    `plugin.yaml`, that the tagged commit is on master, and that every tag has
    a section.
