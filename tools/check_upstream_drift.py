@@ -27,11 +27,15 @@ check_skill_version_bump on every push, so those surface as red CI runs, not
 as weekly drift issues.
 """
 
+import atexit
 import json
 import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -50,7 +54,7 @@ WATCH_FILES = os.environ.get(
 BASELINE_FILE = Path(".github/upstream-drift.baseline")
 WORKFLOWS_DIR = Path(".github/workflows")
 ISSUE_TITLE_UPSTREAM = "Upstream schema drift detected — review checks.py"
-CLONE_DIR = "/tmp/hermes-agent-upstream"
+CLONE_PREFIX = "hermes-agent-upstream-"
 
 # GitHub refuses issue bodies over 65,536 characters ("Body is too long").
 # The schema-drift log and the per-commit history list both grow with every
@@ -128,24 +132,73 @@ def read_baseline() -> str:
     return BASELINE_FILE.read_text(encoding="utf-8-sig").strip()
 
 
+def _is_link_like(path: str) -> bool:
+    """True for symlinks and, on Windows, for junctions.
+
+    `os.path.islink` is False for a junction and `os.walk` descends into one
+    even with ``followlinks=False``, so the reparse tag is the portable test.
+    `os.path.isjunction` would do it but is 3.12+.
+    """
+    if os.path.islink(path):
+        return True
+    try:
+        attrs = os.lstat(path).st_file_attributes
+    except (AttributeError, OSError):
+        return False  # POSIX has no st_file_attributes
+    return bool(attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def cleanup_clone_dir(dir_path: str) -> None:
+    """Remove the clone this run created; best effort, safe to call twice.
+
+    No `rm -rf`: that is POSIX-only, and on native Windows
+    `subprocess.run(["rm", ...])` raises `FileNotFoundError` before git is even
+    reached. Git also marks pack and commit-graph files read-only, which
+    `shutil.rmtree` cannot unlink on Windows, so clear the bit on regular files
+    first. Links are never followed - not at the clone path, not among the
+    entries - so a chmod cannot land outside the tree.
+    """
+    if _is_link_like(dir_path) or not os.path.isdir(dir_path):
+        return
+    for root, dirs, files in os.walk(dir_path):
+        dirs[:] = [d for d in dirs if not _is_link_like(os.path.join(root, d))]
+        for name in files:
+            path = os.path.join(root, name)
+            if _is_link_like(path):
+                continue
+            try:
+                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                pass
+    shutil.rmtree(dir_path, ignore_errors=True)
+
+
 def clone_upstream() -> str:
-    """Blobless partial clone of upstream `main` (fetches history, not file contents)."""
-    subprocess.run(["rm", "-rf", CLONE_DIR], check=False)
+    """Blobless partial clone of upstream `main` into a per-run temp dir.
+
+    A unique directory per run means the check never deletes a pre-existing tree
+    and no other local user can predict (and prepend a symlink to) the path.
+    """
+    dir_path = tempfile.mkdtemp(prefix=CLONE_PREFIX)
+    atexit.register(cleanup_clone_dir, dir_path)
     subprocess.run(
         [
             "git", "clone", "--filter=blob:none", "--no-checkout",
             "--single-branch", "--branch", "main",
-            f"https://github.com/{UPSTREAM_REPO}.git", CLONE_DIR,
+            f"https://github.com/{UPSTREAM_REPO}.git", dir_path,
         ],
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    return CLONE_DIR
+    return dir_path
 
 
 def git(repo_dir: str, *args: str) -> tuple[str, str, int]:
-    proc = subprocess.run(["git", "-C", repo_dir, *args], capture_output=True, text=True)
+    proc = subprocess.run(
+        ["git", "-C", repo_dir, *args], capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
     return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
 
 
@@ -174,7 +227,8 @@ def git_log(repo_dir: str, ref_range: str, watched: list[str] | None = None) -> 
     ]
     if watched:
         cmd.extend(["--", *watched])
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise RuntimeError(
             f"git log failed (rc={proc.returncode}): "
@@ -408,7 +462,8 @@ def _run_ls_remote(runner=None, attempts: int = 3,
             if delay:
                 time.sleep(delay)
         try:
-            proc = run(cmd, capture_output=True, text=True, timeout=60)
+            proc = run(cmd, capture_output=True, text=True, timeout=60,
+                   encoding="utf-8", errors="replace")
         except (subprocess.TimeoutExpired, OSError):
             continue
         if proc.returncode == 0:
@@ -531,6 +586,7 @@ def _list_open_issues(repo: str, title: str) -> list[dict]:
             "--search", f'"{title}" in:title', "--json", "number,title",
         ],
         capture_output=True, text=True, timeout=30,
+        encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError(
@@ -564,6 +620,7 @@ def _file_issue(repo: str, title: str, body: str, label: str) -> int:
             "--body", body, "--label", label,
         ],
         capture_output=True, text=True, timeout=60,
+        encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError(
