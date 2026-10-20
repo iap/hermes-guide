@@ -27,6 +27,7 @@ check_skill_version_bump on every push, so those surface as red CI runs, not
 as weekly drift issues.
 """
 
+import atexit
 import json
 import os
 import re
@@ -53,7 +54,7 @@ WATCH_FILES = os.environ.get(
 BASELINE_FILE = Path(".github/upstream-drift.baseline")
 WORKFLOWS_DIR = Path(".github/workflows")
 ISSUE_TITLE_UPSTREAM = "Upstream schema drift detected — review checks.py"
-CLONE_DIR = os.path.join(tempfile.gettempdir(), "hermes-agent-upstream")
+CLONE_PREFIX = "hermes-agent-upstream-"
 
 # GitHub refuses issue bodies over 65,536 characters ("Body is too long").
 # The schema-drift log and the per-commit history list both grow with every
@@ -131,49 +132,49 @@ def read_baseline() -> str:
     return BASELINE_FILE.read_text(encoding="utf-8-sig").strip()
 
 
-def reset_clone_dir() -> None:
-    """Drop a previous clone.
+def cleanup_clone_dir(dir_path: str) -> None:
+    """Remove the clone this run created; best effort, safe to call twice.
 
     No `rm -rf`: that is POSIX-only, and on native Windows
     `subprocess.run(["rm", ...])` raises `FileNotFoundError` before git is even
     reached. Git also marks pack and commit-graph files read-only, which
-    `shutil.rmtree` cannot unlink on Windows, so clear the bit first. Failure is
-    raised, not swallowed: a half-removed tree makes the clone fail with an
-    opaque exit 128.
+    `shutil.rmtree` cannot unlink on Windows, so clear the bit on regular files
+    first. A symlink is never followed: neither at the clone path nor among its
+    entries, so a chmod cannot land on a file outside the tree.
     """
-    if not os.path.isdir(CLONE_DIR):
+    if os.path.islink(dir_path) or not os.path.isdir(dir_path):
         return
-    # Restore owner rw on files and owner rwx on directories. `S_IWRITE` alone
-    # is 0o200, which on POSIX strips execute from a directory and makes it
-    # untraversable for the rmtree that follows.
-    for root, dirs, files in os.walk(CLONE_DIR):
+    for root, _dirs, files in os.walk(dir_path):
         for name in files:
+            path = os.path.join(root, name)
+            if os.path.islink(path):
+                continue
             try:
-                os.chmod(os.path.join(root, name), stat.S_IRUSR | stat.S_IWUSR)
+                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
             except OSError:
                 pass
-        for name in dirs:
-            try:
-                os.chmod(os.path.join(root, name), stat.S_IRWXU)
-            except OSError:
-                pass
-    shutil.rmtree(CLONE_DIR)
+    shutil.rmtree(dir_path, ignore_errors=True)
 
 
 def clone_upstream() -> str:
-    """Blobless partial clone of upstream `main` (fetches history, not file contents)."""
-    reset_clone_dir()
+    """Blobless partial clone of upstream `main` into a per-run temp dir.
+
+    A unique directory per run means the check never deletes a pre-existing tree
+    and no other local user can predict (and prepend a symlink to) the path.
+    """
+    dir_path = tempfile.mkdtemp(prefix=CLONE_PREFIX)
+    atexit.register(cleanup_clone_dir, dir_path)
     subprocess.run(
         [
             "git", "clone", "--filter=blob:none", "--no-checkout",
             "--single-branch", "--branch", "main",
-            f"https://github.com/{UPSTREAM_REPO}.git", CLONE_DIR,
+            f"https://github.com/{UPSTREAM_REPO}.git", dir_path,
         ],
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    return CLONE_DIR
+    return dir_path
 
 
 def git(repo_dir: str, *args: str) -> tuple[str, str, int]:

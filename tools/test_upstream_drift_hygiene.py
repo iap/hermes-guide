@@ -707,29 +707,43 @@ def case_subcategory_error_blocks_filing(mod):
     print("OK: sub-category lookup failure fails the run without filing")
 
 
-def case_clone_dir_reset_is_portable(mod):
-    """A previous clone is removed without shelling out to `rm`.
+def case_clone_cleanup_is_portable(mod):
+    """The per-run clone is removed without shelling out to `rm`.
 
     `subprocess.run(["rm", "-rf", ...])` raised `FileNotFoundError` on native
-    Windows, so the drift check died before its first `git` call. The reset must
-    stay in-process; `subprocess.run` is patched to fail if it is reached.
+    Windows, so the drift check died before its first `git` call. The cleanup
+    also must not follow a symlink: chmod follows links, so a link at the clone
+    path would have changed modes outside the tree.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp) / "hermes-agent-upstream"
+        root = Path(tmp) / "hermes-agent-upstream-abc123"
         (root / ".git" / "objects" / "info").mkdir(parents=True)
         pack = root / ".git" / "objects" / "info" / "commit-graph-chain"
         pack.write_text("x", encoding="utf-8")
         # Git marks these read-only; plain rmtree leaves the tree on Windows and
-        # the next clone then dies with exit 128 ("already exists").
+        # a later run then walks the wrong directory.
         os.chmod(pack, stat.S_IREAD)
 
-        with mock.patch.object(mod, "CLONE_DIR", str(root)), \
-             mock.patch.object(mod.subprocess, "run",
-                               side_effect=AssertionError("reset must not shell out")):
-            mod.reset_clone_dir()
+        with mock.patch.object(mod.subprocess, "run",
+                               side_effect=AssertionError("cleanup must not shell out")):
+            mod.cleanup_clone_dir(str(root))
 
         assert not root.exists(), "a stale clone must be gone after the reset"
-    print("OK: stale clone removed in-process, no `rm -rf`")
+
+        outside = Path(tmp) / "outside"
+        outside.mkdir()
+        victim = outside / "keep.txt"
+        victim.write_text("x", encoding="utf-8")
+        link = Path(tmp) / "link-to-clone"
+        try:
+            os.symlink(outside, link, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            pass  # Windows needs developer mode; nothing to assert there
+        else:
+            mod.cleanup_clone_dir(str(link))
+            assert victim.exists() and link.is_symlink(), (
+                "a symlink at the clone path must be left alone, never traversed")
+    print("OK: clone cleanup is in-process, clears read-only files, refuses symlinks")
 
 
 def main() -> int:
@@ -764,7 +778,7 @@ def main() -> int:
         case_subcategory_dirs_missing_is_finding,
         case_subcategory_dirs_lookup_error_is_not_drift,
         case_subcategory_error_blocks_filing,
-        case_clone_dir_reset_is_portable,
+        case_clone_cleanup_is_portable,
     )
     for case in cases:
         try:
