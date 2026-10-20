@@ -18,6 +18,11 @@ CONFIG_MEMORY_SECTION = "memory"
 # keys, so a dotted name never matched the nested `mcp.servers` it was meant for.)
 FOREIGN_MCP_KEYS = ("mcpServers",)
 
+# Skill frontmatter OS gate (agent/skill_utils.py::skill_matches_platform).
+# Also a plugin sub-category dir name, which the F3 guard forbids as a literal
+# in checks.py — reference it from here.
+SKILL_PLATFORMS_KEY = "platforms"
+
 # MCP server shape requirements (per entry): stdio needs `command`, http needs `url`
 MCP_STDIO_KEY = "command"
 MCP_HTTP_KEY = "url"
