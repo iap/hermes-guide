@@ -774,15 +774,40 @@ def case_clone_uses_a_fresh_temp_dir(mod):
     print("OK: every run clones into a unique temp directory")
 
 
+def case_clone_registers_its_cleanup(mod):
+    """The per-run directory is registered for cleanup, with its own path.
+
+    Without the registration a run leaves its clone in the temp dir; deleting
+    the `atexit.register` line used to pass every other case.
+    """
+    registered = []
+
+    def fake_register(fn, path):
+        registered.append((fn, path))
+
+    with mock.patch.object(mod.subprocess, "run", mock.Mock(return_value=mock.Mock(returncode=0))), \
+         mock.patch.object(mod.atexit, "register", fake_register):
+        clone = mod.clone_upstream()
+    try:
+        assert registered == [(mod.cleanup_clone_dir, clone)], (
+            f"cleanup not registered for {clone}: {registered}")
+    finally:
+        shutil.rmtree(clone, ignore_errors=True)
+    print("OK: cleanup is registered against the per-run clone directory")
+
+
 def case_git_output_is_decoded_as_utf8(mod):
     """`git()` must decode UTF-8, not the locale codec (cp1252 on Windows)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "f.txt").write_text("x", encoding="utf-8")
         (root / "msg.txt").write_text("fix(api): café (#9)", encoding="utf-8")
+        (root / ".gitconfig-global").touch()  # cut the developer's global config
         env = {**os.environ,
                "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
-               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid",
+               "GIT_CONFIG_NOSYSTEM": "1",
+               "GIT_CONFIG_GLOBAL": str(root / ".gitconfig-global")}
         for args in (("init", "-q"), ("add", "f.txt"), ("commit", "-q", "-F", "msg.txt")):
             subprocess.run(["git", *args], cwd=root, check=True, capture_output=True,
                            text=True, encoding="utf-8", env=env)
@@ -827,6 +852,7 @@ def main() -> int:
         case_subcategory_error_blocks_filing,
         case_clone_cleanup_is_portable,
         case_clone_uses_a_fresh_temp_dir,
+        case_clone_registers_its_cleanup,
         case_git_output_is_decoded_as_utf8,
     )
     for case in cases:
