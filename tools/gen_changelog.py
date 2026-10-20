@@ -54,6 +54,21 @@ def _sanitize(text: str) -> str:
     return _SELF_CLAIM_RE.sub(_SELF_CLAIM_REPLACEMENT, text)
 
 
+def _strip_bom(text: str) -> str:
+    """Drop a leading UTF-8 BOM from a commit subject.
+
+    A subject written by an editor or a here-doc can start with U+FEFF. ``strip()``
+    does not remove it (it is a format character, not whitespace), so
+    ``CONVENTIONAL_RE`` anchored at ``^`` fails to match and the commit is
+    classified as a chore — a ``fix`` silently filed under Chores, with the BOM
+    pasted into CHANGELOG.md. Seen on real commits; stripped, not documented.
+
+    ``git()`` decodes as UTF-8 for this to be visible at all: without it the
+    three BOM bytes decode as cp1252 mojibake on Windows and never match U+FEFF.
+    """
+    return text.lstrip("\ufeff")
+
+
 CONVENTIONAL_RE = re.compile(
     r"^(?P<type>feat|fix|docs|perf|ci|chore|refactor|style|test)"
     r"(?:\((?P<scope>[^)]*)\))?: (?P<subject>.+?)"
@@ -77,7 +92,8 @@ TYPE_LABELS = {
 
 def git(args: list[str]) -> str:
     proc = subprocess.run(
-        ["git", *args], capture_output=True, text=True, cwd=REPO
+        ["git", *args], capture_output=True, text=True, encoding="utf-8",
+        errors="replace", cwd=REPO
     )
     if proc.returncode != 0:
         raise RuntimeError(
@@ -113,8 +129,8 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
         lines = block.strip().splitlines()
         if len(lines) < 2:
             continue
-        sha = lines[0].strip()
-        subject = lines[1].strip()
+        sha = lines[0].strip().lstrip("\ufeff")
+        subject = _strip_bom(lines[1].strip())
         m = CONVENTIONAL_RE.match(subject)
         if m:
             commits.append({

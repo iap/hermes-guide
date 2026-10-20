@@ -81,6 +81,38 @@ def _fixture(root: Path, version: str = "1.0.0") -> None:
 
 
 def _cases() -> list[tuple[str, Callable[[], str | None]]]:
+    def bom_prefixed_subject_keeps_its_type() -> str | None:
+        """A BOM before `fix:` must not demote the commit to a chore.
+
+        ``str.strip()`` leaves U+FEFF alone, so the anchored type regex misses
+        and a real fix is filed under Chores — with the BOM pasted into
+        CHANGELOG.md. Hit on real release commits (#300, #305) and pinned here.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            msg = root / "msg.txt"
+            msg.write_text("\ufefffix(api): bom subject (#7)", encoding="utf-8")
+            (root / "f.txt").write_text("x", encoding="utf-8")
+            _git(root, "add", "f.txt")
+            _git(root, "commit", "-F", "msg.txt")
+            code, out = _run(root, "--upcoming")
+            if code != 0:
+                return f"--upcoming expected 0, got {code}: {out}"
+            text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+            if "\ufeff" in text:
+                return f"a BOM leaked into the changelog:\n{text!r}"
+            idx = text.find("- **api**: bom subject")
+            if idx == -1:
+                return f"section missing the subject:\n{text}"
+            # The heading that governs our line is the last one before it; the
+            # fixture's own `chore: initial commit` legitimately opens a Chores
+            # section, so assert placement rather than the absence of one.
+            heading = text[:idx].rsplit("### ", 1)[-1].splitlines()[0].strip()
+            if heading != "Bug Fixes":
+                return f"the fix landed under {heading!r}, not Bug Fixes:\n{text}"
+        return None
+
     def check_clean_after_upcoming() -> str | None:
         """--upcoming writes a section; --check then passes on it."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -386,6 +418,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
 
     return [
         ("--upcoming then --check is clean", check_clean_after_upcoming),
+        ("a BOM-prefixed subject keeps its type", bom_prefixed_subject_keeps_its_type),
         ("--check fails on a tag with no section", check_fails_on_missing_section),
         ("--check fails on an untagged plugin.yaml version", check_fails_on_untagged_version),
         ("--upcoming is idempotent and newest-first", upcoming_is_idempotent),
