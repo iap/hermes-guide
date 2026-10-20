@@ -734,6 +734,8 @@ def case_clone_cleanup_is_portable(mod):
         outside.mkdir()
         victim = outside / "keep.txt"
         victim.write_text("x", encoding="utf-8")
+        os.chmod(victim, stat.S_IREAD)
+        before = os.stat(victim).st_mode
         link = Path(tmp) / "link-to-clone"
         try:
             os.symlink(outside, link, target_is_directory=True)
@@ -741,9 +743,54 @@ def case_clone_cleanup_is_portable(mod):
             pass  # Windows needs developer mode; nothing to assert there
         else:
             mod.cleanup_clone_dir(str(link))
-            assert victim.exists() and link.is_symlink(), (
-                "a symlink at the clone path must be left alone, never traversed")
-    print("OK: clone cleanup is in-process, clears read-only files, refuses symlinks")
+            assert link.is_symlink(), "a link at the clone path must be left alone"
+            assert os.stat(victim).st_mode == before, (
+                "the link target's mode must be untouched: chmod follows links")
+    print("OK: clone cleanup is in-process, clears read-only files, refuses links")
+
+
+def case_clone_uses_a_fresh_temp_dir(mod):
+    """Each run clones into its own `mkdtemp`, never a shared fixed path."""
+    seen = []
+
+    def fake_run(cmd, **kwargs):
+        seen.append(cmd[-1])
+        return mock.Mock(returncode=0)
+
+    with mock.patch.object(mod.subprocess, "run", fake_run):
+        first = mod.clone_upstream()
+        second = mod.clone_upstream()
+    try:
+        assert first != second, "two runs must not share a clone directory"
+        assert os.path.basename(first).startswith(mod.CLONE_PREFIX), (
+            f"the clone should be recognisable in the temp dir: {first}")
+        assert os.path.realpath(os.path.dirname(first)) == \
+            os.path.realpath(tempfile.gettempdir()), f"not in the temp dir: {first}"
+        assert seen == [first, second], (
+            f"git must be pointed at the fresh directory, saw {seen}")
+    finally:
+        shutil.rmtree(first, ignore_errors=True)
+        shutil.rmtree(second, ignore_errors=True)
+    print("OK: every run clones into a unique temp directory")
+
+
+def case_git_output_is_decoded_as_utf8(mod):
+    """`git()` must decode UTF-8, not the locale codec (cp1252 on Windows)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "f.txt").write_text("x", encoding="utf-8")
+        (root / "msg.txt").write_text("fix(api): café (#9)", encoding="utf-8")
+        env = {**os.environ,
+               "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+        for args in (("init", "-q"), ("add", "f.txt"), ("commit", "-q", "-F", "msg.txt")):
+            subprocess.run(["git", *args], cwd=root, check=True, capture_output=True,
+                           text=True, encoding="utf-8", env=env)
+        subject, _, code = mod.git(str(root), "log", "-1", "--format=%s")
+        assert code == 0, f"git log failed with {code}"
+        assert subject == "fix(api): café (#9)", (
+            f"subject decoded as the locale codec: {subject!r}")
+    print("OK: git() decodes UTF-8 subjects intact")
 
 
 def main() -> int:
@@ -779,6 +826,8 @@ def main() -> int:
         case_subcategory_dirs_lookup_error_is_not_drift,
         case_subcategory_error_blocks_filing,
         case_clone_cleanup_is_portable,
+        case_clone_uses_a_fresh_temp_dir,
+        case_git_output_is_decoded_as_utf8,
     )
     for case in cases:
         try:

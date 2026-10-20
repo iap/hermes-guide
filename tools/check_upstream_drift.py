@@ -132,6 +132,22 @@ def read_baseline() -> str:
     return BASELINE_FILE.read_text(encoding="utf-8-sig").strip()
 
 
+def _is_link_like(path: str) -> bool:
+    """True for symlinks and, on Windows, for junctions.
+
+    `os.path.islink` is False for a junction and `os.walk` descends into one
+    even with ``followlinks=False``, so the reparse tag is the portable test.
+    `os.path.isjunction` would do it but is 3.12+.
+    """
+    if os.path.islink(path):
+        return True
+    try:
+        attrs = os.lstat(path).st_file_attributes
+    except (AttributeError, OSError):
+        return False  # POSIX has no st_file_attributes
+    return bool(attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
 def cleanup_clone_dir(dir_path: str) -> None:
     """Remove the clone this run created; best effort, safe to call twice.
 
@@ -139,15 +155,16 @@ def cleanup_clone_dir(dir_path: str) -> None:
     `subprocess.run(["rm", ...])` raises `FileNotFoundError` before git is even
     reached. Git also marks pack and commit-graph files read-only, which
     `shutil.rmtree` cannot unlink on Windows, so clear the bit on regular files
-    first. A symlink is never followed: neither at the clone path nor among its
-    entries, so a chmod cannot land on a file outside the tree.
+    first. Links are never followed - not at the clone path, not among the
+    entries - so a chmod cannot land outside the tree.
     """
-    if os.path.islink(dir_path) or not os.path.isdir(dir_path):
+    if _is_link_like(dir_path) or not os.path.isdir(dir_path):
         return
-    for root, _dirs, files in os.walk(dir_path):
+    for root, dirs, files in os.walk(dir_path):
+        dirs[:] = [d for d in dirs if not _is_link_like(os.path.join(root, d))]
         for name in files:
             path = os.path.join(root, name)
-            if os.path.islink(path):
+            if _is_link_like(path):
                 continue
             try:
                 os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
