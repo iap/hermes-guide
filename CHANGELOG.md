@@ -2,6 +2,22 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.4 (2026-10-20)
+
+### Bug Fixes
+
+- **plugins**: judge plugins.enabled against the loader's manifests ([#305](https://github.com/iap/hermes-guide/pull/305))
+- **tools**: assert issue forms are well-formed ([#301](https://github.com/iap/hermes-guide/pull/301))
+- **plugins**: correct PLUGIN_SUBCATEGORY_DIRS and guard it against upstream ([#297](https://github.com/iap/hermes-guide/pull/297))
+
+### Chores
+
+- **drift**: re-baseline to upstream 86fa9e6 ([#302](https://github.com/iap/hermes-guide/pull/302))
+
+### Tests
+
+- **checks**: skip POSIX-only scripts on Windows ([#300](https://github.com/iap/hermes-guide/pull/300))
+
 ## v0.8.3 (2026-10-19)
 
 ### Bug Fixes
