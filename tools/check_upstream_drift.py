@@ -30,8 +30,11 @@ as weekly drift issues.
 import json
 import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -50,7 +53,7 @@ WATCH_FILES = os.environ.get(
 BASELINE_FILE = Path(".github/upstream-drift.baseline")
 WORKFLOWS_DIR = Path(".github/workflows")
 ISSUE_TITLE_UPSTREAM = "Upstream schema drift detected — review checks.py"
-CLONE_DIR = "/tmp/hermes-agent-upstream"
+CLONE_DIR = os.path.join(tempfile.gettempdir(), "hermes-agent-upstream")
 
 # GitHub refuses issue bodies over 65,536 characters ("Body is too long").
 # The schema-drift log and the per-commit history list both grow with every
@@ -128,9 +131,30 @@ def read_baseline() -> str:
     return BASELINE_FILE.read_text(encoding="utf-8-sig").strip()
 
 
+def reset_clone_dir() -> None:
+    """Drop a previous clone.
+
+    No `rm -rf`: that is POSIX-only, and on native Windows
+    `subprocess.run(["rm", ...])` raises `FileNotFoundError` before git is even
+    reached. Git also marks pack and commit-graph files read-only, which
+    `shutil.rmtree` cannot unlink on Windows, so clear the bit first. Failure is
+    raised, not swallowed: a half-removed tree makes the clone fail with an
+    opaque exit 128.
+    """
+    if not os.path.isdir(CLONE_DIR):
+        return
+    for root, dirs, files in os.walk(CLONE_DIR):
+        for name in dirs + files:
+            try:
+                os.chmod(os.path.join(root, name), stat.S_IWRITE)
+            except OSError:
+                pass
+    shutil.rmtree(CLONE_DIR)
+
+
 def clone_upstream() -> str:
     """Blobless partial clone of upstream `main` (fetches history, not file contents)."""
-    subprocess.run(["rm", "-rf", CLONE_DIR], check=False)
+    reset_clone_dir()
     subprocess.run(
         [
             "git", "clone", "--filter=blob:none", "--no-checkout",
@@ -145,7 +169,10 @@ def clone_upstream() -> str:
 
 
 def git(repo_dir: str, *args: str) -> tuple[str, str, int]:
-    proc = subprocess.run(["git", "-C", repo_dir, *args], capture_output=True, text=True)
+    proc = subprocess.run(
+        ["git", "-C", repo_dir, *args], capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
     return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
 
 
@@ -174,7 +201,8 @@ def git_log(repo_dir: str, ref_range: str, watched: list[str] | None = None) -> 
     ]
     if watched:
         cmd.extend(["--", *watched])
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise RuntimeError(
             f"git log failed (rc={proc.returncode}): "
@@ -408,7 +436,8 @@ def _run_ls_remote(runner=None, attempts: int = 3,
             if delay:
                 time.sleep(delay)
         try:
-            proc = run(cmd, capture_output=True, text=True, timeout=60)
+            proc = run(cmd, capture_output=True, text=True, timeout=60,
+                   encoding="utf-8", errors="replace")
         except (subprocess.TimeoutExpired, OSError):
             continue
         if proc.returncode == 0:
@@ -531,6 +560,7 @@ def _list_open_issues(repo: str, title: str) -> list[dict]:
             "--search", f'"{title}" in:title', "--json", "number,title",
         ],
         capture_output=True, text=True, timeout=30,
+        encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError(
@@ -564,6 +594,7 @@ def _file_issue(repo: str, title: str, body: str, label: str) -> int:
             "--body", body, "--label", label,
         ],
         capture_output=True, text=True, timeout=60,
+        encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError(

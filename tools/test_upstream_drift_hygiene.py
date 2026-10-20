@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -706,6 +707,31 @@ def case_subcategory_error_blocks_filing(mod):
     print("OK: sub-category lookup failure fails the run without filing")
 
 
+def case_clone_dir_reset_is_portable(mod):
+    """A previous clone is removed without shelling out to `rm`.
+
+    `subprocess.run(["rm", "-rf", ...])` raised `FileNotFoundError` on native
+    Windows, so the drift check died before its first `git` call. The reset must
+    stay in-process; `subprocess.run` is patched to fail if it is reached.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "hermes-agent-upstream"
+        (root / ".git" / "objects" / "info").mkdir(parents=True)
+        pack = root / ".git" / "objects" / "info" / "commit-graph-chain"
+        pack.write_text("x", encoding="utf-8")
+        # Git marks these read-only; plain rmtree leaves the tree on Windows and
+        # the next clone then dies with exit 128 ("already exists").
+        os.chmod(pack, stat.S_IREAD)
+
+        with mock.patch.object(mod, "CLONE_DIR", str(root)), \
+             mock.patch.object(mod.subprocess, "run",
+                               side_effect=AssertionError("reset must not shell out")):
+            mod.reset_clone_dir()
+
+        assert not root.exists(), "a stale clone must be gone after the reset"
+    print("OK: stale clone removed in-process, no `rm -rf`")
+
+
 def main() -> int:
     mod = _load_module()
     failures: list[str] = []
@@ -738,6 +764,7 @@ def main() -> int:
         case_subcategory_dirs_missing_is_finding,
         case_subcategory_dirs_lookup_error_is_not_drift,
         case_subcategory_error_blocks_filing,
+        case_clone_dir_reset_is_portable,
     )
     for case in cases:
         try:
