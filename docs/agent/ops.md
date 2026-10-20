@@ -248,6 +248,29 @@ Hermes facts CI cannot see (`hermes config path`, TUI rendering, installer
 layouts) stay in the second and third tiers. Lean on CI for shared code; use
 dual checkouts for those Hermes-facing facts.
 
+### Host limitation register
+
+Facts verified on a live host that constrain what an agent session there may
+run non-hermetically. Add an entry only with a named host class and a date;
+drop it when a Hermes release removes the constraint. Every command below is a
+Hermes-side state machine, not a guide check — this register only tells an
+agent what it must not assume.
+
+- **macOS < 13 (verified on a 12.7.6 x86_64 host, 2026-10-19/20):** the PM node
+  pin re-resolves to builds linked against a newer libc++
+  (`__libcpp_verbose_abort`) than the OS ships, staged-node verification fails
+  (`pm/install.py:457`), the update tail stays owed, and every `hermes` launch
+  retries it under a six-attempt cap before printing a warning per launch.
+  cua-driver fails the same way (Swift Foundation symbol; upstream #141649).
+  Handling: keep `pm/lock.json` node pinned to a runnable 24.x — 24.13.1 is the
+  known-good store build — with digests from official nodejs.org SHASUMS256
+  files; keep `--without cua-driver`; once the tail is owed again, clear
+  `~/.hermes/installs/<install-id>/source-completion-{pending,attempts}` and let
+  one uninterrupted `hermes` command run the tail. Scoped
+  `hermes pm update node --check` respects a hand-set pin ("up to date"); only a
+  full `hermes update` re-resolution jumps the major. Upstream tracking:
+  #137512 (node), #130574 (skip-Node escape hatch), #141649 (cua-driver).
+
 ### Surface ownership
 
 | Surface | Verifying host |

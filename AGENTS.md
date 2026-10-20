@@ -131,6 +131,17 @@ host in the PR Environment block.
 > concrete action: a `hermes <subcommand>`, or a specific file + field edit,
 > followed by a `/reload-*` or a restart.
 
+> [!WARNING]
+> **On hosts whose macOS < 13, do not let a full `hermes update` re-resolve the
+> node tool.** Node v25+ needs a libc++ symbol Monterey never exported
+> (`__libcpp_verbose_abort`); staged-node verification fails, the update tail
+> stays owed, and every command burns a multi-minute retry loop. Keep
+> `pm/lock.json` node pinned to a runnable 24.x with official nodejs.org SHASUMS
+> digests, keep `--without cua-driver` (same dyld class), and if the tail stays
+> owed, clear `~/.hermes/installs/<install-id>/source-completion-{pending,attempts}`
+> and let one uninterrupted `hermes` command finish it. Tracked upstream:
+> NousResearch/hermes-agent#137512 (#130574 skip-Node, #141649 cua-driver).
+
 ## Before you finish
 
 State plainly what you checked, what passed, and what you skipped. A validation
