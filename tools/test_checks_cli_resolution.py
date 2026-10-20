@@ -626,6 +626,12 @@ def test_run_maps_timeout_to_sentinel():
 
 
 def main():
+    if sys.platform == "win32":
+        print("SKIP: POSIX console-script fixtures cannot be executed on Windows")
+        # _load_checks() runs at import and registers a temp shim; drop it
+        # before the skip returns or every Windows run leaks a directory.
+        cleanup()
+        return 0
     test_sibling_outranks_path()
     test_falls_through_broken_shim()
     test_non_executable_candidate_falls_through()
