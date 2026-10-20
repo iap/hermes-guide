@@ -113,6 +113,30 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 return f"the fix landed under {heading!r}, not Bug Fixes:\n{text}"
         return None
 
+    def log_encoding_overrides_configured_output() -> str | None:
+        """A legacy `i18n.logOutputEncoding` must not mangle a subject.
+
+        `git log` honours that config, so without `--encoding=UTF-8` the tool
+        decodes legacy bytes as UTF-8 — the run dies or the subject loses
+        characters. The flag makes git transcode before Python reads it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _git(root, "config", "i18n.logOutputEncoding", "ISO-8859-1")
+            msg = root / "msg.txt"
+            msg.write_text("fix(api): café (#8)", encoding="utf-8")
+            (root / "f.txt").write_text("x", encoding="utf-8")
+            _git(root, "add", "f.txt")
+            _git(root, "commit", "-F", "msg.txt")
+            code, out = _run(root, "--upcoming")
+            if code != 0:
+                return f"--upcoming expected 0, got {code}: {out}"
+            text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+            if "café" not in text:
+                return f"the subject was mangled under a legacy log encoding:\n{text!r}"
+        return None
+
     def check_clean_after_upcoming() -> str | None:
         """--upcoming writes a section; --check then passes on it."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -419,6 +443,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
     return [
         ("--upcoming then --check is clean", check_clean_after_upcoming),
         ("a BOM-prefixed subject keeps its type", bom_prefixed_subject_keeps_its_type),
+        ("--upcoming transcodes a legacy log encoding", log_encoding_overrides_configured_output),
         ("--check fails on a tag with no section", check_fails_on_missing_section),
         ("--check fails on an untagged plugin.yaml version", check_fails_on_untagged_version),
         ("--upcoming is idempotent and newest-first", upcoming_is_idempotent),

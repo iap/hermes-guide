@@ -92,8 +92,7 @@ TYPE_LABELS = {
 
 def git(args: list[str]) -> str:
     proc = subprocess.run(
-        ["git", *args], capture_output=True, text=True, encoding="utf-8",
-        errors="replace", cwd=REPO
+        ["git", *args], capture_output=True, text=True, encoding="utf-8", cwd=REPO
     )
     if proc.returncode != 0:
         raise RuntimeError(
@@ -121,7 +120,7 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
     else:
         range_spec = until or "HEAD"
     out = git([
-        "log", range_spec,
+        "log", "--encoding=UTF-8", range_spec,
         "--format=%H%n%s%n%b%n---COMMIT---",
     ])
     commits = []
