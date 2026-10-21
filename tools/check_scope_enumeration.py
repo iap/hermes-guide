@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when a hand-written scope list or check count drifts from `_CHECKS`.
+"""Fail when a hand-written scope list, count or description length drifts.
 
 `checks.py` `_CHECKS` is the source of truth for the plugin's health-check
 scopes. Three files restate that set in prose that cannot be generated:
@@ -76,6 +76,12 @@ _DESCRIPTION = re.compile(
 _LABEL = r"`[^`]+`"
 _SEP = r"(?:\s*,\s*(?:and\s+)?|\s+and\s+)"
 _ENUM = re.compile(rf"(?i)\bchecks across\s+({_LABEL}(?:{_SEP}{_LABEL})*)")
+
+# `hermes plugins list` renders this field in a ~20-column cell with no
+# truncation: the 658-character v0.8.5 description produced 41 rows for one
+# plugin. The cap keeps a row scannable; the longer mission text lives in
+# README, which has no column to wrap.
+MAX_DESCRIPTION_CHARS = 200
 
 
 def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
@@ -156,14 +162,24 @@ def plugin_yaml_problems(labels: list[str], text: str) -> list[str]:
     names ("MCP servers"): a run can be compared as a set, whereas prose cannot
     — a whole-description search accepted "checks config files" as a listing of
     the `config` scope, and could never reject an unsupported extra scope.
+
+    The folded scalar is also length-capped: `plugins list` gives it a narrow
+    cell and no ellipsis, so a paragraph turns one row into dozens.
     """
     block = _DESCRIPTION.search(text)
     if not block:
         return ["plugin.yaml: no folded `description:` block found"]
+    value = " ".join(line.strip() for line in block.group(1).splitlines())
     enum = _ENUM.search(block.group(1))
     if not enum:
         return ["plugin.yaml: no 'checks across ...' scope list in the description"]
-    return _set_problems(labels, _BACKTICK.findall(enum.group(1)), "plugin.yaml description")
+    problems = _set_problems(labels, _BACKTICK.findall(enum.group(1)), "plugin.yaml description")
+    if len(value) > MAX_DESCRIPTION_CHARS:
+        problems.append(
+            f"plugin.yaml: description is {len(value)} characters; "
+            f"the list column cap is {MAX_DESCRIPTION_CHARS}"
+        )
+    return problems
 
 
 def router_skill_problems(labels: list[str], text: str) -> list[str]:
@@ -215,6 +231,10 @@ def selftest() -> int:
     with_extra = manifest("  Health checks across `config`, `mcp`, `skills`, `tokens`.")
     # A backticked mention AFTER the list must not rescue a dropped label.
     rescued = manifest("  Health checks across `mcp`, `skills`, plus a `config` playbook.")
+    # `plugins list` wraps without truncation, so a long scalar costs rows.
+    too_long = manifest(
+        "  Health checks across `config`, `mcp`, `skills`. " + "Detail. " * 30
+    )
 
     # (name, problems the guard should return, should it return any at all)
     cases: list[tuple[str, list[str], bool]] = [
@@ -223,6 +243,7 @@ def selftest() -> int:
         ("plugin: an extra unsupported label", plugin_yaml_problems(labels, with_extra), True),
         ("plugin: a dropped label later in the sentence", plugin_yaml_problems(labels, rescued), True),
         ("plugin: no description block", plugin_yaml_problems(labels, "name: x\n"), True),
+        ("plugin: description over the list column cap", plugin_yaml_problems(labels, too_long), True),
         (
             "router: list matches",
             router_skill_problems(labels, "Valid scopes: `config`, `mcp`,\n`skills`.\n\nNext."),
