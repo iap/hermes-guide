@@ -5,11 +5,12 @@ description: >-
   checks across `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
   `memories`, `sessions`, and `update`, plus the troubleshooting playbooks (a
   separate skills tap) for what the built-in doctor leaves out. Built for a
-  session helping someone who does not read the source: every finding names its
-  evidence and the command that confirms it, so the problem can be triaged
-  before an upstream fix lands. Read-only: no config writes, no auto-fix. The
-  hooks check runs `hermes hooks doctor`, which executes each approved hook
-  once; proactive runs inspect hooks in-process and execute nothing.
+  session helping someone who does not read the source: each result gives a
+  reason and, where the check has one, the path or output behind it, so the
+  problem can be triaged before an upstream fix lands. Read-only: no config
+  writes, no auto-fix. The hooks check runs `hermes hooks doctor`, which
+  executes each approved hook once; proactive runs inspect hooks in-process and
+  execute nothing.
 manifest_version: 1
 api_version: 1
 license: MIT

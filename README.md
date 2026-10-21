@@ -6,7 +6,8 @@
 
 Hermes usage and self-diagnosis guide for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 It is an independent community project: not a Hermes core component, and it does
-not ask upstream to change for it.
+not ask upstream to change for this plugin's benefit. Genuine Hermes defects
+found during diagnosis may still be reported upstream.
 
 It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. The plugin is **read-only** (no config writes; empty `capabilities:`). It ships two independent things:
 
@@ -24,10 +25,10 @@ via the tap.
 
 **Who it's for.** A session helping someone who does not read Hermes's source: the
 plugin gives it a deterministic picture of the host, the tap gives it the per-surface
-playbook, and every finding names the evidence and the command that confirms it.
-That is what lets a problem be triaged before an upstream fix lands — and what lets
-an upstream maintainer act on a report without re-deriving the user's environment.
-Read-only throughout: no config writes, no auto-fix.
+playbook, and each finding gives a reason and, where the check has one, the path or
+output behind it. That is what lets a problem be triaged before an upstream fix
+lands — and what lets an upstream maintainer act on a report without re-deriving
+the user's environment. Read-only throughout: no config writes, no auto-fix.
 
 > [!NOTE]
 > The `hooks` check runs `hermes hooks doctor`, which executes each approved
