@@ -351,7 +351,11 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
 2. Generate the section for that version:
    `python tools/gen_changelog.py --upcoming`. It reads the commits since the
    newest tag, so the entry covers the work being released and is reviewed and
-   CI-validated before any tag exists.
+   CI-validated before any tag exists. Run it with the bump **uncommitted**, then
+   commit both together: the generator titles the section from `plugin.yaml` in
+   the working tree, and a bump that is already committed lands in the section
+   as an unscoped `release:` line under Chores. If you ran it after committing,
+   `git checkout -- CHANGELOG.md` and regenerate.
 3. Merge the PR. Then check readiness on the merged master:
    `python tools/check_release_readiness.py`. It verdicts `READY` /
    `READY WITH ADVISORIES` / `NOT READY` from tree state, version consistency,
