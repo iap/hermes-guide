@@ -362,7 +362,7 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    drift direction the guard cannot see: compare
    `git ls-tree -d --name-only <upstream-head>:plugins/` against
    `PLUGIN_SUBCATEGORY_DIRS`. The guard proves every pinned name is real; only a
-   human notices a *new* upstream sub-category the pin omits (ops.md,
+   human notices a *new* upstream sub-category the pin omits (docs/agent/ops.md,
    "Values that drift go in `constants.py`"). Then push the tag
    `v<plugin.yaml version>` to master; `release.yml` verifies the tag matches
    `plugin.yaml`, that the tagged commit is on master, and that every tag has
