@@ -46,9 +46,9 @@ One direction only, and that is the gap. `verify_subcategory_dirs()` proves ever
 name in `PLUGIN_SUBCATEGORY_DIRS` is a real upstream directory, so a pin naming
 something that is gone — or was never there (`observability`) — fails loudly. It
 cannot see the reverse: a *new* upstream sub-category the pin omits is the same
-silent bug from the other end, which is how `computer_use` was missed in #297.
+blind spot from the other end — `computer_use` was missing until #297.
 No listing-only heuristic closes it — `kanban` and `hermes-achievements` are
-directories with no `plugin.yaml` that are standalone plugins, not
+directories with no `plugin.yaml` that ship a `dashboard/manifest.json`, not
 sub-categories — so audit the list by hand before each release (CONTRIBUTING.md,
 "Cutting a release").
 
