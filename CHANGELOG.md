@@ -2,6 +2,29 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.5 (2026-10-21)
+
+### Bug Fixes
+
+- **plugins**: stop reporting exclusive providers as opt-in ([#313](https://github.com/iap/hermes-guide/pull/313))
+- **tools**: make the drift check run on native Windows ([#308](https://github.com/iap/hermes-guide/pull/308))
+
+### Documentation
+
+- **plugins**: diagnose a plugin directory discovery cannot read ([#318](https://github.com/iap/hermes-guide/pull/318))
+- the author waits for an announced cross-check before merging ([#317](https://github.com/iap/hermes-guide/pull/317))
+- **skills**: the plugin load budget is per plugin, not global ([#316](https://github.com/iap/hermes-guide/pull/316))
+- correct the sub-category audit's claims and path ([#314](https://github.com/iap/hermes-guide/pull/314))
+- **plugins**: surface plugins.load_timeout_seconds in the loader-budget diagnosis ([#315](https://github.com/iap/hermes-guide/pull/315))
+- audit the sub-category pin by hand before each release ([#298](https://github.com/iap/hermes-guide/pull/298))
+- **mcp**: note the picker's no-TTY degrade to the catalog text dump ([#309](https://github.com/iap/hermes-guide/pull/309))
+- register the macOS <13 node-pin limitation and recovery path ([#307](https://github.com/iap/hermes-guide/pull/307))
+
+### Chores
+
+- **drift**: re-baseline to upstream bd3cbe9 ([#312](https://github.com/iap/hermes-guide/pull/312))
+- **drift**: re-baseline to upstream d87e753 ([#310](https://github.com/iap/hermes-guide/pull/310))
+
 ## v0.8.4 (2026-10-20)
 
 ### Bug Fixes
