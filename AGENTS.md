@@ -21,6 +21,11 @@ Hermes source and is not a fork of `hermes-agent`.
   without a concrete need (`tools/check_no_mutation.py`).
 - **Never rebrand Hermes CLI output.** Parse it into check envelopes; do not
   rewrite upstream messages as ours.
+- **Not core, permanently.** hermes-guide will not seek to become part of Hermes
+  core, and nothing here is filed upstream asking Hermes to change for this
+  plugin's benefit. Genuine Hermes defects found while diagnosing still go
+  upstream as ordinary bug reports — the rule is about this plugin's scope, not
+  about withholding real findings.
 
 ## What ships
 
