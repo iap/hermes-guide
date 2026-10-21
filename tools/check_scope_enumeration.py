@@ -66,9 +66,34 @@ _SCOPES_BLOCK = re.compile(r"(?is)\bValid scopes:(.*?)(?:\n[ \t]*\n|\Z)")
 _BACKTICK = re.compile(r"`([^`]+)`")
 # The catalog's list is the folded `description:` scalar; searching the whole
 # manifest would let the unrelated `config_schema:` key supply `config`.
-_DESCRIPTION = re.compile(
-    r"(?m)^description:[ \t]*[>|]?[-+]?[ \t]*\n((?:[ \t]+.*(?:\n|\Z))+)"
-)
+_DESCRIPTION_KEY = re.compile(r"^description:[ \t]*[>|]?[-+]?[ \t]*$")
+
+
+def _description_scalar(text: str) -> tuple[str, str] | None:
+    """(raw block, folded value) for the block scalar under `description:`.
+
+    Blank lines belong to a YAML block scalar, so the scan runs through them
+    and stops at the first non-blank, non-indented line (the next top-level
+    key). A regex over consecutive indented lines stops at the first blank
+    line, which would hide a second paragraph from both the scope run and the
+    length cap; `plugins list` wraps the whole value, so the cap must see it.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not _DESCRIPTION_KEY.match(line):
+            continue
+        raw: list[str] = []
+        for following in lines[index + 1:]:
+            if not following.strip():
+                raw.append("")
+            elif following[:1] in (" ", "\t"):
+                raw.append(following)
+            else:
+                break
+        while raw and not raw[-1].strip():
+            raw.pop()
+        return "\n".join(raw), " ".join(part.strip() for part in raw)
+    return None
 # The catalog enumerates scopes as a backticked, comma/and-separated run after
 # "checks across". Capture the run itself — not the rest of the sentence — so a
 # scope dropped from the list cannot be rescued by a later backticked mention
@@ -166,11 +191,11 @@ def plugin_yaml_problems(labels: list[str], text: str) -> list[str]:
     The folded scalar is also length-capped: `plugins list` gives it a narrow
     cell and no ellipsis, so a paragraph turns one row into dozens.
     """
-    block = _DESCRIPTION.search(text)
-    if not block:
+    block = _description_scalar(text)
+    if block is None:
         return ["plugin.yaml: no folded `description:` block found"]
-    value = " ".join(line.strip() for line in block.group(1).splitlines())
-    enum = _ENUM.search(block.group(1))
+    raw, value = block
+    enum = _ENUM.search(raw)
     if not enum:
         return ["plugin.yaml: no 'checks across ...' scope list in the description"]
     problems = _set_problems(labels, _BACKTICK.findall(enum.group(1)), "plugin.yaml description")
@@ -235,6 +260,16 @@ def selftest() -> int:
     too_long = manifest(
         "  Health checks across `config`, `mcp`, `skills`. " + "Detail. " * 30
     )
+    # A blank line inside the block scalar must not hide the second paragraph
+    # from the cap, and the scope run may live after the break.
+    two_paragraphs = manifest(
+        "  Intro paragraph.\n"
+        "\n"
+        "  Health checks across `config`, `mcp`, `skills`. " + "Detail. " * 30
+    )
+    enum_after_break = manifest(
+        "  Intro paragraph.\n\n  Health checks across `config`, `mcp`, `skills`."
+    )
 
     # (name, problems the guard should return, should it return any at all)
     cases: list[tuple[str, list[str], bool]] = [
@@ -244,6 +279,16 @@ def selftest() -> int:
         ("plugin: a dropped label later in the sentence", plugin_yaml_problems(labels, rescued), True),
         ("plugin: no description block", plugin_yaml_problems(labels, "name: x\n"), True),
         ("plugin: description over the list column cap", plugin_yaml_problems(labels, too_long), True),
+        (
+            "plugin: cap still applies after a blank line",
+            plugin_yaml_problems(labels, two_paragraphs),
+            True,
+        ),
+        (
+            "plugin: scope run after a blank line",
+            plugin_yaml_problems(labels, enum_after_break),
+            False,
+        ),
         (
             "router: list matches",
             router_skill_problems(labels, "Valid scopes: `config`, `mcp`,\n`skills`.\n\nNext."),
