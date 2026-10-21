@@ -4,6 +4,11 @@ All notable changes to hermes-guide are documented here.
 
 ## v0.8.6 (2026-10-21)
 
+### Bug Fixes
+
+- **tools**: skip the release commit in generated changelogs
+- **tools**: read the whole folded description, not the first paragraph
+
 ### Documentation
 
 - keep the catalog description inside the list column
