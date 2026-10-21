@@ -2,6 +2,12 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.6 (2026-10-21)
+
+### Documentation
+
+- keep the catalog description inside the list column
+
 ## v0.8.5 (2026-10-21)
 
 ### Bug Fixes
