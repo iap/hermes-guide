@@ -239,6 +239,11 @@ where present (a silent bot is not an approving bot; trigger CodeRabbit after
 Qodo lands when coverage matters), `mergeStateStatus` is `CLEAN`, and the merge
 is explicitly authorized. Report the checklist result, then merge.
 
+When another session has announced a cross-check of a PR, its author waits for
+that verdict — or an explicit `go` — before merging. Green CI and resolved
+threads do not stand in for it: #298 and #315 both merged mid-verification and
+needed correction PRs (#314, #316) minutes later.
+
 ## Multi-environment maintenance
 
 This repo is maintained in parallel from **different host environments**, each
