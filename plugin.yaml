@@ -1,5 +1,5 @@
 name: hermes-guide
-version: 0.8.4
+version: 0.8.5
 description: >-
   Self-diagnosis and troubleshooting for Hermes: deterministic health
   checks across `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
