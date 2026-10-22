@@ -209,6 +209,18 @@ gh api "repos/$REPO/rulesets/<id>" --jq '.rules[] | {type}'
   `required_signatures` or `non_fast_forward` for a direct push to `master`. It
   is a stuck-thread escape hatch, not a way past triage — resolve or decline the
   thread with evidence first, as the pre-merge cross-check requires.
+- **Duplicate `startup_failure` runs on the same SHA are GitHub-side noise, but
+  the run object alone does not prove it.** An unassociated duplicate carries
+  `pull_requests: []`, `run_attempt: 1` and no check-run annotation. That is a
+  signature, not evidence that the commit never reported: this repo requires
+  the `CodeQL` check run and the `gate` commit status, and both exist per SHA.
+  Confirm them before treating the failure as cosmetic —
+  `gh api repos/iap/hermes-guide/commits/<sha>/status` must show `gate:
+  success`, and `.../check-runs` must show `CodeQL: success`. Observed
+  2026-10-22 on `CI`, `validate-claim` and `label-pr-metadata`: empty
+  `pull_requests`, while the same SHA carried both required records from the
+  real runs. If either record is missing, the duplicate is unexplained — do not
+  merge past it on the strength of the signature.
 
 ## Delegation (swarm and second opinions)
 

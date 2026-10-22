@@ -3,7 +3,7 @@
 Manual pre-tag gate (advisory, never CI-blocking — releases stay human
 decisions). Run from a clean checkout before pushing a ``v*`` tag::
 
-    python tools/check_release_readiness.py          # full verdict (needs gh + network for items 4-6)
+    python tools/check_release_readiness.py          # full verdict (needs gh + network for the CI, blocker, catalog-pin and history items)
     python tools/check_release_readiness.py --offline  # tree/version/changelog only
     python tools/check_release_readiness.py --selftest # CI wiring probe, no network
 
@@ -17,10 +17,14 @@ the verdict when ``gh`` or the network is unavailable — the human decides.
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
+
+CATALOG_ENTRY = "repos/NousResearch/hermes-agent/contents/plugin-catalog/hermes-guide.yaml"
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -142,10 +146,106 @@ def _open_blockers() -> tuple[str, str, str]:
             "resolve or downgrade before tagging")
 
 
+def _entry_scalar(text: str, key: str) -> str | None:
+    """Return a top-level scalar from the entry, tolerating YAML quoting.
+
+    The entry is hand-maintained, so ``sha: "abc"`` and ``sha: abc  # pin`` are
+    both legal YAML and both appear in practice. A regex that keeps the quotes
+    or the comment turns a correct pin into a false NOT READY.
+    """
+    # `[ \t]*` rather than `\s*`: the latter crosses the newline, so an empty
+    # `version:` would take the next field as its value instead of reading empty.
+    match = re.search(rf"^{key}:[ \t]*(.*)$", text, re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1).strip()
+    if value[:1] in ("'", '"'):
+        end = value.find(value[0], 1)
+        if end < 1:
+            return None
+        return value[1:end] or None
+    comment = re.search(r"\s#", value)
+    if comment:
+        value = value[: comment.start()].strip()
+    return value or None
+
+
+def _dotted(version: str) -> tuple[int, ...] | None:
+    """Return a comparable key for a dotted-numeric version, else None."""
+    if not re.fullmatch(r"\d+(?:\.\d+)*", version):
+        return None
+    parts = [int(part) for part in version.split(".")]
+    return tuple(parts + [0] * (4 - len(parts))) if len(parts) < 4 else tuple(parts)
+
+
+def _catalog_pin() -> tuple[str, str, str]:
+    # The upstream catalog entry is the only place the pin is written down:
+    # this repo keeps no copy, by design. Read it through the API and check the
+    # invariant that matters -- the entry's sha is the commit behind the tag it
+    # names. A pin that lags plugin.yaml is normal (re-pinning is deliberate),
+    # so it passes with that stated; a pin from another release fails.
+    code, out, err = _run_split("gh", "api", CATALOG_ENTRY)
+    if code != 0:
+        return ("unknown", f"gh failed: {(out + ' ' + err).strip()[:80] or 'no output'}",
+                "re-run with network")
+    try:
+        payload = json.loads(out) if out else {}
+    except json.JSONDecodeError:
+        return ("unknown", f"unparseable gh output: {out[:80]}", "re-run with network")
+    if not isinstance(payload, dict) or payload.get("encoding") != "base64":
+        return ("unknown", f"unexpected entry payload: {str(payload)[:80]}",
+                "re-run with network")
+    content = payload.get("content")
+    if not isinstance(content, str):
+        return ("unknown", f"entry payload has no string content: {str(payload)[:80]}",
+                "inspect the entry by hand")
+    try:
+        text = base64.b64decode(content).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return ("unknown", "upstream entry is not base64 UTF-8", "inspect the entry by hand")
+    if not text.strip():
+        return ("unknown", "empty upstream entry payload", "inspect the entry by hand")
+
+    pinned_sha = _entry_scalar(text, "sha")
+    pinned_version = _entry_scalar(text, "version")
+    if not pinned_sha or not pinned_version:
+        return ("fail", "upstream entry has no sha/version pair",
+                "inspect plugin-catalog/hermes-guide.yaml upstream")
+
+    tag = f"v{pinned_version}"
+    code, target = _run("git", "rev-parse", "--verify", "--quiet",
+                        f"refs/tags/{tag}^{{commit}}")
+    target = target.strip()
+    if code != 0 or not target:
+        return ("unknown", f"tag {tag} is not present locally",
+                "git fetch --tags, then re-check")
+    if target != pinned_sha:
+        return ("fail", f"upstream entry sha {pinned_sha[:8]} != {tag} ({target[:8]})",
+                "set sha to the tag commit")
+
+    version_text = (REPO / "plugin.yaml").read_text(encoding="utf-8")
+    repo_match = re.search(r"^version:\s*(\S+)\s*$", version_text, re.MULTILINE)
+    repo_version = repo_match.group(1) if repo_match else "unknown"
+    pinned_key, repo_key = _dotted(pinned_version), _dotted(repo_version)
+    if pinned_key is None or repo_key is None:
+        if pinned_version != repo_version:
+            return ("unknown",
+                    f"entry pins {pinned_version}, repo is {repo_version}; "
+                    "ordering outside dotted-numeric needs a human", "compare by hand")
+    elif pinned_key > repo_key:
+        return ("fail", f"upstream entry pins {pinned_version}, newer than "
+                        f"plugin.yaml's {repo_version}", "inspect the entry upstream")
+    if repo_version != pinned_version:
+        return ("pass",
+                f"upstream entry pins {pinned_version} at {pinned_sha[:8]} "
+                f"({tag} resolves to it); repo is {repo_version}, so the pin lags", "")
+    return ("pass", f"upstream entry pins {pinned_version} at {pinned_sha[:8]} ({tag} resolves to it)", "")
+
+
 def _commits_since_tag() -> tuple[str, str, str]:
     # Advisory "is there anything worth shipping" signal. This intentionally
-    # reports local commits since the last tag — not the upstream catalog pin
-    # (a separate reviewed change in hermes-agent, owned by other tooling).
+    # reports local commits since the last tag; the upstream catalog pin is
+    # `_catalog_pin` above, and its lag is stated rather than failed.
     code, tag = _run("git", "describe", "--tags", "--abbrev=0", "origin/master")
     if code != 0:
         return ("unknown", "no release tag reachable", "tag history unavailable")
@@ -183,6 +283,7 @@ def main(argv: list[str]) -> int:
         items += [
             ("master-ci", _master_ci()),
             ("blockers", _open_blockers()),
+            ("catalog-pin", _catalog_pin()),
             ("commits-since-tag", _commits_since_tag()),
         ]
 
