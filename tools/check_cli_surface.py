@@ -61,10 +61,10 @@ SESSION_PREFIXES = ("/",)
 # do). Listed here with their subcommand sets so skill cites resolve.
 # Scopes mirror checks._CHECKS and flags mirror _setup_cli; update together.
 # Flags are the command's own options (`hermes guide --help` takes -h plus
-# --fast); globals apply on top.
+# --fast and --json); globals apply on top.
 PLUGIN_COMMANDS = {
     "guide": ({"config", "mcp", "skills", "commands", "hooks", "plugins",
-               "memories", "sessions", "update"}, {"--fast"}),
+               "memories", "sessions", "update"}, {"--fast", "--json"}),
 }
 
 
