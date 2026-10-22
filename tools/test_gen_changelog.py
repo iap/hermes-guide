@@ -436,6 +436,30 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             return f"_utc_today() did not follow UTC: {mod._utc_today()}"
         return None
 
+    def release_bump_is_not_a_changelog_entry() -> str | None:
+        """The bump commit describes the section it writes; it is not an entry.
+
+        A regeneration after the bump (the #320 ordering mistake) used to file
+        `release: bump to vX` under Chores.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "fix(api): real change (#9)")
+            (root / "plugin.yaml").write_text(
+                "name: demo\nversion: 1.0.1\n", encoding="utf-8"
+            )
+            _commit(root, "release: bump to v1.0.1 with changelog section")
+            code, out = _run(root, "--upcoming")
+            if code != 0:
+                return f"--upcoming expected 0, got {code}: {out}"
+            text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+            if "release: bump" in text:
+                return f"the release commit leaked into the section:\n{text}"
+            if "real change" not in text:
+                return f"the real change is missing:\n{text}"
+        return None
+
     def upcoming_never_stamps_local_date() -> str | None:
         """The generator must not call date.today() (local-day stamp)."""
         src = TOOL.read_text(encoding="utf-8")
@@ -459,6 +483,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         ("--upcoming preserves an existing section date", upcoming_preserves_section_date),
         ("--upcoming fails without a plugin.yaml version", upcoming_fails_without_version),
         ("--upcoming stamps the UTC date", upcoming_stamps_utc_date),
+        ("the release bump is not a changelog entry", release_bump_is_not_a_changelog_entry),
         ("_utc_today ignores the local day", utc_helper_ignores_local_day),
         ("--upcoming never calls date.today", upcoming_never_stamps_local_date),
     ]

@@ -1,16 +1,9 @@
 name: hermes-guide
-version: 0.8.5
+version: 0.8.6
 description: >-
-  Self-diagnosis and troubleshooting for Hermes: deterministic health
-  checks across `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
-  `memories`, `sessions`, and `update`, plus the troubleshooting playbooks (a
-  separate skills tap) for what the built-in doctor leaves out. Built for a
-  session helping someone who does not read the source: each result gives a
-  reason and, where the check has one, the path or output behind it, so the
-  problem can be triaged before an upstream fix lands. Read-only: no config
-  writes, no auto-fix. The hooks check runs `hermes hooks doctor`, which
-  executes each approved hook once; proactive runs inspect hooks in-process and
-  execute nothing.
+  Self-diagnosis for Hermes: health checks across `config`, `mcp`, `skills`,
+  `commands`, `hooks`, `plugins`, `memories`, `sessions`, and `update`, plus
+  playbooks in the tap; read-only.
 manifest_version: 1
 api_version: 1
 license: MIT

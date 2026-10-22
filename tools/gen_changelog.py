@@ -75,6 +75,12 @@ CONVENTIONAL_RE = re.compile(
     r"(?:\s+\(#(?P<pr>\d+)\))?\s*$"
 )
 
+# The release commit describes the section being written, so it is never an
+# entry. Skipping it also makes the tool robust to the #320 ordering mistake:
+# regenerating with `release: bump to vX` already committed used to file it
+# under Chores.
+RELEASE_COMMIT_RE = re.compile(r"^release:\s+bump to v\d", re.IGNORECASE)
+
 # No emoji — the project tone guard forbids emoji in prose.
 # Type labels are plain text.
 TYPE_LABELS = {
@@ -130,6 +136,8 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
             continue
         sha = lines[0].strip().lstrip("\ufeff")
         subject = _strip_bom(lines[1].strip())
+        if RELEASE_COMMIT_RE.match(subject):
+            continue
         m = CONVENTIONAL_RE.match(subject)
         if m:
             commits.append({

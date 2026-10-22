@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when a hand-written scope list or check count drifts from `_CHECKS`.
+"""Fail when a hand-written scope list, count or description length drifts.
 
 `checks.py` `_CHECKS` is the source of truth for the plugin's health-check
 scopes. Three files restate that set in prose that cannot be generated:
@@ -66,9 +66,34 @@ _SCOPES_BLOCK = re.compile(r"(?is)\bValid scopes:(.*?)(?:\n[ \t]*\n|\Z)")
 _BACKTICK = re.compile(r"`([^`]+)`")
 # The catalog's list is the folded `description:` scalar; searching the whole
 # manifest would let the unrelated `config_schema:` key supply `config`.
-_DESCRIPTION = re.compile(
-    r"(?m)^description:[ \t]*[>|]?[-+]?[ \t]*\n((?:[ \t]+.*(?:\n|\Z))+)"
-)
+_DESCRIPTION_KEY = re.compile(r"^description:[ \t]*[>|]?[-+]?[ \t]*$")
+
+
+def _description_scalar(text: str) -> tuple[str, str] | None:
+    """(raw block, folded value) for the block scalar under `description:`.
+
+    Blank lines belong to a YAML block scalar, so the scan runs through them
+    and stops at the first non-blank, non-indented line (the next top-level
+    key). A regex over consecutive indented lines stops at the first blank
+    line, which would hide a second paragraph from both the scope run and the
+    length cap; `plugins list` wraps the whole value, so the cap must see it.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not _DESCRIPTION_KEY.match(line):
+            continue
+        raw: list[str] = []
+        for following in lines[index + 1:]:
+            if not following.strip():
+                raw.append("")
+            elif following[:1] in (" ", "\t"):
+                raw.append(following)
+            else:
+                break
+        while raw and not raw[-1].strip():
+            raw.pop()
+        return "\n".join(raw), " ".join(part.strip() for part in raw)
+    return None
 # The catalog enumerates scopes as a backticked, comma/and-separated run after
 # "checks across". Capture the run itself — not the rest of the sentence — so a
 # scope dropped from the list cannot be rescued by a later backticked mention
@@ -76,6 +101,12 @@ _DESCRIPTION = re.compile(
 _LABEL = r"`[^`]+`"
 _SEP = r"(?:\s*,\s*(?:and\s+)?|\s+and\s+)"
 _ENUM = re.compile(rf"(?i)\bchecks across\s+({_LABEL}(?:{_SEP}{_LABEL})*)")
+
+# `hermes plugins list` renders this field in a ~20-column cell with no
+# truncation: the 658-character v0.8.5 description produced 41 rows for one
+# plugin. The cap keeps a row scannable; the longer mission text lives in
+# README, which has no column to wrap.
+MAX_DESCRIPTION_CHARS = 200
 
 
 def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
@@ -156,14 +187,24 @@ def plugin_yaml_problems(labels: list[str], text: str) -> list[str]:
     names ("MCP servers"): a run can be compared as a set, whereas prose cannot
     — a whole-description search accepted "checks config files" as a listing of
     the `config` scope, and could never reject an unsupported extra scope.
+
+    The folded scalar is also length-capped: `plugins list` gives it a narrow
+    cell and no ellipsis, so a paragraph turns one row into dozens.
     """
-    block = _DESCRIPTION.search(text)
-    if not block:
+    block = _description_scalar(text)
+    if block is None:
         return ["plugin.yaml: no folded `description:` block found"]
-    enum = _ENUM.search(block.group(1))
+    raw, value = block
+    enum = _ENUM.search(raw)
     if not enum:
         return ["plugin.yaml: no 'checks across ...' scope list in the description"]
-    return _set_problems(labels, _BACKTICK.findall(enum.group(1)), "plugin.yaml description")
+    problems = _set_problems(labels, _BACKTICK.findall(enum.group(1)), "plugin.yaml description")
+    if len(value) > MAX_DESCRIPTION_CHARS:
+        problems.append(
+            f"plugin.yaml: description is {len(value)} characters; "
+            f"the list column cap is {MAX_DESCRIPTION_CHARS}"
+        )
+    return problems
 
 
 def router_skill_problems(labels: list[str], text: str) -> list[str]:
@@ -215,6 +256,20 @@ def selftest() -> int:
     with_extra = manifest("  Health checks across `config`, `mcp`, `skills`, `tokens`.")
     # A backticked mention AFTER the list must not rescue a dropped label.
     rescued = manifest("  Health checks across `mcp`, `skills`, plus a `config` playbook.")
+    # `plugins list` wraps without truncation, so a long scalar costs rows.
+    too_long = manifest(
+        "  Health checks across `config`, `mcp`, `skills`. " + "Detail. " * 30
+    )
+    # A blank line inside the block scalar must not hide the second paragraph
+    # from the cap, and the scope run may live after the break.
+    two_paragraphs = manifest(
+        "  Intro paragraph.\n"
+        "\n"
+        "  Health checks across `config`, `mcp`, `skills`. " + "Detail. " * 30
+    )
+    enum_after_break = manifest(
+        "  Intro paragraph.\n\n  Health checks across `config`, `mcp`, `skills`."
+    )
 
     # (name, problems the guard should return, should it return any at all)
     cases: list[tuple[str, list[str], bool]] = [
@@ -223,6 +278,17 @@ def selftest() -> int:
         ("plugin: an extra unsupported label", plugin_yaml_problems(labels, with_extra), True),
         ("plugin: a dropped label later in the sentence", plugin_yaml_problems(labels, rescued), True),
         ("plugin: no description block", plugin_yaml_problems(labels, "name: x\n"), True),
+        ("plugin: description over the list column cap", plugin_yaml_problems(labels, too_long), True),
+        (
+            "plugin: cap still applies after a blank line",
+            plugin_yaml_problems(labels, two_paragraphs),
+            True,
+        ),
+        (
+            "plugin: scope run after a blank line",
+            plugin_yaml_problems(labels, enum_after_break),
+            False,
+        ),
         (
             "router: list matches",
             router_skill_problems(labels, "Valid scopes: `config`, `mcp`,\n`skills`.\n\nNext."),
