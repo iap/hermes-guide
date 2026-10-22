@@ -359,9 +359,10 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
 3. Merge the PR. Then check readiness on the merged master:
    `python tools/check_release_readiness.py`. It verdicts `READY` /
    `READY WITH ADVISORIES` / `NOT READY` from tree state, version consistency,
-   changelog coverage, master CI, open `P1` issues, and commits since the last
-   tag. It must run here — after the new version and section exist — not
-   before the bump, where it would only re-verify the previous release.
+   changelog coverage, master CI, open `P1` issues, the upstream catalog pin,
+   and commits since the last tag. It must run here — after the new version and
+   section exist — not before the bump, where it would only re-verify the
+   previous release.
    Advisory only — the tag stays a human decision. Before tagging, audit the one
    drift direction the guard cannot see: compare
    `git ls-tree -d --name-only <upstream-head>:plugins/` against

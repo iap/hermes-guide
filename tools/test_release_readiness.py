@@ -5,17 +5,21 @@ Pins: READY only when every item passes; indeterminate items yield
 ``READY WITH ADVISORIES`` (never a bare READY); any ``fail`` yields
 NOT READY exit 1; a failed history inspection is ``unknown``, not a
 zero-commit pass; the master-CI query is scoped to the CI workflow; the
-blocker query uses the P1 label; ``--offline`` never fetches (tree sync
-reads ``unknown``) while the online run still fetches. No network, no
-gh: ``_run`` is stubbed.
+blocker query uses the P1 label; the catalog-pin item fails only when the
+upstream entry's sha is not its own tag's commit, reads ``unknown`` when gh or
+the tag is unavailable, and is skipped offline; ``--offline`` never fetches
+(tree sync reads ``unknown``) while the online run still fetches. No network,
+no gh: ``_run`` is stubbed.
 
 Run: python3 tools/test_release_readiness.py
 """
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import io
+import json
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -70,12 +74,22 @@ def _healthy(stash_extra: dict | None = None) -> dict:
         ("gh", "run", "list"): (0, '[{"status": "completed", "conclusion": "success", '
                               '"headSha": "' + "a" * 40 + '"}]'),
         ("gh", "issue", "list"): (0, ""),
+        ("gh", "api"): (0, _entry("0.8.7", "a" * 40)),
+        ("git", "rev-parse", "--verify", "--quiet"): (0, "a" * 40),
         ("git", "describe", "--tags"): (0, "v0.7.1"),
         ("git", "log", "--oneline"): (0, "abc subject"),
     }
     if stash_extra:
         base.update(stash_extra)
     return base
+
+
+def _entry(version: str, sha: str) -> str:
+    """Return a GitHub contents payload wrapping a catalog entry."""
+    text = (f"name: hermes-guide\nsha: {sha}\nversion: \"{version}\"\n"
+            "description: test entry\n")
+    encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    return json.dumps({"encoding": "base64", "content": encoded})
 
 
 def test_ready_when_all_pass():
@@ -173,6 +187,81 @@ def test_online_tree_still_fetches():
     assert "[ok] tree" in out, out
 
 
+def test_catalog_pin_matches_its_tag():
+    mod = _load()
+    code, out, _ = _run_main(mod, _healthy())
+    assert "[ok] catalog-pin" in out, out
+    assert "v0.8.7 resolves to it" in out, out
+    assert code == 0, out
+
+
+def test_catalog_pin_lag_is_reported():
+    mod = _load()
+    stubs = _healthy({("gh", "api"): (0, _entry("0.8.6", "a" * 40))})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 0, out
+    assert "[ok] catalog-pin" in out and "lags" in out, out
+
+
+def test_catalog_pin_from_another_release_fails():
+    mod = _load()
+    stubs = _healthy({("git", "rev-parse", "--verify", "--quiet"): (0, "b" * 40)})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 1, out
+    assert "[FAIL] catalog-pin" in out, out
+    assert "FAIL: release NOT READY" in out, out
+
+
+def test_catalog_pin_without_local_tag_is_unknown():
+    mod = _load()
+    stubs = _healthy({("git", "rev-parse", "--verify", "--quiet"): (128, "")})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 0, out
+    assert "[??] catalog-pin" in out and "READY WITH ADVISORIES" in out, out
+
+
+def test_catalog_pin_without_gh_is_unknown():
+    mod = _load()
+    stubs = _healthy({("gh", "api"): (127, "no gh")})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 0, out
+    assert "[??] catalog-pin" in out, out
+
+
+def test_catalog_pin_malformed_entry_is_indeterminate():
+    mod = _load()
+    for bad in ("not json", json.dumps({"content": "x"}),
+                json.dumps({"encoding": "base64", "content": "%%%"})):
+        stubs = _healthy({("gh", "api"): (0, bad)})
+        code, out, _ = _run_main(mod, stubs)
+        assert code == 0, (bad, out)
+        assert "[??] catalog-pin" in out, (bad, out)
+        assert "OK: release READY\n" not in out, (bad, out)
+
+
+def test_catalog_pin_ahead_of_release_fails():
+    mod = _load()
+    stubs = _healthy({("gh", "api"): (0, _entry("9.9.9", "a" * 40))})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 1, out
+    assert "[FAIL] catalog-pin" in out and "newer than" in out, out
+
+
+def test_catalog_pin_without_fields_fails():
+    mod = _load()
+    garbage = json.dumps({"encoding": "base64",
+                          "content": base64.b64encode(b"hello\n").decode("ascii")})
+    code, out, _ = _run_main(mod, _healthy({("gh", "api"): (0, garbage)}))
+    assert code == 1, out
+    assert "[FAIL] catalog-pin" in out, out
+
+
+def test_offline_skips_catalog_pin():
+    mod = _load()
+    _, _, calls = _run_main(mod, _healthy(), ["--offline"])
+    assert not [c for c in calls if c[:2] == ("gh", "api")], "offline queried the catalog"
+
+
 def main() -> int:
     cases = [
         test_ready_when_all_pass,
@@ -186,6 +275,15 @@ def main() -> int:
         test_run_missing_fields_is_unknown,
         test_offline_tree_skips_fetch,
         test_online_tree_still_fetches,
+        test_catalog_pin_matches_its_tag,
+        test_catalog_pin_lag_is_reported,
+        test_catalog_pin_from_another_release_fails,
+        test_catalog_pin_ahead_of_release_fails,
+        test_catalog_pin_without_local_tag_is_unknown,
+        test_catalog_pin_without_gh_is_unknown,
+        test_catalog_pin_malformed_entry_is_indeterminate,
+        test_catalog_pin_without_fields_fails,
+        test_offline_skips_catalog_pin,
     ]
     failed = 0
     for case in cases:
