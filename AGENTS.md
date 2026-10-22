@@ -22,10 +22,13 @@ Hermes source and is not a fork of `hermes-agent`.
 - **Never rebrand Hermes CLI output.** Parse it into check envelopes; do not
   rewrite upstream messages as ours.
 - **Not core, permanently.** hermes-guide will not seek to become part of Hermes
-  core, and nothing here is filed upstream asking Hermes to change for this
-  plugin's benefit. Genuine Hermes defects found while diagnosing still go
-  upstream as ordinary bug reports — the rule is about this plugin's scope, not
-  about withholding real findings.
+  core, and no change to Hermes code or behavior is filed upstream for this
+  plugin's benefit. The exception is its own catalog listing:
+  `plugin-catalog/hermes-guide.yaml` is ours to maintain, so pin bumps and
+  disclosure edits there are ordinary maintenance reviewed like any other entry.
+  Genuine Hermes defects found while diagnosing still go upstream as ordinary
+  bug reports — the rule is about this plugin's scope, not about withholding
+  real findings.
 
 ## What ships
 
