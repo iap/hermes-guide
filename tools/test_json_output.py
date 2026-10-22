@@ -35,23 +35,35 @@ def _load_plugin():
     return hermes_guide, checks_mod
 
 
+class _Sink:
+    """Minimal write target appending to one list."""
+
+    def __init__(self, sink):
+        self._sink = sink
+
+    def write(self, s):
+        self._sink.append(s)
+
+    def flush(self):
+        pass
+
+
 class _Capture:
-    """Swap sys.stdout/sys.stderr for growing in-memory buffers."""
+    """Swap sys.stdout/sys.stderr for separate growing in-memory buffers.
+
+    The streams must stay separate: `_run_cli` reports JSON errors on stdout
+    and keeps stderr clean, so a single shared buffer would make every
+    "stderr is empty" assertion vacuous.
+    """
 
     def __init__(self):
         self.out = []
         self.err = []
         self._saved = (sys.stdout, sys.stderr)
 
-    def write(self, s):
-        self.out.append(s)
-
-    def flush(self):
-        pass
-
     def start(self):
-        sys.stdout = self
-        sys.stderr = self
+        sys.stdout = _Sink(self.out)
+        sys.stderr = _Sink(self.err)
 
     def stop(self):
         sys.stdout, sys.stderr = self._saved
