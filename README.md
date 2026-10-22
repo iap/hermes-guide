@@ -158,7 +158,7 @@ Every diagnosis resolves to a concrete action: a `hermes <subcommand>` command o
 
 ## Planned work
 
-Phase 4 adds a machine-readable contract to `hermes guide` (`--json`), stable finding IDs with plain-language impact and fix text, a generated finding catalog, and skills that act on them. Runtime repair stays upstream with `hermes doctor --fix` / `--live`. Track it in the [Phase 4 milestone](https://github.com/iap/hermes-guide/milestone/4).
+Phase 4 adds a machine-readable contract to `hermes guide` (`--json`), stable finding IDs with plain-language impact and fix text, a generated finding catalog, and skills that act on them. Runtime repair stays upstream with `hermes doctor --fix`; `hermes doctor --live` only runs bounded, read-only health probes. Track it in the [Phase 4 milestone](https://github.com/iap/hermes-guide/milestone/4).
 
 ## Contributing
 
