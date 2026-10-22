@@ -1,6 +1,6 @@
 [project]
 name = "hermes-guide"
-version = "0.8.6"
+version = "0.8.7"
 description = "Self-diagnosis and troubleshooting for Hermes Agent: read-only health checks and evidence-backed playbooks"
 readme = "README.md"
 license = {text = "MIT"}

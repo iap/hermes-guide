@@ -1,7 +1,7 @@
 ---
 name: start
 description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
-version: 1.0.3
+version: 1.0.4
 metadata:
   hermes:
     tags: [hermes, diagnostics, triage, routing]
@@ -58,11 +58,14 @@ Run the health check and read its lines:
 Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
 `memories`, `sessions`, `update`.
 
-The check writes nothing, with one disclosed exception: the `hooks` scope runs
+The check writes nothing. Both exceptions are disclosed: the `hooks` scope runs
 `hermes hooks doctor`, which executes each approved shell hook once with a
-synthetic payload — that is how it verifies a hook actually runs. Every other
-scope reads state only. With `--fast`, the `hooks` scope swaps to an
-in-process check instead — nothing executes.
+synthetic payload — that is how it verifies a hook actually runs; the `update`
+scope reads the update-lock record and opens that file writable to take a
+non-blocking lock it releases immediately, which is how it separates a live
+owner from stale residue (no content is written and the lock file is never
+deleted). Every other scope reads state only. With `--fast`, the `hooks` scope
+swaps to an in-process check instead — nothing executes.
 
 Status marks in the output: `+` healthy, `~` informational, `x` broken,
 `?` unknown. `?` means unmeasured — treat it as broken until the scope runs
@@ -122,4 +125,4 @@ full set.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill
   or the target playbook explicitly.
 
-*Facts (re-)verified 2026-10-17 against this repo's `checks.py` `_CHECKS` (nine scopes) and `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17; --fast clause corrected 2026-10-17: it suppresses per-check hermes subprocesses, not the single CLI launch, and points at Step 2 rather than a no-baseline route that does not exist in this file — `sessions` and `update` shipped earlier but were missing here. Re-verify before reuse.*
+*Facts (re-)verified 2026-10-22 against this repo's `checks.py` `_CHECKS` (nine scopes) and `check_update_lock` (writable non-blocking probe, POSIX read-only fallback for a root-owned lock, released immediately, no content written, never deleted); `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17; --fast clause corrected 2026-10-17: it suppresses per-check hermes subprocesses, not the single CLI launch, and points at Step 2 rather than a no-baseline route that does not exist in this file — `sessions` and `update` shipped earlier but were missing here; update-scope lock probe disclosed 2026-10-22 (the earlier "every other scope reads state only" claim omitted it). Re-verify before reuse.*

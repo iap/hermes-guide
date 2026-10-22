@@ -1,5 +1,5 @@
 name: hermes-guide
-version: 0.8.6
+version: 0.8.7
 description: >-
   Self-diagnosis for Hermes: health checks across `config`, `mcp`, `skills`,
   `commands`, `hooks`, `plugins`, `memories`, `sessions`, and `update`, plus
