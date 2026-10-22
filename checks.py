@@ -499,11 +499,22 @@ def _version_label(value):
 def check_config_parses():
     path, data = _read_config()
     if not path:
-        return {"status": "unknown", "reason": "`hermes config path` failed", "detail": None}
+        return {
+            "id": "CONFIG_PATH_UNRESOLVED",
+            "status": "unknown",
+            "reason": "`hermes config path` failed",
+            "detail": None,
+        }
     if not os.path.exists(path):
-        return {"status": "broken", "reason": "config file missing", "detail": path}
+        return {
+            "id": "CONFIG_MISSING",
+            "status": "broken",
+            "reason": "config file missing",
+            "detail": path,
+        }
     if data is None:
         return {
+            "id": "CONFIG_UNPARSEABLE",
             "status": "broken",
             "reason": "config.yaml does not parse (or root is not a mapping)",
             "detail": path,
@@ -537,7 +548,12 @@ def _parse_enabled(value, default=True):
 def check_mcp_servers_shape():
     path, data = _read_config()
     if not path or data is None:
-        return {"status": "unknown", "reason": "cannot read config", "detail": path}
+        return {
+            "id": "CONFIG_UNREADABLE",
+            "status": "unknown",
+            "reason": "cannot read config",
+            "detail": path,
+        }
 
     broken = []
     notes = []
@@ -576,7 +592,12 @@ def check_mcp_servers_shape():
         )
 
     if broken:
-        return {"status": "broken", "reason": f"{len(broken)} MCP issue(s)", "detail": broken + notes}
+        return {
+            "id": "MCP_SERVER_MALFORMED",
+            "status": "broken",
+            "reason": f"{len(broken)} MCP issue(s)",
+            "detail": broken + notes,
+        }
     if notes:
         return {"status": "informational", "reason": f"{len(notes)} note(s)", "detail": notes}
     return {"status": "healthy", "reason": "MCP servers well-formed", "detail": list(servers.keys()) if isinstance(servers, dict) else []}
@@ -587,7 +608,12 @@ def check_mcp_servers_shape():
 def check_skills():
     home = _hermes_home()
     if not home:
-        return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
+        return {
+            "id": "HOME_UNRESOLVED",
+            "status": "unknown",
+            "reason": "cannot resolve $HERMES_HOME",
+            "detail": None,
+        }
     skills_root = os.path.join(home, "skills")
     if not os.path.isdir(skills_root):
         return {"status": "healthy", "reason": "no skills directory", "detail": skills_root}
@@ -625,7 +651,12 @@ def check_skills():
                     findings.append(f"{dirpath}: frontmatter `{req}` is not a non-empty string{tag}")
 
     if findings:
-        return {"status": "broken", "reason": f"{len(findings)} skill issue(s)", "detail": findings}
+        return {
+            "id": "SKILLS_ISSUES",
+            "status": "broken",
+            "reason": f"{len(findings)} skill issue(s)",
+            "detail": findings,
+        }
 
     # Guide-skill adoption nudge — informational only, never fails the check:
     # the plugin repo ships skills/ alongside checks.py; compare their names
@@ -681,7 +712,12 @@ def check_commands():
     """Detect skill-bundle slug collisions, malformed bundle files, and builtin shadowing."""
     home = _hermes_home()
     if not home:
-        return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
+        return {
+            "id": "HOME_UNRESOLVED",
+            "status": "unknown",
+            "reason": "cannot resolve $HERMES_HOME",
+            "detail": None,
+        }
 
     skill_slugs = set()
     skill_slug_owners: dict[str, str] = {}  # slug -> first skill dir (first-wins, mirrors Hermes)
@@ -767,7 +803,12 @@ def check_commands():
                 collisions.append(f"bundle `{stem}` (/{slug}) shadows skill `/{slug}` (bundle wins)")
 
     if malformed:
-        return {"status": "broken", "reason": f"{len(malformed)} malformed bundle(s)", "detail": malformed + collisions}
+        return {
+            "id": "COMMANDS_BUNDLE_MALFORMED",
+            "status": "broken",
+            "reason": f"{len(malformed)} malformed bundle(s)",
+            "detail": malformed + collisions,
+        }
     if collisions:
         return {"status": "informational", "reason": f"{len(collisions)} slug collision(s)", "detail": collisions}
     return {"status": "healthy", "reason": "no slug collisions or malformed bundles", "detail": None}
@@ -799,6 +840,7 @@ def _check_allowlist_json(home=None):
             json.load(f)
     except Exception:
         return {
+            "id": "HOOKS_ALLOWLIST_INVALID",
             "status": "broken",
             "reason": "shell-hooks-allowlist.json is not valid JSON",
             "detail": allowlist,
@@ -827,6 +869,7 @@ def _merge_allowlist_json(result, source_label, home=None):
         elif extra:
             detail.append(str(extra))
     return {
+        "id": "HOOKS_ALLOWLIST_INVALID",
         "status": "broken",
         "reason": allowlist_result.get("reason"),
         "detail": detail,
@@ -843,6 +886,7 @@ def check_hooks():
     )
     if rc != 0 or not stdout.strip():
         return {
+            "id": "HOOKS_DOCTOR_UNAVAILABLE",
             "status": "unknown",
             "reason": f"`hermes hooks doctor` unavailable or failed (rc={rc})",
             # Keep Hermes stderr as evidence: a timeout surfaces here as
@@ -856,6 +900,7 @@ def check_hooks():
         markers = re.findall(constants.HOOKS_DOCTOR_MARKER_RE, stdout)
         if markers:
             result = {
+                "id": "HOOKS_DOCTOR_FINDINGS",
                 "status": "broken",
                 "reason": f"`hermes hooks doctor` reported {len(markers)} finding(s)",
                 "detail": stdout.strip()[:2000],
@@ -866,6 +911,7 @@ def check_hooks():
             # Output ran but matched no known summary pattern — treat as unknown
             # rather than falsely healthy in case Hermes changed its wording.
             result = {
+                "id": "HOOKS_DOCTOR_OPAQUE",
                 "status": "unknown",
                 "reason": "`hermes hooks doctor` output matched no known summary pattern",
                 "detail": stdout.strip()[:2000],
@@ -907,6 +953,7 @@ def check_hooks_readonly():
     shell_hooks = _load_shell_hooks()
     if shell_hooks is None:
         return {
+            "id": "HOOKS_INSPECTION_UNAVAILABLE",
             "status": "unknown",
             "reason": "agent.shell_hooks unavailable; hooks not inspected",
             "detail": None,
@@ -916,6 +963,7 @@ def check_hooks_readonly():
     home = _hermes_home_from_library()
     if not home:
         return {
+            "id": "HOME_UNRESOLVED",
             "status": "unknown",
             "reason": "hermes home not resolvable; hooks not inspected",
             "detail": None,
@@ -925,6 +973,7 @@ def check_hooks_readonly():
         # Home is known, so a malformed allowlist is still resolvable: merge
         # it in rather than letting `unknown` hide a real `broken`.
         return _merge_allowlist_json({
+            "id": "HOOKS_CONFIG_NOT_FOUND",
             "status": "unknown",
             "reason": "config.yaml not found at library-derived home; hooks not inspected",
             "detail": None,
@@ -938,6 +987,7 @@ def check_hooks_readonly():
         data = None
     if data is None:
         return _merge_allowlist_json({
+            "id": "HOOKS_CONFIG_UNREADABLE",
             "status": "unknown",
             "reason": "config not readable; hooks not inspected",
             "detail": None,
@@ -946,6 +996,7 @@ def check_hooks_readonly():
         specs = shell_hooks.iter_configured_hooks(data)
     except Exception as exc:
         return _merge_allowlist_json({
+            "id": "HOOKS_INSPECTION_FAILED",
             "status": "unknown",
             "reason": f"hooks config could not be inspected ({type(exc).__name__})",
             "detail": None,
@@ -975,6 +1026,7 @@ def check_hooks_readonly():
                 )
         if findings:
             result = {
+                "id": "HOOKS_FINDINGS",
                 "status": "broken",
                 "reason": f"{len(findings)} hook finding(s)",
                 "detail": findings,
@@ -1217,6 +1269,7 @@ def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_
         bundled_note = []
     if broken:
         return {
+            "id": "PLUGINS_MISSING_OR_BROKEN",
             "status": "broken",
             "reason": f"{len(broken)} enabled plugin(s) missing or broken",
             "detail": broken + notes + advisories + bundled_note,
@@ -1279,7 +1332,12 @@ def check_plugins(manifests=None):
     path, data = _read_config()
     home = _hermes_home()
     if not path or data is None or not home:
-        return {"status": "unknown", "reason": "cannot read config", "detail": path}
+        return {
+            "id": "CONFIG_UNREADABLE",
+            "status": "unknown",
+            "reason": "cannot read config",
+            "detail": path,
+        }
 
     plugins_cfg = data.get(constants.CONFIG_PLUGINS_SECTION)
     if plugins_cfg is None:
@@ -1289,6 +1347,7 @@ def check_plugins(manifests=None):
         # broken, not silently healthy. A string/list here means the loader
         # reads nothing while the user believes plugins are configured.
         return {
+            "id": "PLUGINS_CONFIG_SHAPE",
             "status": "broken",
             "reason": f"`{constants.CONFIG_PLUGINS_SECTION}` must be a mapping, "
             f"got {type(plugins_cfg).__name__}",
@@ -1377,7 +1436,12 @@ def check_plugins(manifests=None):
     else:
         bundled_note = []
     if broken:
-        return {"status": "broken", "reason": f"{len(broken)} enabled plugin(s) missing or broken", "detail": broken + notes + bundled_note}
+        return {
+            "id": "PLUGINS_MISSING_OR_BROKEN",
+            "status": "broken",
+            "reason": f"{len(broken)} enabled plugin(s) missing or broken",
+            "detail": broken + notes + bundled_note,
+        }
     if notes:
         return {"status": "informational", "reason": f"{len(notes)} plugin(s) not enabled", "detail": notes + bundled_note}
     if bundled_note:
@@ -1434,7 +1498,12 @@ def check_memory_hygiene():
     """
     home = _hermes_home()
     if not home:
-        return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
+        return {
+            "id": "HOME_UNRESOLVED",
+            "status": "unknown",
+            "reason": "cannot resolve $HERMES_HOME",
+            "detail": None,
+        }
     _, data = _read_config()
 
     memories_dir = os.path.join(home, "memories")
@@ -1548,7 +1617,12 @@ def check_memory_hygiene():
                 )
 
     if broken:
-        return {"status": "broken", "reason": f"{len(broken)} memory issue(s)", "detail": broken + notes}
+        return {
+            "id": "MEMORIES_ISSUES",
+            "status": "broken",
+            "reason": f"{len(broken)} memory issue(s)",
+            "detail": broken + notes,
+        }
     if stores_present == 0:
         return {"status": "healthy", "reason": "no memory files yet (nothing to audit)", "detail": memories_dir}
     for store in missing:
@@ -1659,7 +1733,12 @@ def check_session_health():
     """
     home = _hermes_home()
     if not home:
-        return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
+        return {
+            "id": "HOME_UNRESOLVED",
+            "status": "unknown",
+            "reason": "cannot resolve $HERMES_HOME",
+            "detail": None,
+        }
     log_path = os.path.join(home, "logs", "agent.log")
     if not os.path.exists(log_path):
         # Hermes writes agent.log on every run: absent means no runs yet,
@@ -1673,15 +1752,24 @@ def check_session_health():
             # proactive session boundaries).
             lines = collections.deque(fh, maxlen=_SESSION_LOG_TAIL_LINES)
     except OSError as exc:
-        return {"status": "unknown", "reason": f"cannot read agent log: {exc}", "detail": log_path}
+        return {
+            "id": "SESSIONS_LOG_UNREADABLE",
+            "status": "unknown",
+            "reason": f"cannot read agent log: {exc}",
+            "detail": log_path,
+        }
     tail = list(lines)
     stats = _session_stats(tail)
     loop_lines = sum(1 for line in tail if "conversation_loop" in line)
     if loop_lines and not stats:
         # Log tail is unusable (rotated format? truncated lines?) — that is
         # indeterminate, never a clean bill of health.
-        return {"status": "unknown", "reason": "log tail has session lines but none parsed",
-                "detail": log_path}
+        return {
+            "id": "SESSIONS_LOG_UNPARSED",
+            "status": "unknown",
+            "reason": "log tail has session lines but none parsed",
+            "detail": log_path,
+        }
     if not stats:
         return {"status": "healthy", "reason": "no session activity in recent log tail",
                 "detail": log_path}
@@ -1714,7 +1802,12 @@ def check_session_health():
         elif s["turns"] >= _SESSION_ELEVATED_MIN_TURNS or big_context:
             notes.append(summary + " — elevated")
     if broken:
-        return {"status": "broken", "reason": f"{len(broken)} runaway session(s)", "detail": broken + notes}
+        return {
+            "id": "SESSIONS_RUNAWAY",
+            "status": "broken",
+            "reason": f"{len(broken)} runaway session(s)",
+            "detail": broken + notes,
+        }
     if notes:
         return {"status": "informational", "reason": f"{len(notes)} elevated session(s)", "detail": notes}
     return {"status": "healthy", "reason": "no runaway session signature in recent log tail",
@@ -1943,17 +2036,28 @@ def check_update_lock():
     """
     home = _hermes_home()
     if not home:
-        return {"status": "unknown", "reason": "cannot resolve $HERMES_HOME", "detail": None}
+        return {
+            "id": "HOME_UNRESOLVED",
+            "status": "unknown",
+            "reason": "cannot resolve $HERMES_HOME",
+            "detail": None,
+        }
     try:
         candidates = _checkout_lock_candidates(home)
     except OSError as exc:
-        return {"status": "unknown",
-                "reason": f"cannot resolve the install checkout ({exc.strerror or exc})",
-                "detail": home}
+        return {
+            "id": "UPDATE_CHECKOUT_UNRESOLVED",
+            "status": "unknown",
+            "reason": f"cannot resolve the install checkout ({exc.strerror or exc})",
+            "detail": home,
+        }
     if not candidates:
-        return {"status": "unknown",
-                "reason": "install layout unrecognized (no hermes-agent checkout beside $HERMES_HOME) — verify the update lock by hand",
-                "detail": home}
+        return {
+            "id": "UPDATE_LAYOUT_UNRECOGNIZED",
+            "status": "unknown",
+            "reason": "install layout unrecognized (no hermes-agent checkout beside $HERMES_HOME) — verify the update lock by hand",
+            "detail": home,
+        }
     lock_path = None
     for candidate in candidates:
         try:
@@ -1962,9 +2066,12 @@ def check_update_lock():
         except FileNotFoundError:
             continue  # absent here; another candidate (or healthy) may apply
         except OSError as exc:
-            return {"status": "unknown",
-                    "reason": f"update lock present but unreadable: {candidate} ({exc.strerror or exc})",
-                    "detail": candidate}
+            return {
+                "id": "UPDATE_LOCK_UNREADABLE",
+                "status": "unknown",
+                "reason": f"update lock present but unreadable: {candidate} ({exc.strerror or exc})",
+                "detail": candidate,
+            }
         lock_path = candidate
         break
     if lock_path is None:
@@ -1973,8 +2080,12 @@ def check_update_lock():
     try:
         pid = int(first)
     except ValueError:
-        return {"status": "unknown", "reason": f"unreadable update lock: {lock_path}",
-                "detail": lock_path}
+        return {
+            "id": "UPDATE_LOCK_MALFORMED",
+            "status": "unknown",
+            "reason": f"unreadable update lock: {lock_path}",
+            "detail": lock_path,
+        }
     # PID liveness cannot exclude PID reuse: a recycled PID reads alive.
     # The removal step stays human-confirmed for exactly this reason — the
     # check authorizes nothing by itself.
@@ -1986,19 +2097,282 @@ def check_update_lock():
     if alive is False:
         free = _checkout_lock_free(lock_path)
         if free is False:
-            return {"status": "broken",
-                    "reason": f"update owner PID {pid} dead but the checkout is still held by a process it started — every hermes invocation wedges until it exits; wait, do not remove the lock",
-                    "detail": lock_path}
+            return {
+                "id": "UPDATE_LOCK_HELD",
+                "status": "broken",
+                "reason": f"update owner PID {pid} dead but the checkout is still held by a process it started — every hermes invocation wedges until it exits; wait, do not remove the lock",
+                "detail": lock_path,
+            }
         if free is True:
             return {"status": "informational",
                     "reason": f"stale update lock record (owner PID {pid} dead, checkout free) — harmless residue, CLI unaffected; safe to remove with human confirmation",
                     "detail": lock_path}
-        return {"status": "unknown",
-                "reason": f"owner PID {pid} dead but the checkout lock cannot be probed — verify by hand before touching the lock",
-                "detail": lock_path}
-    return {"status": "unknown",
-            "reason": f"owner PID {pid} liveness indeterminate — verify by hand before touching the lock",
-            "detail": lock_path}
+        return {
+            "id": "UPDATE_LOCK_UNPROBEABLE",
+            "status": "unknown",
+            "reason": f"owner PID {pid} dead but the checkout lock cannot be probed — verify by hand before touching the lock",
+            "detail": lock_path,
+        }
+    return {
+        "id": "UPDATE_LOCK_INDETERMINATE",
+        "status": "unknown",
+        "reason": f"owner PID {pid} liveness indeterminate — verify by hand before touching the lock",
+        "detail": lock_path,
+    }
+
+
+# --- finding contract -----------------------------------------------------
+
+# id -> (title, impact, fix). IDs are public API once released: additive
+# entries are safe, but renaming or removing one needs a schema version bump.
+# `impact` says what the user cannot do; `fix` names one concrete command or
+# file edit. `run_all()` attaches both, so checks stay free of duplicated
+# copy and `_format_result` keeps rendering only `reason` / `detail`.
+FINDING_IDS: dict[str, tuple[str, str, str]] = {
+    "CONFIG_PATH_UNRESOLVED": (
+        "config path unresolved",
+        "Hermes cannot locate `config.yaml`, so custom providers, models, and "
+        "tools may silently fall back to defaults.",
+        "Run `hermes config path`; if it fails, reinstall the Hermes CLI.",
+    ),
+    "CONFIG_MISSING": (
+        "config file missing",
+        "Hermes runs on built-in defaults; any custom provider, model, or tool "
+        "choice is ignored.",
+        "Run `hermes setup` or restore the file to the reported path, then "
+        "re-run `hermes guide config`.",
+    ),
+    "CONFIG_UNPARSEABLE": (
+        "config.yaml does not parse",
+        "Hermes cannot load its settings, so affected features fall back or "
+        "fail at startup.",
+        "Fix the YAML at the reported path (indentation, quoting, duplicate "
+        "keys), then re-run `hermes guide config`.",
+    ),
+    "CONFIG_UNREADABLE": (
+        "config unreadable or unparsable",
+        "The affected surface cannot be inspected because the config could not "
+        "be loaded (unreadable file or invalid YAML).",
+        "Check read permissions on the reported path, and if the file is "
+        "readable fix its YAML, then re-run `hermes guide`.",
+    ),
+    "HOME_UNRESOLVED": (
+        "Hermes home unresolved",
+        "The affected surface cannot be inspected because the Hermes home "
+        "directory could not be resolved.",
+        "Run `hermes config path` to confirm the profile resolves, then re-run "
+        "`hermes guide <scope>`.",
+    ),
+    "MCP_SERVER_MALFORMED": (
+        "MCP server entry malformed",
+        "The listed MCP servers will not start, so their tools are unavailable "
+        "to the agent.",
+        "Move foreign keys such as `mcpServers` under the top-level "
+        "`mcp_servers` mapping, make `mcp_servers` a mapping, and fix the "
+        "listed entries (`command` for stdio, `url` for HTTP); then re-run "
+        "`hermes guide mcp`.",
+    ),
+    "SKILLS_ISSUES": (
+        "skill issues",
+        "The listed skills will not load or will be shadowed, so their "
+        "instructions and slash commands are missing.",
+        "Fix the listed frontmatter, name, or path problems, then re-run "
+        "`hermes guide skills`.",
+    ),
+    "COMMANDS_BUNDLE_MALFORMED": (
+        "command bundle malformed",
+        "Commands defined in the listed bundles will not resolve.",
+        "Fix or remove the listed bundle files, then re-run "
+        "`hermes guide commands`.",
+    ),
+    "HOOKS_ALLOWLIST_INVALID": (
+        "shell-hooks allowlist invalid",
+        "The shell-hook consent list cannot be read, so approved hooks may be "
+        "skipped or re-prompt, and any other hook problems are quoted in the "
+        "detail.",
+        "Repair or delete the reported `shell-hooks-allowlist.json`, then fix "
+        "the hook problems in the detail and re-run `hermes guide hooks`.",
+    ),
+    "HOOKS_DOCTOR_FINDINGS": (
+        "hooks doctor findings",
+        "One or more hooks fail or are misconfigured, so the events they guard "
+        "are unhandled.",
+        "Fix each hook reported by `hermes hooks doctor`, then re-run "
+        "`hermes guide hooks`.",
+    ),
+    "HOOKS_DOCTOR_UNAVAILABLE": (
+        "hooks doctor unavailable",
+        "Hook health could not be verified, so a broken hook can fail silently "
+        "at runtime.",
+        "Run `hermes hooks doctor` manually and fix the error it reports.",
+    ),
+    "HOOKS_DOCTOR_OPAQUE": (
+        "hooks doctor output unrecognized",
+        "Hook health could not be determined because the doctor output was not "
+        "recognized.",
+        "Run `hermes hooks doctor` manually and compare its output with the "
+        "installed Hermes version.",
+    ),
+    "HOOKS_INSPECTION_UNAVAILABLE": (
+        "hooks inspection unavailable",
+        "Hooks were skipped in this run, so hook failures surface only during "
+        "a session.",
+        "Run `hermes guide hooks` without `--fast` to inspect hooks on demand.",
+    ),
+    "HOOKS_CONFIG_NOT_FOUND": (
+        "hooks config missing",
+        "Hooks cannot be inspected because the profile's config file was not "
+        "found.",
+        "Run `hermes config path` and restore the profile's `config.yaml`.",
+    ),
+    "HOOKS_CONFIG_UNREADABLE": (
+        "hooks config unreadable",
+        "Hooks cannot be inspected because the config file could not be "
+        "loaded.",
+        "Check read permissions on the profile's `config.yaml`, and if the "
+        "file is readable fix its YAML, then re-run `hermes guide hooks`.",
+    ),
+    "HOOKS_INSPECTION_FAILED": (
+        "hook inspection failed",
+        "Hooks could not be inspected because the hook configuration raised an "
+        "error.",
+        "Re-run `hermes guide hooks`; if it repeats, report the exception type "
+        "shown in the reason.",
+    ),
+    "HOOKS_FINDINGS": (
+        "hook findings",
+        "One or more shell hooks are malformed, unreachable, or not "
+        "allowlisted, so the events they guard are unhandled.",
+        "Fix the listed hook entries in `config.yaml`, and approve each valid "
+        "hook at the interactive prompt when the detail says it is not "
+        "allowlisted; then re-run `hermes guide hooks`.",
+    ),
+    "PLUGINS_CONFIG_SHAPE": (
+        "plugins config not a mapping",
+        "The `plugins` section is not a mapping, so plugin enable and disable "
+        "settings are ignored.",
+        "Rewrite `plugins` in `config.yaml` as a mapping with `enabled` and "
+        "`disabled` lists, then re-run `hermes guide plugins`.",
+    ),
+    "PLUGINS_MISSING_OR_BROKEN": (
+        "plugin missing or broken",
+        "The listed enabled plugins are missing or failed to load, so their "
+        "commands, tools, and hooks are absent.",
+        "Run `hermes plugins list`; reinstall a missing plugin, and for an "
+        "exclusive provider select its category key (for example "
+        "`memory.provider`) instead of `plugins.enabled`.",
+    ),
+    "MEMORIES_ISSUES": (
+        "memory issues",
+        "The listed memory files are inconsistent, so stored context may be "
+        "stale or ignored.",
+        "Fix the listed files under `$HERMES_HOME/memories/`, then re-run "
+        "`hermes guide memories`.",
+    ),
+    "SESSIONS_LOG_UNREADABLE": (
+        "session log unreadable",
+        "Session activity cannot be analyzed, so runaway sessions stay "
+        "undetected.",
+        "Check read permissions on the reported agent log, then re-run "
+        "`hermes guide sessions`.",
+    ),
+    "SESSIONS_LOG_UNPARSED": (
+        "session log unparsed",
+        "Session activity cannot be analyzed because the log format was not "
+        "recognized.",
+        "Re-run `hermes guide sessions`; if it repeats, check the log format "
+        "written by the installed Hermes version.",
+    ),
+    "SESSIONS_RUNAWAY": (
+        "runaway session",
+        "The listed sessions are burning API calls and context without "
+        "progress, which inflates cost and degrades answers.",
+        "Start a new session instead of resuming the listed one, and separate "
+        "generation from verification into distinct turns.",
+    ),
+    "UPDATE_CHECKOUT_UNRESOLVED": (
+        "install checkout unresolved",
+        "The install checkout cannot be located, so update health cannot be "
+        "verified.",
+        "Run `hermes doctor` to confirm the install layout, then re-run "
+        "`hermes guide update`.",
+    ),
+    "UPDATE_LAYOUT_UNRECOGNIZED": (
+        "install layout unrecognized",
+        "The install layout was not recognized, so a stuck update lock cannot "
+        "be ruled out.",
+        "Run `hermes doctor` to confirm the install layout, then locate the "
+        "checkout and its update lock by hand.",
+    ),
+    "UPDATE_LOCK_UNREADABLE": (
+        "update lock unreadable",
+        "A stale update lock may be blocking every `hermes` command, and it "
+        "could not be read.",
+        "Check read permissions on the reported lock file, then re-run "
+        "`hermes guide update`.",
+    ),
+    "UPDATE_LOCK_MALFORMED": (
+        "update lock malformed",
+        "The update lock does not name an owner, so update state cannot be "
+        "determined.",
+        "The lock must contain one PID; if no update is running, remove the "
+        "reported file with human confirmation.",
+    ),
+    "UPDATE_LOCK_HELD": (
+        "update lock held",
+        "Every `hermes` invocation can wedge until the process holding the "
+        "checkout exits.",
+        "Wait for the process holding the checkout to exit (owner PID in the "
+        "reason); do not remove the lock while it is held.",
+    ),
+    "UPDATE_LOCK_UNPROBEABLE": (
+        "update lock unprobeable",
+        "A dead update owner may still be holding the checkout, and that "
+        "could not be verified.",
+        "Check for a running `hermes` or `git` process by hand before touching "
+        "the reported lock file.",
+    ),
+    "UPDATE_LOCK_INDETERMINATE": (
+        "update lock indeterminate",
+        "Update ownership cannot be determined, so removing the lock could "
+        "interrupt a live update.",
+        "Check whether the owner PID in the reason is alive by hand before "
+        "touching the reported lock file.",
+    ),
+    "FAST_MODE_UNRESOLVED": (
+        "fast mode skipped a surface",
+        "The affected surface was skipped, so its real state is unknown.",
+        "Re-run `hermes guide <scope>` without `--fast`.",
+    ),
+    "CHECK_CRASHED": (
+        "check crashed",
+        "The affected check failed to run, so its surface was not inspected "
+        "(a defect in hermes-guide, not in your config).",
+        "Re-run `hermes guide <scope>`; if it repeats, file the exception type "
+        "and `hermes --version` at "
+        "https://github.com/iap/hermes-guide/issues.",
+    ),
+}
+
+_FINDING_STATUSES = ("broken", "unknown")
+
+
+def _attach_finding(result):
+    """Add `impact` and `fix` to a broken or unknown envelope.
+
+    The id comes from the check; the copy comes from `FINDING_IDS` in one
+    place so it cannot drift per call site. Healthy and informational
+    envelopes are returned untouched, and `_format_result` ignores the new
+    keys, so text output is unchanged.
+    """
+    if result.get("status") not in _FINDING_STATUSES:
+        return result
+    meta = FINDING_IDS.get(result.get("id", ""))
+    if meta is None:
+        return result
+    result.setdefault("impact", meta[1])
+    result.setdefault("fix", meta[2])
+    return result
 
 
 # --- runner ---------------------------------------------------------------
@@ -2069,12 +2443,13 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
         if not home:
             wanted = [scope] if scope is not None else valid
             return {
-                label: {
+                label: _attach_finding({
+                    "id": "FAST_MODE_UNRESOLVED",
                     "status": "unknown",
                     "reason": "skipped in fast mode: home not resolvable "
                     "without a subprocess",
                     "detail": None,
-                }
+                })
                 for label in wanted
             }
         # Seed the expected config path from the known home (file or not):
@@ -2090,13 +2465,14 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
             if (readonly_hooks or fast) and label == "hooks":
                 fn = check_hooks_readonly
             try:
-                results[label] = fn()
+                results[label] = _attach_finding(fn())
             except Exception as exc:
-                results[label] = {
+                results[label] = _attach_finding({
+                    "id": "CHECK_CRASHED",
                     "status": "broken",
                     "reason": f"check crashed ({type(exc).__name__}: {exc})",
                     "detail": None,
-                }
+                })
     finally:
         if token is not None:
             _FAST_MODE.reset(token)

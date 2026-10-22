@@ -280,6 +280,12 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_check_envelopes.py
 
+      - name: Finding-contract regression test
+        # AST scan of checks.py plus run_all() fixtures - no Hermes, no
+        # $HERMES_HOME. Pins stable ids and registry-expanded impact/fix.
+        if: inputs.run-full-gate
+        run: python tools/test_finding_ids.py
+
       - name: Update-notice invocation site regression test
         # Shim-loads the plugin package with a counting git stub — no Hermes,
         # no network. Session start must stay subprocess-free; guide/doctor

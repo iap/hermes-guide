@@ -12,9 +12,16 @@ Learn these from the guard, not from memory — each one names its own script.
 | Layer | Lives in | Contract |
 |---|---|---|
 | Hermes CLI | upstream `hermes …` | Whatever Hermes prints. Parse it inside a check; never rebrand or rewrite a Hermes message as ours |
-| Plugin UX | `__init__.py` + `checks.py` | Check **envelopes** (`status` / `reason` / `detail`); `+/x/~/?` marks; `hermes guide` exits `0` healthy, `1` broken/unknown, `2` bad scope |
+| Plugin UX | `__init__.py` + `checks.py` | Check **envelopes** (`status` / `reason` / `detail`, plus `id` / `impact` / `fix` on broken and unknown); `+/x/~/?` marks; `hermes guide` exits `0` healthy, `1` broken/unknown, `2` bad scope |
 | Repo harness | `tools/` (`tests/` for the scanner-hygiene guard only) | Machine output — `OK:` / `FAIL` / `error:`, success on stdout, failures on stderr, non-zero exit. `--selftest` / `--warn` stay harness-only |
 
+- **Broken and unknown findings carry `id` / `impact` / `fix`.** `id` is a
+  `SCREAMING_SNAKE` key in `checks.FINDING_IDS`; `impact` is what the user
+  cannot do; `fix` is one concrete action — a `hermes …` command, a file +
+  field edit, or a report target when the finding is our defect.
+  `run_all()` expands the copy from the registry, so checks never restate it
+  and the text renderer ignores the keys. IDs are public API once released:
+  add entries, never rename one (`tools/test_finding_ids.py`).
 - **Checks return data; the plugin formats UX.** A check must not print a report
   or invent a second exit-code scheme. Return an envelope; `_format_result` and
   `_run_cli` own presentation.
