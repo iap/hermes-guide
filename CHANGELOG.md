@@ -11,6 +11,7 @@ All notable changes to hermes-guide are documented here.
 ### Documentation
 
 - **scope**: carve out the plugin's own catalog listing ([#324](https://github.com/iap/hermes-guide/pull/324))
+- **skills**: disclose the update scope's lock probe ([#327](https://github.com/iap/hermes-guide/pull/327))
 
 ### Chores
 
