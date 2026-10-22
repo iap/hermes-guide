@@ -25,8 +25,6 @@ import sys
 from pathlib import Path
 
 CATALOG_ENTRY = "repos/NousResearch/hermes-agent/contents/plugin-catalog/hermes-guide.yaml"
-ENTRY_SHA = re.compile(r"^sha:\s*(\S+)\s*$", re.MULTILINE)
-ENTRY_VERSION = re.compile(r"^version:\s*\"?([^\"\s]+)\"?\s*$", re.MULTILINE)
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -148,6 +146,28 @@ def _open_blockers() -> tuple[str, str, str]:
             "resolve or downgrade before tagging")
 
 
+def _entry_scalar(text: str, key: str) -> str | None:
+    """Return a top-level scalar from the entry, tolerating YAML quoting.
+
+    The entry is hand-maintained, so ``sha: "abc"`` and ``sha: abc  # pin`` are
+    both legal YAML and both appear in practice. A regex that keeps the quotes
+    or the comment turns a correct pin into a false NOT READY.
+    """
+    match = re.search(rf"^{key}:\s*(.*)$", text, re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1).strip()
+    if value[:1] in ("'", '"'):
+        end = value.find(value[0], 1)
+        if end < 1:
+            return None
+        return value[1:end] or None
+    comment = re.search(r"\s#", value)
+    if comment:
+        value = value[: comment.start()].strip()
+    return value or None
+
+
 def _dotted(version: str) -> tuple[int, ...] | None:
     """Return a comparable key for a dotted-numeric version, else None."""
     if not re.fullmatch(r"\d+(?:\.\d+)*", version):
@@ -173,18 +193,22 @@ def _catalog_pin() -> tuple[str, str, str]:
     if not isinstance(payload, dict) or payload.get("encoding") != "base64":
         return ("unknown", f"unexpected entry payload: {str(payload)[:80]}",
                 "re-run with network")
+    content = payload.get("content")
+    if not isinstance(content, str):
+        return ("unknown", f"entry payload has no string content: {str(payload)[:80]}",
+                "inspect the entry by hand")
     try:
-        text = base64.b64decode(payload.get("content", "")).decode("utf-8")
+        text = base64.b64decode(content).decode("utf-8")
     except (ValueError, UnicodeDecodeError):
         return ("unknown", "upstream entry is not base64 UTF-8", "inspect the entry by hand")
     if not text.strip():
         return ("unknown", "empty upstream entry payload", "inspect the entry by hand")
 
-    sha_match, version_match = ENTRY_SHA.search(text), ENTRY_VERSION.search(text)
-    if not sha_match or not version_match:
+    pinned_sha = _entry_scalar(text, "sha")
+    pinned_version = _entry_scalar(text, "version")
+    if not pinned_sha or not pinned_version:
         return ("fail", "upstream entry has no sha/version pair",
                 "inspect plugin-catalog/hermes-guide.yaml upstream")
-    pinned_sha, pinned_version = sha_match.group(1), version_match.group(1)
 
     tag = f"v{pinned_version}"
     code, target = _run("git", "rev-parse", "--verify", "--quiet",
@@ -201,7 +225,12 @@ def _catalog_pin() -> tuple[str, str, str]:
     repo_match = re.search(r"^version:\s*(\S+)\s*$", version_text, re.MULTILINE)
     repo_version = repo_match.group(1) if repo_match else "unknown"
     pinned_key, repo_key = _dotted(pinned_version), _dotted(repo_version)
-    if pinned_key is not None and repo_key is not None and pinned_key > repo_key:
+    if pinned_key is None or repo_key is None:
+        if pinned_version != repo_version:
+            return ("unknown",
+                    f"entry pins {pinned_version}, repo is {repo_version}; "
+                    "ordering outside dotted-numeric needs a human", "compare by hand")
+    elif pinned_key > repo_key:
         return ("fail", f"upstream entry pins {pinned_version}, newer than "
                         f"plugin.yaml's {repo_version}", "inspect the entry upstream")
     if repo_version != pinned_version:

@@ -88,6 +88,10 @@ def _entry(version: str, sha: str) -> str:
     """Return a GitHub contents payload wrapping a catalog entry."""
     text = (f"name: hermes-guide\nsha: {sha}\nversion: \"{version}\"\n"
             "description: test entry\n")
+    return _entry_text(text)
+
+
+def _entry_text(text: str) -> str:
     encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
     return json.dumps({"encoding": "base64", "content": encoded})
 
@@ -247,6 +251,45 @@ def test_catalog_pin_ahead_of_release_fails():
     assert "[FAIL] catalog-pin" in out and "newer than" in out, out
 
 
+def test_catalog_pin_tolerates_yaml_quoting_and_comments():
+    mod = _load()
+    sha = "a" * 40
+    forms = [
+        f'name: hermes-guide\nsha: "{sha}"\nversion: "0.8.7"\n',
+        f"name: hermes-guide\nsha: {sha}  # v0.8.7\nversion: '0.8.7'\n",
+        f"name: hermes-guide\nsha: {sha} # bare\nversion: 0.8.7\n",
+    ]
+    for text in forms:
+        stubs = _healthy({("gh", "api"): (0, _entry_text(text))})
+        code, out, _ = _run_main(mod, stubs)
+        assert code == 0, (text, out)
+        assert "[ok] catalog-pin" in out, (text, out)
+
+
+def test_catalog_pin_prerelease_difference_is_indeterminate():
+    mod = _load()
+    stubs = _healthy({("gh", "api"): (0, _entry("0.9.0rc1", "a" * 40))})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 0, out
+    assert "[??] catalog-pin" in out and "READY WITH ADVISORIES" in out, out
+
+
+def test_catalog_pin_enforces_dotted_ordering():
+    mod = _load()
+    stubs = _healthy({("gh", "api"): (0, _entry("9.9.9", "a" * 40))})
+    assert mod._dotted("9.9.9") > mod._dotted("0.8.7")
+    assert mod._dotted("0.9.0rc1") is None
+
+
+def test_catalog_pin_null_content_is_unknown():
+    mod = _load()
+    stubs = _healthy({("gh", "api"): (0, json.dumps({"encoding": "base64",
+                                                    "content": None}))})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 0, out
+    assert "[??] catalog-pin" in out, out
+
+
 def test_catalog_pin_without_fields_fails():
     mod = _load()
     garbage = json.dumps({"encoding": "base64",
@@ -283,6 +326,10 @@ def main() -> int:
         test_catalog_pin_without_gh_is_unknown,
         test_catalog_pin_malformed_entry_is_indeterminate,
         test_catalog_pin_without_fields_fails,
+        test_catalog_pin_tolerates_yaml_quoting_and_comments,
+        test_catalog_pin_prerelease_difference_is_indeterminate,
+        test_catalog_pin_enforces_dotted_ordering,
+        test_catalog_pin_null_content_is_unknown,
         test_offline_skips_catalog_pin,
     ]
     failed = 0
