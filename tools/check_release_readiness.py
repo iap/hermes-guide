@@ -153,7 +153,9 @@ def _entry_scalar(text: str, key: str) -> str | None:
     both legal YAML and both appear in practice. A regex that keeps the quotes
     or the comment turns a correct pin into a false NOT READY.
     """
-    match = re.search(rf"^{key}:\s*(.*)$", text, re.MULTILINE)
+    # `[ \t]*` rather than `\s*`: the latter crosses the newline, so an empty
+    # `version:` would take the next field as its value instead of reading empty.
+    match = re.search(rf"^{key}:[ \t]*(.*)$", text, re.MULTILINE)
     if not match:
         return None
     value = match.group(1).strip()

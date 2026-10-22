@@ -251,6 +251,16 @@ def test_catalog_pin_ahead_of_release_fails():
     assert "[FAIL] catalog-pin" in out and "newer than" in out, out
 
 
+def test_catalog_pin_empty_version_does_not_borrow_the_next_field():
+    mod = _load()
+    text = f"name: hermes-guide\nsha: {'a' * 40}\nversion:\ndescription: gone\n"
+    stubs = _healthy({("gh", "api"): (0, _entry_text(text))})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 1, out
+    assert "[FAIL] catalog-pin" in out, out
+    assert "no sha/version pair" in out, out
+
+
 def test_catalog_pin_tolerates_yaml_quoting_and_comments():
     mod = _load()
     sha = "a" * 40
@@ -326,6 +336,7 @@ def main() -> int:
         test_catalog_pin_without_gh_is_unknown,
         test_catalog_pin_malformed_entry_is_indeterminate,
         test_catalog_pin_without_fields_fails,
+        test_catalog_pin_empty_version_does_not_borrow_the_next_field,
         test_catalog_pin_tolerates_yaml_quoting_and_comments,
         test_catalog_pin_prerelease_difference_is_indeterminate,
         test_catalog_pin_enforces_dotted_ordering,
