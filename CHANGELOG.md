@@ -2,6 +2,21 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.7 (2026-10-22)
+
+### Bug Fixes
+
+- **tools**: fail the changelog guard on a missing release entry ([#325](https://github.com/iap/hermes-guide/pull/325))
+
+### Documentation
+
+- **scope**: carve out the plugin's own catalog listing ([#324](https://github.com/iap/hermes-guide/pull/324))
+- **skills**: disclose the update scope's lock probe ([#327](https://github.com/iap/hermes-guide/pull/327))
+
+### Chores
+
+- **drift**: re-baseline to upstream 8f555f4 ([#326](https://github.com/iap/hermes-guide/pull/326))
+
 ## v0.8.6 (2026-10-21)
 
 ### Bug Fixes
