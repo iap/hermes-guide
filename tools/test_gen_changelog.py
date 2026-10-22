@@ -191,6 +191,83 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 return f"--check did not name the uncovered version: {out}"
         return None
 
+    def check_fails_on_missing_entry() -> str | None:
+        """A section can exist and still omit a PR merged into its tag range.
+
+        This is the v0.8.6 failure: #323 was in the tag but not in the
+        section, and section-existence alone read clean. Plain `(#N)` refs
+        count as coverage, so only the genuinely missing PR is reported.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat(api): real change (#1)")
+            _commit(root, "fix(api): second change (#2)")
+            _commit(root, "release: bump to v1.0.0 with changelog section")
+            _git(root, "tag", "v1.0.0")
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n"
+                "- **api**: real change (#1)\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 1:
+                return f"missing entry expected 1, got {code}: {out}"
+            if "#2" not in out:
+                return f"did not name the omitted PR: {out}"
+            if "#1" in out:
+                return f"reported a PR the section already lists: {out}"
+        return None
+
+    def release_commit_needs_no_entry() -> str | None:
+        """The tag's own commit is the section, in either subject style.
+
+        Squash merges render the bump as `chore(release): bump to 0.7.2 (#250)`;
+        excluding by SHA covers that without a subject heuristic.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat: thing (#1)")
+            _commit(root, "chore(release): bump to 1.1.0 (#2)")
+            _git(root, "tag", "v1.1.0")
+            (root / "plugin.yaml").write_text(
+                "name: demo\nversion: 1.1.0\n", encoding="utf-8"
+            )
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.1.0 (2026-01-01)\n\n### Features\n\n- thing (#1)\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 0:
+                return f"release commit wrongly required an entry: {code}: {out}"
+        return None
+
+    def pre_cutoff_tags_are_exempt() -> str | None:
+        """Merge-commit-era releases carry no PR refs; demanding one is noise.
+
+        Coverage starts at the first PR-generated section (v0.7.0). An older
+        section without `(#N)` refs must not fail the guard.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat: old (#3)")
+            _git(root, "tag", "v0.6.0")
+            _commit(root, "feat: new (#4)")
+            _commit(root, "release: bump to v1.0.0")
+            _git(root, "tag", "v1.0.0")
+            (root / "CHANGELOG.md").write_text(
+                HEADER
+                + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- new (#4)\n\n"
+                + "## v0.6.0 (2025-01-01)\n\n### Features\n\n- old\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 0:
+                return f"pre-cutoff tag caused a false positive: {code}: {out}"
+        return None
+
     def upcoming_is_idempotent() -> str | None:
         """Re-running --upcoming must not duplicate or reorder sections."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -473,6 +550,9 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         ("--upcoming transcodes a legacy log encoding", log_encoding_overrides_configured_output),
         ("--check fails on a tag with no section", check_fails_on_missing_section),
         ("--check fails on an untagged plugin.yaml version", check_fails_on_untagged_version),
+        ("--check fails on a PR missing from its release section", check_fails_on_missing_entry),
+        ("the tag's own release commit needs no entry", release_commit_needs_no_entry),
+        ("pre-cutoff releases are exempt from entry coverage", pre_cutoff_tags_are_exempt),
         ("--upcoming is idempotent and newest-first", upcoming_is_idempotent),
         ("--check reports an unreadable CHANGELOG.md as unusable", check_reports_unreadable_changelog),
         ("--check admits tag-blind coverage", check_admits_tag_blind_coverage),

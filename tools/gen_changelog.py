@@ -78,8 +78,13 @@ CONVENTIONAL_RE = re.compile(
 # The release commit describes the section being written, so it is never an
 # entry. Skipping it also makes the tool robust to the #320 ordering mistake:
 # regenerating with `release: bump to vX` already committed used to file it
-# under Chores.
-RELEASE_COMMIT_RE = re.compile(r"^release:\s+bump to v\d", re.IGNORECASE)
+# under Chores. The version may or may not carry a leading `v`, and a squash
+# merge may render it as `chore(release): bump to 0.7.2` — a variant the
+# original `^release:` pattern missed.
+RELEASE_COMMIT_RE = re.compile(
+    r"^(?:release|chore\(release\)):\s*(?:bump to\s+)?v?\d+\.\d+\.\d+",
+    re.IGNORECASE,
+)
 
 # No emoji — the project tone guard forbids emoji in prose.
 # Type labels are plain text.
@@ -207,6 +212,50 @@ RELEASE_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 def release_tags() -> list[str]:
     """Return the release tags (``v<semver>``) sorted newest-first by date."""
     return [tag for tag, _ in get_tags() if RELEASE_TAG_RE.match(tag)]
+
+
+# PR references in a section. Generated entries link `[#N](pull/N)`; sections
+# assembled or edited by hand may use a plain `(#N)`. Both are coverage.
+SECTION_PR_RE = re.compile(r"\[#(\d+)\]|\(#(\d+)\)")
+
+# Entry coverage is enforced from the first release whose section was generated
+# from PR-numbered squash commits. Older sections were assembled from merge
+# commits (`Merge pull request #N from ...`), which never carry a `(#N)` ref, so
+# demanding PR coverage there would fail history that is legitimately shaped
+# differently — the marker-tag false positive again, one release older.
+COVERAGE_FROM = (0, 7, 0)
+
+
+def _version_key(tag: str) -> tuple[int, ...]:
+    """Sortable ``(major, minor, patch)`` from a ``v<semver>`` tag."""
+    return tuple(int(part) for part in tag.lstrip("v").split("."))
+
+
+def missing_entries(tags: list[str], sections: dict[str, str]) -> list[str]:
+    """PRs whose commits fall in a release's tag range but not in its section.
+
+    Each gap is ``"<tag>: #<pr> <subject>"``. The release commit itself is
+    excluded by SHA, which is exact: every release tag points at the commit
+    that wrote its section, whatever subject style that commit used. Commits
+    without a PR ref are skipped — a direct commit cannot be attributed to a
+    PR, and older history is full of them.
+    """
+    gaps: list[str] = []
+    for i, tag in enumerate(tags):
+        if _version_key(tag) < COVERAGE_FROM:
+            continue
+        prev = tags[i + 1] if i + 1 < len(tags) else None
+        listed = {int(a or b) for a, b in
+                  SECTION_PR_RE.findall(sections.get(tag, ""))}
+        release_sha = git(["rev-parse", f"{tag}^{{commit}}"]).strip()
+        for commit in get_commits(prev, tag):
+            if release_sha.startswith(commit["sha"]):
+                continue
+            if not commit["pr"] or int(commit["pr"]) in listed:
+                continue
+            scope = f"{commit['scope']}: " if commit["scope"] else ""
+            gaps.append(f"  {tag}: #{commit['pr']} {scope}{commit['subject']}")
+    return gaps
 
 
 def split_sections(text: str) -> tuple[str, dict[str, str]]:
@@ -337,6 +386,7 @@ def check() -> int:
         return 2
 
     present = {m.group(1) for m in SECTION_RE.finditer(text)}
+    _, sections = split_sections(text)
     tags = release_tags()
     version = plugin_version()
 
@@ -368,8 +418,29 @@ def check() -> int:
     # tag-blind checkout, and a guard that overstates its own reach is worse
     # than one that admits a gap.
     if tags:
+        # Entry coverage: a section can exist and still miss a PR merged into
+        # its tag range (#310/#312 in v0.8.5, #323 in v0.8.6). Walking tag
+        # ranges needs full history; a shallow clone with tags raises here
+        # rather than reading as coverage.
+        try:
+            gaps = missing_entries(tags, sections)
+        except RuntimeError as exc:
+            print(f"error: cannot walk release tag ranges ({exc}); "
+                  f"deepen the clone for entry coverage", file=sys.stderr)
+            return 2
+        if gaps:
+            print("FAIL: PR(s) in a release tag range with no CHANGELOG.md entry:",
+                  file=sys.stderr)
+            for line in gaps:
+                print(line, file=sys.stderr)
+            print("\nRun `python tools/gen_changelog.py --upcoming` before the tag, "
+                  "or add the missing line to that release's section.",
+                  file=sys.stderr)
+            return 1
+        floor = "v" + ".".join(str(part) for part in COVERAGE_FROM)
         print(f"OK: every release tag and the current version have a section "
-              f"({len(expected)} release(s) covered)")
+              f"({len(expected)} release(s) covered); entry coverage verified "
+              f"from {floor}")
     else:
         print(f"OK: the current version has a section ({version}); "
               f"no release tags visible in this checkout, so the tag half did not "
