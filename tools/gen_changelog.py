@@ -86,6 +86,11 @@ RELEASE_COMMIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A PR ref at the end of the subject, independent of conventional syntax. A
+# squash-merged PR can render as `Add triage guidance (#350)`; the classifier
+# still files it under Chores, but coverage must see #350.
+PR_TAIL_RE = re.compile(r"\(#(\d+)\)\s*$")
+
 # No emoji — the project tone guard forbids emoji in prose.
 # Type labels are plain text.
 TYPE_LABELS = {
@@ -124,8 +129,14 @@ def get_tags() -> list[tuple[str, str]]:
     return tags
 
 
-def get_commits(since: str | None, until: str | None = None) -> list[dict]:
-    """Return commit dicts between refs (exclusive since, inclusive until)."""
+def get_commits(since: str | None, until: str | None = None,
+                *, skip_release: bool = True) -> list[dict]:
+    """Return commit dicts between refs (exclusive since, inclusive until).
+
+    ``skip_release`` drops release-shaped subjects from generated notes, where
+    they are noise. Coverage passes ``False``: a release-shaped PR that is not
+    the tagged commit (say, publish metadata) is real work and must be listed.
+    """
     if since:
         range_spec = f"{since}..{until}" if until else f"{since}..HEAD"
     else:
@@ -141,8 +152,10 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
             continue
         sha = lines[0].strip().lstrip("\ufeff")
         subject = _strip_bom(lines[1].strip())
-        if RELEASE_COMMIT_RE.match(subject):
+        if skip_release and RELEASE_COMMIT_RE.match(subject):
             continue
+        tail = PR_TAIL_RE.search(subject)
+        pr_ref = tail.group(1) if tail else ""
         m = CONVENTIONAL_RE.match(subject)
         if m:
             commits.append({
@@ -151,6 +164,7 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
                 "scope": m.group("scope") or "",
                 "subject": _sanitize(m.group("subject")),
                 "pr": m.group("pr") or "",
+                "pr_ref": m.group("pr") or pr_ref,
             })
         else:
             commits.append({
@@ -159,6 +173,7 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
                 "scope": "",
                 "subject": _sanitize(subject),
                 "pr": "",
+                "pr_ref": pr_ref,
             })
     return commits
 
@@ -254,13 +269,14 @@ def missing_entries(tags: list[str], sections: dict[str, str]) -> list[str]:
         listed = {int(a or b) for a, b in
                   SECTION_PR_RE.findall(sections.get(tag, ""))}
         release_sha = git(["rev-parse", f"{tag}^{{commit}}"]).strip()
-        for commit in get_commits(prev, tag):
+        for commit in get_commits(prev, tag, skip_release=False):
             if release_sha.startswith(commit["sha"]):
                 continue
-            if not commit["pr"] or int(commit["pr"]) in listed:
+            pr = commit["pr_ref"]
+            if not pr or int(pr) in listed:
                 continue
             scope = f"{commit['scope']}: " if commit["scope"] else ""
-            gaps.append(f"  {tag}: #{commit['pr']} {scope}{commit['subject']}")
+            gaps.append(f"  {tag}: #{pr} {scope}{commit['subject']}")
     return gaps
 
 
@@ -426,8 +442,15 @@ def check() -> int:
     if tags:
         # Entry coverage: a section can exist and still miss a PR merged into
         # its tag range (#310/#312 in v0.8.5, #323 in v0.8.6). Walking tag
-        # ranges needs full history; a shallow clone with tags raises here
-        # rather than reading as coverage.
+        # ranges needs full history. A shallow clone is the trap: git treats
+        # the boundary as a root and `git log` succeeds with a truncated range,
+        # so the ranges read clean while commits go unchecked. Fail closed
+        # instead of trusting the exit code.
+        if git(["rev-parse", "--is-shallow-repository"]).strip() == "true":
+            print("error: shallow checkout — cannot verify entry coverage; "
+                  "fetch full history (fetch-depth: 0 or `git fetch --unshallow`)",
+                  file=sys.stderr)
+            return 2
         try:
             gaps = missing_entries(tags, sections)
         except RuntimeError as exc:
