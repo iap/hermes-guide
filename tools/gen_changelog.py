@@ -78,8 +78,18 @@ CONVENTIONAL_RE = re.compile(
 # The release commit describes the section being written, so it is never an
 # entry. Skipping it also makes the tool robust to the #320 ordering mistake:
 # regenerating with `release: bump to vX` already committed used to file it
-# under Chores.
-RELEASE_COMMIT_RE = re.compile(r"^release:\s+bump to v\d", re.IGNORECASE)
+# under Chores. The version may or may not carry a leading `v`, and a squash
+# merge may render it as `chore(release): bump to 0.7.2` — a variant the
+# original `^release:` pattern missed.
+RELEASE_COMMIT_RE = re.compile(
+    r"^(?:release|chore\(release\)):\s*(?:bump to\s+)?v?\d+\.\d+\.\d+",
+    re.IGNORECASE,
+)
+
+# A PR ref at the end of the subject, independent of conventional syntax. A
+# squash-merged PR can render as `Add triage guidance (#350)`; the classifier
+# still files it under Chores, but coverage must see #350.
+PR_TAIL_RE = re.compile(r"\(#(\d+)\)\s*$")
 
 # No emoji — the project tone guard forbids emoji in prose.
 # Type labels are plain text.
@@ -119,8 +129,14 @@ def get_tags() -> list[tuple[str, str]]:
     return tags
 
 
-def get_commits(since: str | None, until: str | None = None) -> list[dict]:
-    """Return commit dicts between refs (exclusive since, inclusive until)."""
+def get_commits(since: str | None, until: str | None = None,
+                *, skip_release: bool = True) -> list[dict]:
+    """Return commit dicts between refs (exclusive since, inclusive until).
+
+    ``skip_release`` drops release-shaped subjects from generated notes, where
+    they are noise. Coverage passes ``False``: a release-shaped PR that is not
+    the tagged commit (say, publish metadata) is real work and must be listed.
+    """
     if since:
         range_spec = f"{since}..{until}" if until else f"{since}..HEAD"
     else:
@@ -136,8 +152,10 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
             continue
         sha = lines[0].strip().lstrip("\ufeff")
         subject = _strip_bom(lines[1].strip())
-        if RELEASE_COMMIT_RE.match(subject):
+        if skip_release and RELEASE_COMMIT_RE.match(subject):
             continue
+        tail = PR_TAIL_RE.search(subject)
+        pr_ref = tail.group(1) if tail else ""
         m = CONVENTIONAL_RE.match(subject)
         if m:
             commits.append({
@@ -146,6 +164,7 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
                 "scope": m.group("scope") or "",
                 "subject": _sanitize(m.group("subject")),
                 "pr": m.group("pr") or "",
+                "pr_ref": m.group("pr") or pr_ref,
             })
         else:
             commits.append({
@@ -154,6 +173,7 @@ def get_commits(since: str | None, until: str | None = None) -> list[dict]:
                 "scope": "",
                 "subject": _sanitize(subject),
                 "pr": "",
+                "pr_ref": pr_ref,
             })
     return commits
 
@@ -207,6 +227,77 @@ RELEASE_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 def release_tags() -> list[str]:
     """Return the release tags (``v<semver>``) sorted newest-first by date."""
     return [tag for tag, _ in get_tags() if RELEASE_TAG_RE.match(tag)]
+
+
+# PR references belong to a bullet, not to the section's prose. Counting every
+# `(#N)` anywhere in the section let an entry that *mentions* another PR stand
+# in for that PR's own missing entry. A generated bullet ends with a link
+# (`[#N](pull/N)`); a hand-written one may end with a plain `(#N)` or a list
+# `(#1, #2)`. Only that trailing group counts.
+_BULLET_LINK_RE = re.compile(r"\[#(\d+)\]\([^)]*\)\)?\s*$")
+_BULLET_REFS_RE = re.compile(r"\((?P<refs>(?:#\d+)(?:\s*,\s*#\d+)*)\)\s*$")
+_BULLET_LINE_RE = re.compile(r"^\s*[-*]\s+\S", re.MULTILINE)
+
+
+def _section_prs(text: str) -> set[int]:
+    """PR numbers owned by the section's bullets (trailing refs only)."""
+    listed: set[int] = set()
+    for line in text.splitlines():
+        if not _BULLET_LINE_RE.match(line):
+            continue
+        link = _BULLET_LINK_RE.search(line)
+        if link:
+            listed.add(int(link.group(1)))
+            continue
+        refs = _BULLET_REFS_RE.search(line)
+        if refs:
+            listed.update(int(n) for n in re.findall(r"#(\d+)", refs.group("refs")))
+    return listed
+
+# Entry coverage is enforced from the first release whose section was generated
+# from PR-numbered squash commits. Older sections were assembled from merge
+# commits (`Merge pull request #N from ...`), which never carry a `(#N)` ref, so
+# demanding PR coverage there would fail history that is legitimately shaped
+# differently — the marker-tag false positive again, one release older.
+COVERAGE_FROM = (0, 7, 0)
+
+
+def _version_key(tag: str) -> tuple[int, ...]:
+    """Sortable ``(major, minor, patch)`` from a ``v<semver>`` tag."""
+    return tuple(int(part) for part in tag.lstrip("v").split("."))
+
+
+def missing_entries(tags: list[str], sections: dict[str, str]) -> list[str]:
+    """PRs whose commits fall in a release's tag range but not in its section.
+
+    Each gap is ``"<tag>: #<pr> <subject>"``. The release commit itself is
+    excluded by SHA, which is exact: every release tag points at the commit
+    that wrote its section, whatever subject style that commit used. Commits
+    without a PR ref are skipped — a direct commit cannot be attributed to a
+    PR, and older history is full of them.
+
+    Tags are ordered by version, not by tag date: two tags created in the same
+    second have no defined creatordate order, and a wrong ``prev`` makes the
+    range span several releases (the CI fixture for the pre-cutoff exemption
+    hit exactly that).
+    """
+    gaps: list[str] = []
+    ordered = sorted(tags, key=_version_key, reverse=True)
+    for i, tag in enumerate(ordered):
+        if _version_key(tag) < COVERAGE_FROM:
+            continue
+        prev = ordered[i + 1] if i + 1 < len(ordered) else None
+        listed = _section_prs(sections.get(tag, ""))
+        release_sha = git(["rev-parse", f"{tag}^{{commit}}"]).strip()
+        for commit in get_commits(prev, tag, skip_release=False):
+            if release_sha.startswith(commit["sha"]):
+                continue
+            pr = commit["pr_ref"]
+            if not pr or int(pr) in listed:
+                continue
+            scope = f"{commit['scope']}: " if commit["scope"] else ""
+            gaps.append(f"  {tag}: #{pr} {scope}{commit['subject']}")
+    return gaps
 
 
 def split_sections(text: str) -> tuple[str, dict[str, str]]:
@@ -337,6 +428,7 @@ def check() -> int:
         return 2
 
     present = {m.group(1) for m in SECTION_RE.finditer(text)}
+    _, sections = split_sections(text)
     tags = release_tags()
     version = plugin_version()
 
@@ -368,8 +460,36 @@ def check() -> int:
     # tag-blind checkout, and a guard that overstates its own reach is worse
     # than one that admits a gap.
     if tags:
+        # Entry coverage: a section can exist and still miss a PR merged into
+        # its tag range (#310/#312 in v0.8.5, #323 in v0.8.6). Walking tag
+        # ranges needs full history. A shallow clone is the trap: git treats
+        # the boundary as a root and `git log` succeeds with a truncated range,
+        # so the ranges read clean while commits go unchecked. Fail closed
+        # instead of trusting the exit code.
+        if git(["rev-parse", "--is-shallow-repository"]).strip() == "true":
+            print("error: shallow checkout — cannot verify entry coverage; "
+                  "fetch full history (fetch-depth: 0 or `git fetch --unshallow`)",
+                  file=sys.stderr)
+            return 2
+        try:
+            gaps = missing_entries(tags, sections)
+        except RuntimeError as exc:
+            print(f"error: cannot walk release tag ranges ({exc}); "
+                  f"deepen the clone for entry coverage", file=sys.stderr)
+            return 2
+        if gaps:
+            print("FAIL: PR(s) in a release tag range with no CHANGELOG.md entry:",
+                  file=sys.stderr)
+            for line in gaps:
+                print(line, file=sys.stderr)
+            print("\nRun `python tools/gen_changelog.py --upcoming` before the tag, "
+                  "or add the missing line to that release's section.",
+                  file=sys.stderr)
+            return 1
+        floor = "v" + ".".join(str(part) for part in COVERAGE_FROM)
         print(f"OK: every release tag and the current version have a section "
-              f"({len(expected)} release(s) covered)")
+              f"({len(expected)} release(s) covered); entry coverage verified "
+              f"from {floor}")
     else:
         print(f"OK: the current version has a section ({version}); "
               f"no release tags visible in this checkout, so the tag half did not "

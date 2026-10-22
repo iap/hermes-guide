@@ -13,6 +13,10 @@ All notable changes to hermes-guide are documented here.
 
 - keep the catalog description inside the list column
 
+### Chores
+
+- **drift**: re-baseline to upstream 6932521 ([#323](https://github.com/iap/hermes-guide/pull/323))
+
 ## v0.8.5 (2026-10-21)
 
 ### Bug Fixes
@@ -22,6 +26,8 @@ All notable changes to hermes-guide are documented here.
 
 ### Documentation
 
+- state the project's scope and audience ([#321](https://github.com/iap/hermes-guide/pull/321))
+- generate the changelog before committing the bump ([#320](https://github.com/iap/hermes-guide/pull/320))
 - **plugins**: diagnose a plugin directory discovery cannot read ([#318](https://github.com/iap/hermes-guide/pull/318))
 - the author waits for an announced cross-check before merging ([#317](https://github.com/iap/hermes-guide/pull/317))
 - **skills**: the plugin load budget is per plugin, not global ([#316](https://github.com/iap/hermes-guide/pull/316))

@@ -191,6 +191,218 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 return f"--check did not name the uncovered version: {out}"
         return None
 
+    def check_fails_on_missing_entry() -> str | None:
+        """A section can exist and still omit a PR merged into its tag range.
+
+        This is the v0.8.6 failure: #323 was in the tag but not in the
+        section, and section-existence alone read clean. Plain `(#N)` refs
+        count as coverage, so only the genuinely missing PR is reported.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat(api): real change (#1)")
+            _commit(root, "fix(api): second change (#2)")
+            _commit(root, "release: bump to v1.0.0 with changelog section")
+            _git(root, "tag", "v1.0.0")
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n"
+                "- **api**: real change (#1)\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 1:
+                return f"missing entry expected 1, got {code}: {out}"
+            if "#2" not in out:
+                return f"did not name the omitted PR: {out}"
+            if "#1" in out:
+                return f"reported a PR the section already lists: {out}"
+        return None
+
+    def release_commit_needs_no_entry() -> str | None:
+        """The tag's own commit is the section, in either subject style.
+
+        Squash merges render the bump as `chore(release): bump to 0.7.2 (#250)`;
+        excluding by SHA covers that without a subject heuristic.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat: thing (#1)")
+            _commit(root, "chore(release): bump to 1.1.0 (#2)")
+            _git(root, "tag", "v1.1.0")
+            (root / "plugin.yaml").write_text(
+                "name: demo\nversion: 1.1.0\n", encoding="utf-8"
+            )
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.1.0 (2026-01-01)\n\n### Features\n\n- thing (#1)\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 0:
+                return f"release commit wrongly required an entry: {code}: {out}"
+        return None
+
+    def pre_cutoff_tags_are_exempt() -> str | None:
+        """Merge-commit-era releases carry no PR refs; demanding one is noise.
+
+        Coverage starts at the first PR-generated section (v0.7.0). An older
+        section without `(#N)` refs must not fail the guard.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat: old (#3)")
+            _git(root, "tag", "v0.6.0")
+            _commit(root, "feat: new (#4)")
+            _commit(root, "release: bump to v1.0.0")
+            _git(root, "tag", "v1.0.0")
+            (root / "CHANGELOG.md").write_text(
+                HEADER
+                + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- new (#4)\n\n"
+                + "## v0.6.0 (2025-01-01)\n\n### Features\n\n- old\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 0:
+                return f"pre-cutoff tag caused a false positive: {code}: {out}"
+        return None
+
+    def coverage_ranges_follow_version_not_tag_date() -> str | None:
+        """Caller tag order must not decide which range a PR belongs to.
+
+        ``git tag --sort=-creatordate`` cannot order two tags created in the
+        same second, and a wrong ``prev`` makes one release's range swallow
+        another's commits. CI hit this on the pre-cutoff fixture, where both
+        tags were created within the same second locally and reported #3
+        under v1.0.0. The guard sorts by version, so the order passed in is
+        irrelevant.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat: old (#3)")
+            _git(root, "tag", "v0.6.0")
+            _commit(root, "feat: new (#4)")
+            _commit(root, "release: bump to v1.0.0")
+            _git(root, "tag", "v1.0.0")
+            spec = importlib.util.spec_from_file_location("gen_changelog_order", TOOL)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.REPO = root
+            sections = {"v1.0.0": "- new (#4)", "v0.6.0": "- old"}
+            for order in (["v0.6.0", "v1.0.0"], ["v1.0.0", "v0.6.0"]):
+                gaps = mod.missing_entries(order, sections)
+                if gaps:
+                    return f"tag order {order} produced gaps: {gaps}"
+        return None
+
+    def shallow_checkout_fails_closed() -> str | None:
+        """A shallow clone must not read as full entry coverage.
+
+        Git treats the shallow boundary as a root, so `git log <prev>..<tag>`
+        succeeds with a truncated range when the tags are present. The guard
+        asks `--is-shallow-repository` first and exits 2 instead of claiming
+        verified coverage from partial history.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "src"
+            root.mkdir()
+            _fixture(root)
+            _commit(root, "feat: new (#4)")
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- new (#4)\n",
+                encoding="utf-8",
+            )
+            _git(root, "add", "-A")
+            _git(root, "commit", "-m", "track fixture files")
+            _git(root, "tag", "v1.0.0")
+            clone = Path(tmp) / "clone"
+            _git(Path(tmp), "clone", "--depth", "1", root.as_uri(), str(clone))
+            code, out = _run(clone, "--check")
+            if code != 2:
+                return f"shallow clone expected 2, got {code}: {out}"
+            if "shallow" not in out.lower():
+                return f"shallow clone error did not name the cause: {out}"
+        return None
+
+    def nonconventional_squash_commit_is_covered() -> str | None:
+        """A PR ref counts even when the subject is not a conventional commit.
+
+        A squash merge can render as `Add triage guidance (#5)`; the parser
+        files it under Chores with no `pr`, so coverage has to read the
+        trailing ref from the raw subject instead of trusting the classifier.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "Add triage guidance (#5)")
+            _commit(root, "release: bump to v1.0.0")
+            _git(root, "tag", "v1.0.0")
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.0.0 (2026-01-01)\n\n### Chores\n\n"
+                "- triage guidance\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 1:
+                return f"non-conventional PR expected 1, got {code}: {out}"
+            if "#5" not in out:
+                return f"did not name the uncovered PR: {out}"
+        return None
+
+    def release_shaped_pr_before_tag_is_covered() -> str | None:
+        """Only the tagged commit is exempt, not every release-shaped subject.
+
+        `chore(release): 0.8.7 publish metadata (#6)` is ordinary work that
+        happens to look like a bump; dropping it during parsing hid #6 from
+        coverage even though the tag points at a different commit.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "chore(release): 0.8.7 publish metadata (#6)")
+            _commit(root, "release: bump to v1.0.0")
+            _git(root, "tag", "v1.0.0")
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.0.0 (2026-01-01)\n\n### Chores\n\n- notes\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 1:
+                return f"release-shaped PR expected 1, got {code}: {out}"
+            if "#6" not in out:
+                return f"did not name the uncovered PR: {out}"
+        return None
+
+    def prose_mention_does_not_count_as_entry() -> str | None:
+        """Only a bullet's trailing ref is its own; section prose is not coverage.
+
+        Scanning the whole section for `(#N)` let a sentence mentioning another
+        PR stand in for that PR's missing entry.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat(api): real change (#1)")
+            _commit(root, "fix(api): other change (#2)")
+            _commit(root, "release: bump to v1.0.0")
+            _git(root, "tag", "v1.0.0")
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n"
+                "- **api**: real change (#1)\n\n"
+                "This supersedes the work in (#2).\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 1:
+                return f"prose mention expected 1, got {code}: {out}"
+            if "#2" not in out:
+                return f"prose mention satisfied coverage for #2: {out}"
+            if "#1" in out:
+                return f"reported the bullet's own PR: {out}"
+        return None
+
     def upcoming_is_idempotent() -> str | None:
         """Re-running --upcoming must not duplicate or reorder sections."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -473,6 +685,14 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         ("--upcoming transcodes a legacy log encoding", log_encoding_overrides_configured_output),
         ("--check fails on a tag with no section", check_fails_on_missing_section),
         ("--check fails on an untagged plugin.yaml version", check_fails_on_untagged_version),
+        ("--check fails on a PR missing from its release section", check_fails_on_missing_entry),
+        ("the tag's own release commit needs no entry", release_commit_needs_no_entry),
+        ("pre-cutoff releases are exempt from entry coverage", pre_cutoff_tags_are_exempt),
+        ("coverage ranges follow version, not tag date", coverage_ranges_follow_version_not_tag_date),
+        ("a shallow clone fails closed", shallow_checkout_fails_closed),
+        ("a non-conventional squash commit is covered", nonconventional_squash_commit_is_covered),
+        ("release-shaped non-tag commits are covered", release_shaped_pr_before_tag_is_covered),
+        ("a prose mention is not an entry", prose_mention_does_not_count_as_entry),
         ("--upcoming is idempotent and newest-first", upcoming_is_idempotent),
         ("--check reports an unreadable CHANGELOG.md as unusable", check_reports_unreadable_changelog),
         ("--check admits tag-blind coverage", check_admits_tag_blind_coverage),
