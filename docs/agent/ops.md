@@ -25,6 +25,25 @@ Learn these from the guard, not from memory — each one names its own script.
 - When a check shells out to Hermes, keep Hermes stdout/stderr as evidence inside
   `detail` / `reason`.
 
+#### The `hermes guide --json` document (Phase 4 contract)
+
+- **stdout is exactly one JSON document**: `schema_version` (`"1"`), `scope`,
+  `fast`, top-level `status`, and `checks` with the envelopes passed through
+  unchanged, in `run_all()` order. Envelope keys stay `status` / `reason` /
+  `detail` — additive envelope fields may appear; existing ones are never
+  renamed here.
+- **Exit codes match the text path**: `0` when the derived top-level `status`
+  is `healthy`, `1` when it is `broken` (derived as: any check `broken` or
+  `unknown`), `2` for a bad scope. The `2` path prints
+  `{"schema_version": "1", "error": "unknown scope: <scope>"}` on stdout and
+  keeps stderr empty — the JSON consumer still gets one and only one stdout
+  document.
+- **The update notice is suppressed** in JSON mode (its `git ls-remote`
+  subprocess and its text output would pollute the document). No other
+  subprocess behavior changes: `--json` alone does not imply `--fast`;
+  `--json --fast` keeps fast mode's no-subprocess contract.
+- `/hermes-doctor` stays text-only; the JSON contract is a terminal surface.
+
 ### Read-only, always
 
 `checks.py` resolves paths, reads files, parses, and shells out to `hermes …`

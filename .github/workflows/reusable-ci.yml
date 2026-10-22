@@ -263,6 +263,14 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_exit_contract.py
 
+      - name: JSON output contract regression test
+        # Shim-loads the plugin package with faked envelopes — no Hermes, no
+        # network. Locks the `hermes guide --json` document: key order,
+        # envelope passthrough, status derivation, exit 0/1/2, notice
+        # suppression, and zero subprocess calls on that path.
+        if: inputs.run-full-gate
+        run: python tools/test_json_output.py
+
       - name: Fast mode regression test
         # Shim-loads checks.py with _run recorded, not executed — one segment needs a hermes candidate.
         if: inputs.run-full-gate
