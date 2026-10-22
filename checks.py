@@ -2150,11 +2150,11 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "keys), then re-run `hermes guide config`.",
     ),
     "CONFIG_UNREADABLE": (
-        "config file unreadable",
-        "The affected surface cannot be inspected because its settings could "
-        "not be read.",
-        "Check read permissions on the reported path, then re-run "
-        "`hermes guide`.",
+        "config unreadable or unparsable",
+        "The affected surface cannot be inspected because the config could not "
+        "be loaded (unreadable file or invalid YAML).",
+        "Check read permissions on the reported path, and if the file is "
+        "readable fix its YAML, then re-run `hermes guide`.",
     ),
     "HOME_UNRESOLVED": (
         "Hermes home unresolved",
@@ -2167,8 +2167,10 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "MCP server entry malformed",
         "The listed MCP servers will not start, so their tools are unavailable "
         "to the agent.",
-        "Fix the listed `mcp_servers` entries in `config.yaml` (`command` for "
-        "stdio, `url` for HTTP), then re-run `hermes guide mcp`.",
+        "Move foreign keys such as `mcpServers` under the top-level "
+        "`mcp_servers` mapping, make `mcp_servers` a mapping, and fix the "
+        "listed entries (`command` for stdio, `url` for HTTP); then re-run "
+        "`hermes guide mcp`.",
     ),
     "SKILLS_ISSUES": (
         "skill issues",
@@ -2186,9 +2188,10 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
     "HOOKS_ALLOWLIST_INVALID": (
         "shell-hooks allowlist invalid",
         "The shell-hook consent list cannot be read, so approved hooks may be "
-        "skipped or re-prompt.",
-        "Repair or delete the reported `shell-hooks-allowlist.json`, then "
-        "re-run `hermes guide hooks`.",
+        "skipped or re-prompt, and any other hook problems are quoted in the "
+        "detail.",
+        "Repair or delete the reported `shell-hooks-allowlist.json`, then fix "
+        "the hook problems in the detail and re-run `hermes guide hooks`.",
     ),
     "HOOKS_DOCTOR_FINDINGS": (
         "hooks doctor findings",
@@ -2224,37 +2227,40 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
     ),
     "HOOKS_CONFIG_UNREADABLE": (
         "hooks config unreadable",
-        "Hooks cannot be inspected because the config file could not be read.",
-        "Check read permissions on the profile's `config.yaml`, then re-run "
-        "`hermes guide hooks`.",
+        "Hooks cannot be inspected because the config file could not be "
+        "loaded.",
+        "Check read permissions on the profile's `config.yaml`, and if the "
+        "file is readable fix its YAML, then re-run `hermes guide hooks`.",
     ),
     "HOOKS_INSPECTION_FAILED": (
         "hook inspection failed",
         "Hooks could not be inspected because the hook configuration raised an "
         "error.",
         "Re-run `hermes guide hooks`; if it repeats, report the exception type "
-        "shown in the detail.",
+        "shown in the reason.",
     ),
     "HOOKS_FINDINGS": (
         "hook findings",
-        "One or more shell hooks are malformed or unreachable, so the events "
-        "they guard are unhandled.",
-        "Fix the listed hook entries in `config.yaml`, then re-run "
-        "`hermes guide hooks`.",
+        "One or more shell hooks are malformed, unreachable, or not "
+        "allowlisted, so the events they guard are unhandled.",
+        "Fix the listed hook entries in `config.yaml`, and approve each valid "
+        "hook at the interactive prompt when the detail says it is not "
+        "allowlisted; then re-run `hermes guide hooks`.",
     ),
     "PLUGINS_CONFIG_SHAPE": (
         "plugins config not a mapping",
         "The `plugins` section is not a mapping, so plugin enable and disable "
         "settings are ignored.",
-        "Rewrite `plugins` in `config.yaml` as a mapping keyed by plugin name, "
-        "then re-run `hermes guide plugins`.",
+        "Rewrite `plugins` in `config.yaml` as a mapping with `enabled` and "
+        "`disabled` lists, then re-run `hermes guide plugins`.",
     ),
     "PLUGINS_MISSING_OR_BROKEN": (
         "plugin missing or broken",
         "The listed enabled plugins are missing or failed to load, so their "
         "commands, tools, and hooks are absent.",
-        "Run `hermes plugins list`, then reinstall or disable each listed "
-        "plugin.",
+        "Run `hermes plugins list`; reinstall a missing plugin, and for an "
+        "exclusive provider select its category key (for example "
+        "`memory.provider`) instead of `plugins.enabled`.",
     ),
     "MEMORIES_ISSUES": (
         "memory issues",
@@ -2295,8 +2301,8 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "install layout unrecognized",
         "The install layout was not recognized, so a stuck update lock cannot "
         "be ruled out.",
-        "Run `hermes doctor` to confirm the install layout, then audit the "
-        "lock by hand at the reported path.",
+        "Run `hermes doctor` to confirm the install layout, then locate the "
+        "checkout and its update lock by hand.",
     ),
     "UPDATE_LOCK_UNREADABLE": (
         "update lock unreadable",
@@ -2316,8 +2322,8 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "update lock held",
         "Every `hermes` invocation can wedge until the process holding the "
         "checkout exits.",
-        "Wait for the process reported in the detail to exit; do not remove "
-        "the lock while it is held.",
+        "Wait for the process holding the checkout to exit (owner PID in the "
+        "reason); do not remove the lock while it is held.",
     ),
     "UPDATE_LOCK_UNPROBEABLE": (
         "update lock unprobeable",
@@ -2330,8 +2336,8 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "update lock indeterminate",
         "Update ownership cannot be determined, so removing the lock could "
         "interrupt a live update.",
-        "Check whether the PID in the detail is alive by hand before touching "
-        "the reported lock file.",
+        "Check whether the owner PID in the reason is alive by hand before "
+        "touching the reported lock file.",
     ),
     "FAST_MODE_UNRESOLVED": (
         "fast mode skipped a surface",
@@ -2342,7 +2348,7 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "check crashed",
         "The affected check failed to run, so its surface was not inspected.",
         "Re-run `hermes guide <scope>`; if it repeats, report the exception "
-        "type and detail.",
+        "type in the reason.",
     ),
 }
 
