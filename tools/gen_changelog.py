@@ -239,12 +239,18 @@ def missing_entries(tags: list[str], sections: dict[str, str]) -> list[str]:
     that wrote its section, whatever subject style that commit used. Commits
     without a PR ref are skipped — a direct commit cannot be attributed to a
     PR, and older history is full of them.
+
+    Tags are ordered by version, not by tag date: two tags created in the same
+    second have no defined creatordate order, and a wrong ``prev`` makes the
+    range span several releases (the CI fixture for the pre-cutoff exemption
+    hit exactly that).
     """
     gaps: list[str] = []
-    for i, tag in enumerate(tags):
+    ordered = sorted(tags, key=_version_key, reverse=True)
+    for i, tag in enumerate(ordered):
         if _version_key(tag) < COVERAGE_FROM:
             continue
-        prev = tags[i + 1] if i + 1 < len(tags) else None
+        prev = ordered[i + 1] if i + 1 < len(ordered) else None
         listed = {int(a or b) for a, b in
                   SECTION_PR_RE.findall(sections.get(tag, ""))}
         release_sha = git(["rev-parse", f"{tag}^{{commit}}"]).strip()

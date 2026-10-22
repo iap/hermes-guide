@@ -268,6 +268,36 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 return f"pre-cutoff tag caused a false positive: {code}: {out}"
         return None
 
+    def coverage_ranges_follow_version_not_tag_date() -> str | None:
+        """Caller tag order must not decide which range a PR belongs to.
+
+        ``git tag --sort=-creatordate`` cannot order two tags created in the
+        same second, and a wrong ``prev`` makes one release's range swallow
+        another's commits. CI hit this on the pre-cutoff fixture, where both
+        tags were created within the same second locally and reported #3
+        under v1.0.0. The guard sorts by version, so the order passed in is
+        irrelevant.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat: old (#3)")
+            _git(root, "tag", "v0.6.0")
+            _commit(root, "feat: new (#4)")
+            _commit(root, "release: bump to v1.0.0")
+            _git(root, "tag", "v1.0.0")
+            spec = importlib.util.spec_from_file_location("gen_changelog_order", TOOL)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.REPO = root
+            gaps = mod.missing_entries(
+                ["v0.6.0", "v1.0.0"],
+                {"v1.0.0": "- new (#4)", "v0.6.0": "- old"},
+            )
+            if gaps:
+                return f"ascending tag order produced gaps: {gaps}"
+        return None
+
     def upcoming_is_idempotent() -> str | None:
         """Re-running --upcoming must not duplicate or reorder sections."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -553,6 +583,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         ("--check fails on a PR missing from its release section", check_fails_on_missing_entry),
         ("the tag's own release commit needs no entry", release_commit_needs_no_entry),
         ("pre-cutoff releases are exempt from entry coverage", pre_cutoff_tags_are_exempt),
+        ("coverage ranges follow version, not tag date", coverage_ranges_follow_version_not_tag_date),
         ("--upcoming is idempotent and newest-first", upcoming_is_idempotent),
         ("--check reports an unreadable CHANGELOG.md as unusable", check_reports_unreadable_changelog),
         ("--check admits tag-blind coverage", check_admits_tag_blind_coverage),
