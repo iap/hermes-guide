@@ -156,6 +156,10 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 
 Every diagnosis resolves to a concrete action: a `hermes <subcommand>` command or a specific file + field edit, then a `/reload-*` or restart to apply.
 
+## Planned work
+
+Phase 4 adds a machine-readable contract to `hermes guide` (`--json`), stable finding IDs with plain-language impact and fix text, a generated finding catalog, and skills that act on them. Runtime repair stays upstream with `hermes doctor --fix`; `hermes doctor --live` only runs bounded, read-only health probes. Track it in the [Phase 4 milestone](https://github.com/iap/hermes-guide/milestone/4).
+
 ## Contributing
 
 Skills track the Hermes Agent source and its shipped documentation (`website/docs/` in `hermes-agent`). When Hermes changes behavior, update the affected skill and bump its `version`. See [CONTRIBUTING.md](CONTRIBUTING.md).
