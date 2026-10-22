@@ -61,11 +61,12 @@ Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
 The check writes nothing. Both exceptions are disclosed: the `hooks` scope runs
 `hermes hooks doctor`, which executes each approved shell hook once with a
 synthetic payload — that is how it verifies a hook actually runs; the `update`
-scope reads the update-lock record and opens that file writable to take a
-non-blocking lock it releases immediately, which is how it separates a live
-owner from stale residue (no content is written and the lock file is never
-deleted). Every other scope reads state only. With `--fast`, the `hooks` scope
-swaps to an in-process check instead — nothing executes.
+scope reads the update-lock record and opens that file writable (read-only
+fallback for a root-owned lock on POSIX) to take a non-blocking lock it
+releases immediately, which is how it separates a live owner from stale residue
+(no content is written and the lock file is never deleted). Every other scope
+reads state only. With `--fast`, the `hooks` scope swaps to an in-process check
+instead — nothing executes.
 
 Status marks in the output: `+` healthy, `~` informational, `x` broken,
 `?` unknown. `?` means unmeasured — treat it as broken until the scope runs
