@@ -17,7 +17,8 @@ Learn these from the guard, not from memory — each one names its own script.
 
 - **Broken and unknown findings carry `id` / `impact` / `fix`.** `id` is a
   `SCREAMING_SNAKE` key in `checks.FINDING_IDS`; `impact` is what the user
-  cannot do; `fix` is one concrete `hermes …` command or file + field edit.
+  cannot do; `fix` is one concrete action — a `hermes …` command, a file +
+  field edit, or a report target when the finding is our defect.
   `run_all()` expands the copy from the registry, so checks never restate it
   and the text renderer ignores the keys. IDs are public API once released:
   add entries, never rename one (`tools/test_finding_ids.py`).

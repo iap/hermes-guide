@@ -2346,9 +2346,11 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
     ),
     "CHECK_CRASHED": (
         "check crashed",
-        "The affected check failed to run, so its surface was not inspected.",
-        "Re-run `hermes guide <scope>`; if it repeats, report the exception "
-        "type in the reason.",
+        "The affected check failed to run, so its surface was not inspected "
+        "(a defect in hermes-guide, not in your config).",
+        "Re-run `hermes guide <scope>`; if it repeats, file the exception type "
+        "and `hermes --version` at "
+        "https://github.com/iap/hermes-guide/issues.",
     ),
 }
 
