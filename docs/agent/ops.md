@@ -31,7 +31,11 @@ Learn these from the guard, not from memory — each one names its own script.
   `fast`, top-level `status`, and `checks` with the envelopes passed through
   unchanged, in `run_all()` order. Envelope keys stay `status` / `reason` /
   `detail` — additive envelope fields may appear; existing ones are never
-  renamed here.
+  renamed here. One documented coercion keeps the document always
+  serializable: a non-JSON-native `detail` leaf (in practice a YAML-parsed
+  date-like `mcp_servers:` name, i.e. `datetime.date`) prints as the same
+  text the renderer would show (`str()`); JSON-native values pass through
+  untouched and the caller's envelopes stay unmutated.
 - **Exit codes match the text path**: `0` when the derived top-level `status`
   is `healthy`, `1` when it is `broken` (derived as: any check `broken` or
   `unknown`), `2` for a bad scope. The `2` path prints

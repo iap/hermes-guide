@@ -157,12 +157,15 @@ def main() -> int:
     checks_mod.run_all = lambda *a, **k: (_ for _ in ()).throw(ValueError("unknown scope"))
     cap = _Capture()
     cap.start()
+    code = None
     try:
         plugin._run_cli(_args(scope="bogus"))
     except SystemExit as e:
         code = e.code
     finally:
         cap.stop()
+    if code != 2:
+        failures.append(f"bad scope must exit 2, got {code!r}")
     try:
         err_doc = json.loads(cap.text())
     except json.JSONDecodeError:
@@ -172,6 +175,30 @@ def main() -> int:
         failures.append(f"bad-scope document wrong: {err_doc!r}")
     if cap.text("err").strip():
         failures.append(f"bad-scope stderr must stay empty, got: {cap.text('err')!r}")
+
+    # 3b. A date-like YAML key (datetime.date) can ride inside `detail`
+    # (mcp_servers names are emitted verbatim). The document must stay
+    # serializable, the leaf coerced to the text the renderer would print,
+    # and the caller's envelope must be left unmutated.
+    import datetime  # noqa: E402
+    date_case = {
+        "mcp": {"status": "healthy", "reason": "MCP servers well-formed",
+                "detail": [datetime.date(2026, 10, 5), "context7"]},
+    }
+    checks_mod.run_all = lambda *a, **k: date_case
+    cap = _Capture()
+    cap.start()
+    try:
+        plugin._run_cli(_args())
+    except SystemExit:
+        pass
+    finally:
+        cap.stop()
+    doc = cap.json_out()
+    if doc["checks"]["mcp"]["detail"] != ["2026-10-05", "context7"]:
+        failures.append(f"date leaf not coerced to renderer text: {doc['checks']['mcp']['detail']!r}")
+    if date_case["mcp"]["detail"][0] != datetime.date(2026, 10, 5):
+        failures.append("caller's envelope was mutated in place")
 
     # 4. Notice suppression + no bonus subprocesses: _version_check must not
     # fire in JSON mode; the module owns exactly one subprocess surface

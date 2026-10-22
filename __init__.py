@@ -84,15 +84,42 @@ def _handle_doctor(raw_args):
     return text
 
 
+_DETAIL_NATIVE = (str, int, float, bool)
+
+
+def _jsonify_detail(value):
+    """Return a `detail` value that survives `json.dumps`, deterministically.
+
+    The envelope contract makes this a no-op for the shapes checks actually
+    emit (a string, or a list of strings). The one real escape hatch comes
+    from YAML itself: an unquoted date-like `mcp_servers:` key parses as
+    `datetime.date`, so a server name can reach `detail` as a non-JSON-native
+    scalar — the MCP shape check prints parsed names verbatim. Coerce exactly
+    those leaf scalars to the text they would get in the text renderer
+    (`str()`), leave JSON-native values untouched, and mutate nothing in
+    place.
+    """
+    if not isinstance(value, list):
+        return value
+    return [
+        v if v is None or isinstance(v, _DETAIL_NATIVE) else str(v)
+        for v in value
+    ]
+
+
 def _build_json_payload(results, scope, fast):
     """Assemble the `--json` machine contract from check envelopes.
 
     Envelopes pass through unchanged (and in `run_all()` order); the only
     derived field is the top-level `status`, which is `broken` when any
     check is `broken` or `unknown`, else `healthy` — the same derivation
-    the text renderer applies for its exit code.
+    the text renderer applies for its exit code. `detail` goes through
+    `_jsonify_detail` so the document is always serializable.
     """
-    checks_payload = dict(results)
+    checks_payload = {
+        label: {**r, "detail": _jsonify_detail(r.get("detail"))}
+        for label, r in dict(results).items()
+    }
     status = "broken" if any(
         r.get("status") in ("broken", "unknown") for r in checks_payload.values()
     ) else "healthy"
