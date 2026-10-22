@@ -377,8 +377,9 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    follow the tag, not the merge commit: `sha` is
    `git rev-parse v<version>^{commit}` and `version` is the tag without the
    `v`. Edit that entry (refresh an open pin PR rather than opening a second
-   one), run `scripts/validate_plugin_catalog.py plugin-catalog` in that clone,
-   then re-run `python tools/check_release_readiness.py` here. Its `catalog-pin`
+   one), run `python scripts/validate_plugin_catalog.py plugin-catalog` in that
+   clone, then re-run `python tools/check_release_readiness.py` here. Its
+   `catalog-pin`
    item reports the entry as current or lagging and fails a `sha` that belongs
    to another tag, but it reads the merged upstream file, so it keeps reporting
    the old pin as lagging until the upstream PR lands. The listing is ours to
