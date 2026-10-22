@@ -290,12 +290,11 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             mod.REPO = root
-            gaps = mod.missing_entries(
-                ["v0.6.0", "v1.0.0"],
-                {"v1.0.0": "- new (#4)", "v0.6.0": "- old"},
-            )
-            if gaps:
-                return f"ascending tag order produced gaps: {gaps}"
+            sections = {"v1.0.0": "- new (#4)", "v0.6.0": "- old"}
+            for order in (["v0.6.0", "v1.0.0"], ["v1.0.0", "v0.6.0"]):
+                gaps = mod.missing_entries(order, sections)
+                if gaps:
+                    return f"tag order {order} produced gaps: {gaps}"
         return None
 
     def shallow_checkout_fails_closed() -> str | None:
