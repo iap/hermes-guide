@@ -18,6 +18,7 @@ in-process at those boundaries, never executed).
 
 __version__ = "0.8.7"
 
+import json
 import logging
 import subprocess
 import sys
@@ -83,18 +84,86 @@ def _handle_doctor(raw_args):
     return text
 
 
+_DETAIL_NATIVE = (str, int, float, bool)
+
+
+def _jsonify_detail(value):
+    """Return a `detail` value that survives `json.dumps`, deterministically.
+
+    The envelope contract makes this a no-op for the shapes checks actually
+    emit (a string, or a list of strings). The one real escape hatch comes
+    from YAML itself: an unquoted date-like `mcp_servers:` key parses as
+    `datetime.date`, so a server name can reach `detail` as a non-JSON-native
+    scalar — the MCP shape check prints parsed names verbatim. Coerce exactly
+    those leaf scalars to the text they would get in the text renderer
+    (`str()`), leave JSON-native values untouched, and mutate nothing in
+    place.
+    """
+    if not isinstance(value, list):
+        return value
+    return [
+        v if v is None or isinstance(v, _DETAIL_NATIVE) else str(v)
+        for v in value
+    ]
+
+
+def _build_json_payload(results, scope, fast):
+    """Assemble the `--json` machine contract from check envelopes.
+
+    Envelopes pass through unchanged (and in `run_all()` order); the only
+    derived field is the top-level `status`, which is `broken` when any
+    check is `broken` or `unknown`, else `healthy` — the same derivation
+    the text renderer applies for its exit code. `detail` goes through
+    `_jsonify_detail` so the document is always serializable.
+    """
+    checks_payload = {
+        label: {**r, "detail": _jsonify_detail(r.get("detail"))}
+        for label, r in dict(results).items()
+    }
+    status = "broken" if any(
+        r.get("status") in ("broken", "unknown") for r in checks_payload.values()
+    ) else "healthy"
+    return {
+        "schema_version": "1",
+        "scope": scope,
+        "fast": fast,
+        "status": status,
+        "checks": checks_payload,
+    }
+
+
 def _run_cli(args):
     """`hermes guide <scope>` handler."""
     scope = getattr(args, "scope", None)
     fast = getattr(args, "fast", False)
+    json_mode = getattr(args, "json", False)
     try:
         call: dict = {"scope": scope}
         if fast:
             call["fast"] = True
-        exit_ok, text = _format_result(checks.run_all(**call))
+        results = checks.run_all(**call)
     except ValueError as exc:
+        if json_mode:
+            # Bad scope keeps the exit code but reports on stdout as a JSON
+            # error document, so the machine consumer still gets one and
+            # only one stdout JSON value.
+            print(
+                json.dumps(
+                    {"schema_version": "1", "error": f"unknown scope: {scope}"},
+                    ensure_ascii=False,
+                )
+            )
+            sys.exit(2)
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(2)
+    if json_mode:
+        # One JSON document, one line of stdout. The update notice is
+        # suppressed: consumers parse stdout as bytes, and its subprocess
+        # budget (git ls-remote) is dialog the document does not owe them.
+        payload = _build_json_payload(results, scope, fast)
+        print(json.dumps(payload, ensure_ascii=False))
+        sys.exit(0 if payload["status"] == "healthy" else 1)
+    exit_ok, text = _format_result(results)
     print(text)
     # Update notice after the results; skipped in fast mode, whose contract
     # is "no subprocess starts" (the notice would still spawn git).
@@ -116,6 +185,14 @@ def _setup_cli(subparser):
         action="store_true",
         help="degraded-host variant: no subprocess starts; unresolvable "
         "checks report unknown instead of stalling",
+    )
+    subparser.add_argument(
+        "--json",
+        action="store_true",
+        help="machine-readable contract: one JSON document on stdout "
+        "(envelopes unchanged, update notice suppressed); exit is still "
+        "0/1/2; subprocess behavior is unchanged — combine with --fast "
+        "for the no-subprocess variant",
     )
 
 
