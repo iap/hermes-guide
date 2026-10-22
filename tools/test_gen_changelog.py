@@ -376,6 +376,34 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 return f"did not name the uncovered PR: {out}"
         return None
 
+    def prose_mention_does_not_count_as_entry() -> str | None:
+        """Only a bullet's trailing ref is its own; section prose is not coverage.
+
+        Scanning the whole section for `(#N)` let a sentence mentioning another
+        PR stand in for that PR's missing entry.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _fixture(root)
+            _commit(root, "feat(api): real change (#1)")
+            _commit(root, "fix(api): other change (#2)")
+            _commit(root, "release: bump to v1.0.0")
+            _git(root, "tag", "v1.0.0")
+            (root / "CHANGELOG.md").write_text(
+                HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n"
+                "- **api**: real change (#1)\n\n"
+                "This supersedes the work in (#2).\n",
+                encoding="utf-8",
+            )
+            code, out = _run(root, "--check")
+            if code != 1:
+                return f"prose mention expected 1, got {code}: {out}"
+            if "#2" not in out:
+                return f"prose mention satisfied coverage for #2: {out}"
+            if "#1" in out:
+                return f"reported the bullet's own PR: {out}"
+        return None
+
     def upcoming_is_idempotent() -> str | None:
         """Re-running --upcoming must not duplicate or reorder sections."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -665,6 +693,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
         ("a shallow clone fails closed", shallow_checkout_fails_closed),
         ("a non-conventional squash commit is covered", nonconventional_squash_commit_is_covered),
         ("release-shaped non-tag commits are covered", release_shaped_pr_before_tag_is_covered),
+        ("a prose mention is not an entry", prose_mention_does_not_count_as_entry),
         ("--upcoming is idempotent and newest-first", upcoming_is_idempotent),
         ("--check reports an unreadable CHANGELOG.md as unusable", check_reports_unreadable_changelog),
         ("--check admits tag-blind coverage", check_admits_tag_blind_coverage),

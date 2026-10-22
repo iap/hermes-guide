@@ -229,9 +229,30 @@ def release_tags() -> list[str]:
     return [tag for tag, _ in get_tags() if RELEASE_TAG_RE.match(tag)]
 
 
-# PR references in a section. Generated entries link `[#N](pull/N)`; sections
-# assembled or edited by hand may use a plain `(#N)`. Both are coverage.
-SECTION_PR_RE = re.compile(r"\[#(\d+)\]|\(#(\d+)\)")
+# PR references belong to a bullet, not to the section's prose. Counting every
+# `(#N)` anywhere in the section let an entry that *mentions* another PR stand
+# in for that PR's own missing entry. A generated bullet ends with a link
+# (`[#N](pull/N)`); a hand-written one may end with a plain `(#N)` or a list
+# `(#1, #2)`. Only that trailing group counts.
+_BULLET_LINK_RE = re.compile(r"\[#(\d+)\]\([^)]*\)\)?\s*$")
+_BULLET_REFS_RE = re.compile(r"\((?P<refs>(?:#\d+)(?:\s*,\s*#\d+)*)\)\s*$")
+_BULLET_LINE_RE = re.compile(r"^\s*[-*]\s+\S", re.MULTILINE)
+
+
+def _section_prs(text: str) -> set[int]:
+    """PR numbers owned by the section's bullets (trailing refs only)."""
+    listed: set[int] = set()
+    for line in text.splitlines():
+        if not _BULLET_LINE_RE.match(line):
+            continue
+        link = _BULLET_LINK_RE.search(line)
+        if link:
+            listed.add(int(link.group(1)))
+            continue
+        refs = _BULLET_REFS_RE.search(line)
+        if refs:
+            listed.update(int(n) for n in re.findall(r"#(\d+)", refs.group("refs")))
+    return listed
 
 # Entry coverage is enforced from the first release whose section was generated
 # from PR-numbered squash commits. Older sections were assembled from merge
@@ -266,8 +287,7 @@ def missing_entries(tags: list[str], sections: dict[str, str]) -> list[str]:
         if _version_key(tag) < COVERAGE_FROM:
             continue
         prev = ordered[i + 1] if i + 1 < len(ordered) else None
-        listed = {int(a or b) for a, b in
-                  SECTION_PR_RE.findall(sections.get(tag, ""))}
+        listed = _section_prs(sections.get(tag, ""))
         release_sha = git(["rev-parse", f"{tag}^{{commit}}"]).strip()
         for commit in get_commits(prev, tag, skip_release=False):
             if release_sha.startswith(commit["sha"]):
