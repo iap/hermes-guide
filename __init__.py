@@ -16,7 +16,7 @@ findings (observer-only; nothing is injected or modified — hooks are inspected
 in-process at those boundaries, never executed).
 """
 
-__version__ = "0.8.8"
+__version__ = "0.8.9"
 
 import json
 import logging
