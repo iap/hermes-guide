@@ -163,8 +163,8 @@ Every diagnosis resolves to a concrete action: a `hermes <subcommand>` command o
 Phase 4 shipped the machine-readable contract. `hermes guide --json` emits one
 document per run, every `broken` or `unknown` finding carries a stable `id` with
 plain-language `impact` and a concrete `fix`, and the
-[finding catalog](docs/findings.md) is generated from that registry so it cannot
-drift. The triage and router skills consume the contract. Runtime repair stays
+[finding catalog](docs/findings.md) is generated from that registry. The triage
+and router skills consume the contract. Runtime repair stays
 upstream with `hermes doctor --fix`; `hermes doctor --live` only runs bounded,
 read-only health probes.
 

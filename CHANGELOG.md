@@ -8,7 +8,7 @@ All notable changes to hermes-guide are documented here.
 
 - **checks**: give broken and unknown findings stable ids ([#337](https://github.com/iap/hermes-guide/pull/337))
 - **guide**: machine-readable --json output mode ([#336](https://github.com/iap/hermes-guide/pull/336))
-- **tools**: verdict the upstream catalog pin before tagging ([#328](https://github.com/iap/hermes-guide/pull/328))
+- **tools**: verify the upstream catalog pin before tagging ([#328](https://github.com/iap/hermes-guide/pull/328))
 
 ### Documentation
 
