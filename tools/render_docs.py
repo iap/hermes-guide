@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the generated blocks in README.md and AGENTS.md from the repo itself.
+"""Render the generated blocks in README.md, AGENTS.md, and docs/findings.md.
 
 Why this exists
 ---------------
@@ -106,8 +106,8 @@ def diagnostic_names(skills_dir: Path = SKILLS_DIR) -> list[str]:
     return [n for n in skill_names(skills_dir) if n.startswith("diagnosing-")]
 
 
-def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
-    """The `_CHECKS` labels, read with `ast` rather than by importing checks.py.
+def check_pairs(checks_py: Path = CHECKS_PY) -> list[tuple[str, str]]:
+    """`_CHECKS` as (label, function name), read with `ast`.
 
     Importing would drag in PyYAML and the rest of the plugin's import graph,
     and this script has to stay runnable on a bare interpreter in a commit hook.
@@ -118,15 +118,158 @@ def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
             continue
         if not any(isinstance(t, ast.Name) and t.id == "_CHECKS" for t in node.targets):
             continue
-        labels: list[str] = []
+        pairs: list[tuple[str, str]] = []
         for elt in node.value.elts:  # type: ignore[attr-defined]
-            first = elt.elts[0]
-            if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                labels.append(first.value)
-        if not labels:
+            first, second = elt.elts
+            if (
+                isinstance(first, ast.Constant)
+                and isinstance(first.value, str)
+                and isinstance(second, ast.Name)
+            ):
+                pairs.append((first.value, second.id))
+        if not pairs:
             break
-        return labels
-    raise SystemExit(f"error: could not read _CHECKS labels from {checks_py}")
+        return pairs
+    raise SystemExit(f"error: could not read _CHECKS pairs from {checks_py}")
+
+
+def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
+    """The `_CHECKS` labels, in report order."""
+    return [label for label, _ in check_pairs(checks_py)]
+
+
+# run_all() swaps this variant in for the `hooks` label, so it is not in
+# _CHECKS. A new out-of-registry variant must be added here, or finding_scopes
+# refuses the ids it emits instead of publishing them without a scope.
+_SCOPE_ALIASES = {"check_hooks_readonly": "hooks"}
+_RUNNER = "run_all"
+
+
+def _emitted_ids(fn: ast.AST) -> set[str]:
+    """Ids on broken/unknown envelope literals inside one function body."""
+    ids: set[str] = set()
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Dict):
+            continue
+        pairs = {
+            key.value: value
+            for key, value in zip(node.keys, node.values)
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+        status = pairs.get("status")
+        finding_id = pairs.get("id")
+        if (
+            isinstance(status, ast.Constant)
+            and status.value in ("broken", "unknown")
+            and isinstance(finding_id, ast.Constant)
+            and isinstance(finding_id.value, str)
+        ):
+            ids.add(finding_id.value)
+    return ids
+
+
+def finding_scopes(checks_py: Path = CHECKS_PY) -> dict[str, list[str]]:
+    """Map each emitted id to the scope labels that can report it."""
+    tree = ast.parse(checks_py.read_text(encoding="utf-8"))
+    funcs = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    emits = {name: _emitted_ids(fn) for name, fn in funcs.items()}
+    calls = {
+        name: {
+            node.func.id
+            for node in ast.walk(fn)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        for name, fn in funcs.items()
+    }
+
+    def reached(name: str, seen: set[str] | None = None) -> set[str]:
+        seen = set() if seen is None else seen
+        if name in seen:
+            return seen
+        seen.add(name)
+        for callee in calls.get(name, ()):
+            if callee in funcs:
+                reached(callee, seen)
+        return seen
+
+    scopes: dict[str, set[str]] = {}
+    for label, func in check_pairs(checks_py):
+        for name in reached(func):
+            for finding_id in emits.get(name, ()):
+                scopes.setdefault(finding_id, set()).add(label)
+    for name, label in _SCOPE_ALIASES.items():
+        for finding_id in emits.get(name, ()):
+            scopes.setdefault(finding_id, set()).add(label)
+    # run_all() itself emits the crash and fast-mode envelopes, which any
+    # requested scope can produce.
+    for finding_id in emits.get(_RUNNER, ()):
+        scopes.setdefault(finding_id, set()).add("*")
+    return {finding_id: sorted(labels) for finding_id, labels in scopes.items()}
+
+
+def finding_registry(checks_py: Path = CHECKS_PY) -> list[dict[str, str]]:
+    """`FINDING_IDS` as (id, title, impact, fix) dicts, read with `ast`."""
+    tree = ast.parse(checks_py.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not any(
+            isinstance(t, ast.Name) and t.id == "FINDING_IDS" for t in targets
+        ):
+            continue
+        if not isinstance(value, ast.Dict):
+            raise SystemExit(f"error: FINDING_IDS in {checks_py} is not a dict literal")
+        entries: list[dict[str, str]] = []
+        for key, item in zip(value.keys, value.values):
+            if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+                continue
+            if not isinstance(item, ast.Tuple) or len(item.elts) != 3:
+                raise SystemExit(f"error: FINDING_IDS[{key.value!r}] is not a 3-tuple")
+            parts = [
+                elt.value
+                for elt in item.elts
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+            ]
+            if len(parts) != 3:
+                raise SystemExit(
+                    f"error: FINDING_IDS[{key.value!r}] must be three string literals"
+                )
+            title, impact, fix = parts
+            entries.append(
+                {
+                    "id": key.value,
+                    "title": title,
+                    "impact": impact,
+                    "fix": fix,
+                }
+            )
+        if not entries:
+            break
+        return entries
+    raise SystemExit(f"error: could not read FINDING_IDS from {checks_py}")
+
+
+def finding_catalog(checks_py: Path = CHECKS_PY) -> list[dict]:
+    """The registry plus its scopes, ready to render. Fails on drift."""
+    scopes = finding_scopes(checks_py)
+    rows: list[dict] = []
+    for entry in sorted(finding_registry(checks_py), key=lambda e: e["id"]):
+        labels = scopes.get(entry["id"])
+        if not labels:
+            raise SystemExit(
+                f"error: {entry['id']} has no scope — add its emitting check to "
+                "the call graph reachable from _CHECKS, or to _SCOPE_ALIASES"
+            )
+        rows.append({**entry, "scopes": ["any"] if labels == ["*"] else labels})
+    return rows
 
 
 # --- blocks ----------------------------------------------------------------
@@ -201,6 +344,24 @@ def _agents_inventory(ctx: dict) -> list[str]:
     ]
 
 
+def _cell(text: str) -> str:
+    """One Markdown table cell: no raw pipes, no newlines."""
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def _findings_catalog(ctx: dict) -> list[str]:
+    lines = ["| id | scope | meaning | impact | fix |", "|---|---|---|---|---|"]
+    for row in ctx["findings"]:
+        scope = "any" if row["scopes"] == ["any"] else ", ".join(
+            f"`{label}`" for label in row["scopes"]
+        )
+        lines.append(
+            f"| `{row['id']}` | {scope} | {_cell(row['title'])} | "
+            f"{_cell(row['impact'])} | {_cell(row['fix'])} |"
+        )
+    return lines
+
+
 # filename -> {block name: render function}
 BLOCKS: dict[str, dict[str, object]] = {
     "README.md": {
@@ -211,6 +372,9 @@ BLOCKS: dict[str, dict[str, object]] = {
     "AGENTS.md": {
         "inventory": _agents_inventory,
     },
+    "docs/findings.md": {
+        "findings-catalog": _findings_catalog,
+    },
 }
 
 _SOURCES = {
@@ -218,6 +382,7 @@ _SOURCES = {
     "intro-scopes": "checks._CHECKS labels",
     "install-all-loop": "skills/*/SKILL.md (identifiers)",
     "inventory": "skills/*/SKILL.md + checks._CHECKS labels",
+    "findings-catalog": "checks.FINDING_IDS + the _CHECKS call graph",
 }
 
 
@@ -284,6 +449,7 @@ def context() -> dict:
         "skills": skill_names(),
         "diagnostics": diagnostic_names(),
         "labels": check_labels(),
+        "findings": finding_catalog(),
     }
 
 
