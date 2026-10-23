@@ -1,7 +1,7 @@
 ---
 name: start
 description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
-version: 1.0.4
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, diagnostics, triage, routing]
@@ -53,6 +53,16 @@ Run the health check and read its lines:
   such a host is where the minutes go. It does not help when the CLI itself
   will not start — that launch still happens, so fall back to reading state
   directly and routing by subsystem name (Step 2).
+- Prefer the machine-readable document when the shell is available:
+  `hermes guide --json` (or `hermes guide <scope> --json`) prints one JSON
+  document whose `checks` object is keyed by scope and carries the same
+  envelopes the text report prints, each `broken`/`unknown` envelope with a
+  stable `id`, a plain-language `impact`, and the sanctioned `fix` (id
+  catalog: `docs/findings.md` in the repo). Fall back to the text output —
+  and say so — when `--json` errors: installs whose `hermes guide --help`
+  does not list `--json` reject it with an argparse usage error
+  (`unrecognized arguments: --json`, exit `2`). Do not reword that error or
+  retry the flag; the text report carries the same findings.
 - In a session: `/hermes-doctor`, or `/hermes-doctor <scope>`.
 
 Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
@@ -74,8 +84,31 @@ clean.
 
 ## Step 2 — route the findings
 
-The tap's `diagnosing-triage` playbook carries the full line-to-skill mapping.
-The short version:
+Read the document in one order: `broken` findings first, then `unknown`
+(`?` means unmeasured — treat it as broken until the scope runs clean), then
+informational (`~` lines, which are actionable hints, not noise). For each
+`broken`/`unknown` finding carry the envelope verbatim: the stable `id`, the
+reason with any upstream error text quoted exactly, and the `impact` copy —
+what the user cannot do until it is fixed. Only `broken`/`unknown` envelopes
+carry an `id`, `impact`, and `fix`; informational lines carry the reason and
+detail text and route straight into the mapping below — do not invent
+metadata for them.
+
+Then offer at most three options per finding and let the user pick:
+
+1. A **session-scoped workaround** — an existing `hermes` command or manual
+   substitute that unblocks the current turn without persisting anything.
+2. The **sanctioned fix** — the exact command from the envelope's `fix` (or
+   the loaded playbook's resolution order), with the persistent change named
+   before anything runs.
+3. **Proceed without the capability** — say what stays unavailable.
+
+Anything persistent needs explicit user confirmation in the same turn; never
+run a persistent fix unprompted. After a confirmed change, re-run the check
+that flagged it.
+
+The tap's `diagnosing-triage` playbook carries the full symptom-to-finding-id
+to playbook mapping. The short version:
 
 - `x config` → load `hermes-configuration-guide` Step 0 (resolve the home and
   config path), then re-run the scope.
@@ -126,4 +159,4 @@ full set.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill
   or the target playbook explicitly.
 
-*Facts (re-)verified 2026-10-22 against this repo's `checks.py` `_CHECKS` (nine scopes) and `check_update_lock` (writable non-blocking probe, POSIX read-only fallback for a root-owned lock, released immediately, no content written, never deleted); `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17; --fast clause corrected 2026-10-17: it suppresses per-check hermes subprocesses, not the single CLI launch, and points at Step 2 rather than a no-baseline route that does not exist in this file — `sessions` and `update` shipped earlier but were missing here; update-scope lock probe disclosed 2026-10-22 (the earlier "every other scope reads state only" claim omitted it). Re-verify before reuse.*
+*Facts (re-)verified 2026-10-23 against this repo's `checks.py` `_CHECKS` (nine scopes) and `check_update_lock` (writable non-blocking probe, POSIX read-only fallback for a root-owned lock, released immediately, no content written, never deleted); `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17; --fast clause corrected 2026-10-17: it suppresses per-check hermes subprocesses, not the single CLI launch, and points at Step 2 rather than a no-baseline route that does not exist in this file — `sessions` and `update` shipped earlier but were missing here; update-scope lock probe disclosed 2026-10-22 (the earlier "every other scope reads state only" claim omitted it). `--json` preference, ordered reporting, and the three-option rule added 2026-10-23: `--json` contract taken from this repo's `hermes guide --json` tests (`tools/test_json_output.py`, #336); the fallback shape observed live on the host (Hermes Agent v0.22.2+1915.gdd519c7.dirty, hermes-guide 0.8.7) where `hermes guide config --json` exits `2` with `unrecognized arguments: --json`; the fallback wording keys off `hermes guide --help` listing `--json` rather than a hard version; commands cited (`hermes config path`, `hermes doctor --fix`/`--live`, `hermes setup`, `hermes skills install`/`tap`, `hermes plugins install`/`update`/`list`, `hermes hooks doctor`, `hermes gateway status`) re-verified live on v0.22.2. Review-round corrections 2026-10-23 (re-checked against the repo source, no new live facts): the JSON document's `checks` is an object keyed by scope (from `_build_json_payload` in this repo's `__init__.py`), not an array; `id`/`impact`/`fix` apply to `broken`/`unknown` envelopes only — informational lines carry reason and detail and route without invented metadata. Re-verify before reuse.*

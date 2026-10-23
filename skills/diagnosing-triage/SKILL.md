@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.0.14
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -33,7 +33,7 @@ Do **not** load this skill when the user has already named a specific subsystem 
 
 Before walking the flowchart, capture the machine-readable baseline — it routes whole branches by itself and exposes findings no symptom description mentions:
 
-- Headless / one-shot: `hermes guide` (all scopes) or `hermes guide <scope>`. On a degraded host where every launch takes minutes, add `--fast` — in-process checks, no subprocess; helps when launches are slow, not when the CLI is wedged (the no-baseline exception below still applies).
+- Headless / one-shot: `hermes guide` (all scopes) or `hermes guide <scope>`. On a degraded host where every launch takes minutes, add `--fast` — in-process checks, no subprocess; helps when launches are slow, not when the CLI is wedged (the no-baseline exception below still applies). When the shell is available, prefer the JSON document: `hermes guide --json` (or `hermes guide <scope> --json`) carries the same findings — `broken`/`unknown` envelopes with stable `id`s, the sanctioned `fix`es, and `informational` ones as plain envelopes — fall back to the text report (and say so) when the flag errors: installs older than the release carrying `--json` answer with an argparse usage error and exit `2`.
 - In-session: `/hermes-doctor` or `/hermes-doctor <scope>`.
 
 Route its `~`/`x`/`?` lines first:
@@ -57,6 +57,56 @@ Route its `~`/`x`/`?` lines first:
 Exception — no baseline possible: when every `hermes` invocation hangs (e.g. on `an update is still running`), the baseline cannot run. Load the diagnosing-cli-tui stale-lock note directly and follow its manual steps; run `hermes guide update` after the CLI recovers as confirmation, not as the entry point. Minutes-long launches that keep retrying update completion are a different shape — route to diagnosing-path (retry-loop note), not here.
 
 Then continue with symptom routing below for whatever the baseline did not explain.
+
+## 0c. Finding-id decision table
+
+Every `broken`/`unknown` finding the baseline reports carries a stable `id`
+(the generated catalog lives in `docs/findings.md` in the repo). Use this
+table to turn each id into what you present to the user: at most three
+options — a session-scoped workaround, the sanctioned fix, or proceeding
+without the capability — and never a persistent change without explicit
+confirmation in the same turn.
+
+Two rules bound the table: repair of runtime state belongs to upstream
+(`hermes doctor --fix`, `hermes doctor --live`), not to this plugin; and each
+command below was checked against a named Hermes build before it was cited —
+Hermes Agent v0.22.2+1915.gdd519c7.dirty (upstream `dd519c74`), checked
+2026-10-23.
+
+| Symptom | Finding id | Session workaround | Permanent fix (consent first) | Verify |
+|---|---|---|---|---|
+| Custom provider, model, or tool choice silently reverts to defaults | `CONFIG_PATH_UNRESOLVED` | none safe — acknowledge defaults are untrusted | run `hermes config path`; if it fails, reinstall the Hermes CLI | `hermes guide config` |
+| Hermes ignores every custom setting | `CONFIG_MISSING` | none — state that built-in defaults are in force | run `hermes setup`, or restore the file to the reported path | `hermes guide config` |
+| Hermes cannot load its settings at startup | `CONFIG_UNPARSEABLE` | none — every consumer of the file fails | fix the YAML at the reported path (indentation, quoting, duplicate keys) | `hermes guide config` |
+| `mcp` or `plugins` reports the config could not be read | `CONFIG_UNREADABLE` | none | check read permissions on the reported path; if readable, fix its YAML | `hermes guide mcp` when the finding came from the `mcp` scope, `hermes guide plugins` when from `plugins` |
+| A scope reports the Hermes home unresolved | `HOME_UNRESOLVED` | run `hermes config path` to see whether the profile resolves | restore or correct the profile the check names | `hermes guide <scope>` |
+| Listed MCP servers will not start; their tools are missing | `MCP_SERVER_MALFORMED` | name the tools that are absent and move on | in `config.yaml` move foreign keys (e.g. `mcpServers`) under top-level `mcp_servers`, make `mcp_servers` a mapping, fix the listed entries (`command` for stdio, `url` for HTTP) | `hermes guide mcp` |
+| Listed skills will not load or are shadowed | `SKILLS_ISSUES` | use the skills that do load; name the missing ones | fix the listed frontmatter, name, or path problems | `hermes guide skills` |
+| Commands from a listed bundle do not resolve | `COMMANDS_BUNDLE_MALFORMED` | use the built-ins that still resolve | fix or remove the listed bundle files | `hermes guide commands` |
+| Possibly-approved hooks are skipped or re-prompt; detail quotes hook problems | `HOOKS_ALLOWLIST_INVALID` | run hooks manually, expecting re-approval prompts | repair or delete the reported `shell-hooks-allowlist.json`, then fix the hook problems quoted in the detail | `hermes guide hooks` |
+| One or more hooks fail or are misconfigured; guarded events unhandled | `HOOKS_DOCTOR_FINDINGS` | reproduce the affected event by hand | fix each hook reported by `hermes hooks doctor` | `hermes guide hooks` |
+| Hook health could not be verified; a broken hook can fail silently | `HOOKS_DOCTOR_UNAVAILABLE` | treat hook health as unverified this turn | run `hermes hooks doctor` manually and fix the error it reports | `hermes guide hooks` |
+| Hook health undetermined; `hermes hooks doctor` output unrecognized | `HOOKS_DOCTOR_OPAQUE` | same as above: health unknown | run `hermes hooks doctor` manually and compare its output with the installed Hermes version | `hermes guide hooks` |
+| Hooks were skipped in this run; failures would only surface in-session | `HOOKS_INSPECTION_UNAVAILABLE` | accept the skip; say what was not measured | run `hermes guide hooks` without `--fast` to inspect hooks on demand | `hermes guide hooks` |
+| Hooks cannot be inspected; the profile's config file is missing | `HOOKS_CONFIG_NOT_FOUND` | none | run `hermes config path` and restore the profile's `config.yaml` | `hermes guide hooks` |
+| Hooks cannot be inspected; the config file could not be loaded | `HOOKS_CONFIG_UNREADABLE` | none | check read permissions on the profile's `config.yaml`; if readable, fix its YAML | `hermes guide hooks` |
+| Hook inspection raised an error | `HOOKS_INSPECTION_FAILED` | none | re-run `hermes guide hooks`; if it repeats, report the exception type from the reason | `hermes guide hooks` |
+| Shell hooks malformed, unreachable, or not allowlisted | `HOOKS_FINDINGS` | invoke the affected event by hand where possible | fix the listed hook entries in `config.yaml`; approve each valid hook at the interactive prompt when the detail says it is not allowlisted | `hermes guide hooks` |
+| `plugins` section is not a mapping; enable/disable settings ignored | `PLUGINS_CONFIG_SHAPE` | plugins run on whatever loads by default | rewrite the `plugins` section in `config.yaml` as a mapping with `enabled` and `disabled` lists | `hermes guide plugins` |
+| Enabled plugins missing or failed to load; their commands/tools/hooks absent | `PLUGINS_MISSING_OR_BROKEN` | run without the missing plugin's surface; name what is gone | run `hermes plugins list`; reinstall from the catalog with `hermes plugins install <name>`, or re-link an already-installed one with `hermes plugins update <name>`; for an exclusive provider select its category key (e.g. `memory.provider`) instead of `plugins.enabled` | `hermes guide plugins` |
+| Memory files inconsistent; stored context stale or ignored | `MEMORIES_ISSUES` | restate the needed context manually in-chat | fix the listed files under `$HERMES_HOME/memories/` | `hermes guide memories` |
+| Session activity cannot be analyzed; runaway sessions undetected | `SESSIONS_LOG_UNREADABLE` | none — measurements stay blind | check read permissions on the reported agent log | `hermes guide sessions` |
+| Session log format unrecognized | `SESSIONS_LOG_UNPARSED` | same as above | re-run `hermes guide sessions`; if it repeats, check the log format written by the installed Hermes version | `hermes guide sessions` |
+| Agent loops, burning API calls and context without progress | `SESSIONS_RUNAWAY` | kill the session and start a fresh one — do not keep interrupting | start a new session instead of resuming the listed one, and split generation from verification into separate turns; a `:free` default model in `config.yaml` `model:` is one known aggravator, so if it is set, moving off it is a further candidate fix — the finding can occur without it | `hermes guide sessions` |
+| Update scope says the install checkout is unresolved | `UPDATE_CHECKOUT_UNRESOLVED` | none — update health unknown | run `hermes doctor` to confirm the install layout | `hermes guide update` |
+| Install layout unrecognized; stuck update lock not ruled out | `UPDATE_LAYOUT_UNRECOGNIZED` | treat update health as unknown | run `hermes doctor` to confirm the install layout, then locate the checkout and its update lock by hand | `hermes guide update` |
+| An updater's process still holds the checkout and wedges every `hermes` command | `UPDATE_LOCK_HELD` | wait — the holder must exit; the PID in the reason is the dead updater that spawned it, so find the holding process by hand, not by that PID | none — do not remove the lock while it is held; once the holder exits, re-run the check | `hermes guide update` |
+| The lock does not name an owner | `UPDATE_LOCK_MALFORMED` | none | confirm no update is running, then remove the reported file with human confirmation | `hermes guide update` |
+| The lock could not be probed; a dead owner may hold the checkout | `UPDATE_LOCK_UNPROBEABLE` | none | check for a running `hermes` or `git` process by hand before touching the reported lock file | `hermes guide update` |
+| Ownership cannot be determined | `UPDATE_LOCK_INDETERMINATE` | none | check whether the owner PID in the reason is alive by hand before touching the lock file | `hermes guide update` |
+| The update lock could not be read | `UPDATE_LOCK_UNREADABLE` | none | check read permissions on the reported lock file | `hermes guide update` |
+| A fast-mode run skipped the surface; its real state unknown | `FAST_MODE_UNRESOLVED` | accept the skip; say what was not measured | re-run `hermes guide <scope>` without `--fast` | `hermes guide <scope>` |
+| The check itself crashed — a defect in hermes-guide, not in your config | `CHECK_CRASHED` | none | re-run `hermes guide <scope>`; if it repeats, file the exception type and `hermes --version` at https://github.com/iap/hermes-guide/issues | `hermes guide <scope>` |
 
 Ownership: symptom-order routing lives in this skill; surface-order rows live in the config map; pairwise precedence is canonical in the config-map Disambiguation list — edit each where it lives.
 
@@ -265,4 +315,4 @@ When the triage skill routes to a diagnostic skill, the model reports findings u
 - **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
 - **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
-*Facts re-verified 2026-10-13 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id). `x update` row + symptom-map stale-lock row point at the diagnosing-cli-tui §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py; rows re-checked 2026-10-16). §4 escalation rules moved to the canonical config-map list 2026-10-16 (verbatim move, pointer left behind). Routing additions verified 2026-10-16 (retry-loop vs wedge split to diagnosing-path; outdated-plugin `2 bad scope` → `hermes plugins update hermes-guide`). `~ update` row, the `--fast` degraded-host clause, and the row count (re-counted: 70) added 2026-10-17. Re-verify before reuse.*
+*Facts re-verified 2026-10-23 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id). `x update` row + symptom-map stale-lock row point at the diagnosing-cli-tui §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py; rows re-checked 2026-10-16). §4 escalation rules moved to the canonical config-map list 2026-10-16 (verbatim move, pointer left behind). Routing additions verified 2026-10-16 (retry-loop vs wedge split to diagnosing-path; outdated-plugin `2 bad scope` → `hermes plugins update hermes-guide`). `~ update` row, the `--fast` degraded-host clause, and the row count (re-counted: 70) added 2026-10-17. §0c finding-id decision table added 2026-10-23 (JSON contract consumed per #334): all 32 finding ids tabulated against this repo's `docs/findings.md` catalog (PR-head `tools/render_docs.py` render, cross-checked against `checks.FINDING_IDS`); commands verified live on Hermes Agent v0.22.2+1915.gdd519c7.dirty (upstream `dd519c74`): `hermes --version`, `hermes doctor --fix`/`--live`, `hermes setup --help`, `hermes config path` (`/Users/iap/.hermes/config.yaml`), `hermes skills` (install/tap/inspect subcommands), `hermes plugins` (install/update/list subcommands), `hermes hooks doctor`, `hermes gateway status`; `--json` fallback wording keyed off the flag erroring (argparse exit `2`, observed on this host because hermes-guide 0.8.7 predates #336), not off a hard version number. Review-round corrections 2026-10-23 (semantic re-checks against the repo source, no new live facts): `SESSIONS_RUNAWAY` no longer implies `model:` is part of the sanctioned fix for every finding; `PLUGINS_MISSING_OR_BROKEN` carries the concrete reinstall commands (`hermes plugins install <name>` from the catalog, `hermes plugins update <name>` for an installed one); `CONFIG_UNREADABLE` verifies against the scope that reported it (mcp or plugins); `UPDATE_LOCK_HELD` row reworded to the check's semantics (this repo's `check_update_lock` in `checks.py` — a live owner renders as the informational update-in-progress line, while this id means the owner PID is dead and a process it started still holds the checkout). Re-verify before reuse.*
