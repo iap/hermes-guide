@@ -158,9 +158,18 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 
 Every diagnosis resolves to a concrete action: a `hermes <subcommand>` command or a specific file + field edit, then a `/reload-*` or restart to apply.
 
-## Planned work
+## Machine-readable diagnostics
 
-Phase 4 adds a machine-readable contract to `hermes guide` (`--json`), stable finding IDs with plain-language impact and fix text, a generated finding catalog, and skills that act on them. Runtime repair stays upstream with `hermes doctor --fix`; `hermes doctor --live` only runs bounded, read-only health probes. Track it in the [Phase 4 milestone](https://github.com/iap/hermes-guide/milestone/4).
+Phase 4 shipped the machine-readable contract. `hermes guide --json` emits one
+document per run, every `broken` or `unknown` finding carries a stable `id` with
+plain-language `impact` and a concrete `fix`, and the
+[finding catalog](docs/findings.md) is generated from that registry. The triage
+and router skills consume the contract. Runtime repair stays
+upstream with `hermes doctor --fix`; `hermes doctor --live` only runs bounded,
+read-only health probes.
+
+No next phase is scoped yet; [open
+issues](https://github.com/iap/hermes-guide/issues) carry the work.
 
 ## Contributing
 
