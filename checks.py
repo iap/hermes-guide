@@ -1057,8 +1057,8 @@ def _bundled_plugins_dir():
         return None
 
 
-def _read_plugin_manifest(d):
-    """Return a directory plugin's manifest ``name``, or None if none exists.
+def _read_plugin_meta(d):
+    """Return a directory plugin's ``(name, kind)``, or None if none exists.
 
     Accepts ``plugin.yaml`` then ``plugin.yml`` (mirroring
     ``plugins_cmd._read_manifest_info``), then falls back to portable
@@ -1066,6 +1066,10 @@ def _read_plugin_manifest(d):
     resolves all three, so a ``plugin.json``-only plugin that is enabled and
     loaded must not be reported as missing. The portable schema is a flat
     mapping with a top-level ``name`` (see ``hermes_cli.agent_plugins``).
+
+    ``kind`` is needed by the fallback opt-in notes: exclusive and
+    model-provider plugins are selected by a category key, never by
+    ``plugins.enabled``, so advising the reader to enable them is wrong.
     """
     for ext in ("plugin.yaml", "plugin.yml"):
         manifest_file = os.path.join(d, ext)
@@ -1087,7 +1091,8 @@ def _read_plugin_manifest(d):
             name = manifest.get("name")
             if not name:
                 name = os.path.basename(d)
-            return name
+            kind = manifest.get("kind")
+            return name, kind if isinstance(kind, str) else ""
     portable = os.path.join(d, "plugin.json")
     if os.path.isfile(portable):
         try:
@@ -1100,8 +1105,15 @@ def _read_plugin_manifest(d):
             name = manifest.get("name")
             if not name:
                 name = os.path.basename(d)
-            return name
+            kind = manifest.get("kind")
+            return name, kind if isinstance(kind, str) else ""
     return None
+
+
+def _read_plugin_manifest(d):
+    """Return a directory plugin's manifest ``name``, or None if none exists."""
+    meta = _read_plugin_meta(d)
+    return meta[0] if meta is not None else None
 
 
 def _collect_plugin_ids(root, prefix, depth, skip_names, seen, by_dir=None):
@@ -1110,8 +1122,8 @@ def _collect_plugin_ids(root, prefix, depth, skip_names, seen, by_dir=None):
     its path-derived ``key`` (``<category>/<dirname>``). Both are added to
     *seen* so ``plugins.enabled`` matches by name or key alike.
 
-    When *by_dir* is given, each resolved ``dirpath -> manifest name`` is also
-    recorded there so callers needing per-directory names (the opt-in notes
+    When *by_dir* is given, each resolved ``dirpath -> (name, kind)`` is also
+    recorded there so callers needing per-directory metadata (the opt-in notes
     loop) do not re-walk and re-parse every manifest.
     """
     if not root or not os.path.isdir(root):
@@ -1122,13 +1134,14 @@ def _collect_plugin_ids(root, prefix, depth, skip_names, seen, by_dir=None):
             continue
         if depth == 0 and skip_names and d in skip_names:
             continue
-        name = _read_plugin_manifest(dpath)
-        if name is not None:
+        meta = _read_plugin_meta(dpath)
+        if meta is not None:
+            name, _kind = meta
             key = f"{prefix}/{d}" if prefix else name
             seen.add(name)
             seen.add(key)
             if by_dir is not None:
-                by_dir[dpath] = name
+                by_dir[dpath] = meta
             continue
         if depth >= 1:
             continue
@@ -1212,9 +1225,11 @@ def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_
     advisories = []
     bundled_only = []
     for name in sorted(enabled):
-        if name in constants.PLUGIN_SUBCATEGORY_DIRS:
-            # Parity with the mirror below: a bare sub-category name is not a
-            # plugin id — those dirs use their own selection keys.
+        if name in constants.PLUGIN_SUBCATEGORY_DIRS and name not in user_ids:
+            # A bare sub-category name is not a plugin id — those dirs use
+            # their own selection keys. But a *user* manifest may legitimately
+            # carry that name (e.g. a plugin called `delegation`), so only skip
+            # when no user manifest defines it.
             continue
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
@@ -1379,7 +1394,7 @@ def check_plugins(manifests=None):
     # claim a plugin the user dir already provides (by name or by nested
     # path-derived key), and Hermes' disabled deny-list wins over enabled.
     user_known: set[str] = set()
-    user_manifests: dict[str, str] = {}
+    user_manifests: dict[str, tuple[str, str]] = {}
     _collect_plugin_ids(plugins_root, "", 0, set(), user_known, user_manifests)
     # Subcategory dirs resolve by their own selection keys (memory.provider,
     # context.engine, image_gen.provider, --provider), never plugins.enabled, so
@@ -1394,8 +1409,10 @@ def check_plugins(manifests=None):
     broken = []
     bundled_only = []
     for name in sorted(enabled):
-        if name in skip:
-            continue  # sub-category dirs use their own selection keys, not plugins.enabled
+        if name in skip and name not in user_known:
+            # A bare sub-category name is not a plugin id. A user manifest with
+            # that name is a real plugin and must still be judged.
+            continue
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
         if name not in known:
@@ -1409,17 +1426,22 @@ def check_plugins(manifests=None):
     notes = []
     if os.path.isdir(plugins_root):
         for entry in sorted(os.listdir(plugins_root)):
-            if entry in skip or entry.startswith(".") or entry == "__pycache__":
+            if entry.startswith(".") or entry == "__pycache__":
                 continue
             dpath = os.path.join(plugins_root, entry)
             if not os.path.isdir(dpath):
                 continue
             # Reuse the single walk above: re-parsing every manifest here
             # doubled the I/O per run.
-            manifest_name = user_manifests.get(dpath)
-            if manifest_name is None:
+            manifest_meta = user_manifests.get(dpath)
+            if manifest_meta is None:
                 # No manifest — not a plugin. Hermes does not load it either, so
                 # reporting a stray state/vendor directory would be noise.
+                continue
+            manifest_name, kind = manifest_meta
+            if kind in {"exclusive", "model-provider"}:
+                # Selected by a category key, never plugins.enabled: the same
+                # suppression `_user_dir_notes()` applies on the upstream path.
                 continue
             # Match on the manifest name, which is what `plugins.enabled` keys
             # on; the directory basename is not a reliable identifier.
