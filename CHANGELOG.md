@@ -2,6 +2,12 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.9 (2026-10-23)
+
+### Bug Fixes
+
+- **plugins**: document delegation backend selection and judge category-named user plugins ([#341](https://github.com/iap/hermes-guide/pull/341))
+
 ## v0.8.8 (2026-10-23)
 
 ### Features
