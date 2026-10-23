@@ -229,6 +229,23 @@ def main(argv: list[str]) -> int:
             failures.append(f"skipped-category plugin verdict wrong: {result!r}")
         checks._bundled_plugins_dir = lambda: None
 
+        # (8b) delegation is scanned by upstream discovery, not a skipped
+        # category: a bundled backend key under it must resolve in the
+        # fallback scan instead of being reported missing.
+        _write(bundled / "delegation" / "default" / "plugin.yaml", "name: default\nkind: backend\n")
+        checks._bundled_plugins_dir = lambda: str(bundled)
+        _write(config, "plugins:\n  enabled: [delegation/default]\n  disabled: []\n")
+        checks._upstream_manifests = lambda home: None
+        checks._store().clear()
+        try:
+            result = checks.check_plugins()
+        finally:
+            checks._upstream_manifests = original_upstream
+        joined = " | ".join(str(d) for d in (result.get("detail") or []))
+        if result.get("status") == "broken" or "delegation/default" not in joined:
+            failures.append(f"bundled delegation backend not resolved: {result!r}")
+        checks._bundled_plugins_dir = lambda: None
+
         # (9) discovery for a DIFFERENT home must not judge this config. In CI
         # Hermes is installed, so the import succeeds — the home guard is what
         # keeps a stubbed fixture from being compared with the real profile.
