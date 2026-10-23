@@ -2,6 +2,21 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.8 (2026-10-23)
+
+### Features
+
+- **checks**: give broken and unknown findings stable ids ([#337](https://github.com/iap/hermes-guide/pull/337))
+- **guide**: machine-readable --json output mode ([#336](https://github.com/iap/hermes-guide/pull/336))
+- **tools**: verdict the upstream catalog pin before tagging ([#328](https://github.com/iap/hermes-guide/pull/328))
+
+### Documentation
+
+- **skills**: consume the JSON finding contract ([#339](https://github.com/iap/hermes-guide/pull/339))
+- generate the finding catalog from FINDING_IDS ([#338](https://github.com/iap/hermes-guide/pull/338))
+- point README at the Phase 4 milestone ([#335](https://github.com/iap/hermes-guide/pull/335))
+- **release**: add the upstream catalog re-pin to the release steps ([#329](https://github.com/iap/hermes-guide/pull/329))
+
 ## v0.8.7 (2026-10-22)
 
 ### Bug Fixes
