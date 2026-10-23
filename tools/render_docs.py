@@ -229,8 +229,20 @@ def finding_registry(checks_py: Path = CHECKS_PY) -> list[dict[str, str]]:
             raise SystemExit(f"error: FINDING_IDS in {checks_py} is not a dict literal")
         entries: list[dict[str, str]] = []
         for key, item in zip(value.keys, value.values):
+            # An unpacking (`**base`) arrives as key=None, and any other
+            # non-literal key cannot be resolved without executing checks.py.
+            # Refuse loudly: a skipped row would publish a catalog that is
+            # silently missing a runtime-valid id.
+            if key is None:
+                raise SystemExit(
+                    f"error: FINDING_IDS in {checks_py} uses dict unpacking; "
+                    "write every entry as an explicit literal id"
+                )
             if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
-                continue
+                raise SystemExit(
+                    f"error: FINDING_IDS key at line {key.lineno} is not a "
+                    "string literal"
+                )
             if not isinstance(item, ast.Tuple) or len(item.elts) != 3:
                 raise SystemExit(f"error: FINDING_IDS[{key.value!r}] is not a 3-tuple")
             parts = [
@@ -613,7 +625,22 @@ def _selftest() -> int:
         print("selftest FAIL: _word_num(23) should refuse rather than invent a word")
         fails += 1
 
-    total = len(_SELFTEST_CASES) + len(_SELFTEST_ERRORS) + len(word_cases)
+    # The registry reader refuses syntax it cannot resolve statically: a
+    # skipped row would be a silently incomplete catalog.
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        bad = Path(td) / "checks.py"
+        bad.write_text("FINDING_IDS = {**BASE}\n", encoding="utf-8")
+        try:
+            finding_registry(bad)
+        except SystemExit:
+            pass
+        else:
+            print("selftest FAIL: dict unpacking in FINDING_IDS should raise")
+            fails += 1
+
+    total = len(_SELFTEST_CASES) + len(_SELFTEST_ERRORS) + len(word_cases) + 1
     if fails:
         return 1
     print(f"selftest OK ({total} cases)")
