@@ -173,6 +173,24 @@ def main(argv: list[str]) -> int:
         if result.get("status") == "broken":
             failures.append(f"bare sub-category name reported broken: {result!r}")
 
+        # (6b2) a user manifest that happens to share a sub-category name is a
+        # real plugin: it must be judged, not swallowed by the bare-name skip.
+        collide = SimpleNamespace(
+            name="delegation",
+            key="delegation",
+            kind="exclusive",
+            source="user",
+            path=str(plugins / "delegation"),
+        )
+        _write(config, "plugins:\n  enabled: [delegation]\n  disabled: []\n")
+        checks._store().clear()
+        result = checks.check_plugins(manifests=[collide])
+        joined = " | ".join(str(d) for d in (result.get("detail") or []))
+        if result.get("status") != "broken" or "delegation" not in joined:
+            failures.append(
+                f"user plugin named like a sub-category was skipped: {result!r}"
+            )
+
         # (7) a name with no manifest is still reported missing.
         _write(config, "plugins:\n  enabled: [ghost]\n  disabled: []\n")
         checks._store().clear()

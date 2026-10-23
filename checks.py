@@ -1212,9 +1212,11 @@ def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_
     advisories = []
     bundled_only = []
     for name in sorted(enabled):
-        if name in constants.PLUGIN_SUBCATEGORY_DIRS:
-            # Parity with the mirror below: a bare sub-category name is not a
-            # plugin id — those dirs use their own selection keys.
+        if name in constants.PLUGIN_SUBCATEGORY_DIRS and name not in user_ids:
+            # A bare sub-category name is not a plugin id — those dirs use
+            # their own selection keys. But a *user* manifest may legitimately
+            # carry that name (e.g. a plugin called `delegation`), so only skip
+            # when no user manifest defines it.
             continue
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
@@ -1394,8 +1396,10 @@ def check_plugins(manifests=None):
     broken = []
     bundled_only = []
     for name in sorted(enabled):
-        if name in skip:
-            continue  # sub-category dirs use their own selection keys, not plugins.enabled
+        if name in skip and name not in user_known:
+            # A bare sub-category name is not a plugin id. A user manifest with
+            # that name is a real plugin and must still be judged.
+            continue
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
         if name not in known:
