@@ -7,7 +7,6 @@ Only the latest published version (`0.8.9`) receives security fixes.
 | Version | Supported |
 | --- | --- |
 | 0.8.9 | :white_check_mark: |
-| 0.8.8 | :white_check_mark: |
 | 0.8.7 | :x: |
 | 0.8.5 | :x: |
 | 0.8.4 | :x: |
