@@ -88,13 +88,6 @@ PLUGIN_SUBCATEGORY_DIRS = (
     # `computer_use/cua` as a discoverable plugin id, so a stale
     # `plugins.enabled: [cua]` resolved as valid instead of being flagged.
     "computer_use",
-    # delegation: upstream `plugins/delegation/default/plugin.yaml` declares
-    # `delegation.provider` / `model` / `base_url`, so it is a provider
-    # sub-category with its own selection key, not a plugins.enabled plugin.
-    # Added 2026-10-23 after the v0.8.8 release audit; it did not exist at the
-    # drift baseline 8f555f4, which is why the static drift check could not
-    # flag the omission.
-    "delegation",
 )
 
 # Filesystem names owned by the Hermes layout (rename upstream -> edit here).

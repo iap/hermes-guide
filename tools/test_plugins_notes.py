@@ -176,19 +176,37 @@ def main(argv: list[str]) -> int:
         # (6b2) a user manifest that happens to share a sub-category name is a
         # real plugin: it must be judged, not swallowed by the bare-name skip.
         collide = SimpleNamespace(
-            name="delegation",
-            key="delegation",
+            name="memory",
+            key="memory",
             kind="exclusive",
             source="user",
-            path=str(plugins / "delegation"),
+            path=str(plugins / "memory"),
         )
-        _write(config, "plugins:\n  enabled: [delegation]\n  disabled: []\n")
+        _write(config, "plugins:\n  enabled: [memory]\n  disabled: []\n")
         checks._store().clear()
         result = checks.check_plugins(manifests=[collide])
         joined = " | ".join(str(d) for d in (result.get("detail") or []))
-        if result.get("status") != "broken" or "delegation" not in joined:
+        if result.get("status") != "broken" or "memory" not in joined:
             failures.append(
                 f"user plugin named like a sub-category was skipped: {result!r}"
+            )
+
+        # (6b3) fallback opt-in notes: a top-level user dir named like a
+        # sub-category is still a real plugin and must be noted, matching
+        # _user_dir_notes() on the upstream path.
+        _write(plugins / "memory" / "plugin.yaml", "name: memory\n")
+        _write(config, "plugins:\n  enabled: []\n  disabled: []\n")
+        original_upstream = checks._upstream_manifests
+        checks._upstream_manifests = lambda home: None
+        checks._store().clear()
+        try:
+            result = checks.check_plugins()
+        finally:
+            checks._upstream_manifests = original_upstream
+        joined = " | ".join(str(d) for d in (result.get("detail") or []))
+        if "memory" not in joined or "opt-in" not in joined:
+            failures.append(
+                f"fallback suppressed a category-named user plugin note: {result!r}"
             )
 
         # (7) a name with no manifest is still reported missing.

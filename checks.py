@@ -1413,7 +1413,7 @@ def check_plugins(manifests=None):
     notes = []
     if os.path.isdir(plugins_root):
         for entry in sorted(os.listdir(plugins_root)):
-            if entry in skip or entry.startswith(".") or entry == "__pycache__":
+            if entry.startswith(".") or entry == "__pycache__":
                 continue
             dpath = os.path.join(plugins_root, entry)
             if not os.path.isdir(dpath):
