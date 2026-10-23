@@ -209,6 +209,25 @@ def main(argv: list[str]) -> int:
                 f"fallback suppressed a category-named user plugin note: {result!r}"
             )
 
+        # (6b4) the fallback notes must not advise enabling a category-selected
+        # plugin: exclusive/model-provider manifests are picked by their key.
+        _write(
+            plugins / "platforms" / "plugin.yaml",
+            "name: platforms-provider\nkind: exclusive\n",
+        )
+        _write(config, "plugins:\n  enabled: []\n  disabled: []\n")
+        checks._upstream_manifests = lambda home: None
+        checks._store().clear()
+        try:
+            result = checks.check_plugins()
+        finally:
+            checks._upstream_manifests = original_upstream
+        joined = " | ".join(str(d) for d in (result.get("detail") or []))
+        if "platforms-provider" in joined:
+            failures.append(
+                f"fallback advised enabling an exclusive plugin: {result!r}"
+            )
+
         # (7) a name with no manifest is still reported missing.
         _write(config, "plugins:\n  enabled: [ghost]\n  disabled: []\n")
         checks._store().clear()
