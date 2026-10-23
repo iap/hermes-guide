@@ -22,10 +22,11 @@ tracked top-level path and every `.github/` file.
 | `tools/check_issue_templates.py` | Reporter-surface guard: issue-template schema, and docs that promise a route the chooser does not offer |
 | `tools/check_skill_dogfood.py` | Read-only live-install smoke test: version, config path, skills, plugins, doctor |
 | `tools/test_*.py` | Regression suites for the plugin and for `tools/` itself |
-| `tools/render_docs.py` | Renders the generated blocks in README.md and AGENTS.md from the repo |
+| `tools/render_docs.py` | Renders the generated blocks in README.md, AGENTS.md, and docs/findings.md |
 | `tools/pr_metadata_labels.py` | PR label/priority parser shared by the labelling workflows |
 | `tests/check_scanner_hygiene.py` | Scanner-hygiene guard — lives under `tests/` (not `tools/`) because the upstream install scanner rates its literal attack-string fixtures dangerous outside a tests directory |
 | `docs/agent/` | On-demand agent/maintainer deep ops (this tree); not injected every turn |
+| `docs/findings.md` | Generated catalog of stable finding ids with scope, impact, and fix (source: `checks.FINDING_IDS`) |
 | `assets/` | Binary documentation assets referenced from README.md (concept banner); never edited by hand |
 | `docs/embedding.md` | Host-app integration guide — guarantee chain, bridge patterns, eval scenario |
 | `.github/workflows/reusable-ci.yml` | The CI body: ubuntu+windows × Python 3.11/3.12 matrix, all gates |
