@@ -31,10 +31,11 @@ lands — and what lets an upstream maintainer act on a report without re-derivi
 the user's environment. Read-only throughout: no config writes, no auto-fix.
 
 > [!NOTE]
-> The `hooks` check runs `hermes hooks doctor`, which executes each approved
-> shell hook once with a synthetic payload — that is how it verifies a hook
-> actually runs. Proactive runs do not execute hooks: they inspect hook
-> configuration in-process (allowlist state, exec bit) instead.
+> The `hooks` check inspects hook configuration in-process by default — it
+> reads the config, consent state and exec bit without running anything. Add
+> `--deep` to run `hermes hooks doctor`, which executes each approved shell
+> hook once with a synthetic payload; that is how it verifies a hook actually
+> runs. Proactive runs always stay in-process.
 
 ## Install the plugin
 
@@ -86,6 +87,7 @@ as a plugin.
 
 - **In a session:** `/hermes-doctor` for every surface, or `/hermes-doctor mcp` for one.
 - **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy. On a degraded host — where every `hermes` launch replays a minutes-long update tail — `hermes guide --fast` runs all nine checks in-process with no subprocess.
+- **Deep hooks:** `hermes guide hooks --deep` (or `/hermes-doctor hooks --deep`) runs `hermes hooks doctor`, which executes each approved hook once. The default hooks check runs nothing.
 - **Machine-readable:** `hermes guide mcp --json` prints one JSON document instead of the report — envelopes unchanged, top-level `status` derived, update notice suppressed (exit codes above still apply). Agents and scripts parse that document; plain `grep`-style consumers keep the text output.
 - **Finding ids:** every broken or unknown result carries a stable `id`, `impact`, and `fix`; the [finding catalog](docs/findings.md) lists scope separately, and `--json` emits those keys in each finding envelope under its scope key.
 

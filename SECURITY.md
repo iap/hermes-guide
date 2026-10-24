@@ -22,11 +22,14 @@ Please do not publicly disclose the vulnerability until it has been resolved.
 
 This plugin never writes to Hermes configuration or the filesystem — in normal
 operation, or during install/uninstall. It reads config (`hermes config path`),
-parses SKILL.md / bundle files, and inspects state. One subcommand has a side
-effect worth naming: `hermes hooks doctor` — run by the explicit
-`/hermes-doctor` and `hermes guide` paths — executes each approved shell hook
-once with a synthetic payload. Proactive runs never execute hooks: they inspect
-hook configuration in-process (allowlist state, exec bit) instead. An explicit
+parses SKILL.md / bundle files, and inspects state. The default `hooks` check is
+in-process: it reads the configured hooks, consent state and exec bit without
+running anything. One opt-in flag has a side effect worth naming: `--deep` runs
+`hermes hooks doctor`, which executes each approved shell hook once with a
+synthetic payload. Proactive runs never execute hooks. The `update` scope probes
+the updater's lock (writable non-blocking open, POSIX read-only fallback for a
+root-owned lock, released immediately; no content is written and the lock file
+is never deleted). An explicit
 `hermes guide` or `/hermes-doctor` run makes one further network call: a
 best-effort version check (`git ls-remote --tags origin`, no writes, fails
 silently), at most once per process, printed after the results. `hermes guide

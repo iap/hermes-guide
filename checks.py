@@ -15,12 +15,12 @@ Checks are read-only by design: they resolve paths, read files, parse them, and
 shell out to `hermes ... doctor`-style commands. They never mutate config,
 enable/disable anything, or auto-fix.
 
-One shell-out is not side-effect free: `hermes hooks doctor` executes every
-approved shell hook once with a synthetic payload — that is what verifies a
-hook actually runs. It stays on the explicit `/hermes-doctor` and `hermes
-guide` paths; proactive runs (session start/end) use `check_hooks_readonly()`,
-an in-process inspection that registers nothing, runs no hooks, and starts no
-subprocess.
+The default hooks check is in-process (`check_hooks_readonly()`): it inspects
+configuration, consent state and the exec bit without running anything. The
+deep variant (`--deep`, `check_hooks()`) runs `hermes hooks doctor`, which
+executes every approved shell hook once with a synthetic payload — that is
+what verifies a hook actually runs. It is opt-in precisely because it is not
+side-effect free; proactive runs (session start/end) always stay in-process.
 """
 
 import collections
@@ -874,7 +874,47 @@ def _merge_allowlist_json(result, source_label, home=None):
     }
 
 
+def _redact_hook_output(text):
+    """Strip credential-looking values from `hermes hooks doctor` output.
+
+    The doctor prints configured hook commands, and a command may carry a
+    token (`API_KEY=...`, `Authorization: Bearer ...`). The report is returned
+    into a session that a gateway can deliver to a chat channel, so raw
+    stdout cannot be copied through. Hook names and ✗/⚠ markers are preserved;
+    only the value after a credential-shaped key is replaced.
+    """
+    if not text:
+        return text
+    text = re.sub(
+        # Consume the whole value: `Basic dXNlcjpwYXNz` and quoted passwords
+        # (`PASSWORD="correct horse battery staple"`) both hide a multiword
+        # credential, not just the first token.
+        r"(?i)\b(Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?(?:\"[^\"]*\"|'[^']*'|[^\n,;]+)",
+        r"\1=***",
+        text,
+    )
+    text = re.sub(
+        # Header names carry hyphens (`x-api-key`) and the value may be
+        # quoted or contain spaces, so `[^\n,;]+` is not enough.
+        r"(?i)\b([A-Z0-9_-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|CREDENTIAL)[A-Z0-9_-]*)"
+        r"\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|[^\n,;]+)",
+        r"\1=***",
+        text,
+    )
+    text = re.sub(r"(?i)\b(Bearer)\s+[A-Za-z0-9._~+/=-]+", r"\1 ***", text)
+    # `sk-ant-api03-…` has a separator inside the key, so the character class
+    # must include hyphens and underscores, not just letters and digits.
+    text = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b", "***", text)
+    text = re.sub(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/@\s]+@", r"\1***@", text)
+    return text
+
+
 def check_hooks():
+    """Deep hooks check: runs `hermes hooks doctor` and redacts its output.
+
+    The doctor executes each approved hook once with a synthetic payload.
+    This is the `--deep` path only; the default is `check_hooks_readonly()`.
+    """
     # `hermes hooks doctor` exits 0 even with problems, so we parse its output
     # (rc is not a reliable signal — it is 0 in all cases). Count the U+2717 /
     # U+26A0 markers emitted per hook rather than matching the summary line's
@@ -882,6 +922,8 @@ def check_hooks():
     rc, stdout, stderr = _run_hermes(
         list(constants.CLI_HOOKS_DOCTOR_ARGV), timeout=_HOOKS_DOCTOR_TIMEOUT
     )
+    safe_stdout = _redact_hook_output(stdout)
+    safe_stderr = _redact_hook_output(stderr)
     if rc != 0 or not stdout.strip():
         return {
             "id": "HOOKS_DOCTOR_UNAVAILABLE",
@@ -889,7 +931,7 @@ def check_hooks():
             "reason": f"`hermes hooks doctor` unavailable or failed (rc={rc})",
             # Keep Hermes stderr as evidence: a timeout surfaces here as
             # rc=-124 with a "timed out after Ns" message naming the cause.
-            "detail": (stderr.strip()[:2000] or stdout.strip()[:2000]) or None,
+            "detail": (safe_stderr.strip()[:2000] or safe_stdout.strip()[:2000]) or None,
         }
     if constants.HOOKS_DOCTOR_NONE_CONFIGURED in stdout:
         result = {"status": "healthy", "reason": "no shell hooks configured", "detail": None}
@@ -901,7 +943,7 @@ def check_hooks():
                 "id": "HOOKS_DOCTOR_FINDINGS",
                 "status": "broken",
                 "reason": f"`hermes hooks doctor` reported {len(markers)} finding(s)",
-                "detail": stdout.strip()[:2000],
+                "detail": safe_stdout.strip()[:2000],
             }
         elif constants.HOOKS_DOCTOR_HEALTHY_SUMMARY in stdout:
             result = {"status": "healthy", "reason": "hooks doctor passed", "detail": None}
@@ -912,7 +954,7 @@ def check_hooks():
                 "id": "HOOKS_DOCTOR_OPAQUE",
                 "status": "unknown",
                 "reason": "`hermes hooks doctor` output matched no known summary pattern",
-                "detail": stdout.strip()[:2000],
+                "detail": safe_stdout.strip()[:2000],
             }
     # A malformed allowlist is real breakage regardless of the doctor's verdict —
     # but it must not *replace* the doctor's findings. _merge_allowlist_json
@@ -939,14 +981,16 @@ def _load_shell_hooks():
 def check_hooks_readonly():
     """Inspect configured hooks in-process: no hook runs, no subprocess starts.
 
-    The variant proactive mode uses at session boundaries. `hermes hooks
-    doctor` executes every approved hook once with a synthetic payload —
-    correct when the user asked for it explicitly, wrong for a boundary they
-    did not. This reads the same sources the doctor reads — configured hooks
+    This is the default for every path, including proactive session boundaries
+    and the explicit `/hermes-doctor` / `hermes guide` surfaces. The deep
+    variant (`--deep`) runs `hermes hooks doctor`, which executes every
+    approved hook once with a synthetic payload — correct when the user asked
+    for it, wrong for a default they did not opt into. This reads the same
+    sources the doctor reads — configured hooks
     (`iter_configured_hooks`, which parses without registering), consent state
     (`allowlist_entry_for`) and the exec bit (`script_is_executable`) — and
     reports the static subset of findings. Deeper doctor checks (mtime drift,
-    live execution) stay on the manual path.
+    live execution) stay behind `--deep`.
     """
     shell_hooks = _load_shell_hooks()
     if shell_hooks is None:
@@ -2453,7 +2497,9 @@ _CHECKS = [
     ("mcp", check_mcp_servers_shape),
     ("skills", check_skills),
     ("commands", check_commands),
-    ("hooks", check_hooks),
+    # In-process by default: the doctor variant executes every approved hook,
+    # so it is reachable only through the explicit `--deep` flag.
+    ("hooks", check_hooks_readonly),
     ("plugins", check_plugins),
     # Label is "memories" (the $HERMES_HOME/memories/ directory the check
     # audits) — "memory" is reserved by constants.PLUGIN_SUBCATEGORY_DIRS and
@@ -2474,7 +2520,7 @@ def labels():
     return [label for label, _ in _CHECKS]
 
 
-def run_all(scope=None, readonly_hooks=False, fast=False):
+def run_all(scope=None, deep_hooks=False, fast=False):
     """Run every check, or exactly the one named by ``scope``.
 
     Each check is isolated: a crash in one check surfaces as a `broken`
@@ -2485,10 +2531,10 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
     ``ValueError`` naming the valid ones — matching on a substring would let
     ``s`` silently run four checks and a typo report success.
 
-    ``readonly_hooks`` swaps the hooks check for its in-process variant
-    (``check_hooks_readonly``): no hook runs, no subprocess starts. Proactive
-    boundaries pass it; the explicit CLI and slash-command paths keep the
-    deeper ``hermes hooks doctor`` check.
+    Hooks are inspected in-process by default (``check_hooks_readonly``): no
+    hook runs, no subprocess starts. ``deep_hooks`` opts into the
+    doctor-backed variant (``check_hooks``), which executes each approved hook
+    once; the explicit ``--deep`` flag is the only path that sets it.
 
     ``fast`` is the degraded-host variant: no subprocess starts at all (every
     ``_run_hermes`` call short-circuits) and hooks always use the in-process
@@ -2533,8 +2579,8 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
         for label, fn in _CHECKS:
             if scope is not None and scope != label:
                 continue
-            if (readonly_hooks or fast) and label == "hooks":
-                fn = check_hooks_readonly
+            if deep_hooks and not fast and label == "hooks":
+                fn = check_hooks
             try:
                 results[label] = _attach_finding(fn())
             except Exception as exc:
