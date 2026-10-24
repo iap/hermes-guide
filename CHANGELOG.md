@@ -2,6 +2,16 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.10 (2026-10-24)
+
+### Bug Fixes
+
+- **diagnostics**: reject malformed plugin config and read BOM router frontmatter ([#344](https://github.com/iap/hermes-guide/pull/344))
+
+### Documentation
+
+- **skills**: re-anchor diagnosing-browser on the v52 browser surface ([#343](https://github.com/iap/hermes-guide/pull/343))
+
 ## v0.8.9 (2026-10-23)
 
 ### Bug Fixes
