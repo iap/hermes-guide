@@ -32,6 +32,12 @@ Learn these from the guard, not from memory — each one names its own script.
 - When a check shells out to Hermes, keep Hermes stdout/stderr as evidence inside
   `detail` / `reason`.
 
+### Python style
+
+No separate formatter is configured. Match the neighbouring function in
+`checks.py`: return an envelope, do not print a report, and keep drift-prone
+strings in `constants.py`.
+
 #### The `hermes guide --json` document (Phase 4 contract)
 
 - **stdout is exactly one JSON document**: `schema_version` (`"1"`), `scope`,

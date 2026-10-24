@@ -2,7 +2,8 @@
 
 Always-on operating contract for AI agents working **in this repository**. Keep
 this file short: every coding turn pays its full cost via `CLAUDE.md` and Cursor
-rules. Deep ops live under [docs/agent/](docs/agent/README.md).
+rules. Deep ops live under [docs/agent/](docs/agent/README.md) — open the row
+that matches the task, not the whole of `ops.md`.
 
 It is not a Hermes tutorial. Per-surface knowledge lives in `skills/`; the
 authoring standard lives in [CONTRIBUTING.md](CONTRIBUTING.md). Where those two
@@ -91,6 +92,9 @@ CI adds `tools/test_*.py`, citation integrity, install-scan parity, mypy, and ba
 | Drift-prone names live in `constants.py` | `check_upstream_drift.py` |
 | Skill version bumps up; provenance footer dated only when facts re-checked | `check_skill_version_bump.py`, `check_skill_provenance.py` |
 | Citations resolve against `.github/upstream-drift.baseline` | `check_citation_integrity.py` |
+| Finding IDs are public API: add `FINDING_IDS` entries, never rename; `docs/findings.md` is generated | `test_finding_ids.py`, `render_docs.py` |
+| `hermes guide --json` is one stdout document; no update notice; `/hermes-doctor` stays text | [ops.md](docs/agent/ops.md#the-hermes-guide---json-document-phase-4-contract) |
+| Hooks stay manual: `hermes hooks doctor` executes approved hooks once; proactive checks use `check_hooks_readonly()` | [ops.md](docs/agent/ops.md#read-only-always) |
 | Tone / no emoji / no filler | [CONTRIBUTING.md#tone](CONTRIBUTING.md#tone), `check_doc_style.py` |
 
 Never `git add -A`. Stage named paths. Platform facts: three claim tiers
