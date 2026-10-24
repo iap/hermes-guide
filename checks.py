@@ -706,8 +706,123 @@ def _builtin_command_names():
         return set()
 
 
+# Slash-command name resolution mirrors agent/skill_commands.py::_scan_skill_md:
+# a declared `name` wins, and a skill with NO `name` key registers under its
+# directory name. Platform aliases mirror agent/skill_utils.py::PLATFORM_MAP.
+_PLATFORM_ALIASES = {"macos": "darwin", "linux": "linux", "windows": "win32"}
+
+
+def _skill_matches_platform(fm):
+    """True when the skill's ``platforms:`` gate allows the current OS.
+
+    Prefers Hermes' own predicate (the normal in-session case); the local
+    mirror exists for the hermetic tier. ``environments:`` and
+    ``requires_apps:`` are NOT mirrored here: they are offer-time /
+    app-registry gates that need a live Hermes to evaluate, and a mirror that
+    guessed would invent collisions the loader never registers. The caller
+    discloses that the mirror saw only the platform gate.
+    """
+    if not isinstance(fm, dict):
+        return True
+    try:
+        from agent.skill_utils import skill_matches_platform  # type: ignore[import-not-found]
+
+        return bool(skill_matches_platform(fm))
+    except Exception:
+        pass  # nosec B110 - fall through to the local platform mirror
+    platforms = fm.get(constants.SKILL_PLATFORMS_KEY)
+    if not platforms:
+        return True
+    if not isinstance(platforms, list):
+        platforms = [platforms]
+    current = sys.platform
+    for platform in platforms:
+        normalized = str(platform).lower().strip()
+        mapped = _PLATFORM_ALIASES.get(normalized, normalized)
+        # No truthiness guard: upstream tests `current.startswith(mapped)`,
+        # and a blank entry matches every OS. Dropping it made
+        # `platforms: [""]` exclude a skill Hermes still registers.
+        if current.startswith(mapped):
+            return True
+    return False
+
+
+_MIRROR_GATES = "platforms only"
+
+
+def _skill_command_name(dirpath, fm, skills_root):
+    """Name a skill registers as a bare slash command, or ``""`` for none.
+
+    Mirrors ``_scan_skill_md``: a declared string ``name`` wins (an empty one
+    yields no command), and only a skill with NO ``name`` key falls back to its
+    directory name — at any depth, because the loader's fallback is the
+    SKILL.md's parent directory name and does not care about depth. A nested
+    nameless skill still collides with a same-named sibling or a built-in, so
+    the fallback must not be narrowed to the skills root. A non-string ``name``
+    is unusable to the loader.
+    """
+    if not isinstance(fm, dict):
+        return ""
+    if "name" in fm:
+        name = fm.get("name")
+        return name if isinstance(name, str) else ""
+    return os.path.basename(dirpath.rstrip(os.sep))
+
+
+def _catalog_command_entries(home):
+    """``(skill_md_path, name, version)`` for skills the loader gives a bare slug, or None.
+
+    Mirrors ``agent/skill_commands.py::scan_skill_commands``: only catalog
+    entries with ``status == "unique"`` register a bare ``/slug``; shadowed and
+    ambiguous copies are reached by path and must not be reported as
+    collisions. The catalog also applies the platform/environment/apps gates
+    and the disabled list, so this path can neither miss nor invent one.
+
+    Returns None when the catalog is unavailable (outside a live Hermes
+    process) or describes a different home than the one being diagnosed — a
+    stubbed test/profile home must not be judged against another profile's
+    skills. A catalog that carries no ``status`` annotation is also refused:
+    without it there is no way to tell a unique skill from a shadowed copy, so
+    reporting zero collisions from such a build would be an unearned clean
+    bill of health. Callers then fall back to the local mirror.
+    """
+    try:
+        _skill_catalog = importlib.import_module("tools.skills_tool")._skill_catalog
+        get_hermes_home = importlib.import_module("hermes_constants").get_hermes_home
+
+        if os.path.realpath(str(get_hermes_home())) != os.path.realpath(home):
+            return None
+        entries = _skill_catalog()
+    except Exception:
+        return None
+    if not isinstance(entries, list):
+        return None
+    # A build whose catalog predates the `status` annotation cannot tell a
+    # unique skill from a shadowed copy. Treat every entry as unknown rather
+    # than silently reporting zero collisions; the caller falls back to the
+    # name/platform mirror.
+    if entries and not any(isinstance(e, dict) and "status" in e for e in entries):
+        return None
+    out = []
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("status") != "unique":
+            continue
+        name, path = entry.get("name"), entry.get("path")
+        if isinstance(name, str) and name and path:
+            out.append((str(path), name, (frontmatter(str(path)) or {}).get("version")))
+    return out
+
+
 def check_commands():
-    """Detect skill-bundle slug collisions, malformed bundle files, and builtin shadowing."""
+    """Detect skill-bundle slug collisions, malformed bundle files, and builtin shadowing.
+
+    Command names come from Hermes' own skill catalog when it is importable
+    (the normal in-session case): the catalog resolves tier precedence and
+    applies the loader's platform/environment gates, so a shadowed copy is
+    never reported as a collision and a name-less skill is not missed. Outside
+    a live Hermes process the local mirror reproduces the loader's name rule
+    (declared name, else directory name at the top of the skills root).
+    """
     home = _hermes_home()
     if not home:
         return {
@@ -717,39 +832,51 @@ def check_commands():
             "detail": None,
         }
 
+    entries = _catalog_command_entries(home)
+    mirror_used = entries is None
+    if entries is None:
+        skills_root = os.path.join(home, "skills")
+        entries = []
+        for dirpath, fm in _iter_skills():
+            if not _skill_matches_platform(fm):
+                continue
+            name = _skill_command_name(dirpath, fm, skills_root)
+            if name:
+                entries.append((os.path.join(dirpath, "SKILL.md"), name, fm.get("version")))
+
     skill_slugs = set()
     skill_slug_owners: dict[str, str] = {}  # slug -> first skill dir (first-wins, mirrors Hermes)
     skill_slug_versions: dict[str, str] = {}  # slug -> version string of first owner
     collisions = []
-    for dirpath, fm in _iter_skills():
-        if fm and fm.get("name"):
-            s = _bundle_slug(fm.get("name"))
-            if s:
-                skill_slugs.add(s)
-                if s in skill_slug_owners:
-                    collisions.append(
-                        f"skill `{_rel_path(skill_slug_owners[s], home)}` "
-                        f"({_version_label(skill_slug_versions.get(s))}) and "
-                        f"`{_rel_path(dirpath, home)}` ({_version_label(fm.get('version'))}) "
-                        f"both normalize to `/{s}` (first wins)"
-                    )
-                else:
-                    skill_slug_owners[s] = dirpath
-                    skill_slug_versions[s] = str(fm.get("version") or "").strip()
+    for skill_md, name, version in entries:
+        s = _bundle_slug(name)
+        if not s:
+            continue
+        dirpath = os.path.dirname(skill_md)
+        skill_slugs.add(s)
+        if s in skill_slug_owners:
+            collisions.append(
+                f"skill `{_rel_path(skill_slug_owners[s], home)}` "
+                f"({_version_label(skill_slug_versions.get(s))}) and "
+                f"`{_rel_path(dirpath, home)}` ({_version_label(version)}) "
+                f"both normalize to `/{s}` (first wins)"
+            )
+        else:
+            skill_slug_owners[s] = dirpath
+            skill_slug_versions[s] = str(version or "").strip()
 
     # Skill-vs-builtin collisions: a skill whose slug matches a built-in command
     # name is silently shadowed (built-in wins). Surface this so the user can
     # rename the skill before wondering why `/<name>` behaves unexpectedly.
     builtin_names = _builtin_command_names()
     if builtin_names:
-        for dirpath, fm in _iter_skills():
-            if fm and fm.get("name"):
-                s = _bundle_slug(fm.get("name"))
-                if s and s in builtin_names:
-                    collisions.append(
-                        f"skill `{_rel_path(dirpath, home)}` (/{s}) shadows a built-in command "
-                        f"(builtin wins — rename the skill or expect the builtin behavior)"
-                    )
+        for skill_md, name, _version in entries:
+            s = _bundle_slug(name)
+            if s and s in builtin_names:
+                collisions.append(
+                    f"skill `{_rel_path(os.path.dirname(skill_md), home)}` (/{s}) shadows a built-in command "
+                    f"(built-in wins — rename the skill or expect the builtin behavior)"
+                )
 
     malformed = []
     bundle_slugs: dict[str, str] = {}  # slug -> first bundle stem (bundle-vs-bundle first-wins)
@@ -809,6 +936,16 @@ def check_commands():
         }
     if collisions:
         return {"status": "informational", "reason": f"{len(collisions)} slug collision(s)", "detail": collisions}
+    if mirror_used and entries:
+        # The mirror evaluated only the platform gate; the environment/apps
+        # gates need a live Hermes. Say so instead of letting `healthy` read as
+        # full coverage (the same honesty rule the hooks check follows).
+        return {
+            "status": "informational",
+            "reason": "no slug collisions (offline mirror: platforms gate only)",
+            "detail": "in a live Hermes process the catalog applies the "
+                      "platform, environment and app gates too",
+        }
     return {"status": "healthy", "reason": "no slug collisions or malformed bundles", "detail": None}
 
 

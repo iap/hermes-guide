@@ -24,7 +24,9 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
+import types
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -121,16 +123,109 @@ def main(argv: list[str]) -> int:
         if any("malformed-yaml" in d for d in sdetail):
             failures.append("malformed-yaml (recoverable name) reported as broken")
 
-        # (3) collision messages carry versions and skip archived copies
+        # (3) collision messages carry versions and skip archived copies.
+        # The `category/foo` copy is nameless, so the loader-faithful fallback
+        # registers it too: two collisions (category/foo vs foo, and
+        # foo vs category/foo) plus the archived copy staying out.
         cr = checks.check_commands()
         cdetail = cr.get("detail") or []
         coll = [d for d in cdetail if "normalize to" in d]
-        if len(coll) != 1:
-            failures.append(f"expected exactly 1 collision, got {len(coll)}")
-        elif "v1.2.0" not in coll[0] or "unversioned" not in coll[0]:
-            failures.append(f"version info missing from collision: {coll[0]}")
-        elif "foo-old" in coll[0]:
+        if len(coll) != 2:
+            failures.append(f"expected exactly 2 collisions, got {len(coll)}: {coll}")
+        elif not any("v1.2.0" in c and "unversioned" in c for c in coll):
+            failures.append(f"version info missing from collision: {coll}")
+        elif any("foo-old" in c for c in coll):
             failures.append("archived skill leaked into collision")
+
+        # (4) command names mirror the loader: a nameless skill registers
+        # under its directory name at ANY depth (upstream uses the SKILL.md's
+        # parent name without a depth guard); the platform gate excludes skills
+        # Hermes would not register a command for. The environment/apps gates
+        # need a live Hermes, so the offline mirror must fail open and say so.
+        cmd_home = Path(td) / "cmd-home"
+        _write(cmd_home / "skills/named/SKILL.md",
+               "---\nname: git_helper\ndescription: named\nversion: 3.0.0\n---\nbody\n")
+        _write(cmd_home / "skills/git-helper/SKILL.md",
+               "---\ndescription: no name; directory is the command\n---\nbody\n")
+        _write(cmd_home / "skills/collection/git-helper/SKILL.md",
+               "---\ndescription: nested nameless copy\n---\nbody\n")
+        _write(cmd_home / "skills/deploy/SKILL.md",
+               "---\nname: deploy\ndescription: d\n---\nbody\n")
+        other = {"darwin": "linux", "linux": "windows", "win32": "macos"}.get(sys.platform, "linux")
+        _write(cmd_home / "skills/deploy-elsewhere/SKILL.md",
+               f"---\nname: deploy\ndescription: d\nplatforms: [{other}]\n---\nbody\n")
+        _write(cmd_home / "skills/deploy-dockered/SKILL.md",
+               "---\nname: deploy\ndescription: d\nenvironments: [docker]\n---\nbody\n")
+        _write(cmd_home / "skills/empty-name/SKILL.md",
+               "---\nname: \"\"\ndescription: d\n---\nbody\n")
+        _write(cmd_home / "skills/empty-owner/SKILL.md",
+               "---\nname: empty-name\ndescription: d\n---\nbody\n")
+        # a blank platform entry matches every OS upstream, so it must not
+        # exclude the skill
+        _write(cmd_home / "skills/deploy-blank/SKILL.md",
+               "---\nname: deploy\ndescription: d\nplatforms: [\"\"]\n---\nbody\n")
+
+        checks._store().clear()
+        checks._hermes_home_from_library = lambda: str(cmd_home)
+        cr = checks.check_commands()
+        cdetail = cr.get("detail") or []
+        coll = [d for d in cdetail if "normalize to" in d]
+        # named + 2 nameless git-helper copies = 2 collisions. The deploy
+        # family yields 2 more: the dockered and blank-platform variants stay
+        # (the mirror cannot evaluate `environments:`, so it fails open) and
+        # only `deploy-elsewhere` is platform-gated out. 4 total.
+        if cr["status"] != "informational" or len(coll) != 4:
+            failures.append(f"command-name mirror: expected 4 collisions, got {cr['status']} / {coll}")
+        if any("deploy-elsewhere" in d for d in cdetail):
+            failures.append("platform-gated skill invented a collision")
+        if any("empty-name" in d for d in cdetail):
+            failures.append("empty `name` fell back to the directory name")
+        if not any("collection" in d for d in cdetail):
+            failures.append("nested nameless copy no longer registers a command")
+
+        # the offline mirror must disclose that it saw only the platform gate
+        quiet_home = Path(td) / "quiet-home"
+        _write(quiet_home / "skills/alpha/SKILL.md",
+               "---\nname: alpha\ndescription: a\n---\nbody\n")
+        _write(quiet_home / "skills/beta/SKILL.md",
+               "---\nname: beta\ndescription: b\n---\nbody\n")
+        checks._store().clear()
+        checks._hermes_home_from_library = lambda: str(quiet_home)
+        cr_quiet = checks.check_commands()
+        if cr_quiet["status"] != "informational" or "mirror" not in cr_quiet.get("reason", ""):
+            failures.append(f"offline mirror did not disclose its gate coverage: {cr_quiet}")
+
+        # (5) the catalog path counts only `unique` entries and refuses a
+        # different profile's home (shadowed/ambiguous copies are reached by
+        # path, so reporting them would be a false collision).
+        fake_tools = types.ModuleType("tools")
+        fake_skills = types.ModuleType("tools.skills_tool")
+        fake_skills._skill_catalog = lambda: [
+            {"name": "git_helper", "path": str(cmd_home / "skills/named/SKILL.md"), "status": "unique"},
+            {"name": "git-helper", "path": str(cmd_home / "skills/git-helper/SKILL.md"), "status": "unique"},
+            {"name": "git-helper", "path": str(cmd_home / "skills/collection/git-helper/SKILL.md"), "status": "shadowed"},
+        ]
+        fake_tools.skills_tool = fake_skills
+        fake_hc = types.ModuleType("hermes_constants")
+        fake_hc.get_hermes_home = lambda: str(cmd_home)
+        with mock.patch.dict(sys.modules, {
+            "tools": fake_tools,
+            "tools.skills_tool": fake_skills,
+            "hermes_constants": fake_hc,
+        }):
+            checks._store().clear()
+            # restore the home patch: section 4 pointed it at quiet_home
+            checks._hermes_home_from_library = lambda: str(cmd_home)
+            catalog = checks._catalog_command_entries(str(cmd_home))
+            if catalog is None or len(catalog) != 2:
+                failures.append(f"catalog path: expected 2 unique entries, got {catalog}")
+            cr2 = checks.check_commands()
+            c2 = [d for d in (cr2.get("detail") or []) if "normalize to" in d]
+            if len(c2) != 1:
+                failures.append(f"catalog path: expected 1 collision, got {c2}")
+            fake_hc.get_hermes_home = lambda: str(cmd_home) + "-other"
+            if checks._catalog_command_entries(str(cmd_home)) is not None:
+                failures.append("catalog path: accepted a different profile's home")
 
     if failures:
         for f in failures:
