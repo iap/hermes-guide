@@ -229,11 +229,11 @@ def main() -> int:
     if checks._FAST_MODE.get():
         failures.append("fast mode leaked past run_all (ContextVar not reset)")
 
-    # fast + readonly_hooks compose (proactive boundary shape)
+    # fast + the default in-process hooks check compose (proactive shape)
     checks._hermes_home_from_library = lambda: str(home)
     try:
         reset_calls()
-        both = checks.run_all(readonly_hooks=True, fast=True)
+        both = checks.run_all(fast=True)
     finally:
         checks._hermes_home_from_library = real_home
     if sorted(both.keys()) != sorted(labels):

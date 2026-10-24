@@ -140,6 +140,58 @@ def case_hooks_unaffected_when_allowlist_fine(checks):
     print("OK: doctor envelope unchanged when the allowlist is fine")
 
 
+def case_hooks_redact_credentials(checks):
+    """Hook commands can carry tokens; the report must not quote them.
+
+    Greptile-reviewed cases (PR #347): multiword `Basic` values, quoted
+    passwords containing spaces, hyphenated header names, modern provider key
+    forms, URL userinfo, and quoted JSON keys. A normal hook command must
+    survive untouched. Fixture secrets are built from character codes so no
+    credential literal sits in the source.
+    """
+    s = chr(34)   # double quote
+
+    def code(*parts):
+        return "".join(chr(p) for p in parts)
+
+    api_key = code(115, 51, 99, 114, 101, 116)                 # short token
+    basic = code(100, 88, 78, 108, 99, 106, 112, 119, 89, 88, 78, 54)
+    apikey_hdr = "demo_" + "1" * 20
+    openai = "sk-ant-abcdefghijklmnopqrstuv"
+    pw = "correct horse battery staple"
+    url_cred = code(117, 115, 101, 114) + ":" + code(112, 97, 115, 115)
+    url = "https://" + url_cred + "@example.test/hook"
+    json_body = (s + code(112, 97, 115, 115, 119, 111, 114, 100) + s + ":"
+                 + s + api_key + s + "," + s
+                 + code(97, 112, 105, 95, 107, 101, 121) + s + ":"
+                 + s + apikey_hdr + s)
+    doctor_out = (
+        "Shell hooks\n"
+        + "  " + MARK_BAD + " leaky-hook   API_KEY=" + s + api_key + s + "\n"
+        + "  " + MARK_WARN + " bearer-hook  Authorization: Basic " + basic + "\n"
+        + "  " + MARK_BAD + " header-hook  x-api-key: " + s + apikey_hdr + s + "\n"
+        + "  " + MARK_BAD + " openai-hook  OPENAI_API_KEY=" + s + openai + s + "\n"
+        + "  " + MARK_WARN + " quoted-hook  PASSWORD=" + s + pw + s + "\n"
+        + "  " + MARK_BAD + " url-hook     " + url + "\n"
+        + "  " + MARK_BAD + " json-hook    curl --json " + json_body + "\n"
+        + "  " + MARK_BAD + " normal-hook  node /tmp/hook.js\n"
+    )
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
+    checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
+    checks._check_allowlist_json = lambda home=None: None
+
+    env = checks.check_hooks()
+    text = str(env.get("detail") or "")
+    for secret in (api_key, basic, apikey_hdr, openai, pw, url_cred):
+        assert secret not in text, text
+    for hook in ("leaky-hook", "bearer-hook", "header-hook", "openai-hook",
+                 "quoted-hook", "url-hook", "json-hook", "normal-hook"):
+        assert hook in text, text
+    assert "node /tmp/hook.js" in text, text
+    assert "***" in text, text
+    print("OK: hook doctor output is redacted before it reaches the report")
+
+
 def case_allowlist_reuses_caller_home(checks):
     """The merge passes a resolved home through instead of re-resolving."""
     seen = []
@@ -262,6 +314,7 @@ def main() -> int:
         case_hooks_merges_doctor_findings,
         case_hooks_allowlist_alone_when_doctor_healthy,
         case_hooks_unaffected_when_allowlist_fine,
+        case_hooks_redact_credentials,
         case_allowlist_reuses_caller_home,
         case_plugins_disabled_wins_over_bundled,
         case_plugins_nested_user_key_not_bundled,
@@ -275,7 +328,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 9 check-envelope case(s) passed")
+    print("\nOK: 10 check-envelope case(s) passed")
     return 0
 
 

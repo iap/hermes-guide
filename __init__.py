@@ -61,16 +61,21 @@ def _format_result(results):
 def _handle_doctor(raw_args):
     """`/hermes-doctor` handler — optional scope, e.g. `/hermes-doctor mcp`.
 
-    A trailing ``--fast`` (e.g. ``/hermes-doctor --fast``) runs the degraded-
-    host variant: no subprocess starts (see ``checks.run_all``).
+    A trailing ``--deep`` runs the doctor-backed hooks check, which executes
+    each approved hook once. A trailing ``--fast`` runs the degraded-host
+    variant: no subprocess starts (see ``checks.run_all``); it wins over
+    ``--deep``.
     """
     tokens = raw_args.strip().split()
     fast = "--fast" in tokens
-    scope = " ".join(t for t in tokens if t != "--fast") or None
+    deep = "--deep" in tokens
+    scope = " ".join(t for t in tokens if t not in ("--fast", "--deep")) or None
     try:
         call: dict = {"scope": scope}
         if fast:
             call["fast"] = True
+        if deep:
+            call["deep_hooks"] = True
         _, text = _format_result(checks.run_all(**call))
     except ValueError as exc:
         # Slash commands have no exit-code contract; surface the error as text.
@@ -136,11 +141,14 @@ def _run_cli(args):
     """`hermes guide <scope>` handler."""
     scope = getattr(args, "scope", None)
     fast = getattr(args, "fast", False)
+    deep = getattr(args, "deep", False)
     json_mode = getattr(args, "json", False)
     try:
         call: dict = {"scope": scope}
         if fast:
             call["fast"] = True
+        if deep:
+            call["deep_hooks"] = True
         results = checks.run_all(**call)
     except ValueError as exc:
         if json_mode:
@@ -185,6 +193,12 @@ def _setup_cli(subparser):
         action="store_true",
         help="degraded-host variant: no subprocess starts; unresolvable "
         "checks report unknown instead of stalling",
+    )
+    subparser.add_argument(
+        "--deep",
+        action="store_true",
+        help="run `hermes hooks doctor` for the hooks scope; it executes each "
+        "approved shell hook once. Default hooks inspection is in-process",
     )
     subparser.add_argument(
         "--json",
@@ -264,13 +278,12 @@ def _version_check() -> str | None:
 def _proactive_check(**_kwargs):
     """Run drift checks at a session boundary; log findings (observer-only).
 
-    ``readonly_hooks`` keeps the hooks check in-process: `hermes hooks doctor`
-    executes every approved hook once with a synthetic payload, which is fine
-    when the user asked for it explicitly — not at a session boundary.
-    ``fast`` additionally starts no subprocess at all, so a degraded host
-    (minutes per `hermes` launch) still gets a bounded boundary report.
+    Hooks are in-process by default (the doctor variant is `--deep` only), so
+    a boundary never executes a user hook. ``fast`` additionally starts no
+    subprocess at all, so a degraded host (minutes per `hermes` launch) still
+    gets a bounded boundary report.
     """
-    for label, r in checks.run_all(readonly_hooks=True, fast=True).items():
+    for label, r in checks.run_all(fast=True).items():
         status = r.get("status")
         skill = checks.constants.SKILL_FOR_SCOPE.get(label, "diagnosing-triage")
         if status == "broken":

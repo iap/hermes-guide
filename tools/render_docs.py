@@ -141,7 +141,9 @@ def check_labels(checks_py: Path = CHECKS_PY) -> list[str]:
 # run_all() swaps this variant in for the `hooks` label, so it is not in
 # _CHECKS. A new out-of-registry variant must be added here, or finding_scopes
 # refuses the ids it emits instead of publishing them without a scope.
-_SCOPE_ALIASES = {"check_hooks_readonly": "hooks"}
+# Both hooks variants report the `hooks` scope: the readonly one is the
+# default, and `check_hooks` is reached only through `--deep`.
+_SCOPE_ALIASES = {"check_hooks_readonly": "hooks", "check_hooks": "hooks"}
 _RUNNER = "run_all"
 
 
