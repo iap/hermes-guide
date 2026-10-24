@@ -442,23 +442,21 @@ def _bundled_skill_names():
 
 
 def _as_name_set(value):
-    """Normalize a config value (list or scalar string) into a set of names.
+    """Normalize ``plugins.enabled``/``plugins.disabled`` into a set of names.
 
-    Guards against a scalar ``plugins.enabled: my-plugin`` — ``set("my-plugin")``
-    would explode into single characters and produce bogus findings. Non-list,
-    non-string values (bool/int/float/dict) are ignored, mirroring Hermes's
-    list-only ``plugins.enabled`` handling instead of crashing on ``set(True)``.
+    Hermes reads both keys as lists only (``plugins_discovery.py``:
+    ``set(enabled) if isinstance(enabled, list) else None``). A scalar is
+    malformed and load-equivalent to an empty list, so it must not be treated
+    as a one-item list — ``enabled: my-plugin`` would otherwise report a plugin
+    as active while the loader ignores the key. ``check_plugins`` reports the
+    wrong shape separately.
+
+    Non-string entries inside a list are ignored: malformed entries (dicts,
+    ints, ...) must not reach ``set()``/``sorted()`` and crash the diagnostic.
     """
-    if value is None:
+    if not isinstance(value, list):
         return set()
-    if isinstance(value, str):
-        return {value}
-    if isinstance(value, (list, tuple, set, frozenset)):
-        # Keep only string names: malformed entries (dicts, ints, ...) must not
-        # reach set()/sorted() and crash the diagnostic.
-        return {v for v in value if isinstance(v, str)}
-    # bool/int/float/dict/… are ignored (Hermes requires a list for `enabled`).
-    return set()
+    return {v for v in value if isinstance(v, str)}
 
 
 # Slug normalization — identical to Hermes agent/skill_bundles.py::_slugify and
@@ -1057,6 +1055,26 @@ def _bundled_plugins_dir():
         return None
 
 
+def _manifest_name(value, d):
+    """Return a manifest ``name`` as a non-empty string, or None if malformed.
+
+    A missing/empty name falls back to the directory basename (the existing
+    manifest contract). Any other type — a list, number, mapping — is not a
+    usable identifier: returning it would make the collector feed an
+    unhashable value into ``set``/``sorted`` and crash the check.
+
+    Non-empty strings are returned unchanged, including padded names: Hermes
+    preserves the manifest name when it gates `plugins.enabled`, so stripping
+    here would make `name: "  foo  "` match `enabled: [foo]` while the loader
+    does not.
+    """
+    if value is None:
+        return os.path.basename(d)
+    if not isinstance(value, str):
+        return None
+    return value or os.path.basename(d)
+
+
 def _read_plugin_meta(d):
     """Return a directory plugin's ``(name, kind)``, or None if none exists.
 
@@ -1088,9 +1106,9 @@ def _read_plugin_meta(d):
             if not isinstance(manifest, dict):
                 # List/scalar root has no `name` mapping: unusable as a manifest.
                 return None
-            name = manifest.get("name")
-            if not name:
-                name = os.path.basename(d)
+            name = _manifest_name(manifest.get("name"), d)
+            if name is None:
+                return None
             kind = manifest.get("kind")
             return name, kind if isinstance(kind, str) else ""
     portable = os.path.join(d, "plugin.json")
@@ -1102,9 +1120,9 @@ def _read_plugin_meta(d):
             # Malformed JSON / unreadable file: not a usable plugin manifest.
             return None
         if isinstance(manifest, dict):
-            name = manifest.get("name")
-            if not name:
-                name = os.path.basename(d)
+            name = _manifest_name(manifest.get("name"), d)
+            if name is None:
+                return None
             kind = manifest.get("kind")
             return name, kind if isinstance(kind, str) else ""
     return None
@@ -1200,6 +1218,22 @@ def _skipped_category_ids(bundled_root):
     return found
 
 
+def _manifest_ids(manifest):
+    """String identifiers from a loader manifest (``name`` and ``key``).
+
+    Upstream does not validate the manifest name type, so a malformed
+    ``name: [a, b]`` can reach this path even though our own reader rejects
+    it. Only strings are identifiers: returning a list would make the caller's
+    ``set`` construction raise and turn the whole check into CHECK_CRASHED.
+    """
+    ids = []
+    for attr in ("name", "key"):
+        value = getattr(manifest, attr, None)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
 def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_root):
     """Judge `plugins.enabled` against the loader's own manifests.
 
@@ -1211,12 +1245,11 @@ def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_
     by_id = {}
     user_ids = set()
     for manifest in manifests:
-        name = getattr(manifest, "name", None)
-        key = getattr(manifest, "key", None)
-        for ident in {name, key} - {None}:
+        ids = _manifest_ids(manifest)
+        for ident in ids:
             by_id[ident] = manifest
         if getattr(manifest, "source", "") != "bundled":
-            user_ids.update({name, key} - {None})
+            user_ids.update(ids)
 
     skipped_ids = None  # scanned on first unresolved id, not on every run
 
@@ -1332,13 +1365,16 @@ def _user_dir_notes(manifests, plugins_root, enabled, disabled):
             continue
         name = getattr(manifest, "name", None)
         key = getattr(manifest, "key", None)
-        if not name or name in seen:
+        if not isinstance(name, str) or not name or name in seen:
             continue
+        if not isinstance(key, str):
+            key = None
         seen.add(name)
         # Both identifiers gate the plugin: a directory-derived key can be the
         # string in `plugins.enabled` even when it differs from the name.
-        if (name not in enabled and key not in enabled
-                and name not in disabled and key not in disabled):
+        if (name not in enabled and (key is None or key not in enabled)
+                and name not in disabled
+                and (key is None or key not in disabled)):
             notes.append(f"`{name}` discovered but not enabled (opt-in)")
     return notes
 
@@ -1368,6 +1404,19 @@ def check_plugins(manifests=None):
             f"got {type(plugins_cfg).__name__}",
             "detail": path,
         }
+    # Hermes accepts only lists for these keys; a scalar is malformed and the
+    # loader ignores it. Report that shape instead of silently treating the
+    # scalar as an active (or denied) plugin.
+    for key in (constants.CONFIG_PLUGINS_ENABLED, constants.CONFIG_PLUGINS_DISABLED):
+        value = plugins_cfg.get(key)
+        if value is not None and not isinstance(value, list):
+            return {
+                "id": "PLUGINS_CONFIG_SHAPE",
+                "status": "broken",
+                "reason": f"`{constants.CONFIG_PLUGINS_SECTION}.{key}` must be a "
+                f"list, got {type(value).__name__}",
+                "detail": path,
+            }
     enabled = _as_name_set(plugins_cfg.get(constants.CONFIG_PLUGINS_ENABLED))
     disabled = _as_name_set(plugins_cfg.get(constants.CONFIG_PLUGINS_DISABLED))
 
@@ -2270,9 +2319,9 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "allowlisted; then re-run `hermes guide hooks`.",
     ),
     "PLUGINS_CONFIG_SHAPE": (
-        "plugins config not a mapping",
-        "The `plugins` section is not a mapping, so plugin enable and disable "
-        "settings are ignored.",
+        "plugins config malformed",
+        "The `plugins` section or its `enabled`/`disabled` keys have the wrong "
+        "shape, so Hermes ignores those settings and plugins may not load.",
         "Rewrite `plugins` in `config.yaml` as a mapping with `enabled` and "
         "`disabled` lists, then re-run `hermes guide plugins`.",
     ),

@@ -43,6 +43,11 @@ def _git(root: Path, *args: str) -> None:
         ["git", *args], cwd=root, check=True,
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         env={**os.environ,
+             # A developer's global config can require signed tags/commits or
+             # an interactive editor; the fixture owns its repository config.
+             "GIT_CONFIG_GLOBAL": os.devnull,
+             "GIT_CONFIG_SYSTEM": os.devnull,
+             "GIT_CONFIG_NOSYSTEM": "1",
              "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
              "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"},
     )
