@@ -2,7 +2,8 @@
 
 Always-on operating contract for AI agents working **in this repository**. Keep
 this file short: every coding turn pays its full cost via `CLAUDE.md` and Cursor
-rules. Deep ops live under [docs/agent/](docs/agent/README.md).
+rules. Deep ops live under [docs/agent/](docs/agent/README.md) — open the row
+that matches the task, not the whole of `ops.md`.
 
 It is not a Hermes tutorial. Per-surface knowledge lives in `skills/`; the
 authoring standard lives in [CONTRIBUTING.md](CONTRIBUTING.md). Where those two
@@ -42,6 +43,7 @@ tap add iap/hermes-guide`. `$HERMES_HOME` is `~/.hermes` on POSIX and
 `%LOCALAPPDATA%\hermes` on native Windows; `hermes config path` is ground truth.
 
 Repo layout encyclopedia: [docs/agent/layout.md](docs/agent/layout.md).
+Task router: [docs/agent/README.md](docs/agent/README.md).
 
 ## Where a change goes
 
@@ -91,7 +93,15 @@ CI adds `tools/test_*.py`, citation integrity, install-scan parity, mypy, and ba
 | Drift-prone names live in `constants.py` | `check_upstream_drift.py` |
 | Skill version bumps up; provenance footer dated only when facts re-checked | `check_skill_version_bump.py`, `check_skill_provenance.py` |
 | Citations resolve against `.github/upstream-drift.baseline` | `check_citation_integrity.py` |
+| Finding IDs are public API: add `FINDING_IDS` entries, never rename; `docs/findings.md` is generated | `test_finding_ids.py`, `render_docs.py` |
+| `hermes guide --json` is one stdout document; no update notice; `/hermes-doctor` stays text | [ops.md](docs/agent/ops.md#the-hermes-guide---json-document-phase-4-contract) |
+| Never hand-edit `<!-- BEGIN GENERATED -->` blocks | `python tools/render_docs.py --write` |
+| Do not widen `hermes hooks doctor` past the manual exception already in ops | [ops.md](docs/agent/ops.md#read-only-always) |
 | Tone / no emoji / no filler | [CONTRIBUTING.md#tone](CONTRIBUTING.md#tone), `check_doc_style.py` |
+
+Python has no separate formatter. Match the neighbouring function in
+`checks.py`: return an envelope, do not print a report, put drift-prone
+strings in `constants.py`.
 
 Never `git add -A`. Stage named paths. Platform facts: three claim tiers
 (shared / cross-platform prose / platform-owned); WSL is its own class — see
