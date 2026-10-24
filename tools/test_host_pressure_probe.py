@@ -132,6 +132,11 @@ def _fixture(
 
     env = dict(os.environ)
     env["PATH"] = f"{bindir}:{env['PATH']}"
+    # A caller-supplied BASH_ENV is sourced by every non-interactive bash and
+    # can reset PATH, silently bypassing the stub directory. The fixture must
+    # own the shell environment it asserts against.
+    env.pop("BASH_ENV", None)
+    env.pop("ENV", None)
     env["HERMES_HOME"] = str(home)
     # The probe reads /proc directly on non-Darwin; redirect to fixtures.
     # The probe escalates when its OWN wall time exceeds 20s. Under host load
