@@ -322,6 +322,48 @@ def main(argv: list[str]) -> int:
             else:
                 sys.modules[name] = module
 
+        # (11) a scalar `enabled` is malformed, not a one-item list. Hermes
+        # ignores non-list values (plugins_discovery._get_enabled_plugins), so
+        # treating `enabled: real-plugin` as active would be a false healthy.
+        _write(config, "plugins:\n  enabled: real-plugin\n  disabled: []\n")
+        checks._store().clear()
+        result = checks.check_plugins(manifests=[])
+        reason = str(result.get("reason") or "")
+        if result.get("id") != "PLUGINS_CONFIG_SHAPE" or result.get("status") != "broken":
+            failures.append(f"scalar enabled not reported as malformed: {result!r}")
+        if "enabled" not in reason or "list" not in reason:
+            failures.append(f"scalar enabled reason not actionable: {result!r}")
+
+        # (12) the same guard covers `disabled`.
+        _write(config, "plugins:\n  enabled: []\n  disabled: real-plugin\n")
+        checks._store().clear()
+        result = checks.check_plugins(manifests=[])
+        reason = str(result.get("reason") or "")
+        if result.get("id") != "PLUGINS_CONFIG_SHAPE" or result.get("status") != "broken":
+            failures.append(f"scalar disabled not reported as malformed: {result!r}")
+        if "disabled" not in reason or "list" not in reason:
+            failures.append(f"scalar disabled reason not actionable: {result!r}")
+
+        # (13) upstream can hand us a malformed manifest object (its parser does
+        # not validate the name type). The key must still resolve instead of
+        # raising TypeError while the identifiers are collected.
+        malformed = SimpleNamespace(
+            name=["not", "a", "string"],
+            key="bad-key",
+            kind="standalone",
+            source="user",
+            path=str(plugins / "bad-key"),
+        )
+        _write(config, "plugins:\n  enabled: [bad-key]\n  disabled: []\n")
+        checks._store().clear()
+        try:
+            result = checks.check_plugins(manifests=[malformed])
+        except Exception as exc:  # noqa: BLE001 - the regression this case pins
+            failures.append(f"malformed upstream manifest name crashed the check: {exc!r}")
+        else:
+            if result.get("status") == "broken":
+                failures.append(f"valid key with malformed name not resolved: {result!r}")
+
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
