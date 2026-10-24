@@ -22,7 +22,9 @@ Cases:
    the two-argument fallback registers the skill;
 7. a context without ``register_skill`` at all -> contained, no crash;
 8. a damaged (invalid UTF-8) skill file -> contained: no frontmatter, no
-   crash, plugin load survives.
+   crash, plugin load survives;
+9. a UTF-8 BOM before the opening ``---`` does not hide the frontmatter
+   (upstream strips the BOM; a BOM-prefixed router skill must still register).
 
 Run: python3 tools/test_bootstrap_skill.py
 """
@@ -177,6 +179,21 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             failures.append(f"damaged file escaped containment: {exc!r}")
         _check("damaged file registers nothing", not ctx6.skills)
+
+        # 9: BOM-prefixed frontmatter parses and registers. `utf-8` leaves the
+        # BOM on the string, so `startswith("---")` failed and the router skill
+        # was skipped; upstream parse_frontmatter strips it.
+        bom = Path(td) / "bom.md"
+        bom.write_bytes(
+            b"\xef\xbb\xbf---\nname: start\ndescription: BOM router\n---\nbody\n"
+        )
+        fm = hermes_guide._read_frontmatter(bom)
+        _check("BOM frontmatter parses", fm.get("description") == "BOM router", repr(fm))
+        ctx7 = _FakeCtx()
+        hermes_guide._register_start_skill(ctx7, skill_file=bom)
+        _check("BOM skill registers", len(ctx7.skills) == 1, f"got {len(ctx7.skills)}")
+        if len(ctx7.skills) == 1:
+            _check("BOM skill keeps description", ctx7.skills[0]["description"] == "BOM router")
 
     if failures:
         print("FAIL: bootstrap skill registration")

@@ -307,7 +307,10 @@ _START_SKILL_FILE = Path(__file__).resolve().parent / "plugin-skills" / "start" 
 def _read_frontmatter(path):
     """Parse the YAML frontmatter of a SKILL.md; ``{}`` when absent or malformed."""
     try:
-        text = path.read_text(encoding="utf-8")
+        # utf-8-sig accepts both plain UTF-8 and a BOM-prefixed file. Without
+        # it, a BOM makes the opening `---` invisible and the router skill is
+        # silently skipped (upstream parse_frontmatter strips the BOM).
+        text = path.read_text(encoding="utf-8-sig")
     except (OSError, UnicodeError):
         # UnicodeError covers UnicodeDecodeError: a damaged or
         # differently-encoded file must degrade to "no frontmatter", not
