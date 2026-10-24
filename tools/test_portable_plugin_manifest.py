@@ -110,11 +110,18 @@ def main(argv: list[str]) -> int:
         if checks._read_plugin_manifest(str(d3e)) is not None:
             failures.append("plugin.yaml with a numeric name was treated as a plugin")
 
-        # (3f) whitespace-only names still fall back to the directory basename.
+        # (3f) an empty name falls back to the directory basename.
         d3f = Path(td) / "blank-name"
-        _write(d3f / "plugin.yaml", 'name: "   "\n')
+        _write(d3f / "plugin.yaml", 'name: ""\n')
         if checks._read_plugin_manifest(str(d3f)) != "blank-name":
-            failures.append("plugin.yaml with a blank name did not fall back to basename")
+            failures.append("plugin.yaml with an empty name did not fall back to basename")
+
+        # (3f2) padded names are preserved verbatim: Hermes gates on the raw
+        # manifest name, so stripping would create a false healthy.
+        d3f2 = Path(td) / "padded-name"
+        _write(d3f2 / "plugin.yaml", 'name: "  padded  "\n')
+        if checks._read_plugin_manifest(str(d3f2)) != "  padded  ":
+            failures.append("plugin.yaml with a padded name was normalized")
 
         # (3g) the portable path applies the same type guard.
         d3g = Path(td) / "portable-list-name"
@@ -182,6 +189,24 @@ def main(argv: list[str]) -> int:
                 failures.append(f"malformed manifest name reported as a crash: {result!r}")
             if result.get("status") != "broken" or "bad-name" not in joined:
                 failures.append(f"malformed manifest verdict wrong: {result!r}")
+        finally:
+            checks._upstream_manifests = original_upstream
+
+        # (8) padded manifest names must not be normalized into an enabled
+        # match. Hermes preserves the raw name, so `enabled: [padded]` does not
+        # activate a manifest named `"  padded  "`.
+        _write(plugins / "padded" / "plugin.yaml", 'name: "  padded  "\n')
+        _write(config, "plugins:\n  enabled: [padded]\n  disabled: []\n")
+        checks._upstream_manifests = lambda home: None
+        checks._store().clear()
+        try:
+            result = checks.check_plugins()
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"padded manifest name crashed check_plugins: {exc!r}")
+        else:
+            joined = " | ".join(str(d) for d in (result.get("detail") or []))
+            if result.get("status") != "broken" or "padded" not in joined:
+                failures.append(f"padded manifest name matched a stripped id: {result!r}")
         finally:
             checks._upstream_manifests = original_upstream
 

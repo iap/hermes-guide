@@ -1058,16 +1058,21 @@ def _bundled_plugins_dir():
 def _manifest_name(value, d):
     """Return a manifest ``name`` as a non-empty string, or None if malformed.
 
-    A missing/blank name falls back to the directory basename (the existing
+    A missing/empty name falls back to the directory basename (the existing
     manifest contract). Any other type — a list, number, mapping — is not a
     usable identifier: returning it would make the collector feed an
     unhashable value into ``set``/``sorted`` and crash the check.
+
+    Non-empty strings are returned unchanged, including padded names: Hermes
+    preserves the manifest name when it gates `plugins.enabled`, so stripping
+    here would make `name: "  foo  "` match `enabled: [foo]` while the loader
+    does not.
     """
     if value is None:
         return os.path.basename(d)
     if not isinstance(value, str):
         return None
-    return value.strip() or os.path.basename(d)
+    return value or os.path.basename(d)
 
 
 def _read_plugin_meta(d):
