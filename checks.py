@@ -905,6 +905,16 @@ def _redact_hook_output(text):
     # `sk-ant-api03-…` has a separator inside the key, so the character class
     # must include hyphens and underscores, not just letters and digits.
     text = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b", "***", text)
+    # Quoted JSON keys: a credential-shaped name inside `"..."` is separated
+    # from its value by the closing quote, so the bare-name patterns miss it
+    # (`curl --json '{"password":"...","api_key":"..."}'`). Match the quoted
+    # name and consume its quoted or bare value.
+    text = re.sub(
+        r'(?i)("[A-Z0-9_-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|CREDENTIAL|AUTH)[A-Z0-9_-]*")'
+        r'\s*:\s*(?:"[^"]*"|\'[^\']*\'|[^\s,;}]+)',
+        r"\1:***",
+        text,
+    )
     text = re.sub(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/@\s]+@", r"\1***@", text)
     return text
 

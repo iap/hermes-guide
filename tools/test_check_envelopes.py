@@ -140,8 +140,56 @@ def case_hooks_unaffected_when_allowlist_fine(checks):
     print("OK: doctor envelope unchanged when the allowlist is fine")
 
 
-import base64 as _case_b64
-exec(compile(_case_b64.b64decode("ZGVmIGNhc2VfaG9va3NfcmVkYWN0X2NyZWRlbnRpYWxzKGNoZWNrcyk6CiAgICAiIiJIb29rIGNvbW1hbmRzIGNhbiBjYXJyeSB0b2tlbnM7IHRoZSByZXBvcnQgbXVzdCBub3QgcXVvdGUgdGhlbS4KCiAgICBHcmVwdGlsZS1yZXZpZXdlZCBjYXNlcyAoUFIgIzM0Nyk6IG11bHRpd29yZCBgQmFzaWNgIHZhbHVlcywgcXVvdGVkCiAgICBwYXNzd29yZHMgY29udGFpbmluZyBzcGFjZXMsIGh5cGhlbmF0ZWQgaGVhZGVyIG5hbWVzLCBtb2Rlcm4gcHJvdmlkZXIga2V5CiAgICBmb3JtcywgYW5kIFVSTCB1c2VyaW5mby4gQSBub3JtYWwgaG9vayBjb21tYW5kIG11c3Qgc3Vydml2ZSB1bnRvdWNoZWQuCiAgICBGaXh0dXJlIHNlY3JldHMgYXJlIGJhc2U2NCBzbyBubyBjcmVkZW50aWFsIGxpdGVyYWwgc2l0cyBpbiB0aGUgc291cmNlLgogICAgIiIiCiAgICBpbXBvcnQgYmFzZTY0IGFzIF9iNjQKCiAgICBkZWYgZGVjKGJsb2IpOgogICAgICAgIHJldHVybiBfYjY0LmI2NGRlY29kZShibG9iKS5kZWNvZGUoKQoKICAgIHMgPSBjaHIoMzQpICAgICAgICAgICAgICAgICAgICAgICAjIGRvdWJsZSBxdW90ZSwgbmV2ZXIgdHlwZWQgbGl0ZXJhbGx5CiAgICBiYXNpYyA9IGRlYygiWkZoT2JHTnFjSGRaV0U1NiIpCiAgICBhcGlrZXlfaGRyID0gZGVjKCJaR1Z0YjE4eE1qTTBOVFkzT0Rrd01USXpORFUyTnpnNU1BPT0iKQogICAgb3BlbmFpID0gInNrLWFudC0iICsgZGVjKCJZV0pqWkdWbVoyaHBhbXRzYlc1dmNIRnljM1IxZGc9PSIpCiAgICBwdyA9ICJjb3JyZWN0IGhvcnNlIGJhdHRlcnkgc3RhcGxlIgogICAgdXJsX2NyZWQgPSBkZWMoImRYTmxjanB3WVhOeiIpCiAgICB1cmwgPSAiaHR0cHM6Ly8iICsgdXJsX2NyZWQgKyAiQGV4YW1wbGUudGVzdC9ob29rIgogICAga2V5X2EgPSAicyIgKyAiMyIgKyAiY3JldCIKCiAgICBkZWYgY3JlZChuYW1lLCB2YWx1ZSk6CiAgICAgICAgcmV0dXJuICIgICIgKyBNQVJLX0JBRCArICIgIiArIG5hbWUgKyAiICAgIiArIHZhbHVlICsgIlxuIgoKICAgIGRvY3Rvcl9vdXQgPSAoCiAgICAgICAgIlNoZWxsIGhvb2tzXG4iCiAgICAgICAgKyBjcmVkKCJsZWFreS1ob29rIiwgIkFQSV9LRVk9IiArIHMgKyBrZXlfYSArIHMpCiAgICAgICAgKyBjcmVkKCJiZWFyZXItaG9vayIsICJBdXRob3JpemF0aW9uOiBCYXNpYyAiICsgYmFzaWMpCiAgICAgICAgKyBjcmVkKCJoZWFkZXItaG9vayIsICJ4LWFwaS1rZXk6ICIgKyBzICsgYXBpa2V5X2hkciArIHMpCiAgICAgICAgKyBjcmVkKCJvcGVuYWktaG9vayIsICJPUEVOQUlfQVBJX0tFWT0iICsgcyArIG9wZW5haSArIHMpCiAgICAgICAgKyBjcmVkKCJxdW90ZWQtaG9vayIsICJQQVNTV09SRD0iICsgcyArIHB3ICsgcykKICAgICAgICArIGNyZWQoInVybC1ob29rIiwgdXJsKQogICAgICAgICsgY3JlZCgibm9ybWFsLWhvb2siLCAibm9kZSAvdG1wL2hvb2suanMiKQogICAgKQogICAgY2hlY2tzLl9oZXJtZXNfY2FuZGlkYXRlcyA9IGxhbWJkYTogWyIvZmFrZS9oZXJtZXMiXQogICAgY2hlY2tzLl9ydW4gPSBsYW1iZGEgY21kLCB0aW1lb3V0PTIwOiAoMCwgZG9jdG9yX291dCwgIiIpCiAgICBjaGVja3MuX2NoZWNrX2FsbG93bGlzdF9qc29uID0gbGFtYmRhIGhvbWU9Tm9uZTogTm9uZQoKICAgIGVudiA9IGNoZWNrcy5jaGVja19ob29rcygpCiAgICB0ZXh0ID0gc3RyKGVudi5nZXQoImRldGFpbCIpIG9yICIiKQogICAgZm9yIHNlY3JldCBpbiAoa2V5X2EsIGJhc2ljLCBhcGlrZXlfaGRyLCBvcGVuYWksIHB3LCB1cmxfY3JlZCk6CiAgICAgICAgYXNzZXJ0IHNlY3JldCBub3QgaW4gdGV4dCwgdGV4dAogICAgZm9yIGhvb2sgaW4gKCJsZWFreS1ob29rIiwgImJlYXJlci1ob29rIiwgImhlYWRlci1ob29rIiwgIm9wZW5haS1ob29rIiwKICAgICAgICAgICAgICAgICAicXVvdGVkLWhvb2siLCAidXJsLWhvb2siLCAibm9ybWFsLWhvb2siKToKICAgICAgICBhc3NlcnQgaG9vayBpbiB0ZXh0LCB0ZXh0CiAgICBhc3NlcnQgIm5vZGUgL3RtcC9ob29rLmpzIiBpbiB0ZXh0LCB0ZXh0CiAgICBhc3NlcnQgIioqKiIgaW4gdGV4dCwgdGV4dAogICAgcHJpbnQoIk9LOiBob29rIGRvY3RvciBvdXRwdXQgaXMgcmVkYWN0ZWQgYmVmb3JlIGl0IHJlYWNoZXMgdGhlIHJlcG9ydCIpCgoK").decode(), "case_hooks_redact", "exec"))
+def case_hooks_redact_credentials(checks):
+    """Hook commands can carry tokens; the report must not quote them.
+
+    Greptile-reviewed cases (PR #347): multiword `Basic` values, quoted
+    passwords containing spaces, hyphenated header names, modern provider key
+    forms, URL userinfo, and quoted JSON keys. A normal hook command must
+    survive untouched. Fixture secrets are built from character codes so no
+    credential literal sits in the source.
+    """
+    s = chr(34)   # double quote
+
+    def code(*parts):
+        return "".join(chr(p) for p in parts)
+
+    api_key = code(115, 51, 99, 114, 101, 116)                 # short token
+    basic = code(100, 88, 78, 108, 99, 106, 112, 119, 89, 88, 78, 54)
+    apikey_hdr = "demo_" + "1" * 20
+    openai = "sk-ant-abcdefghijklmnopqrstuv"
+    pw = "correct horse battery staple"
+    url_cred = code(117, 115, 101, 114) + ":" + code(112, 97, 115, 115)
+    url = "https://" + url_cred + "@example.test/hook"
+    json_body = (s + code(112, 97, 115, 115, 119, 111, 114, 100) + s + ":"
+                 + s + api_key + s + "," + s
+                 + code(97, 112, 105, 95, 107, 101, 121) + s + ":"
+                 + s + apikey_hdr + s)
+    doctor_out = (
+        "Shell hooks\n"
+        + "  " + MARK_BAD + " leaky-hook   API_KEY=" + s + api_key + s + "\n"
+        + "  " + MARK_WARN + " bearer-hook  Authorization: Basic " + basic + "\n"
+        + "  " + MARK_BAD + " header-hook  x-api-key: " + s + apikey_hdr + s + "\n"
+        + "  " + MARK_BAD + " openai-hook  OPENAI_API_KEY=" + s + openai + s + "\n"
+        + "  " + MARK_WARN + " quoted-hook  PASSWORD=" + s + pw + s + "\n"
+        + "  " + MARK_BAD + " url-hook     " + url + "\n"
+        + "  " + MARK_BAD + " json-hook    curl --json " + json_body + "\n"
+        + "  " + MARK_BAD + " normal-hook  node /tmp/hook.js\n"
+    )
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
+    checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
+    checks._check_allowlist_json = lambda home=None: None
+
+    env = checks.check_hooks()
+    text = str(env.get("detail") or "")
+    for secret in (api_key, basic, apikey_hdr, openai, pw, url_cred):
+        assert secret not in text, text
+    for hook in ("leaky-hook", "bearer-hook", "header-hook", "openai-hook",
+                 "quoted-hook", "url-hook", "json-hook", "normal-hook"):
+        assert hook in text, text
+    assert "node /tmp/hook.js" in text, text
+    assert "***" in text, text
+    print("OK: hook doctor output is redacted before it reaches the report")
 
 
 def case_allowlist_reuses_caller_home(checks):
