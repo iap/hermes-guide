@@ -197,9 +197,9 @@ query($owner:String!,$repo:String!,$pr:Int!,$endCursor:String){
     reviewThreads(first:100,after:$endCursor){
       pageInfo{hasNextPage endCursor}
       nodes{id isResolved isOutdated path line
-        comments(first:1){nodes{author{login} body}}}}}}
+        comments(first:1){nodes{databaseId author{login} body}}}}}}
 }' -F owner="${REPO%/*}" -F repo="${REPO#*/}" -F pr=<PR> \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|"\(.path):\(.line) \(.id) \(.comments.nodes[0].author.login)"'
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|"\(.path):\(.line) thread=\(.id) comment=\(.comments.nodes[0].databaseId) \(.comments.nodes[0].author.login)"'
 ```
 
 `--paginate` follows `endCursor` until `hasNextPage` is false; never declare a
@@ -207,9 +207,10 @@ PR clear from one page. Treat the result as binary: no rows after paging means
 clear (report `OK: 0 unresolved review threads`); any row is a thread to triage
 before replying. `isOutdated: true` only means the anchor moved to a newer
 commit — it is not evidence the finding was fixed.
-Resolve by the thread node's `PRRT_…` id, which is what
-`addPullRequestReviewThreadReply` and `resolveReviewThread` accept; ids carried
-in a review body are not thread nodes:
+Each row carries both ids: `thread=PRRT_…` feeds
+`addPullRequestReviewThreadReply` and `resolveReviewThread`; `comment=<numeric>`
+feeds the REST `in_reply_to` reply below. Ids carried in a review body are not
+thread nodes. Resolve only after the reply is posted:
 
 ```bash
 gh api graphql -f query='
