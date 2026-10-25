@@ -2,6 +2,16 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.12 (2026-10-25)
+
+### Bug Fixes
+
+- **redact**: stop AUTH matching --author, add regression cases
+
+### Documentation
+
+- **agents**: correct the hooks default and --deep opt-in
+
 ## v0.8.11 (2026-10-25)
 
 ### Bug Fixes

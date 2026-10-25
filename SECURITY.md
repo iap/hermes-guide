@@ -2,11 +2,12 @@
 
 ## Supported Versions
 
-Only the latest published version (`0.8.11`) receives security fixes.
+Only the latest published version (`0.8.12`) receives security fixes.
 
 | Version | Supported |
 | --- | --- |
-| 0.8.11 | :white_check_mark: |
+| 0.8.12 | :white_check_mark: |
+| 0.8.11 | :x: |
 | 0.8.7 | :x: |
 | 0.8.5 | :x: |
 | 0.8.4 | :x: |

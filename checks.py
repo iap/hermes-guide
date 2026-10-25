@@ -1038,9 +1038,16 @@ def _merge_allowlist_json(result, source_label, home=None):
     }
 
 
+# `AUTH` must not stand alone: a bare `AUTH` word matched `--author` and
+# `AUTHOR=Jane Doe`, corrupting the report with no credential involved. But
+# dropping it outright also exposed credential-bearing names such as
+# `BASIC_AUTH=alice:private-value` and `AUTH_HEADER='Basic ...'` (Greptile
+# regression). So keep compound `AUTH` names and exclude the AUTHOR shape.
 _CRED_WORDS = (
     r"TOKEN|SECRET|PASSWORD|PASSWD|PWD|API[-_]?KEY|"
-    r"ACCESS[-_]?KEY[-_]?ID|CREDENTIAL|AUTH"
+    r"ACCESS[-_]?KEY[-_]?ID|CREDENTIAL|"
+    r"AUTH(?:ORIZATION|[-_]?(?:TOKEN|KEY|SECRET|BEARER|HEADER|CREDENTIALS?)|S)?"
+    r"(?!OR)"
 )
 
 # A credential key is a bare name (`API_KEY`), a quoted JSON name
@@ -1049,7 +1056,7 @@ _CRED_KEY = r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
 # `--user`/`--username` and curl's `--proxy-user` carry HTTP auth too; keep
 # them separate so `--user-agent` is not mistaken for a credential flag.
 _CRED_FLAG_KEY = (
-    r'(?:--[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
+    r'(?:--(?!auth[-_]?(?:mode|type|method)(?:[\s=]|$))[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
     r'|--(?:proxy-)?user(?:name)?)'
 )
 
@@ -1057,7 +1064,7 @@ _CRED_FLAG_KEY = (
 # (`top'secret'`, `top\ secret`). Consume every segment but stop at an
 # unescaped separator so the next argument is left intact.
 _CRED_VALUE = (
-    r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|(?:\\.|[^\s,;\'"\\])+)+'
+    r'(?:"(?:(?!\n[ \t]*[\u2717\u26a0])(?:[^"\\]|\\.))*"|\'[^\']*\'|Bearer\s+\S+|(?:\\.|[^\s,;\'"\\])+)+'
 )
 
 # Ordinary keys need a real `:` or `=` separator. Requiring it is what stops
@@ -1065,13 +1072,13 @@ _CRED_VALUE = (
 # `auth-hook PASSWORD="..."` matched `auth-hook` as the key and swallowed only
 # the first word of the real value (Greptile regression).
 _CRED_RE = re.compile(
-    r"(?i)(?P<key>" + _CRED_KEY + r")\s*(?P<sep>[:=])\s*(?P<val>" + _CRED_VALUE + r")"
+    r"(?i)(?P<key>" + _CRED_KEY + r")[ \t]*(?P<sep>[:=])[ \t]*(?P<val>" + _CRED_VALUE + r")"
 )
 
 # Flag-style keys (`--api-key ***`, `--user=***`) separate key from value
 # with whitespace or `=`.
 _CRED_FLAG_RE = re.compile(
-    r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")(?:\s*=\s*|\s+)(?P<val>" + _CRED_VALUE + r")"
+    r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")(?:[ \t]*=[ \t]*|[ \t]+)(?P<val>" + _CRED_VALUE + r")"
 )
 
 # `-u` is curl's short basic-auth flag, but `python -u` means unbuffered and
@@ -1079,17 +1086,20 @@ _CRED_FLAG_RE = re.compile(
 # separator, so a script path such as `python -u /tmp/hook.py` survives.
 _CRED_SHORT_USER_RE = re.compile(
     r"(?i)(?P<key>(?<![\w-])-u)"
-    r"(?P<sep>\s*=\s*|\s+|(?=[^\s=]))(?P<val>" + _CRED_VALUE + r")"
+    r"(?P<sep>[ \t]*=[ \t]*|[ \t]+|(?=[^\s=]))(?P<val>" + _CRED_VALUE + r")"
 )
 
 _BEARER_RE = re.compile(
     # `Authorization: Basic <cred>` / `Authorization: Bearer *** <cred>` — the
     # scheme word and the credential are both dropped; no stray token remains.
-    r"(?i)\b(?P<key>Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?\S+"
+    r'(?i)\b(?P<key>Authorization|X-Auth|X-Authorization|Proxy-Authorization)[ \t]*[:=][ \t]*(?:"(?:(?!\n[ \t]*[\u2717\u26a0])(?:[^"\\]|\\.))*"|\'[^\']*\'|(?:[A-Za-z]+\s+)?\S+)'
 )
 # Standalone bearer credentials (`--oauth2-bearer <jwt>`, `Bearer <token>`) are
 # not tied to an Authorization header.
-_BEARER_TOKEN_RE = re.compile(r"(?i)\b(?:Bearer|--oauth2-bearer)\s+(?P<val>\S+)")
+_BEARER_TOKEN_RE = re.compile(
+    r'(?i)(?<![\w-])(?:"?Bearer"?|--oauth2-bearer)[ \t]+'
+    r'(?P<val>(?:"(?:[^"\\\r\n]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|[^\s"\']+)+)'
+)
 _PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")
 _URL_CRED_RE = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@\s]+@")
 
@@ -1118,14 +1128,23 @@ def _redact_hook_output(text):
         # separator becomes a single space so `--api-key***` reads as `--api-key ***`.
         return f"{key}{sep if sep else ' '}***"
 
-    # Authorization first: its value is `scheme credential`, and the generic
-    # key rule would otherwise match the header name and leave the token behind.
-    text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
-    # Flag-style keys BEFORE the ordinary rule: a quoted flag value may itself
-    # contain an assignment (`--password "…TOKEN=x"`), and masking the whole
-    # quoted value first stops the inner `TOKEN=x` from consuming part of it
-    # and leaving the rest of the password visible (Greptile regression).
+    # Flag-style keys FIRST: a quoted flag value may itself contain an
+    # assignment or an auth header (`--password "…TOKEN=x"` or
+    # `--password "private X-Auth: Bearer abc"`), and masking the whole
+    # quoted value first stops the inner rule from consuming part of it and
+    # leaving the rest of the password visible (Greptile / CodeRabbit
+    # regression). `_BEARER_RE` runs after so an unquoted
+    # `Authorization: Bearer <token>` is still masked before `_CRED_RE`.
     text = _CRED_FLAG_RE.sub(lambda m: f"{m.group('key')} ***", text)
+    # Standalone bearer pairs next: the flag rule already masked a quoted value
+    # as a whole, so `--password "private Bearer abc"` cannot leak here;
+    # an unquoted `"Bearer" <token>` must be masked before `_CRED_RE`
+    # consumes the scheme word.
+    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
+    # Authorization (and common proxy/auth header variants): its value is
+    # `scheme credential`, and the generic key rule would otherwise match the
+    # header name and leave the token behind.
+    text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
     text = _CRED_RE.sub(_red, text)
     text = _CRED_SHORT_USER_RE.sub(
         lambda m: (
@@ -1135,7 +1154,6 @@ def _redact_hook_output(text):
         ),
         text,
     )
-    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
     text = _PROVIDER_KEY_RE.sub("***", text)
     text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
     return text

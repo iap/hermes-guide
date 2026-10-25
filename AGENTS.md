@@ -94,7 +94,7 @@ CI adds `tools/test_*.py`, citation integrity, install-scan parity, mypy, and ba
 | Citations resolve against `.github/upstream-drift.baseline` | `check_citation_integrity.py` |
 | Finding IDs are public API: add `FINDING_IDS` entries, never rename; `docs/findings.md` is generated | `test_finding_ids.py`, `render_docs.py` |
 | `hermes guide --json` is one stdout document; no update notice; `/hermes-doctor` stays text | [ops.md](docs/agent/ops.md#the-hermes-guide---json-document-phase-4-contract) |
-| Hooks stay manual: `hermes hooks doctor` executes approved hooks once; proactive checks use `check_hooks_readonly()` | [ops.md](docs/agent/ops.md#read-only-always) |
+| Hooks default to in-process `check_hooks_readonly()` (executes nothing); `--deep` runs `hermes hooks doctor`, which executes approved hooks once; `--fast` wins when both are given | [ops.md](docs/agent/ops.md#read-only-always) |
 | Review threads: enumerate `reviewThreads`, reply with evidence, then resolve; `isOutdated` is not a fix | [ops.md](docs/agent/ops.md#reviewer-bot-threads) |
 | Tone / no emoji / no filler | [CONTRIBUTING.md#tone](CONTRIBUTING.md#tone), `check_doc_style.py` |
 
