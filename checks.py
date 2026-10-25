@@ -1038,9 +1038,12 @@ def _merge_allowlist_json(result, source_label, home=None):
     }
 
 
+# `AUTH` must not stand alone: a bare `AUTH` word matched `--author` and
+# `AUTHOR=Jane Doe`, corrupting the report with no credential involved. Only
+# `Authorization` and `auth`-prefixed compound names are credentials.
 _CRED_WORDS = (
     r"TOKEN|SECRET|PASSWORD|PASSWD|PWD|API[-_]?KEY|"
-    r"ACCESS[-_]?KEY[-_]?ID|CREDENTIAL|AUTH"
+    r"ACCESS[-_]?KEY[-_]?ID|CREDENTIAL|AUTH(?:ORIZATION|[-_]?(?:TOKEN|KEY|SECRET|BEARER))"
 )
 
 # A credential key is a bare name (`API_KEY`), a quoted JSON name

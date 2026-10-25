@@ -206,6 +206,10 @@ def case_hooks_redact_credentials(checks):
         + cred("short-user-hook", "curl -u " + user_cred + " https://example.test")
         + cred("attached-user-hook", "curl -u" + user_cred + " https://example.test")
         + cred("unbuffered-hook", "python -u /tmp/hook.py")
+        # `--author` and `AUTHOR=` must NOT be treated as credentials: the
+        # word `AUTH` alone was over-matched and corrupted the report.
+        + cred("author-hook", "git commit --author " + s + "Jane Doe" + s + " -m x")
+        + cred("author-env-hook", "AUTHOR=Jane Doe")
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -233,7 +237,7 @@ def case_hooks_redact_credentials(checks):
                  "shell-quoted-hook", "shell-escaped-hook", "user-hook",
                  "user-eq-hook", "proxy-hook", "short-user-hook",
                  "attached-user-hook", "unbuffered-hook", "agent-hook",
-                 "nested-flag", "normal-hook"):
+                 "author-hook", "author-env-hook", "nested-flag", "normal-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text
@@ -242,6 +246,8 @@ def case_hooks_redact_credentials(checks):
     assert "curl --proxy-user ***" in text, text
     assert "curl -u ***" in text, text
     assert "python -u /tmp/hook.py" in text, text
+    # non-credential `AUTH` words survive untouched
+    assert "Jane Doe" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")
