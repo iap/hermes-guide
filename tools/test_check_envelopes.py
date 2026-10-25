@@ -190,6 +190,8 @@ def case_hooks_redact_credentials(checks):
         + cred("escaped-hook", "curl --json " + json_escaped)
         + cred("aws-hook", "curl --json " + aws_body)
         + cred("flag-hook", "hook --api-key " + s + api_key + s + " ./run.sh")
+        + cred("oauth-hook", "curl --oauth2-bearer " + openai + " https://example.test")
+        + cred("named-hook", "auth-hook PASSWORD=" + s + pw + s + " ./run.sh")
         + cred("normal-hook", "node /tmp/hook.js")
     )
     checks._hermes_candidates = lambda: ["/fake/hermes"]
@@ -203,7 +205,8 @@ def case_hooks_redact_credentials(checks):
     assert "horse battery staple" not in text, text
     for hook in ("leaky-hook", "bearer-hook", "header-hook", "openai-hook",
                  "quoted-hook", "url-hook", "json-hook", "escaped-hook",
-                 "aws-hook", "flag-hook", "normal-hook"):
+                 "aws-hook", "flag-hook", "oauth-hook", "named-hook",
+                 "normal-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text

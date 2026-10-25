@@ -880,18 +880,24 @@ _CRED_WORDS = (
 )
 
 # A credential key is a bare name (`API_KEY`), a quoted JSON name
-# (`"api_key"`), or a flag (`--api-key`).
-_CRED_KEY = (
-    r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
-)
+# (`"api_key"`), or an explicit flag (`--api-key`).
+_CRED_KEY = r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
+_CRED_FLAG_KEY = r'--[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
 
-# One value: a quoted string (with \\" escapes handled), or a bare token.
+# One value: a quoted string (escapes handled) or a bare token.
 _CRED_VALUE = r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s,;\']+)'
 
-# The separator may be `:`/`=` or plain whitespace, because a flag-style
-# command (`--api-key ***`) separates the key from its value with a space.
+# Ordinary keys need a real `:` or `=` separator. Requiring it is what stops
+# `_CRED_RE` from reading a hook NAME as a credential key: without it,
+# `auth-hook PASSWORD="..."` matched `auth-hook` as the key and swallowed only
+# the first word of the real value (Greptile regression).
 _CRED_RE = re.compile(
-    r"(?i)(?P<key>" + _CRED_KEY + r")\s*(?P<sep>[:=]?)\s*(?P<val>" + _CRED_VALUE + r")"
+    r"(?i)(?P<key>" + _CRED_KEY + r")\s*(?P<sep>[:=])\s*(?P<val>" + _CRED_VALUE + r")"
+)
+
+# Flag-style keys (`--api-key ***`) separate key from value with whitespace.
+_CRED_FLAG_RE = re.compile(
+    r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")\s+(?P<val>" + _CRED_VALUE + r")"
 )
 
 _BEARER_RE = re.compile(
@@ -899,6 +905,9 @@ _BEARER_RE = re.compile(
     # scheme word and the credential are both dropped; no stray token remains.
     r"(?i)\b(?P<key>Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?\S+"
 )
+# Standalone bearer credentials (`--oauth2-bearer <jwt>`, `Bearer <token>`) are
+# not tied to an Authorization header.
+_BEARER_TOKEN_RE = re.compile(r"(?i)\b(?:Bearer|--oauth2-bearer)\s+(?P<val>\S+)")
 _PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")
 _URL_CRED_RE = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@\s]+@")
 
@@ -931,6 +940,10 @@ def _redact_hook_output(text):
     # key rule would otherwise match the header name and leave the token behind.
     text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
     text = _CRED_RE.sub(_red, text)
+    # Flag-style keys are matched separately because they use a whitespace
+    # separator; folding them into _CRED_RE let a hook NAME masquerade as a key.
+    text = _CRED_FLAG_RE.sub(lambda m: f"{m.group('key')} ***", text)
+    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
     text = _PROVIDER_KEY_RE.sub("***", text)
     text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
     return text
