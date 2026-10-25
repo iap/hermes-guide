@@ -1064,7 +1064,7 @@ _CRED_FLAG_KEY = (
 # (`top'secret'`, `top\ secret`). Consume every segment but stop at an
 # unescaped separator so the next argument is left intact.
 _CRED_VALUE = (
-    r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|Bearer\s+\S+|(?:\\.|[^\s,;\'"\\])+)+'
+    r'(?:"(?:(?!\n[ \t]*[\u2717\u26a0])(?:[^"\\]|\\.))*"|\'[^\']*\'|Bearer\s+\S+|(?:\\.|[^\s,;\'"\\])+)+'
 )
 
 # Ordinary keys need a real `:` or `=` separator. Requiring it is what stops
@@ -1072,13 +1072,13 @@ _CRED_VALUE = (
 # `auth-hook PASSWORD="..."` matched `auth-hook` as the key and swallowed only
 # the first word of the real value (Greptile regression).
 _CRED_RE = re.compile(
-    r"(?i)(?P<key>" + _CRED_KEY + r")\s*(?P<sep>[:=])\s*(?P<val>" + _CRED_VALUE + r")"
+    r"(?i)(?P<key>" + _CRED_KEY + r")[ \t]*(?P<sep>[:=])[ \t]*(?P<val>" + _CRED_VALUE + r")"
 )
 
 # Flag-style keys (`--api-key ***`, `--user=***`) separate key from value
 # with whitespace or `=`.
 _CRED_FLAG_RE = re.compile(
-    r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")(?:\s*=\s*|\s+)(?P<val>" + _CRED_VALUE + r")"
+    r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")(?:[ \t]*=[ \t]*|[ \t]+)(?P<val>" + _CRED_VALUE + r")"
 )
 
 # `-u` is curl's short basic-auth flag, but `python -u` means unbuffered and
@@ -1086,18 +1086,18 @@ _CRED_FLAG_RE = re.compile(
 # separator, so a script path such as `python -u /tmp/hook.py` survives.
 _CRED_SHORT_USER_RE = re.compile(
     r"(?i)(?P<key>(?<![\w-])-u)"
-    r"(?P<sep>\s*=\s*|\s+|(?=[^\s=]))(?P<val>" + _CRED_VALUE + r")"
+    r"(?P<sep>[ \t]*=[ \t]*|[ \t]+|(?=[^\s=]))(?P<val>" + _CRED_VALUE + r")"
 )
 
 _BEARER_RE = re.compile(
     # `Authorization: Basic <cred>` / `Authorization: Bearer *** <cred>` — the
     # scheme word and the credential are both dropped; no stray token remains.
-    r'(?i)\b(?P<key>Authorization|X-Auth|X-Authorization|Proxy-Authorization)\s*[:=]\s*(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|(?:[A-Za-z]+\s+)?\S+)'
+    r'(?i)\b(?P<key>Authorization|X-Auth|X-Authorization|Proxy-Authorization)[ \t]*[:=][ \t]*(?:"(?:(?!\n[ \t]*[\u2717\u26a0])(?:[^"\\]|\\.))*"|\'[^\']*\'|(?:[A-Za-z]+\s+)?\S+)'
 )
 # Standalone bearer credentials (`--oauth2-bearer <jwt>`, `Bearer <token>`) are
 # not tied to an Authorization header.
 _BEARER_TOKEN_RE = re.compile(
-    r'(?i)(?<![\w-])(?:"?Bearer"?|--oauth2-bearer)\s+'
+    r'(?i)(?<![\w-])(?:"?Bearer"?|--oauth2-bearer)[ \t]+'
     r'(?P<val>(?:"(?:[^"\\\r\n]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|[^\s"\']+)+)'
 )
 _PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")
