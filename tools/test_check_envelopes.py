@@ -247,6 +247,31 @@ def case_hooks_redact_credentials(checks):
     print("OK: hook doctor output is redacted before it reaches the report")
 
 
+def case_hooks_marker_beats_healthy_summary(checks):
+    """A failure marker outranks the healthy summary; a bad rc stays unknown.
+
+    Gemma's review worried that a keyword match could report healthy when the
+    doctor also printed a failure. Pin both directions: the per-hook marker
+    wins over the summary line, and a non-zero rc never becomes healthy.
+    """
+    doctor_out = (
+        "All shell hooks look healthy\n"
+        f"  {MARK_BAD} broken-hook   exit code 3\n"
+    )
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
+    checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
+    checks._check_allowlist_json = lambda home=None: None
+
+    env = checks.check_hooks()
+    assert env["status"] == "broken", env
+    assert "1 finding" in env["reason"], env
+
+    checks._run = lambda cmd, timeout=20: (1, "All shell hooks look healthy\n", "boom")
+    env = checks.check_hooks()
+    assert env["status"] == "unknown", env
+    print("OK: a failure marker or non-zero rc outranks the healthy summary")
+
+
 def case_allowlist_reuses_caller_home(checks):
     """The merge passes a resolved home through instead of re-resolving."""
     seen = []
@@ -369,6 +394,7 @@ def main() -> int:
         case_hooks_merges_doctor_findings,
         case_hooks_allowlist_alone_when_doctor_healthy,
         case_hooks_unaffected_when_allowlist_fine,
+        case_hooks_marker_beats_healthy_summary,
         case_hooks_redact_credentials,
         case_allowlist_reuses_caller_home,
         case_plugins_disabled_wins_over_bundled,
@@ -383,7 +409,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 10 check-envelope case(s) passed")
+    print("\nOK: 11 check-envelope case(s) passed")
     return 0
 
 
