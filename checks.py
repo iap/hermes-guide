@@ -1064,7 +1064,7 @@ _CRED_FLAG_KEY = (
 # (`top'secret'`, `top\ secret`). Consume every segment but stop at an
 # unescaped separator so the next argument is left intact.
 _CRED_VALUE = (
-    r'(?:"(?:[^"\\\r\n]|\\.)*"|\'[^\']*\'|Bearer\s+\S+|(?:\\.|[^\s,;\'"\\])+)+'
+    r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|Bearer\s+\S+|(?:\\.|[^\s,;\'"\\])+)+'
 )
 
 # Ordinary keys need a real `:` or `=` separator. Requiring it is what stops
@@ -1092,12 +1092,12 @@ _CRED_SHORT_USER_RE = re.compile(
 _BEARER_RE = re.compile(
     # `Authorization: Basic <cred>` / `Authorization: Bearer *** <cred>` — the
     # scheme word and the credential are both dropped; no stray token remains.
-    r'(?i)\b(?P<key>Authorization|X-Auth|X-Authorization|Proxy-Authorization)\s*[:=]\s*(?:"(?:[^"\\\r\n]|\\.)*"|\'[^\']*\'|(?:[A-Za-z]+\s+)?\S+)'
+    r'(?i)\b(?P<key>Authorization|X-Auth|X-Authorization|Proxy-Authorization)\s*[:=]\s*(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|(?:[A-Za-z]+\s+)?\S+)'
 )
 # Standalone bearer credentials (`--oauth2-bearer <jwt>`, `Bearer <token>`) are
 # not tied to an Authorization header.
 _BEARER_TOKEN_RE = re.compile(
-    r'(?i)(?<![\w-])"?Bearer"?\s+'
+    r'(?i)(?<![\w-])(?:"?Bearer"?|--oauth2-bearer)\s+'
     r'(?P<val>(?:"(?:[^"\\\r\n]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|[^\s"\']+)+)'
 )
 _PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")

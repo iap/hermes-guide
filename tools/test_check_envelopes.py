@@ -308,6 +308,8 @@ def case_hooks_redact_bearer_edges(checks):
         + cred("not-bearer-hook", "echo NotBearer diagnostic")
         + cred("escaped-bearer-hook", "tool --oauth2-bearer " + s + "abc" + chr(92) + s + "esctok" + s)
         + cred("quoted-assignment-hook", "PASSWORD=" + s + "private Bearer abcplane" + s)
+        + cred("oauth2-bearer-hook", "tool --oauth2-bearer oauthtok")
+        + cred("multiline-hook", "PASSWORD=" + s + "firstline\nsecondline" + s)
     )
     checks._hermes_candidates = lambda: ["/fake/hermes"]
     checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
@@ -318,10 +320,12 @@ def case_hooks_redact_bearer_edges(checks):
     for secret in ("opaque-token", "opaque-two", "qsuffix", "esctok", "abcplane"):
         assert secret not in text, text
     assert "private Bearer" not in text, text
+    assert "oauthtok" not in text, text
+    assert "secondline" not in text, text
     assert "NotBearer diagnostic" in text, text
     for hook in ("auth-mode-hook", "quoted-bearer-hook", "quoted-scheme-hook",
                  "bearer-suffix-hook", "not-bearer-hook", "escaped-bearer-hook",
-                 "quoted-assignment-hook"):
+                 "quoted-assignment-hook", "oauth2-bearer-hook", "multiline-hook"):
         assert hook in text, text
     print("OK: bearer redaction covers quoted schemes, suffixes and false positives")
 
