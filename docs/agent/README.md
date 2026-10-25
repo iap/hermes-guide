@@ -12,6 +12,7 @@ row below. Do not read [ops.md](ops.md) end to end unless the task spans rows.
 | Writing or trimming a skill | [CONTRIBUTING.md](../../CONTRIBUTING.md#adding-or-changing-a-skill) (growth policy included). Not ops.md |
 | Committing or publishing a branch | [ops.md — Commit signing](ops.md#commit-signing) and [What belongs in git](ops.md#what-belongs-in-git) |
 | Replying to a reviewer bot | [ops.md — Reviewer-bot threads](ops.md#reviewer-bot-threads) |
+| Configuring CodeRabbit or requesting its second review pass | [ops.md — CodeRabbit configuration](ops.md#coderabbit-configuration) |
 | Merging to master | [ops.md — Pre-merge cross-check](ops.md#pre-merge-cross-check) and [Branch protection](ops.md#branch-protection) |
 | Claiming Windows, macOS, or WSL behavior | [ops.md — Multi-environment maintenance](ops.md#multi-environment-maintenance) |
 | Touching secrets, fixtures, or `.env` | [ops.md — Security Guidelines](ops.md#security-guidelines) |

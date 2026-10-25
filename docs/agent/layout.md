@@ -41,7 +41,7 @@ tracked top-level path and every `.github/` file.
 | `.github/labeler.yml` | Path-based labels (the body-based ones live in a workflow, since labeler v5 cannot read the body) |
 | `.github/dependabot.yml` | Weekly version-update PRs for the SHA-pinned actions |
 | `.pre-commit-config.yaml` | Local hook running the hermetic gate tier at commit time |
-| `.coderabbit.yaml` | Reviewer-bot config: manual reviews only, "Review skipped" status silenced |
+| `.coderabbit.yaml` | Versioned CodeRabbit policy: manual second pass, focused instructions, UI policy carried explicitly; see [ops.md](ops.md#coderabbit-configuration) |
 | `.pr_agent.toml` | Reviewer-bot config: Qodo automatic primary, repo-tuned instructions |
 | `AGENTS.md` | Always-on agent contract (slim); deep ops live under `docs/agent/` |
 | `CLAUDE.md` | `@AGENTS.md` import — the Claude Code entry point |
