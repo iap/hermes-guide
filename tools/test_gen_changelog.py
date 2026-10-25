@@ -170,7 +170,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             root = Path(tmp)
             _fixture(root)
             _commit(root, "feat: something (#1)")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             code, out = _run(root, "--check")
             if code != 1:
                 return f"--check with a missing section expected 1, got {code}: {out}"
@@ -209,7 +209,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             _commit(root, "feat(api): real change (#1)")
             _commit(root, "fix(api): second change (#2)")
             _commit(root, "release: bump to v1.0.0 with changelog section")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             (root / "CHANGELOG.md").write_text(
                 HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n"
                 "- **api**: real change (#1)\n",
@@ -235,7 +235,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             _fixture(root)
             _commit(root, "feat: thing (#1)")
             _commit(root, "chore(release): bump to 1.1.0 (#2)")
-            _git(root, "tag", "v1.1.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.1.0")
             (root / "plugin.yaml").write_text(
                 "name: demo\nversion: 1.1.0\n", encoding="utf-8"
             )
@@ -258,10 +258,10 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             root = Path(tmp)
             _fixture(root)
             _commit(root, "feat: old (#3)")
-            _git(root, "tag", "v0.6.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v0.6.0")
             _commit(root, "feat: new (#4)")
             _commit(root, "release: bump to v1.0.0")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             (root / "CHANGELOG.md").write_text(
                 HEADER
                 + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- new (#4)\n\n"
@@ -287,10 +287,10 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             root = Path(tmp)
             _fixture(root)
             _commit(root, "feat: old (#3)")
-            _git(root, "tag", "v0.6.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v0.6.0")
             _commit(root, "feat: new (#4)")
             _commit(root, "release: bump to v1.0.0")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             spec = importlib.util.spec_from_file_location("gen_changelog_order", TOOL)
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
@@ -321,7 +321,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             )
             _git(root, "add", "-A")
             _git(root, "commit", "-m", "track fixture files")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             clone = Path(tmp) / "clone"
             _git(Path(tmp), "clone", "--depth", "1", root.as_uri(), str(clone))
             code, out = _run(clone, "--check")
@@ -343,7 +343,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             _fixture(root)
             _commit(root, "Add triage guidance (#5)")
             _commit(root, "release: bump to v1.0.0")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             (root / "CHANGELOG.md").write_text(
                 HEADER + "## v1.0.0 (2026-01-01)\n\n### Chores\n\n"
                 "- triage guidance\n",
@@ -368,7 +368,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             _fixture(root)
             _commit(root, "chore(release): 0.8.7 publish metadata (#6)")
             _commit(root, "release: bump to v1.0.0")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             (root / "CHANGELOG.md").write_text(
                 HEADER + "## v1.0.0 (2026-01-01)\n\n### Chores\n\n- notes\n",
                 encoding="utf-8",
@@ -392,7 +392,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             _commit(root, "feat(api): real change (#1)")
             _commit(root, "fix(api): other change (#2)")
             _commit(root, "release: bump to v1.0.0")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             (root / "CHANGELOG.md").write_text(
                 HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n"
                 "- **api**: real change (#1)\n\n"
@@ -414,7 +414,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             root = Path(tmp)
             _fixture(root)
             _commit(root, "feat: first (#1)")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             # v1.0.0 is released, so its section is already in the file.
             (root / "CHANGELOG.md").write_text(
                 HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- first (#1)\n",
@@ -530,9 +530,9 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- thing (#1)\n",
                 encoding="utf-8",
             )
-            _git(root, "tag", "v1.0.0")
-            _git(root, "tag", "docs-snapshot")
-            _git(root, "tag", "pre-refactor")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "docs-snapshot")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "pre-refactor")
             code, out = _run(root, "--check")
             if code != 0:
                 return f"marker tags caused a false positive: exit={code}: {out}"
@@ -550,9 +550,9 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
                 HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- thing (#1)\n",
                 encoding="utf-8",
             )
-            _git(root, "tag", "v1.0.0")
-            _git(root, "tag", "v1.5.0")          # release tag, no section
-            _git(root, "tag", "docs-snapshot")   # marker tag
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.5.0")          # release tag, no section
+            _git(root, "-c", "tag.gpgsign=false", "tag", "docs-snapshot")   # marker tag
             code, out = _run(root, "--check")
             if code != 1:
                 return f"uncovered release tags expected 1, got {code}: {out}"
@@ -572,7 +572,7 @@ def _cases() -> list[tuple[str, Callable[[], str | None]]]:
             root = Path(tmp)
             _fixture(root)
             _commit(root, "feat: first (#1)")
-            _git(root, "tag", "v1.0.0")
+            _git(root, "-c", "tag.gpgsign=false", "tag", "v1.0.0")
             (root / "CHANGELOG.md").write_text(
                 HEADER + "## v1.0.0 (2026-01-01)\n\n### Features\n\n- first (#1)\n",
                 encoding="utf-8",
