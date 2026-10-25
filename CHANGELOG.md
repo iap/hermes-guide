@@ -2,6 +2,19 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.11 (2026-10-25)
+
+### Bug Fixes
+
+- **commands**: mirror the loader's skill command names ([#346](https://github.com/iap/hermes-guide/pull/346))
+- **hooks**: in-process by default, redacted doctor output ([#347](https://github.com/iap/hermes-guide/pull/347))
+
+### Documentation
+
+- **agents**: enumerate review threads via GraphQL ([#350](https://github.com/iap/hermes-guide/pull/350))
+- **agents**: route deep-ops reads and pin contract rows ([#349](https://github.com/iap/hermes-guide/pull/349))
+- **agent**: record commit-signing rules for API and upstream writes ([#348](https://github.com/iap/hermes-guide/pull/348))
+
 ## v0.8.10 (2026-10-24)
 
 ### Bug Fixes
