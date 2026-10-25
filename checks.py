@@ -874,48 +874,65 @@ def _merge_allowlist_json(result, source_label, home=None):
     }
 
 
+_CRED_WORDS = (
+    r"TOKEN|SECRET|PASSWORD|PASSWD|PWD|API[-_]?KEY|"
+    r"ACCESS[-_]?KEY[-_]?ID|CREDENTIAL|AUTH"
+)
+
+# A credential key is a bare name (`API_KEY`), a quoted JSON name
+# (`"api_key"`), or a flag (`--api-key`).
+_CRED_KEY = (
+    r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
+)
+
+# One value: a quoted string (with \\" escapes handled), or a bare token.
+_CRED_VALUE = r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s,;\']+)'
+
+# The separator may be `:`/`=` or plain whitespace, because a flag-style
+# command (`--api-key ***`) separates the key from its value with a space.
+_CRED_RE = re.compile(
+    r"(?i)(?P<key>" + _CRED_KEY + r")\s*(?P<sep>[:=]?)\s*(?P<val>" + _CRED_VALUE + r")"
+)
+
+_BEARER_RE = re.compile(
+    # `Authorization: Basic <cred>` / `Authorization: Bearer *** <cred>` — the
+    # scheme word and the credential are both dropped; no stray token remains.
+    r"(?i)\b(?P<key>Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?\S+"
+)
+_PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")
+_URL_CRED_RE = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@\s]+@")
+
+
 def _redact_hook_output(text):
     """Strip credential-looking values from `hermes hooks doctor` output.
 
     The doctor prints configured hook commands, and a command may carry a
-    token (`API_KEY=...`, `Authorization: Bearer ...`). The report is returned
+    token (`API_KEY=*** `Authorization: Bearer ***`). The report is returned
     into a session that a gateway can deliver to a chat channel, so raw
-    stdout cannot be copied through. Hook names and ✗/⚠ markers are preserved;
-    only the value after a credential-shaped key is replaced.
+    stdout cannot be copied through. Hook names, the script path and the
+    ✗/⚠ markers are preserved; only the credential VALUE is replaced — never
+    the rest of the line.
     """
     if not text:
         return text
-    text = re.sub(
-        # Consume the whole value: `Basic dXNlcjpwYXNz` and quoted passwords
-        # (`PASSWORD="correct horse battery staple"`) both hide a multiword
-        # credential, not just the first token.
-        r"(?i)\b(Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?(?:\"[^\"]*\"|'[^']*'|[^\n,;]+)",
-        r"\1=***",
-        text,
-    )
-    text = re.sub(
-        # Header names carry hyphens (`x-api-key`) and the value may be
-        # quoted or contain spaces, so `[^\n,;]+` is not enough.
-        r"(?i)\b([A-Z0-9_-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|CREDENTIAL)[A-Z0-9_-]*)"
-        r"\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|[^\n,;]+)",
-        r"\1=***",
-        text,
-    )
-    text = re.sub(r"(?i)\b(Bearer)\s+[A-Za-z0-9._~+/=-]+", r"\1 ***", text)
-    # `sk-ant-api03-…` has a separator inside the key, so the character class
-    # must include hyphens and underscores, not just letters and digits.
-    text = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b", "***", text)
-    # Quoted JSON keys: a credential-shaped name inside `"..."` is separated
-    # from its value by the closing quote, so the bare-name patterns miss it
-    # (`curl --json '{"password":"...","api_key":"..."}'`). Match the quoted
-    # name and consume its quoted or bare value.
-    text = re.sub(
-        r'(?i)("[A-Z0-9_-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|CREDENTIAL|AUTH)[A-Z0-9_-]*")'
-        r'\s*:\s*(?:"[^"]*"|\'[^\']*\'|[^\s,;}]+)',
-        r"\1:***",
-        text,
-    )
-    text = re.sub(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/@\s]+@", r"\1***@", text)
+
+    def _red(m):
+        d = m.groupdict()
+        key = d.get("key") or ""
+        sep = d.get("sep") or ""
+        val = d.get("val") or ""
+        if not key:
+            return m.group(0)
+        # Keep the separator's shape: `:` and `=` keep theirs, a whitespace
+        # separator becomes a single space so `--api-key***` reads as `--api-key ***`.
+        return f"{key}{sep if sep else ' '}***"
+
+    # Authorization first: its value is `scheme credential`, and the generic
+    # key rule would otherwise match the header name and leave the token behind.
+    text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
+    text = _CRED_RE.sub(_red, text)
+    text = _PROVIDER_KEY_RE.sub("***", text)
+    text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
     return text
 
 
@@ -2342,7 +2359,9 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "hooks inspection unavailable",
         "Hooks were skipped in this run, so hook failures surface only during "
         "a session.",
-        "Run `hermes guide hooks` without `--fast` to inspect hooks on demand.",
+        "Hooks are inspected in-process by default and nothing was inspected "
+        "here — add `--deep` (or run `hermes hooks doctor` directly) for the "
+        "live check that executes each approved hook once.",
     ),
     "HOOKS_CONFIG_NOT_FOUND": (
         "hooks config missing",
