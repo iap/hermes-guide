@@ -15,12 +15,12 @@ Checks are read-only by design: they resolve paths, read files, parse them, and
 shell out to `hermes ... doctor`-style commands. They never mutate config,
 enable/disable anything, or auto-fix.
 
-One shell-out is not side-effect free: `hermes hooks doctor` executes every
-approved shell hook once with a synthetic payload — that is what verifies a
-hook actually runs. It stays on the explicit `/hermes-doctor` and `hermes
-guide` paths; proactive runs (session start/end) use `check_hooks_readonly()`,
-an in-process inspection that registers nothing, runs no hooks, and starts no
-subprocess.
+The default hooks check is in-process (`check_hooks_readonly()`): it inspects
+configuration, consent state and the exec bit without running anything. The
+deep variant (`--deep`, `check_hooks()`) runs `hermes hooks doctor`, which
+executes every approved shell hook once with a synthetic payload — that is
+what verifies a hook actually runs. It is opt-in precisely because it is not
+side-effect free; proactive runs (session start/end) always stay in-process.
 """
 
 import collections
@@ -874,7 +874,115 @@ def _merge_allowlist_json(result, source_label, home=None):
     }
 
 
+_CRED_WORDS = (
+    r"TOKEN|SECRET|PASSWORD|PASSWD|PWD|API[-_]?KEY|"
+    r"ACCESS[-_]?KEY[-_]?ID|CREDENTIAL|AUTH"
+)
+
+# A credential key is a bare name (`API_KEY`), a quoted JSON name
+# (`"api_key"`), or an explicit flag (`--api-key`).
+_CRED_KEY = r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
+# `--user`/`--username` and curl's `--proxy-user` carry HTTP auth too; keep
+# them separate so `--user-agent` is not mistaken for a credential flag.
+_CRED_FLAG_KEY = (
+    r'(?:--[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
+    r'|--(?:proxy-)?user(?:name)?)'
+)
+
+# A shell word may concatenate adjacent bare, quoted and escaped segments
+# (`top'secret'`, `top\ secret`). Consume every segment but stop at an
+# unescaped separator so the next argument is left intact.
+_CRED_VALUE = (
+    r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|(?:\\.|[^\s,;\'"\\])+)+'
+)
+
+# Ordinary keys need a real `:` or `=` separator. Requiring it is what stops
+# `_CRED_RE` from reading a hook NAME as a credential key: without it,
+# `auth-hook PASSWORD="..."` matched `auth-hook` as the key and swallowed only
+# the first word of the real value (Greptile regression).
+_CRED_RE = re.compile(
+    r"(?i)(?P<key>" + _CRED_KEY + r")\s*(?P<sep>[:=])\s*(?P<val>" + _CRED_VALUE + r")"
+)
+
+# Flag-style keys (`--api-key ***`, `--user=***`) separate key from value
+# with whitespace or `=`.
+_CRED_FLAG_RE = re.compile(
+    r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")(?:\s*=\s*|\s+)(?P<val>" + _CRED_VALUE + r")"
+)
+
+# `-u` is curl's short basic-auth flag, but `python -u` means unbuffered and
+# `sort -u` means unique. Mask it only when the value contains the `user:pass`
+# separator, so a script path such as `python -u /tmp/hook.py` survives.
+_CRED_SHORT_USER_RE = re.compile(
+    r"(?i)(?P<key>(?<![\w-])-u)"
+    r"(?P<sep>\s*=\s*|\s+|(?=[^\s=]))(?P<val>" + _CRED_VALUE + r")"
+)
+
+_BEARER_RE = re.compile(
+    # `Authorization: Basic <cred>` / `Authorization: Bearer *** <cred>` — the
+    # scheme word and the credential are both dropped; no stray token remains.
+    r"(?i)\b(?P<key>Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?\S+"
+)
+# Standalone bearer credentials (`--oauth2-bearer <jwt>`, `Bearer <token>`) are
+# not tied to an Authorization header.
+_BEARER_TOKEN_RE = re.compile(r"(?i)\b(?:Bearer|--oauth2-bearer)\s+(?P<val>\S+)")
+_PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")
+_URL_CRED_RE = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@\s]+@")
+
+
+def _redact_hook_output(text):
+    """Strip credential-looking values from `hermes hooks doctor` output.
+
+    The doctor prints configured hook commands, and a command may carry a
+    token (`API_KEY=*** `Authorization: Bearer ***`). The report is returned
+    into a session that a gateway can deliver to a chat channel, so raw
+    stdout cannot be copied through. Hook names, the script path and the
+    ✗/⚠ markers are preserved; only the credential VALUE is replaced — never
+    the rest of the line.
+    """
+    if not text:
+        return text
+
+    def _red(m):
+        d = m.groupdict()
+        key = d.get("key") or ""
+        sep = d.get("sep") or ""
+        val = d.get("val") or ""
+        if not key:
+            return m.group(0)
+        # Keep the separator's shape: `:` and `=` keep theirs, a whitespace
+        # separator becomes a single space so `--api-key***` reads as `--api-key ***`.
+        return f"{key}{sep if sep else ' '}***"
+
+    # Authorization first: its value is `scheme credential`, and the generic
+    # key rule would otherwise match the header name and leave the token behind.
+    text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
+    # Flag-style keys BEFORE the ordinary rule: a quoted flag value may itself
+    # contain an assignment (`--password "…TOKEN=x"`), and masking the whole
+    # quoted value first stops the inner `TOKEN=x` from consuming part of it
+    # and leaving the rest of the password visible (Greptile regression).
+    text = _CRED_FLAG_RE.sub(lambda m: f"{m.group('key')} ***", text)
+    text = _CRED_RE.sub(_red, text)
+    text = _CRED_SHORT_USER_RE.sub(
+        lambda m: (
+            f"{m.group('key')} ***"
+            if ":" in (m.group("val") or "")
+            else m.group(0)
+        ),
+        text,
+    )
+    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
+    text = _PROVIDER_KEY_RE.sub("***", text)
+    text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
+    return text
+
+
 def check_hooks():
+    """Deep hooks check: runs `hermes hooks doctor` and redacts its output.
+
+    The doctor executes each approved hook once with a synthetic payload.
+    This is the `--deep` path only; the default is `check_hooks_readonly()`.
+    """
     # `hermes hooks doctor` exits 0 even with problems, so we parse its output
     # (rc is not a reliable signal — it is 0 in all cases). Count the U+2717 /
     # U+26A0 markers emitted per hook rather than matching the summary line's
@@ -882,6 +990,8 @@ def check_hooks():
     rc, stdout, stderr = _run_hermes(
         list(constants.CLI_HOOKS_DOCTOR_ARGV), timeout=_HOOKS_DOCTOR_TIMEOUT
     )
+    safe_stdout = _redact_hook_output(stdout)
+    safe_stderr = _redact_hook_output(stderr)
     if rc != 0 or not stdout.strip():
         return {
             "id": "HOOKS_DOCTOR_UNAVAILABLE",
@@ -889,7 +999,7 @@ def check_hooks():
             "reason": f"`hermes hooks doctor` unavailable or failed (rc={rc})",
             # Keep Hermes stderr as evidence: a timeout surfaces here as
             # rc=-124 with a "timed out after Ns" message naming the cause.
-            "detail": (stderr.strip()[:2000] or stdout.strip()[:2000]) or None,
+            "detail": (safe_stderr.strip()[:2000] or safe_stdout.strip()[:2000]) or None,
         }
     if constants.HOOKS_DOCTOR_NONE_CONFIGURED in stdout:
         result = {"status": "healthy", "reason": "no shell hooks configured", "detail": None}
@@ -901,7 +1011,7 @@ def check_hooks():
                 "id": "HOOKS_DOCTOR_FINDINGS",
                 "status": "broken",
                 "reason": f"`hermes hooks doctor` reported {len(markers)} finding(s)",
-                "detail": stdout.strip()[:2000],
+                "detail": safe_stdout.strip()[:2000],
             }
         elif constants.HOOKS_DOCTOR_HEALTHY_SUMMARY in stdout:
             result = {"status": "healthy", "reason": "hooks doctor passed", "detail": None}
@@ -912,7 +1022,7 @@ def check_hooks():
                 "id": "HOOKS_DOCTOR_OPAQUE",
                 "status": "unknown",
                 "reason": "`hermes hooks doctor` output matched no known summary pattern",
-                "detail": stdout.strip()[:2000],
+                "detail": safe_stdout.strip()[:2000],
             }
     # A malformed allowlist is real breakage regardless of the doctor's verdict —
     # but it must not *replace* the doctor's findings. _merge_allowlist_json
@@ -939,14 +1049,16 @@ def _load_shell_hooks():
 def check_hooks_readonly():
     """Inspect configured hooks in-process: no hook runs, no subprocess starts.
 
-    The variant proactive mode uses at session boundaries. `hermes hooks
-    doctor` executes every approved hook once with a synthetic payload —
-    correct when the user asked for it explicitly, wrong for a boundary they
-    did not. This reads the same sources the doctor reads — configured hooks
+    This is the default for every path, including proactive session boundaries
+    and the explicit `/hermes-doctor` / `hermes guide` surfaces. The deep
+    variant (`--deep`) runs `hermes hooks doctor`, which executes every
+    approved hook once with a synthetic payload — correct when the user asked
+    for it, wrong for a default they did not opt into. This reads the same
+    sources the doctor reads — configured hooks
     (`iter_configured_hooks`, which parses without registering), consent state
     (`allowlist_entry_for`) and the exec bit (`script_is_executable`) — and
     reports the static subset of findings. Deeper doctor checks (mtime drift,
-    live execution) stay on the manual path.
+    live execution) stay behind `--deep`.
     """
     shell_hooks = _load_shell_hooks()
     if shell_hooks is None:
@@ -2288,7 +2400,9 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "hooks inspection unavailable",
         "Hooks were skipped in this run, so hook failures surface only during "
         "a session.",
-        "Run `hermes guide hooks` without `--fast` to inspect hooks on demand.",
+        "Hooks are inspected in-process by default and nothing was inspected "
+        "here — add `--deep` (or run `hermes hooks doctor` directly) for the "
+        "live check that executes each approved hook once.",
     ),
     "HOOKS_CONFIG_NOT_FOUND": (
         "hooks config missing",
@@ -2453,7 +2567,9 @@ _CHECKS = [
     ("mcp", check_mcp_servers_shape),
     ("skills", check_skills),
     ("commands", check_commands),
-    ("hooks", check_hooks),
+    # In-process by default: the doctor variant executes every approved hook,
+    # so it is reachable only through the explicit `--deep` flag.
+    ("hooks", check_hooks_readonly),
     ("plugins", check_plugins),
     # Label is "memories" (the $HERMES_HOME/memories/ directory the check
     # audits) — "memory" is reserved by constants.PLUGIN_SUBCATEGORY_DIRS and
@@ -2474,7 +2590,7 @@ def labels():
     return [label for label, _ in _CHECKS]
 
 
-def run_all(scope=None, readonly_hooks=False, fast=False):
+def run_all(scope=None, deep_hooks=False, fast=False):
     """Run every check, or exactly the one named by ``scope``.
 
     Each check is isolated: a crash in one check surfaces as a `broken`
@@ -2485,10 +2601,10 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
     ``ValueError`` naming the valid ones — matching on a substring would let
     ``s`` silently run four checks and a typo report success.
 
-    ``readonly_hooks`` swaps the hooks check for its in-process variant
-    (``check_hooks_readonly``): no hook runs, no subprocess starts. Proactive
-    boundaries pass it; the explicit CLI and slash-command paths keep the
-    deeper ``hermes hooks doctor`` check.
+    Hooks are inspected in-process by default (``check_hooks_readonly``): no
+    hook runs, no subprocess starts. ``deep_hooks`` opts into the
+    doctor-backed variant (``check_hooks``), which executes each approved hook
+    once; the explicit ``--deep`` flag is the only path that sets it.
 
     ``fast`` is the degraded-host variant: no subprocess starts at all (every
     ``_run_hermes`` call short-circuits) and hooks always use the in-process
@@ -2533,8 +2649,8 @@ def run_all(scope=None, readonly_hooks=False, fast=False):
         for label, fn in _CHECKS:
             if scope is not None and scope != label:
                 continue
-            if (readonly_hooks or fast) and label == "hooks":
-                fn = check_hooks_readonly
+            if deep_hooks and not fast and label == "hooks":
+                fn = check_hooks
             try:
                 results[label] = _attach_finding(fn())
             except Exception as exc:

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.8
+version: 1.1.9
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -76,7 +76,7 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 3. `hermes hooks doctor` / `hermes hooks list` → consent, exec bit, drift (pitfalls 1, 2).
 4. `hermes hooks test <event>` → behavior under a synthetic payload (3, 5).
 5. Apply the fix, restart the session/gateway, re-test.
-6. Re-run the detector: `hermes guide hooks` headless or `/hermes-doctor hooks` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
+6. Re-run the detector: `hermes guide hooks --deep` headless or `/hermes-doctor hooks --deep` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved. The unqualified `hermes guide hooks` / `/hermes-doctor hooks` inspects static state (config, consent, exec bit) and never executes a hook — use it when you only need to confirm registration. Add `--deep` when the diagnosis turns on runtime behavior (a hook that runs but misbehaves) or mtime drift, because that flag is what runs `hermes hooks doctor`.
 
 ## Report
 
@@ -101,4 +101,4 @@ Approve the hook by starting an interactive session (`hermes --cli`, or bare `he
 
 ---
 
-*Facts re-verified 2026-10-10 against upstream source at commit `b406d25f24462a61f01541069c90b78051c2c257` — correction: consent guidance now prefers interactive TTY approval of a specific hook over `--accept-hooks` (which approves all hooks) or `hooks_auto_accept: true`, which turns the consent gate off for every hook on non-TTY surfaces (`hermes_cli/config_defaults.py`, `hermes_cli/oneshot.py`). All other facts unchanged from the 2026-09-14 pass (`46a0daee58abbc1b07f84f505a5ba90f1958295c`); sources are cited inline so the next reviewer can re-verify fast.*
+*Facts re-verified 2026-10-10 against upstream source at commit `b406d25f24462a61f01541069c90b78051c2c257` — correction: consent guidance now prefers interactive TTY approval of a specific hook over `--accept-hooks` (which approves all hooks) or `hooks_auto_accept: true`, which turns the consent gate off for every hook on non-TTY surfaces (`hermes_cli/config_defaults.py`, `hermes_cli/oneshot.py`). All other facts unchanged from the 2026-09-14 pass (`46a0daee58abbc1b07f84f505a5ba90f1958295c`); sources are cited inline so the next reviewer can re-verify fast. Detector wording corrected 2026-10-24: the plugin's default hooks check is in-process, so the recheck step now says `--deep` (which runs `hermes hooks doctor`) for runtime or drift questions.*

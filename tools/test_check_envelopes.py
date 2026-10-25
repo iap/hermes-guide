@@ -140,6 +140,113 @@ def case_hooks_unaffected_when_allowlist_fine(checks):
     print("OK: doctor envelope unchanged when the allowlist is fine")
 
 
+def case_hooks_redact_credentials(checks):
+    """Hook commands can carry tokens; the report must not quote them.
+
+    Qodo/CodeRabbit-reviewed cases (PR #347): multiword `Basic` values, quoted
+    passwords containing spaces, adjacent quoted/escaped shell words,
+    hyphenated header names, flag-style values, user-auth flags (`--user`,
+    `--user=`, `--proxy-user`, `-u`, attached `-uUSER:PASS`), modern provider
+    key forms, quoted JSON keys, escaped quotes inside a JSON value, and URL
+    userinfo. Two properties are asserted: the secret never reaches `detail`,
+    and the rest of the line (script path, status text, hook name) survives
+    untouched. Fixture secrets are built from character codes so no credential
+    literal sits in the source.
+    """
+    s = chr(34)   # double quote
+
+    def code(*parts):
+        return "".join(chr(p) for p in parts)
+
+    api_key = code(115, 51, 99, 114, 101, 116)                 # short token
+    basic = code(100, 88, 78, 108, 99, 106, 112, 119, 89, 88, 78, 54)
+    apikey_hdr = "demo_" + "1" * 20
+    openai = "sk-ant…stuv"
+    pw = "correct horse battery staple"
+    url_cred = code(117, 115, 101, 114) + ":" + code(112, 97, 115, 115)
+    url = "https://" + url_cred + "@example.test/hook"
+    aws = "AKIA" + "1" * 16
+    shell_quoted = "top" + chr(39) + api_key + chr(39)
+    shell_escaped = "top" + chr(92) + " " + api_key
+    user_cred = "alice:" + api_key
+    proxy_cred = "proxy:" + api_key
+    # a JSON password containing an escaped quote, then more text
+    json_escaped = (s + code(112, 97, 115, 115, 119, 111, 114, 100) + s + ":"
+                    + s + code(99, 111, 114, 114, 101, 99, 116) + chr(92) + s
+                    + " horse battery staple" + s)
+    json_body = (s + code(112, 97, 115, 115, 119, 111, 114, 100) + s + ":"
+                 + s + api_key + s + "," + s
+                 + code(97, 112, 105, 95, 107, 101, 121) + s + ":"
+                 + s + apikey_hdr + s)
+    aws_body = (s + code(97, 119, 115, 95, 97, 99, 99, 101, 115, 115, 95, 107,
+                       101, 121, 95, 105, 100) + s + ":" + s + aws + s)
+
+    def cred(name, value):
+        return "  " + MARK_BAD + " " + name + "   " + value + "\n"
+
+    doctor_out = (
+        "Shell hooks\n"
+        + cred("leaky-hook", "API_KEY=" + s + api_key + s)
+        + cred("bearer-hook", "Authorization: Basic " + basic)
+        + cred("header-hook", "x-api-key: " + s + apikey_hdr + s)
+        + cred("openai-hook", "OPENAI_API_KEY=" + s + openai + s)
+        + cred("quoted-hook", "PASSWORD=" + s + pw + s)
+        + cred("url-hook", url)
+        + cred("json-hook", "curl --json " + json_body)
+        + cred("escaped-hook", "curl --json " + json_escaped)
+        + cred("aws-hook", "curl --json " + aws_body)
+        + cred("flag-hook", "hook --api-key " + s + api_key + s + " ./run.sh")
+        + cred("oauth-hook", "curl --oauth2-bearer " + openai + " https://example.test")
+        + cred("named-hook", "auth-hook PASSWORD=" + s + pw + s + " ./run.sh")
+        + cred("shell-quoted-hook", "PASSWORD=" + shell_quoted + " ./run.sh")
+        + cred("shell-escaped-hook", "PASSWORD=" + shell_escaped + " ./run.sh")
+        + cred("user-hook", "curl --user " + user_cred + " https://example.test")
+        + cred("user-eq-hook", "curl --user=" + user_cred + " https://example.test")
+        + cred("proxy-hook", "curl --proxy-user " + proxy_cred + " https://example.test")
+        + cred("short-user-hook", "curl -u " + user_cred + " https://example.test")
+        + cred("attached-user-hook", "curl -u" + user_cred + " https://example.test")
+        + cred("unbuffered-hook", "python -u /tmp/hook.py")
+        + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
+        # a quoted flag value containing its own assignment: the whole quoted
+        # value must be masked before the inner KEY=value rule runs
+        + cred("nested-flag", "hook --password " + s + "correct horse TOKEN="
+               + api_key + s + " ./run.sh")
+        + cred("normal-hook", "node /tmp/hook.js")
+    )
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
+    checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
+    checks._check_allowlist_json = lambda home=None: None
+
+    env = checks.check_hooks()
+    text = str(env.get("detail") or "")
+    for secret in (api_key, basic, apikey_hdr, openai, pw, url_cred, aws,
+                   shell_quoted, shell_escaped, user_cred, proxy_cred):
+        assert secret not in text, text
+    assert "horse battery staple" not in text, text
+    # the nested-flag case must be guarded by the SURVIVING fragment, not just
+    # the full password: a broken replacement order leaves a bare `horse`
+    # behind, which the full-string assertion alone would not catch.
+    assert "horse" not in text, text
+    for hook in ("leaky-hook", "bearer-hook", "header-hook", "openai-hook",
+                 "quoted-hook", "url-hook", "json-hook", "escaped-hook",
+                 "aws-hook", "flag-hook", "oauth-hook", "named-hook",
+                 "shell-quoted-hook", "shell-escaped-hook", "user-hook",
+                 "user-eq-hook", "proxy-hook", "short-user-hook",
+                 "attached-user-hook", "unbuffered-hook", "agent-hook",
+                 "nested-flag", "normal-hook"):
+        assert hook in text, text
+    # the rest of the line must survive: script path and status text
+    assert "node /tmp/hook.js" in text, text
+    assert "./run.sh" in text, text
+    assert "curl --user ***" in text, text
+    assert "curl --proxy-user ***" in text, text
+    assert "curl -u ***" in text, text
+    assert "python -u /tmp/hook.py" in text, text
+    assert "curl --user-agent Mozilla/5.0" in text, text
+    assert "***" in text, text
+    print("OK: hook doctor output is redacted before it reaches the report")
+
+
 def case_allowlist_reuses_caller_home(checks):
     """The merge passes a resolved home through instead of re-resolving."""
     seen = []
@@ -262,6 +369,7 @@ def main() -> int:
         case_hooks_merges_doctor_findings,
         case_hooks_allowlist_alone_when_doctor_healthy,
         case_hooks_unaffected_when_allowlist_fine,
+        case_hooks_redact_credentials,
         case_allowlist_reuses_caller_home,
         case_plugins_disabled_wins_over_bundled,
         case_plugins_nested_user_key_not_bundled,
@@ -275,7 +383,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 9 check-envelope case(s) passed")
+    print("\nOK: 10 check-envelope case(s) passed")
     return 0
 
 

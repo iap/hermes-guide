@@ -9,6 +9,7 @@ subprocess call the text path would not already owe (here: zero, because the
 only notice-bearing call lives in `_version_check`).
 """
 
+import argparse
 import io
 import json
 import shutil
@@ -246,6 +247,23 @@ def main() -> int:
         failures.append(f"text renderer changed: {text!r}")
     if len(calls) != 1:
         failures.append(f"text path should run the notice exactly once, saw {len(calls)}")
+
+    # 6. --deep is a real CLI flag and reaches run_all as deep_hooks=True.
+    seen = {}
+    checks_mod.run_all = lambda *a, **k: (seen.update(k), healthy)[1]
+    parser = argparse.ArgumentParser()
+    plugin._setup_cli(parser)
+    ns = parser.parse_args(["hooks", "--deep", "--json"])
+    cap3 = _Capture()
+    cap3.start()
+    try:
+        plugin._run_cli(ns)
+    except SystemExit:
+        pass
+    finally:
+        cap3.stop()
+    if seen.get("deep_hooks") is not True:
+        failures.append(f"--deep did not reach run_all: {seen}")
 
     if failures:
         for f in failures:

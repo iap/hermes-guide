@@ -19,8 +19,8 @@ Cases (a fake ``agent.shell_hooks`` is injected via ``checks._load_shell_hooks``
 8. the check never takes a subprocess path: ``_run`` / ``_run_hermes`` are
    booby-trapped for every case above, and the fake raises if ``run_once``
    (hook execution) is ever called;
-9. ``run_all(readonly_hooks=True)`` swaps in the readonly check; the default
-   ``run_all()`` still uses the doctor-based one.
+9. ``run_all()`` uses the readonly check by default; only
+   ``run_all(deep_hooks=True)`` takes the doctor-based path.
 
 Run: python3 tools/test_hooks_readonly_check.py
 """
@@ -167,8 +167,8 @@ def main(argv: list[str]) -> int:
         _expect("unreadable config", r.get("status"), "unknown", f" ({r.get('reason')})")
         config.write_text(saved, encoding="utf-8")
 
-        # 8. wiring: run_all(readonly_hooks=True) uses the readonly check,
-        #    the default keeps the doctor-based check.
+        # 8. wiring: run_all() defaults to the readonly check; deep_hooks=True
+        #    is the only path that reaches the doctor-based check.
         checks._store().clear()
         doctor_calls = []
         checks._run = lambda cmd, timeout=20: (0, "No shell hooks configured.\n", "")
@@ -177,14 +177,24 @@ def main(argv: list[str]) -> int:
             (0, "No shell hooks configured.\n", ""),
         )[1]
         _install([spec])  # readonly flags this spec as not allowlisted
-        r_ro = checks.run_all(scope="hooks", readonly_hooks=True)
         r_default = checks.run_all(scope="hooks")
-        if r_ro["hooks"].get("status") != "broken":
-            failures.append(f"readonly_hooks did not use the readonly check: {r_ro['hooks']!r}")
-        if r_default["hooks"].get("status") != "healthy":
-            failures.append(f"default path did not use the doctor check: {r_default['hooks']!r}")
-        if not doctor_calls:
-            failures.append("default hooks check never called the hermes CLI")
+        # The guard Greptile flagged: the default must not reach the doctor at
+        # all, not merely report broken.
+        if doctor_calls:
+            failures.append(f"default hooks check executed the doctor: {doctor_calls!r}")
+        r_deep = checks.run_all(scope="hooks", deep_hooks=True)
+        if r_default["hooks"].get("status") != "broken":
+            failures.append(f"default path did not use the readonly check: {r_default['hooks']!r}")
+        if r_deep["hooks"].get("status") != "healthy":
+            failures.append(f"deep path did not use the doctor check: {r_deep['hooks']!r}")
+        # deep+fast must stay in-process: --fast wins over --deep.
+        doctor_calls.clear()
+        checks._store().clear()
+        r_fast_deep = checks.run_all(scope="hooks", deep_hooks=True, fast=True)
+        if doctor_calls:
+            failures.append(f"fast+deep still executed the doctor: {doctor_calls!r}")
+        if r_fast_deep["hooks"].get("status") not in ("unknown", "broken", "healthy"):
+            failures.append(f"fast+deep gave an unusable envelope: {r_fast_deep['hooks']!r}")
 
     if failures:
         for f in failures:
