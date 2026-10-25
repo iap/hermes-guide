@@ -14,6 +14,10 @@ Verifies three behaviors introduced for mixed bundled/user skill libraries:
 3. ``check_commands`` includes each skill's ``version`` in slug-collision
    messages, so a stale unversioned copy is distinguishable from a newer
    versioned one at a glance.
+4. A valid catalog with no unique entries stays authoritative (no mirror
+   fallback), while a malformed catalog does fall back.
+5. Skill slugs keep Unicode letters, matching Hermes' skill-command rule;
+   bundle slugs remain ASCII.
 
 Uses a synthetic ``$HERMES_HOME`` (monkeypatched) so it does not touch the
 real install and does not require the ``hermes`` CLI.
@@ -251,17 +255,94 @@ def main(argv: list[str]) -> int:
         }):
             checks._store().clear()
             checks._hermes_home_from_library = lambda: str(bad_home)
+            if checks._catalog_command_entries(str(bad_home)) is not None:
+                failures.append("malformed catalog entries were silently accepted")
             cr3 = checks.check_commands()
             if cr3["status"] == "healthy" or "mirror" not in cr3.get("reason", ""):
                 failures.append(
                     f"an unusable catalog was reported as an empty command set: {cr3}"
                 )
 
+        # (7) a valid catalog with no unique entries is an authoritative empty
+        # command set. The disk pair below would collide if the mirror ran, so
+        # a fallback is visible; shadowed/ambiguous-only catalogs must behave
+        # the same as an empty list (disabled entries are filtered upstream).
+        empty_home = Path(td) / "empty-catalog-home"
+        _write(empty_home / "skills/alpha-one/SKILL.md",
+               "---\nname: alpha\ndescription: a\n---\nbody\n")
+        _write(empty_home / "skills/alpha-two/SKILL.md",
+               "---\nname: alpha\ndescription: b\n---\nbody\n")
+        fake_skills3 = types.ModuleType("tools.skills_tool")
+        fake_skills3._skill_catalog = lambda: []
+        fake_tools3 = types.ModuleType("tools")
+        fake_tools3.skills_tool = fake_skills3
+        fake_hc3 = types.ModuleType("hermes_constants")
+        fake_hc3.get_hermes_home = lambda: str(empty_home)
+        with mock.patch.dict(sys.modules, {
+            "tools": fake_tools3,
+            "tools.skills_tool": fake_skills3,
+            "hermes_constants": fake_hc3,
+        }):
+            checks._store().clear()
+            checks._hermes_home_from_library = lambda: str(empty_home)
+            if checks._catalog_command_entries(str(empty_home)) != []:
+                failures.append("valid empty catalog was not preserved as []")
+            cr4 = checks.check_commands()
+            if cr4["status"] != "healthy" or any(
+                    "normalize to" in d for d in (cr4.get("detail") or [])):
+                failures.append(f"valid empty catalog fell back to the mirror: {cr4}")
+            fake_skills3._skill_catalog = lambda: [
+                {"name": "alpha", "path": str(empty_home / "skills/alpha-one/SKILL.md"),
+                 "status": "shadowed"},
+                {"name": "alpha", "path": str(empty_home / "skills/alpha-two/SKILL.md"),
+                 "status": "ambiguous"},
+            ]
+            if checks._catalog_command_entries(str(empty_home)) != []:
+                failures.append("non-unique-only catalog was not preserved as []")
+            cr5 = checks.check_commands()
+            if cr5["status"] != "healthy" or any(
+                    "normalize to" in d for d in (cr5.get("detail") or [])):
+                failures.append(f"non-unique-only catalog fell back to the mirror: {cr5}")
+
+        # (8) skill names use Hermes' Unicode-preserving slug; bundle names do
+        # not. `report` and `report报告` must not be reported as a collision.
+        unicode_home = Path(td) / "unicode-home"
+        _write(unicode_home / "skills/report/SKILL.md",
+               "---\nname: report\ndescription: ascii\n---\nbody\n")
+        _write(unicode_home / "skills/report-cn/SKILL.md",
+               "---\nname: report报告\ndescription: unicode\n---\nbody\n")
+        fake_skills4 = types.ModuleType("tools.skills_tool")
+        fake_skills4._skill_catalog = lambda: [
+            {"name": "report", "path": str(unicode_home / "skills/report/SKILL.md"),
+             "status": "unique"},
+            {"name": "report报告", "path": str(unicode_home / "skills/report-cn/SKILL.md"),
+             "status": "unique"},
+        ]
+        fake_tools4 = types.ModuleType("tools")
+        fake_tools4.skills_tool = fake_skills4
+        fake_hc4 = types.ModuleType("hermes_constants")
+        fake_hc4.get_hermes_home = lambda: str(unicode_home)
+        with mock.patch.dict(sys.modules, {
+            "tools": fake_tools4,
+            "tools.skills_tool": fake_skills4,
+            "hermes_constants": fake_hc4,
+        }):
+            checks._store().clear()
+            checks._hermes_home_from_library = lambda: str(unicode_home)
+            if checks._skill_slug("report报告") != "report报告":
+                failures.append("skill slug stripped Unicode letters")
+            if checks._bundle_slug("report报告") != "report":
+                failures.append("bundle slug no longer strips Unicode letters")
+            cr6 = checks.check_commands()
+            if cr6["status"] != "healthy" or any(
+                    "normalize to" in d for d in (cr6.get("detail") or [])):
+                failures.append(f"Unicode skill names reported a false collision: {cr6}")
+
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
         return 1
-    print("OK: skill-library checks behave as expected (bundled label, hidden-dir skip, versioned collisions)")
+    print("OK: skill-library checks behave as expected (catalog validity, Unicode slugs, bundled label, hidden-dir skip, versioned collisions)")
     return 0
 
 

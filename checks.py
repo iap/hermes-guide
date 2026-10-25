@@ -459,18 +459,29 @@ def _as_name_set(value):
     return {v for v in value if isinstance(v, str)}
 
 
-# Slug normalization — identical to Hermes agent/skill_bundles.py::_slugify and
-# agent/skill_commands.py::scan_skill_commands (same patterns + steps).
+# Bundle slugs follow Hermes agent/skill_bundles.py::_slugify (ASCII only).
+# Skill command slugs follow agent/skill_commands.py::slugify_skill_name, whose
+# `\w` keeps Unicode letters: `report` and `report报告` are distinct commands.
 _BUNDLE_INVALID_CHARS = re.compile(r"[^a-z0-9-]")
+_SKILL_INVALID_CHARS = re.compile(r"[^\w-]")
 _BUNDLE_MULTI_HYPHEN = re.compile(r"-{2,}")
 
 
 def _bundle_slug(name):
-    """Normalize a skill/bundle name to the hyphenated slash-command slug."""
+    """Normalize a bundle name to the hyphenated slash-command slug."""
     if not isinstance(name, str):
         return ""
     cmd = name.lower().replace(" ", "-").replace("_", "-")
     cmd = _BUNDLE_INVALID_CHARS.sub("", cmd)
+    return _BUNDLE_MULTI_HYPHEN.sub("-", cmd).strip("-")
+
+
+def _skill_slug(name):
+    """Normalize a skill name like agent/skill_commands.py::slugify_skill_name."""
+    if not isinstance(name, str):
+        return ""
+    cmd = name.lower().replace(" ", "-").replace("_", "-")
+    cmd = _SKILL_INVALID_CHARS.sub("", cmd)
     return _BUNDLE_MULTI_HYPHEN.sub("-", cmd).strip("-")
 
 
@@ -769,22 +780,26 @@ def _skill_command_name(dirpath, fm, skills_root):
     return os.path.basename(dirpath.rstrip(os.sep))
 
 
+_CATALOG_STATUSES = frozenset({"unique", "shadowed", "ambiguous"})
+
+
 def _catalog_command_entries(home):
     """``(skill_md_path, name, version)`` for skills the loader gives a bare slug, or None.
 
     Mirrors ``agent/skill_commands.py::scan_skill_commands``: only catalog
     entries with ``status == "unique"`` register a bare ``/slug``; shadowed and
     ambiguous copies are reached by path and must not be reported as
-    collisions. The catalog also applies the platform/environment/apps gates
-    and the disabled list, so this path can neither miss nor invent one.
+    collisions. The status set mirrors `agent/skill_utils.py::resolve_skill_catalog`
+    (`unique`, `shadowed`, `ambiguous`); `tools/skills_tool.py::_skill_catalog`
+    has already applied the platform/environment/apps gates and the disabled
+    list, so this path can neither miss nor invent one.
 
     Returns None when the catalog is unavailable (outside a live Hermes
-    process) or describes a different home than the one being diagnosed — a
-    stubbed test/profile home must not be judged against another profile's
-    skills. A catalog that carries no ``status`` annotation is also refused:
-    without it there is no way to tell a unique skill from a shadowed copy, so
-    reporting zero collisions from such a build would be an unearned clean
-    bill of health. Callers then fall back to the local mirror.
+    process), describes a different home, or carries an entry whose shape is
+    not understood. A valid catalog with no unique entries — empty, all
+    shadowed/ambiguous, or all names empty — returns ``[]``: that is an
+    authoritative empty command set, not a reason to scan the filesystem.
+    Callers fall back to the local mirror only on None.
     """
     try:
         _skill_catalog = importlib.import_module("tools.skills_tool")._skill_catalog
@@ -797,19 +812,26 @@ def _catalog_command_entries(home):
         return None
     if not isinstance(entries, list):
         return None
-    # A build whose catalog predates the `status` annotation cannot tell a
-    # unique skill from a shadowed copy. Treat every entry as unknown rather
-    # than silently reporting zero collisions; the caller falls back to the
-    # name/platform mirror.
-    if entries and not any(isinstance(e, dict) and "status" in e for e in entries):
-        return None
     out = []
     for entry in entries:
-        if not isinstance(entry, dict) or entry.get("status") != "unique":
+        if not isinstance(entry, dict):
+            return None
+        status = entry.get("status")
+        name = entry.get("name")
+        if status not in _CATALOG_STATUSES or not isinstance(name, str):
+            return None
+        raw_path = entry.get("path")
+        if isinstance(raw_path, str):
+            path = raw_path
+        elif isinstance(raw_path, os.PathLike):
+            path = os.fspath(raw_path)
+        else:
+            return None
+        if not isinstance(path, str) or not path:
+            return None
+        if status != "unique" or not name:
             continue
-        name, path = entry.get("name"), entry.get("path")
-        if isinstance(name, str) and name and path:
-            out.append((str(path), name, (frontmatter(str(path)) or {}).get("version")))
+        out.append((path, name, (frontmatter(path) or {}).get("version")))
     return out
 
 
@@ -820,8 +842,9 @@ def check_commands():
     (the normal in-session case): the catalog resolves tier precedence and
     applies the loader's platform/environment gates, so a shadowed copy is
     never reported as a collision and a name-less skill is not missed. Outside
-    a live Hermes process the local mirror reproduces the loader's name rule
-    (declared name, else directory name at the top of the skills root).
+    a live Hermes process — or when the catalog's shape is not understood —
+    the local mirror reproduces the loader's name rule (declared name, else
+    directory name at the top of the skills root).
     """
     home = _hermes_home()
     if not home:
@@ -834,13 +857,6 @@ def check_commands():
 
     entries = _catalog_command_entries(home)
     mirror_used = entries is None
-    # A catalog that resolved but yielded nothing usable is NOT an empty
-    # command set: it means the build's catalog is shaped unlike this check
-    # expects. Reporting `healthy` there would be an unearned clean bill of
-    # health (Qodo finding 1). Fall back to the mirror instead.
-    if entries is not None and not entries:
-        entries = None
-        mirror_used = True
     if entries is None:
         skills_root = os.path.join(home, "skills")
         entries = []
@@ -856,7 +872,7 @@ def check_commands():
     skill_slug_versions: dict[str, str] = {}  # slug -> version string of first owner
     collisions = []
     for skill_md, name, version in entries:
-        s = _bundle_slug(name)
+        s = _skill_slug(name)
         if not s:
             continue
         dirpath = os.path.dirname(skill_md)
@@ -878,7 +894,7 @@ def check_commands():
     builtin_names = _builtin_command_names()
     if builtin_names:
         for skill_md, name, _version in entries:
-            s = _bundle_slug(name)
+            s = _skill_slug(name)
             if s and s in builtin_names:
                 collisions.append(
                     f"skill `{_rel_path(os.path.dirname(skill_md), home)}` (/{s}) shadows a built-in command "
