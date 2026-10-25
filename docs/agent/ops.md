@@ -66,10 +66,12 @@ strings in `constants.py`.
 `checks.py` resolves paths, reads files, parses, and shells out to `hermes …`
 commands. It never mutates config and never auto-fixes
 (`tools/check_no_mutation.py`). One command is not side-effect free: `hermes
-hooks doctor` executes each approved hook once, so it stays on the manual
-paths — proactive runs use `check_hooks_readonly()` (no hook runs, no
-subprocess). A new check returns an envelope and tolerates malformed input
-without crashing.
+hooks doctor` executes each approved hook once, so it runs only behind the
+opt-in `--deep` flag on `/hermes-doctor` and `hermes guide`. The default
+hooks check is `check_hooks_readonly()` — in-process, reads config, consent
+state and the exec bit, and executes nothing; proactive runs use it too (no
+hook runs, no subprocess). A new check returns an envelope and tolerates
+malformed input without crashing.
 
 `plugin.yaml` keeps `capabilities:` empty. Do not add one without a concrete need.
 
