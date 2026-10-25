@@ -215,6 +215,7 @@ def case_hooks_redact_credentials(checks):
         + cred("auth-header-hook", "AUTH_HEADER=" + s + "Basic " + basic + s)
         + cred("auth-mode-hook", "tool --auth-mode Bearer opaque-token")
         + cred("quoted-bearer-hook", "curl --password " + s + "private Bearer abc" + s)
+        + cred("quoted-scheme-hook", "tool --auth-mode=" + s + "Bearer" + s + " opaque-two")
         # quoted password containing an auth header must mask the whole value
         # (CodeRabbit regression: bearer pass consumed the closing quote)
         + cred("quoted-auth-in-password-hook",
@@ -292,6 +293,7 @@ def case_hooks_redact_credentials(checks):
     assert "private" not in text, text
     assert "private Bearer" not in text, text
     assert "quoted-bearer-hook" in text, text
+    assert "opaque-two" not in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")

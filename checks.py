@@ -1096,7 +1096,7 @@ _BEARER_RE = re.compile(
 )
 # Standalone bearer credentials (`--oauth2-bearer <jwt>`, `Bearer <token>`) are
 # not tied to an Authorization header.
-_BEARER_TOKEN_RE = re.compile(r"(?i)\b(?:Bearer|--oauth2-bearer)\s+(?P<val>\S+)")
+_BEARER_TOKEN_RE = re.compile(r'(?i)(?:"?Bearer"?|--oauth2-bearer)\s+(?P<val>"[^"]*"|\'[^\']*\'|\S+)')
 _PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")
 _URL_CRED_RE = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@\s]+@")
 
@@ -1133,6 +1133,11 @@ def _redact_hook_output(text):
     # regression). `_BEARER_RE` runs after so an unquoted
     # `Authorization: Bearer <token>` is still masked before `_CRED_RE`.
     text = _CRED_FLAG_RE.sub(lambda m: f"{m.group('key')} ***", text)
+    # Standalone bearer pairs next: the flag rule already masked a quoted value
+    # as a whole, so `--password "private Bearer abc"` cannot leak here;
+    # an unquoted `"Bearer" <token>` must be masked before `_CRED_RE`
+    # consumes the scheme word.
+    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
     # Authorization (and common proxy/auth header variants): its value is
     # `scheme credential`, and the generic key rule would otherwise match the
     # header name and leave the token behind.
@@ -1146,9 +1151,6 @@ def _redact_hook_output(text):
         ),
         text,
     )
-    # Standalone bearer pairs last: a quoted flag value was already masked as
-    # a whole above, so `--password "private Bearer abc"` cannot leak `private`.
-    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
     text = _PROVIDER_KEY_RE.sub("***", text)
     text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
     return text
