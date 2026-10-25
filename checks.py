@@ -1056,7 +1056,7 @@ _CRED_KEY = r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
 # `--user`/`--username` and curl's `--proxy-user` carry HTTP auth too; keep
 # them separate so `--user-agent` is not mistaken for a credential flag.
 _CRED_FLAG_KEY = (
-    r'(?:--[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
+    r'(?:--(?!auth[-_]?(?:mode|type|method)\b)[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
     r'|--(?:proxy-)?user(?:name)?)'
 )
 
@@ -1128,10 +1128,6 @@ def _redact_hook_output(text):
     # Authorization first: its value is `scheme credential`, and the generic
     # key rule would otherwise match the header name and leave the token behind.
     text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
-    # Standalone bearer pairs BEFORE the flag rule: a flag such as
-    # `--auth-mode Bearer <token>` otherwise consumes `Bearer` as its value,
-    # leaving the token for no later rule to see.
-    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
     # Flag-style keys BEFORE the ordinary rule: a quoted flag value may itself
     # contain an assignment (`--password "…TOKEN=x"`), and masking the whole
     # quoted value first stops the inner `TOKEN=x` from consuming part of it
@@ -1146,6 +1142,9 @@ def _redact_hook_output(text):
         ),
         text,
     )
+    # Standalone bearer pairs last: a quoted flag value was already masked as
+    # a whole above, so `--password "private Bearer abc"` cannot leak `private`.
+    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
     text = _PROVIDER_KEY_RE.sub("***", text)
     text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
     return text

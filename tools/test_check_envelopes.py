@@ -214,6 +214,7 @@ def case_hooks_redact_credentials(checks):
         + cred("basic-auth-hook", "BASIC_AUTH=" + s + "alice:" + api_key + s)
         + cred("auth-header-hook", "AUTH_HEADER=" + s + "Basic " + basic + s)
         + cred("auth-mode-hook", "tool --auth-mode Bearer opaque-token")
+        + cred("quoted-bearer-hook", "curl --password " + s + "private Bearer abc" + s)
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -261,6 +262,8 @@ def case_hooks_redact_credentials(checks):
     # an auth-mode flag must not split `Bearer <token>` past the bearer rule
     assert "opaque-token" not in text, text
     assert "auth-mode-hook" in text, text
+    assert "private Bearer" not in text, text
+    assert "quoted-bearer-hook" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")
