@@ -207,6 +207,10 @@ def case_hooks_redact_credentials(checks):
     for secret in (api_key, basic, apikey_hdr, openai, pw, url_cred, aws):
         assert secret not in text, text
     assert "horse battery staple" not in text, text
+    # the nested-flag case must be guarded by the SURVIVING fragment, not just
+    # the full password: a broken replacement order leaves a bare `horse`
+    # behind, which the full-string assertion alone would not catch.
+    assert "horse" not in text, text
     for hook in ("leaky-hook", "bearer-hook", "header-hook", "openai-hook",
                  "quoted-hook", "url-hook", "json-hook", "escaped-hook",
                  "aws-hook", "flag-hook", "oauth-hook", "named-hook",
