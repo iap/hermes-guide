@@ -233,7 +233,8 @@ def case_hooks_redact_credentials(checks):
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text
     assert "./run.sh" in text, text
-    assert "https://example.test" in text, text
+    assert "curl --user ***" in text, text
+    assert "curl --proxy-user ***" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")
