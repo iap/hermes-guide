@@ -21,7 +21,9 @@ Version lives in five sites (plugin.yaml, __init__.py, SECURITY.md policy senten
 
 Behavioral changes under tools/ need tools/test_*.py coverage wired into .github/workflows/reusable-ci.yml — flag behavior without a wired test.
 
-Ground factual claims in this repo's source or the installed Hermes agent; say explicitly when a claim needs live verification instead of asserting it."""
+Ground factual claims in this repo's source or the installed Hermes agent; say explicitly when a claim needs live verification instead of asserting it.
+
+For regex, parser, and fallback-path findings: name the exact line in the reviewed revision and a concrete input that triggers the claimed failure. Check `constants.py` and `tools/test_*.py` for an existing guard before reporting. If the triggering code is not in the current diff, say the finding is cross-file rather than asserting a regression; if no triggering input can be named, report it as a question, not a bug."""
 
 # Ask Qodo to surface coverage gaps in review. This is advisory only — it
 # does not block merges; enforcement stays with CI's tool-coverage guard
