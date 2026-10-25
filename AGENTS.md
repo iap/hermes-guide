@@ -24,8 +24,9 @@ Hermes source and is not a fork of `hermes-agent`.
   rewrite upstream messages as ours.
 - **Not core, permanently.** hermes-guide will not seek to become part of Hermes
   core, and no change to Hermes code or behavior is filed upstream for this
-  plugin's benefit. The exception is its own catalog listing:
-  `plugin-catalog/hermes-guide.yaml` is ours to maintain, so pin bumps and
+  plugin's benefit. The exception is its own catalog listing, which lives in the
+  upstream repository at `plugin-catalog/hermes-guide.yaml` under
+  `NousResearch/hermes-agent` — that entry is ours to maintain, so pin bumps and
   disclosure edits there are ordinary maintenance reviewed like any other entry.
   Genuine Hermes defects found while diagnosing still go upstream as ordinary
   bug reports — the rule is about this plugin's scope, not about withholding
