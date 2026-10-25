@@ -55,6 +55,12 @@ Learn these from the guard, not from memory — each one names its own script.
   `--json --fast` keeps fast mode's no-subprocess contract.
 - `/hermes-doctor` stays text-only; the JSON contract is a terminal surface.
 
+### Python style
+
+No separate formatter is configured. Match the neighbouring function in
+`checks.py`: return an envelope, do not print a report, and keep drift-prone
+strings in `constants.py`.
+
 ### Read-only, always
 
 `checks.py` resolves paths, reads files, parses, and shells out to `hermes …`
