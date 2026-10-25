@@ -210,6 +210,9 @@ def case_hooks_redact_credentials(checks):
         # word `AUTH` alone was over-matched and corrupted the report.
         + cred("author-hook", "git commit --author " + s + "Jane Doe" + s + " -m x")
         + cred("author-env-hook", "AUTHOR=Jane Doe")
+        # compound AUTH names ARE credentials and must still be masked
+        + cred("basic-auth-hook", "BASIC_AUTH=" + s + "alice:" + api_key + s)
+        + cred("auth-header-hook", "AUTH_HEADER=" + s + "Basic " + basic + s)
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -237,7 +240,8 @@ def case_hooks_redact_credentials(checks):
                  "shell-quoted-hook", "shell-escaped-hook", "user-hook",
                  "user-eq-hook", "proxy-hook", "short-user-hook",
                  "attached-user-hook", "unbuffered-hook", "agent-hook",
-                 "author-hook", "author-env-hook", "nested-flag", "normal-hook"):
+                 "author-hook", "author-env-hook", "basic-auth-hook",
+                 "auth-header-hook", "nested-flag", "normal-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text
@@ -246,8 +250,13 @@ def case_hooks_redact_credentials(checks):
     assert "curl --proxy-user ***" in text, text
     assert "curl -u ***" in text, text
     assert "python -u /tmp/hook.py" in text, text
-    # non-credential `AUTH` words survive untouched
-    assert "Jane Doe" in text, text
+    # non-credential `AUTH` words survive untouched. Assert each command
+    # separately: a shared `Jane Doe` string would let one fixture's failure be
+    # masked by the other still matching (Greptile finding).
+    assert "git commit --author " + s + "Jane Doe" + s + " -m x" in text, text
+    assert "AUTHOR=Jane Doe" in text, text
+    # compound AUTH names are credentials and must still be masked
+    assert "BASIC_AUTH=" in text and "alice:" not in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")
