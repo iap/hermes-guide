@@ -37,7 +37,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
 
 
 def _build_home(root: Path) -> None:
@@ -262,6 +262,12 @@ def main(argv: list[str]) -> int:
                 failures.append(
                     f"an unusable catalog was reported as an empty command set: {cr3}"
                 )
+            fake_skills2._skill_catalog = lambda: [
+                {"name": "alpha", "path": str(bad_home / "skills/alpha/SKILL.md"),
+                 "status": ["unique"]},
+            ]
+            if checks._catalog_command_entries(str(bad_home)) is not None:
+                failures.append("unhashable catalog status was not rejected")
 
         # (7) a valid catalog with no unique entries is an authoritative empty
         # command set. The disk pair below would collide if the mirror ran, so

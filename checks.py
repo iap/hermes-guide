@@ -818,7 +818,11 @@ def _catalog_command_entries(home):
             return None
         status = entry.get("status")
         name = entry.get("name")
-        if status not in _CATALOG_STATUSES or not isinstance(name, str):
+        if (
+            not isinstance(status, str)
+            or status not in _CATALOG_STATUSES
+            or not isinstance(name, str)
+        ):
             return None
         raw_path = entry.get("path")
         if isinstance(raw_path, str):
