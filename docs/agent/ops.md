@@ -185,6 +185,53 @@ local until the user explicitly asks for it.
   on purpose and say so in the commit message — do not silently broaden the ignore
   rules afterwards.
 
+## CodeRabbit configuration
+
+[`.coderabbit.yaml`](../../.coderabbit.yaml) owns this repository's CodeRabbit
+policy. It carries the settings previously held in the UI and uses
+`inheritance: false`; ordinary repository/organization UI settings do not fill
+omitted values. Organization/workspace global overrides can still win. Edit the
+tracked file for project changes, and inspect the resolved configuration when
+the observed behavior differs. See CodeRabbit's
+[configuration precedence](https://docs.coderabbit.ai/configuration/configuration-inheritance).
+
+Qodo remains the automatic primary reviewer. After its findings are addressed,
+request `@coderabbitai full review` for a complete CodeRabbit pass. After fixes,
+use `@coderabbitai review` for new changes only. Automatic and automatic
+incremental reviews are disabled, so a push alone does not request another
+pass. Mention `@coderabbitai` for follow-up chat. See the
+[command reference](https://docs.coderabbit.ai/reference/review-commands).
+
+The assertive profile is intentional: use CodeRabbit for a thorough second
+opinion, with concrete evidence for parser/fallback findings. Keep review
+metadata and static-analysis tools; suppress the extra PR-description summary,
+diagrams, effort estimate, and poem. The file also disables docstring generation
+and the generic docstring-percentage check, since that threshold is not a repo
+requirement. Incorrect or missing contract documentation still merits review.
+Automatic approvals and the built-in finishing-touch code generators are off.
+Issue enrichment stays enabled independently; issue planning stays disabled.
+
+`AGENTS.md` is detected automatically; `CONTRIBUTING.md` is explicitly included
+as a guideline. Path instructions focus on contracts and observed review gaps,
+including the trigger requirement introduced in PR #354. They are advisory and
+do not guarantee deduplication across reviewers. CI remains the enforcement
+layer. Web search is enabled for upstream context; findings must distinguish
+the pinned citation baseline or targeted installed version from newer upstream
+behavior. See [code guidelines](https://docs.coderabbit.ai/knowledge-base/code-guidelines)
+and [path instructions](https://docs.coderabbit.ai/configuration/path-instructions).
+
+Verify on a PR after the configuration is available to CodeRabbit:
+
+1. Post `@coderabbitai configuration` and check the source annotations: manual
+   reviews, manual incremental reviews, approvals off, web search on, and this
+   file's path instructions. Investigate global overrides if they differ.
+2. Run `@coderabbitai full review`; inspect reviewed commits, skipped files, and
+   findings against the current PR head. A schema check cannot verify live
+   installation access, plan availability, or review quality.
+3. After several representative PRs, compare actionable findings, repeated or
+   declined findings, and review rounds. Adjust a specific instruction when
+   evidence shows a gap; keep security and behavior coverage intact.
+
 ## Reviewer-bot threads
 
 A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. Triage each thread before replying: reproduce it against the repo guards and cited code, then fix or decline with file:line evidence. Never auto-resolve a thread to unblock a merge.

@@ -1,9 +1,135 @@
-# CodeRabbit configuration for iap/hermes-guide.
-#
-# Reviews stay manual here (`@coderabbitai review` per PR): automatic reviews
-# are disabled in the CodeRabbit dashboard, not in this file — do not enable
-# them here. This file exists for one reason: silence the "Review skipped"
-# status comment on every PR (`reviews.review_status: false`).
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Repository policy: Qodo reviews automatically; request CodeRabbit after Qodo
+# with `@coderabbitai full review`, then `@coderabbitai review` after fixes.
+# This file carries the UI policy explicitly; ordinary UI settings are not
+# inherited. Organization/workspace global overrides can still take precedence.
+# Rationale and verification: docs/agent/ops.md#coderabbit-configuration
+inheritance: false
+tone_instructions: >-
+  Follow CONTRIBUTING.md#tone. Keep findings concise: describe the impact,
+  cite evidence, and suggest a concrete fix.
 
 reviews:
+  # Keep a thorough second pass; target noise through evidence and presentation.
+  profile: assertive
+  # Qodo already supplies the PR description. Keep CodeRabbit's review evidence.
+  high_level_summary: false
   review_status: false
+  review_info: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  poem: false
+  suggested_labels: false
+  auto_review:
+    enabled: false
+    auto_incremental_review: false
+    ignore_usernames:
+      - "dependabot[bot]"
+  auto_approvals:
+    enabled: false
+    max_merge_risk: low
+    max_security_risk: low
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+    simplify:
+      enabled: false
+    autofix:
+      enabled: false
+    fix_ci:
+      enabled: false
+    resolve_merge_conflict:
+      enabled: false
+  pre_merge_checks:
+    # There is no repository-wide docstring percentage requirement.
+    # Still review misleading documentation and undocumented public behavior.
+    docstrings:
+      mode: "off"
+
+  # No extra path exclusions: skills, generated-doc sources, tests, and CI
+  # all carry contracts. Built-in analysis tools remain at their defaults.
+  path_instructions:
+    - path: "**"
+      instructions: |
+        Review hermes-guide as a read-only diagnostics plugin plus a skills tap;
+        it is not Hermes core. Apply AGENTS.md and the existing public contracts.
+        Check the pre-change behavior and affected callers before proposing a fix.
+        For regex, parser, and fallback-path findings, cite the exact reviewed
+        line and a concrete triggering input. Check constants.py and existing
+        tools/test_*.py guards first. Label findings outside the diff as cross-file;
+        if no trigger can be identified, ask a question instead of asserting a bug.
+        Existing tests are evidence to inspect, not proof that a path is correct.
+        When upstream behavior matters, prefer source at the relevant revision:
+        .github/upstream-drift.baseline for citations, or the explicitly targeted
+        installed version for runtime claims. Use official Hermes sources for web
+        context; label newer behavior as drift rather than silently changing the
+        baseline contract. State when a claim needs live verification.
+        If an existing review already identifies a defect, add a comment only
+        when contributing new evidence or a distinct impact. Another reviewer's
+        approval does not establish correctness.
+    - path: "**/*.py"
+      instructions: |
+        Prioritize filesystem/config mutation, secret leakage, malformed input,
+        timeout handling, and native Windows/POSIX behavior. Plugin checks return
+        envelopes; __init__.py owns presentation. Preserve finding IDs, exit codes,
+        and the single-document JSON contract. --fast must not spawn subprocesses;
+        --json alone does not imply --fast. Proactive hooks checks must not execute
+        hooks; explicit deep/manual hooks diagnosis may execute approved hooks.
+        Trace redaction through nested values and subprocess output. Keep upstream
+        names in constants.py and check scope changes against the CLI surface guard.
+    - path: "**/SKILL.md"
+      instructions: |
+        Check commands, config keys, platform claims, and source citations against
+        the relevant Hermes version. A skill edit requires a version increase;
+        provenance dates change only when facts were re-verified. Tap skills under
+        skills/ and plugin-registered skills under plugin-skills/ have separate
+        inventories. Preserve that distinction. Generated inventory blocks must
+        be refreshed through tools/render_docs.py. Do not recommend manual edits
+        to generated blocks or claim a text guard proves executable behavior.
+    - path: "skills/**/scripts/**"
+      instructions: |
+        Check actual execution paths, quoting, exit status, timeouts, and platform
+        availability. Behavioral changes need tests under tools/test_*.py wired
+        into reusable-ci.yml; text scans alone do not validate these scripts.
+    - path: "tools/**"
+      instructions: |
+        These are maintainer tools, not plugin runtime code. Some deliberately
+        generate files; inspect each command's contract before flagging writes.
+        Commands advertised as read-only must not mutate project or user config;
+        isolated fixture/temp setup may write. Behavioral changes need
+        executable regression coverage wired into .github/workflows/reusable-ci.yml.
+        Check the tool-coverage guard and existing tests before claiming a gap.
+        Preserve stdout/stderr and nonzero failure-status contracts.
+    - path: ".github/workflows/**"
+      instructions: |
+        Prioritize permissions, untrusted PR input, action pins, and fail-closed
+        checks. Preserve required status reporting on the PR head SHA, including
+        gate, and the existing platform/Python matrix. A skipped or missing check
+        is not a pass. Verify new tool tests are actually invoked by reusable CI.
+
+chat:
+  art: false
+  allow_non_org_members: false
+  # Require a mention for conversation; review triggers remain explicit commands.
+  auto_reply: false
+
+knowledge_base:
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    # AGENTS.md is auto-detected. Add the authoring standard without copying it.
+    filePatterns:
+      - "CONTRIBUTING.md"
+
+# Preserve the supplied issue workflow; issue enrichment is separate from reviews.
+issue_enrichment:
+  auto_enrich:
+    enabled: true
+  planning:
+    enabled: false
+    auto_planning:
+      enabled: false
