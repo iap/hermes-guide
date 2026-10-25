@@ -939,10 +939,12 @@ def _redact_hook_output(text):
     # Authorization first: its value is `scheme credential`, and the generic
     # key rule would otherwise match the header name and leave the token behind.
     text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
-    text = _CRED_RE.sub(_red, text)
-    # Flag-style keys are matched separately because they use a whitespace
-    # separator; folding them into _CRED_RE let a hook NAME masquerade as a key.
+    # Flag-style keys BEFORE the ordinary rule: a quoted flag value may itself
+    # contain an assignment (`--password "…TOKEN=x"`), and masking the whole
+    # quoted value first stops the inner `TOKEN=x` from consuming part of it
+    # and leaving the rest of the password visible (Greptile regression).
     text = _CRED_FLAG_RE.sub(lambda m: f"{m.group('key')} ***", text)
+    text = _CRED_RE.sub(_red, text)
     text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
     text = _PROVIDER_KEY_RE.sub("***", text)
     text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
