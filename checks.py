@@ -1092,7 +1092,7 @@ _CRED_SHORT_USER_RE = re.compile(
 _BEARER_RE = re.compile(
     # `Authorization: Basic <cred>` / `Authorization: Bearer *** <cred>` — the
     # scheme word and the credential are both dropped; no stray token remains.
-    r"(?i)\b(?P<key>Authorization|X-Auth|X-Authorization|Proxy-Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?\S+"
+    r'(?i)\b(?P<key>Authorization|X-Auth|X-Authorization|Proxy-Authorization)\s*[:=]\s*(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|(?:[A-Za-z]+\s+)?\S+)'
 )
 # Standalone bearer credentials (`--oauth2-bearer <jwt>`, `Bearer <token>`) are
 # not tied to an Authorization header.

@@ -224,6 +224,8 @@ def case_hooks_redact_credentials(checks):
         + cred("compound-auth-flag-hook", "tool --auth-mode-password hunter2")
         # non-Authorization auth headers must mask bearer tokens
         + cred("x-auth-header-hook", "curl -H " + s + "X-Auth: Bearer opaque-value" + s)
+        # quoted multi-word auth headers must mask the whole value
+        + cred("quoted-x-auth-hook", "curl -H " + s + "X-Auth: " + s + "Bearer secret-token" + s + s)
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -254,7 +256,8 @@ def case_hooks_redact_credentials(checks):
                  "author-hook", "author-env-hook", "basic-auth-hook",
                  "auth-header-hook", "nested-flag", "normal-hook",
                  "unquoted-bearer-flag-hook", "unquoted-bearer-assign-hook",
-                 "compound-auth-flag-hook", "x-auth-header-hook"):
+                 "compound-auth-flag-hook", "x-auth-header-hook",
+                 "quoted-x-auth-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text
@@ -279,6 +282,8 @@ def case_hooks_redact_credentials(checks):
     assert "hunter2" not in text, text
     # non-Authorization header bearer tokens must not leak
     assert "opaque-value" not in text, text
+    # quoted multi-word auth headers must not leak
+    assert "secret-token" not in text, text
     assert "private Bearer" not in text, text
     assert "quoted-bearer-hook" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
