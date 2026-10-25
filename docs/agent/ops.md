@@ -67,8 +67,9 @@ strings in `constants.py`.
 commands. It never mutates config and never auto-fixes
 (`tools/check_no_mutation.py`). One command is not side-effect free: `hermes
 hooks doctor` executes each approved hook once, so it runs only behind the
-opt-in `--deep` flag on `/hermes-doctor` and `hermes guide`. The default
-hooks check is `check_hooks_readonly()` — in-process, reads config, consent
+opt-in `--deep` flag on `/hermes-doctor` and `hermes guide`. `--fast` wins
+when both are supplied: fast mode starts no subprocess, so the doctor path does
+not run. The default hooks check is `check_hooks_readonly()` — in-process, reads config, consent
 state and the exec bit, and executes nothing; proactive runs use it too (no
 hook runs, no subprocess). A new check returns an envelope and tolerates
 malformed input without crashing.

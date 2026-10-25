@@ -213,6 +213,7 @@ def case_hooks_redact_credentials(checks):
         # compound AUTH names ARE credentials and must still be masked
         + cred("basic-auth-hook", "BASIC_AUTH=" + s + "alice:" + api_key + s)
         + cred("auth-header-hook", "AUTH_HEADER=" + s + "Basic " + basic + s)
+        + cred("auth-mode-hook", "tool --auth-mode Bearer opaque-token")
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -257,6 +258,9 @@ def case_hooks_redact_credentials(checks):
     assert "AUTHOR=Jane Doe" in text, text
     # compound AUTH names are credentials and must still be masked
     assert "BASIC_AUTH=" in text and "alice:" not in text, text
+    # an auth-mode flag must not split `Bearer <token>` past the bearer rule
+    assert "opaque-token" not in text, text
+    assert "auth-mode-hook" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")
