@@ -215,6 +215,15 @@ def case_hooks_redact_credentials(checks):
         + cred("auth-header-hook", "AUTH_HEADER=" + s + "Basic " + basic + s)
         + cred("auth-mode-hook", "tool --auth-mode Bearer opaque-token")
         + cred("quoted-bearer-hook", "curl --password " + s + "private Bearer abc" + s)
+        # unquoted bearer in flag/assignment values must mask the whole value
+        # (Greptile regression: `Bearer` was consumed alone, leaking the token)
+        + cred("unquoted-bearer-flag-hook", "tool --password Bearer secret-token")
+        + cred("unquoted-bearer-assign-hook", "AUTH_HEADER=Bearer secret-token")
+        # compound auth flags must still be masked (not excluded by the
+        # auth-mode/type/method exclusion)
+        + cred("compound-auth-flag-hook", "tool --auth-mode-password hunter2")
+        # non-Authorization auth headers must mask bearer tokens
+        + cred("x-auth-header-hook", "curl -H " + s + "X-Auth: Bearer opaque-value" + s)
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -243,7 +252,9 @@ def case_hooks_redact_credentials(checks):
                  "user-eq-hook", "proxy-hook", "short-user-hook",
                  "attached-user-hook", "unbuffered-hook", "agent-hook",
                  "author-hook", "author-env-hook", "basic-auth-hook",
-                 "auth-header-hook", "nested-flag", "normal-hook"):
+                 "auth-header-hook", "nested-flag", "normal-hook",
+                 "unquoted-bearer-flag-hook", "unquoted-bearer-assign-hook",
+                 "compound-auth-flag-hook", "x-auth-header-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text
@@ -262,6 +273,12 @@ def case_hooks_redact_credentials(checks):
     # an auth-mode flag must not split `Bearer <token>` past the bearer rule
     assert "opaque-token" not in text, text
     assert "auth-mode-hook" in text, text
+    # unquoted bearer tokens must not leak
+    assert "secret-token" not in text, text
+    # compound auth flag values must not leak
+    assert "hunter2" not in text, text
+    # non-Authorization header bearer tokens must not leak
+    assert "opaque-value" not in text, text
     assert "private Bearer" not in text, text
     assert "quoted-bearer-hook" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text

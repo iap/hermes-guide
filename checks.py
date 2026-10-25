@@ -1056,7 +1056,7 @@ _CRED_KEY = r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
 # `--user`/`--username` and curl's `--proxy-user` carry HTTP auth too; keep
 # them separate so `--user-agent` is not mistaken for a credential flag.
 _CRED_FLAG_KEY = (
-    r'(?:--(?!auth[-_]?(?:mode|type|method)\b)[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
+    r'(?:--(?!auth[-_]?(?:mode|type|method)(?:[\s=]|$))[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
     r'|--(?:proxy-)?user(?:name)?)'
 )
 
@@ -1064,7 +1064,7 @@ _CRED_FLAG_KEY = (
 # (`top'secret'`, `top\ secret`). Consume every segment but stop at an
 # unescaped separator so the next argument is left intact.
 _CRED_VALUE = (
-    r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|(?:\\.|[^\s,;\'"\\])+)+'
+    r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|Bearer\s+\S+|(?:\\.|[^\s,;\'"\\])+)+'
 )
 
 # Ordinary keys need a real `:` or `=` separator. Requiring it is what stops
@@ -1092,7 +1092,7 @@ _CRED_SHORT_USER_RE = re.compile(
 _BEARER_RE = re.compile(
     # `Authorization: Basic <cred>` / `Authorization: Bearer *** <cred>` — the
     # scheme word and the credential are both dropped; no stray token remains.
-    r"(?i)\b(?P<key>Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?\S+"
+    r"(?i)\b(?P<key>Authorization|X-Auth|X-Authorization|Proxy-Authorization)\s*[:=]\s*(?:[A-Za-z]+\s+)?\S+"
 )
 # Standalone bearer credentials (`--oauth2-bearer <jwt>`, `Bearer <token>`) are
 # not tied to an Authorization header.
