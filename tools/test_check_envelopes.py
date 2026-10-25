@@ -146,11 +146,12 @@ def case_hooks_redact_credentials(checks):
     Qodo/CodeRabbit-reviewed cases (PR #347): multiword `Basic` values, quoted
     passwords containing spaces, adjacent quoted/escaped shell words,
     hyphenated header names, flag-style values, user-auth flags (`--user`,
-    `--user=`, `--proxy-user`, `-u`), modern provider key forms, quoted JSON
-    keys, escaped quotes inside a JSON value, and URL userinfo. Two properties
-    are asserted: the secret never reaches `detail`, and the rest of the line
-    (script path, status text, hook name) survives untouched. Fixture secrets
-    are built from character codes so no credential literal sits in the source.
+    `--user=`, `--proxy-user`, `-u`, attached `-uUSER:PASS`), modern provider
+    key forms, quoted JSON keys, escaped quotes inside a JSON value, and URL
+    userinfo. Two properties are asserted: the secret never reaches `detail`,
+    and the rest of the line (script path, status text, hook name) survives
+    untouched. Fixture secrets are built from character codes so no credential
+    literal sits in the source.
     """
     s = chr(34)   # double quote
 
@@ -203,6 +204,8 @@ def case_hooks_redact_credentials(checks):
         + cred("user-eq-hook", "curl --user=" + user_cred + " https://example.test")
         + cred("proxy-hook", "curl --proxy-user " + proxy_cred + " https://example.test")
         + cred("short-user-hook", "curl -u " + user_cred + " https://example.test")
+        + cred("attached-user-hook", "curl -u" + user_cred + " https://example.test")
+        + cred("unbuffered-hook", "python -u /tmp/hook.py")
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -228,7 +231,8 @@ def case_hooks_redact_credentials(checks):
                  "quoted-hook", "url-hook", "json-hook", "escaped-hook",
                  "aws-hook", "flag-hook", "oauth-hook", "named-hook",
                  "shell-quoted-hook", "shell-escaped-hook", "user-hook",
-                 "user-eq-hook", "proxy-hook", "short-user-hook", "agent-hook",
+                 "user-eq-hook", "proxy-hook", "short-user-hook",
+                 "attached-user-hook", "unbuffered-hook", "agent-hook",
                  "nested-flag", "normal-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
@@ -237,6 +241,7 @@ def case_hooks_redact_credentials(checks):
     assert "curl --user ***" in text, text
     assert "curl --proxy-user ***" in text, text
     assert "curl -u ***" in text, text
+    assert "python -u /tmp/hook.py" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")

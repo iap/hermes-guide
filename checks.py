@@ -882,13 +882,11 @@ _CRED_WORDS = (
 # A credential key is a bare name (`API_KEY`), a quoted JSON name
 # (`"api_key"`), or an explicit flag (`--api-key`).
 _CRED_KEY = r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
-# `--user`/`--username`, curl's `--proxy-user`, and the `-u` short form carry
-# HTTP auth too; keep them separate so `--user-agent` is not mistaken for a
-# credential flag.
+# `--user`/`--username` and curl's `--proxy-user` carry HTTP auth too; keep
+# them separate so `--user-agent` is not mistaken for a credential flag.
 _CRED_FLAG_KEY = (
     r'(?:--[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
-    r'|--(?:proxy-)?user(?:name)?'
-    r'|(?<![\w-])-u)'
+    r'|--(?:proxy-)?user(?:name)?)'
 )
 
 # A shell word may concatenate adjacent bare, quoted and escaped segments
@@ -910,6 +908,14 @@ _CRED_RE = re.compile(
 # with whitespace or `=`.
 _CRED_FLAG_RE = re.compile(
     r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")(?:\s*=\s*|\s+)(?P<val>" + _CRED_VALUE + r")"
+)
+
+# `-u` is curl's short basic-auth flag, but `python -u` means unbuffered and
+# `sort -u` means unique. Mask it only when the value contains the `user:pass`
+# separator, so a script path such as `python -u /tmp/hook.py` survives.
+_CRED_SHORT_USER_RE = re.compile(
+    r"(?i)(?P<key>(?<![\w-])-u)"
+    r"(?P<sep>\s*=\s*|\s+|(?=[^\s=]))(?P<val>" + _CRED_VALUE + r")"
 )
 
 _BEARER_RE = re.compile(
@@ -957,6 +963,14 @@ def _redact_hook_output(text):
     # and leaving the rest of the password visible (Greptile regression).
     text = _CRED_FLAG_RE.sub(lambda m: f"{m.group('key')} ***", text)
     text = _CRED_RE.sub(_red, text)
+    text = _CRED_SHORT_USER_RE.sub(
+        lambda m: (
+            f"{m.group('key')} ***"
+            if ":" in (m.group("val") or "")
+            else m.group(0)
+        ),
+        text,
+    )
     text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
     text = _PROVIDER_KEY_RE.sub("***", text)
     text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
