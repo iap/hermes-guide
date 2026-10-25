@@ -113,6 +113,29 @@ Before any commit:
 
 These rules complement the "What belongs in git" table below.
 
+## Commit signing
+
+Local `commit.gpgsign` / `tag.gpgsign` cover only commits and tags created by
+`git` on this machine. Server-side writes bypass them:
+
+- A commit created through the GitHub **Contents API** is unsigned even when the
+  account has a signing key. Before opening a PR, check
+  `gh api repos/<owner>/<repo>/commits/<sha> --jq .commit.verification.verified`;
+  if it is `false`, recreate the commit locally with `git commit -S` and push the
+  branch instead.
+- GitHub web-UI commits are signed by web-flow. Squash merges are signed by
+  GitHub and verify on the merged commit; the original branch commits are not
+  what lands. Locally, `git log --show-signature` may say "No public key" for
+  web-flow commits until GitHub's key is imported — use the API verdict, not the
+  local keyring, for those.
+- Catalog re-pins in other repositories are upstream contributions and follow
+  the same rule: commit locally with `git commit -S`, verify with
+  `git verify-commit`, then push and open the PR. Never rewrite a merged
+  upstream branch to repair a signature.
+
+Verification is provenance, not content review: an unsigned commit can still be
+correct, but it breaks the signature chain for anyone checking it later.
+
 ## Testing Requirements
 
 Guards read text; tests execute behavior. Both are required, neither substitutes for the other.
