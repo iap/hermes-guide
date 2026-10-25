@@ -834,6 +834,13 @@ def check_commands():
 
     entries = _catalog_command_entries(home)
     mirror_used = entries is None
+    # A catalog that resolved but yielded nothing usable is NOT an empty
+    # command set: it means the build's catalog is shaped unlike this check
+    # expects. Reporting `healthy` there would be an unearned clean bill of
+    # health (Qodo finding 1). Fall back to the mirror instead.
+    if entries is not None and not entries:
+        entries = None
+        mirror_used = True
     if entries is None:
         skills_root = os.path.join(home, "skills")
         entries = []

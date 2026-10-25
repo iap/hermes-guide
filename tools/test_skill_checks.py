@@ -227,6 +227,36 @@ def main(argv: list[str]) -> int:
             if checks._catalog_command_entries(str(cmd_home)) is not None:
                 failures.append("catalog path: accepted a different profile's home")
 
+        # (6) a catalog that resolves but yields nothing usable must not be
+        # reported as an empty (healthy) command set — fall back to the mirror
+        # instead (Qodo finding 1).
+        bad_home = Path(td) / "bad-catalog-home"
+        _write(bad_home / "skills/alpha/SKILL.md",
+               "---\nname: alpha\ndescription: a\n---\nbody\n")
+        _write(bad_home / "skills/beta/SKILL.md",
+               "---\nname: beta\ndescription: b\n---\nbody\n")
+        fake_skills2 = types.ModuleType("tools.skills_tool")
+        fake_skills2._skill_catalog = lambda: [
+            {"name": 12345, "path": None, "status": "unique"},
+            {"status": "shadowed"},
+        ]
+        fake_tools2 = types.ModuleType("tools")
+        fake_tools2.skills_tool = fake_skills2
+        fake_hc2 = types.ModuleType("hermes_constants")
+        fake_hc2.get_hermes_home = lambda: str(bad_home)
+        with mock.patch.dict(sys.modules, {
+            "tools": fake_tools2,
+            "tools.skills_tool": fake_skills2,
+            "hermes_constants": fake_hc2,
+        }):
+            checks._store().clear()
+            checks._hermes_home_from_library = lambda: str(bad_home)
+            cr3 = checks.check_commands()
+            if cr3["status"] == "healthy" or "mirror" not in cr3.get("reason", ""):
+                failures.append(
+                    f"an unusable catalog was reported as an empty command set: {cr3}"
+                )
+
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
