@@ -1125,14 +1125,18 @@ def _redact_hook_output(text):
         # separator becomes a single space so `--api-key***` reads as `--api-key ***`.
         return f"{key}{sep if sep else ' '}***"
 
-    # Authorization first: its value is `scheme credential`, and the generic
-    # key rule would otherwise match the header name and leave the token behind.
-    text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
-    # Flag-style keys BEFORE the ordinary rule: a quoted flag value may itself
-    # contain an assignment (`--password "…TOKEN=x"`), and masking the whole
-    # quoted value first stops the inner `TOKEN=x` from consuming part of it
-    # and leaving the rest of the password visible (Greptile regression).
+    # Flag-style keys FIRST: a quoted flag value may itself contain an
+    # assignment or an auth header (`--password "…TOKEN=x"` or
+    # `--password "private X-Auth: Bearer abc"`), and masking the whole
+    # quoted value first stops the inner rule from consuming part of it and
+    # leaving the rest of the password visible (Greptile / CodeRabbit
+    # regression). `_BEARER_RE` runs after so an unquoted
+    # `Authorization: Bearer <token>` is still masked before `_CRED_RE`.
     text = _CRED_FLAG_RE.sub(lambda m: f"{m.group('key')} ***", text)
+    # Authorization (and common proxy/auth header variants): its value is
+    # `scheme credential`, and the generic key rule would otherwise match the
+    # header name and leave the token behind.
+    text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
     text = _CRED_RE.sub(_red, text)
     text = _CRED_SHORT_USER_RE.sub(
         lambda m: (

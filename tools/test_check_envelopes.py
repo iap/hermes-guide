@@ -215,6 +215,10 @@ def case_hooks_redact_credentials(checks):
         + cred("auth-header-hook", "AUTH_HEADER=" + s + "Basic " + basic + s)
         + cred("auth-mode-hook", "tool --auth-mode Bearer opaque-token")
         + cred("quoted-bearer-hook", "curl --password " + s + "private Bearer abc" + s)
+        # quoted password containing an auth header must mask the whole value
+        # (CodeRabbit regression: bearer pass consumed the closing quote)
+        + cred("quoted-auth-in-password-hook",
+               "hook --password " + s + "private X-Auth: Bearer abc" + s + " ./run.sh")
         # unquoted bearer in flag/assignment values must mask the whole value
         # (Greptile regression: `Bearer` was consumed alone, leaking the token)
         + cred("unquoted-bearer-flag-hook", "tool --password Bearer secret-token")
@@ -257,7 +261,7 @@ def case_hooks_redact_credentials(checks):
                  "auth-header-hook", "nested-flag", "normal-hook",
                  "unquoted-bearer-flag-hook", "unquoted-bearer-assign-hook",
                  "compound-auth-flag-hook", "x-auth-header-hook",
-                 "quoted-x-auth-hook"):
+                 "quoted-x-auth-hook", "quoted-auth-in-password-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text
@@ -284,6 +288,8 @@ def case_hooks_redact_credentials(checks):
     assert "opaque-value" not in text, text
     # quoted multi-word auth headers must not leak
     assert "secret-token" not in text, text
+    # quoted password containing an auth header must not leak
+    assert "private" not in text, text
     assert "private Bearer" not in text, text
     assert "quoted-bearer-hook" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
