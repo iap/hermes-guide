@@ -213,9 +213,6 @@ def case_hooks_redact_credentials(checks):
         # compound AUTH names ARE credentials and must still be masked
         + cred("basic-auth-hook", "BASIC_AUTH=" + s + "alice:" + api_key + s)
         + cred("auth-header-hook", "AUTH_HEADER=" + s + "Basic " + basic + s)
-        + cred("auth-mode-hook", "tool --auth-mode Bearer opaque-token")
-        + cred("quoted-bearer-hook", "curl --password " + s + "private Bearer abc" + s)
-        + cred("quoted-scheme-hook", "tool --auth-mode=" + s + "Bearer" + s + " opaque-two")
         # quoted password containing an auth header must mask the whole value
         # (CodeRabbit regression: bearer pass consumed the closing quote)
         + cred("quoted-auth-in-password-hook",
@@ -279,8 +276,6 @@ def case_hooks_redact_credentials(checks):
     # compound AUTH names are credentials and must still be masked
     assert "BASIC_AUTH=" in text and "alice:" not in text, text
     # an auth-mode flag must not split `Bearer <token>` past the bearer rule
-    assert "opaque-token" not in text, text
-    assert "auth-mode-hook" in text, text
     # unquoted bearer tokens must not leak
     assert "secret-token" not in text, text
     # compound auth flag values must not leak
@@ -291,12 +286,44 @@ def case_hooks_redact_credentials(checks):
     assert "secret-token" not in text, text
     # quoted password containing an auth header must not leak
     assert "private" not in text, text
-    assert "private Bearer" not in text, text
-    assert "quoted-bearer-hook" in text, text
     assert "opaque-two" not in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")
+
+
+def case_hooks_redact_bearer_edges(checks):
+    """Bearer edges: quoted schemes, suffixes, escapes, and a false positive."""
+    s = chr(34)
+
+    def cred(name, value):
+        return "  " + MARK_BAD + " " + name + "   " + value + "\n"
+
+    doctor_out = (
+        "Shell hooks\n"
+        + cred("auth-mode-hook", "tool --auth-mode Bearer opaque-token")
+        + cred("quoted-bearer-hook", "curl --password " + s + "private Bearer abc" + s)
+        + cred("quoted-scheme-hook", "tool --auth-mode=" + s + "Bearer" + s + " opaque-two")
+        + cred("bearer-suffix-hook", "tool Bearer " + s + "secret" + s + "qsuffix")
+        + cred("not-bearer-hook", "echo NotBearer diagnostic")
+        + cred("escaped-bearer-hook", "tool --oauth2-bearer " + s + "abc" + chr(92) + s + "esctok" + s)
+        + cred("quoted-assignment-hook", "PASSWORD=" + s + "private Bearer abcplane" + s)
+    )
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
+    checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
+    checks._check_allowlist_json = lambda home=None: None
+
+    env = checks.check_hooks()
+    text = str(env.get("detail") or "")
+    for secret in ("opaque-token", "opaque-two", "qsuffix", "esctok", "abcplane"):
+        assert secret not in text, text
+    assert "private Bearer" not in text, text
+    assert "NotBearer diagnostic" in text, text
+    for hook in ("auth-mode-hook", "quoted-bearer-hook", "quoted-scheme-hook",
+                 "bearer-suffix-hook", "not-bearer-hook", "escaped-bearer-hook",
+                 "quoted-assignment-hook"):
+        assert hook in text, text
+    print("OK: bearer redaction covers quoted schemes, suffixes and false positives")
 
 
 def case_allowlist_reuses_caller_home(checks):
@@ -422,6 +449,7 @@ def main() -> int:
         case_hooks_allowlist_alone_when_doctor_healthy,
         case_hooks_unaffected_when_allowlist_fine,
         case_hooks_redact_credentials,
+        case_hooks_redact_bearer_edges,
         case_allowlist_reuses_caller_home,
         case_plugins_disabled_wins_over_bundled,
         case_plugins_nested_user_key_not_bundled,
@@ -435,7 +463,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 10 check-envelope case(s) passed")
+    print("\nOK: 11 check-envelope case(s) passed")
     return 0
 
 
