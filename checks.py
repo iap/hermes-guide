@@ -882,10 +882,19 @@ _CRED_WORDS = (
 # A credential key is a bare name (`API_KEY`), a quoted JSON name
 # (`"api_key"`), or an explicit flag (`--api-key`).
 _CRED_KEY = r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
-_CRED_FLAG_KEY = r'--[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
+# `--user`/`--username` (and curl's `--proxy-user`) carry HTTP auth too; keep
+# the alt separate so `--user-agent` is not mistaken for a credential flag.
+_CRED_FLAG_KEY = (
+    r'(?:--[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
+    r'|--(?:proxy-)?user(?:name)?)'
+)
 
-# One value: a quoted string (escapes handled) or a bare token.
-_CRED_VALUE = r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s,;\']+)'
+# A shell word may concatenate adjacent bare, quoted and escaped segments
+# (`top'secret'`, `top\ secret`). Consume every segment but stop at an
+# unescaped separator so the next argument is left intact.
+_CRED_VALUE = (
+    r'(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|(?:\\.|[^\s,;\'"\\])+)+'
+)
 
 # Ordinary keys need a real `:` or `=` separator. Requiring it is what stops
 # `_CRED_RE` from reading a hook NAME as a credential key: without it,
@@ -895,9 +904,10 @@ _CRED_RE = re.compile(
     r"(?i)(?P<key>" + _CRED_KEY + r")\s*(?P<sep>[:=])\s*(?P<val>" + _CRED_VALUE + r")"
 )
 
-# Flag-style keys (`--api-key ***`) separate key from value with whitespace.
+# Flag-style keys (`--api-key ***`, `--user=***`) separate key from value
+# with whitespace or `=`.
 _CRED_FLAG_RE = re.compile(
-    r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")\s+(?P<val>" + _CRED_VALUE + r")"
+    r"(?i)(?P<key>" + _CRED_FLAG_KEY + r")(?:\s*=\s*|\s+)(?P<val>" + _CRED_VALUE + r")"
 )
 
 _BEARER_RE = re.compile(
