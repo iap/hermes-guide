@@ -882,11 +882,13 @@ _CRED_WORDS = (
 # A credential key is a bare name (`API_KEY`), a quoted JSON name
 # (`"api_key"`), or an explicit flag (`--api-key`).
 _CRED_KEY = r'"?[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*"?'
-# `--user`/`--username` (and curl's `--proxy-user`) carry HTTP auth too; keep
-# the alt separate so `--user-agent` is not mistaken for a credential flag.
+# `--user`/`--username`, curl's `--proxy-user`, and the `-u` short form carry
+# HTTP auth too; keep them separate so `--user-agent` is not mistaken for a
+# credential flag.
 _CRED_FLAG_KEY = (
     r'(?:--[A-Z0-9_-]*(?:' + _CRED_WORDS + r')[A-Z0-9_-]*'
-    r'|--(?:proxy-)?user(?:name)?)'
+    r'|--(?:proxy-)?user(?:name)?'
+    r'|(?<![\w-])-u)'
 )
 
 # A shell word may concatenate adjacent bare, quoted and escaped segments

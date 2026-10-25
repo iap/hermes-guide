@@ -146,9 +146,9 @@ def case_hooks_redact_credentials(checks):
     Qodo/CodeRabbit-reviewed cases (PR #347): multiword `Basic` values, quoted
     passwords containing spaces, adjacent quoted/escaped shell words,
     hyphenated header names, flag-style values, user-auth flags (`--user`,
-    `--user=`, `--proxy-user`), modern provider key forms, quoted JSON keys,
-    escaped quotes inside a JSON value, and URL userinfo. Two properties are
-    asserted: the secret never reaches `detail`, and the rest of the line
+    `--user=`, `--proxy-user`, `-u`), modern provider key forms, quoted JSON
+    keys, escaped quotes inside a JSON value, and URL userinfo. Two properties
+    are asserted: the secret never reaches `detail`, and the rest of the line
     (script path, status text, hook name) survives untouched. Fixture secrets
     are built from character codes so no credential literal sits in the source.
     """
@@ -202,6 +202,7 @@ def case_hooks_redact_credentials(checks):
         + cred("user-hook", "curl --user " + user_cred + " https://example.test")
         + cred("user-eq-hook", "curl --user=" + user_cred + " https://example.test")
         + cred("proxy-hook", "curl --proxy-user " + proxy_cred + " https://example.test")
+        + cred("short-user-hook", "curl -u " + user_cred + " https://example.test")
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -227,14 +228,15 @@ def case_hooks_redact_credentials(checks):
                  "quoted-hook", "url-hook", "json-hook", "escaped-hook",
                  "aws-hook", "flag-hook", "oauth-hook", "named-hook",
                  "shell-quoted-hook", "shell-escaped-hook", "user-hook",
-                 "user-eq-hook", "proxy-hook", "agent-hook", "nested-flag",
-                 "normal-hook"):
+                 "user-eq-hook", "proxy-hook", "short-user-hook", "agent-hook",
+                 "nested-flag", "normal-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text
     assert "./run.sh" in text, text
     assert "curl --user ***" in text, text
     assert "curl --proxy-user ***" in text, text
+    assert "curl -u ***" in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")
