@@ -14,6 +14,10 @@ Verifies three behaviors introduced for mixed bundled/user skill libraries:
 3. ``check_commands`` includes each skill's ``version`` in slug-collision
    messages, so a stale unversioned copy is distinguishable from a newer
    versioned one at a glance.
+4. A valid catalog with no unique entries stays authoritative (no mirror
+   fallback), while a malformed catalog does fall back.
+5. Skill slugs keep Unicode letters, matching Hermes' skill-command rule;
+   bundle slugs remain ASCII.
 
 Uses a synthetic ``$HERMES_HOME`` (monkeypatched) so it does not touch the
 real install and does not require the ``hermes`` CLI.
@@ -24,14 +28,16 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
+import types
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
 
 
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
 
 
 def _build_home(root: Path) -> None:
@@ -121,22 +127,231 @@ def main(argv: list[str]) -> int:
         if any("malformed-yaml" in d for d in sdetail):
             failures.append("malformed-yaml (recoverable name) reported as broken")
 
-        # (3) collision messages carry versions and skip archived copies
+        # (3) collision messages carry versions and skip archived copies.
+        # The `category/foo` copy is nameless, so the loader-faithful fallback
+        # registers it too: two collisions (category/foo vs foo, and
+        # foo vs category/foo) plus the archived copy staying out.
         cr = checks.check_commands()
         cdetail = cr.get("detail") or []
         coll = [d for d in cdetail if "normalize to" in d]
-        if len(coll) != 1:
-            failures.append(f"expected exactly 1 collision, got {len(coll)}")
-        elif "v1.2.0" not in coll[0] or "unversioned" not in coll[0]:
-            failures.append(f"version info missing from collision: {coll[0]}")
-        elif "foo-old" in coll[0]:
+        if len(coll) != 2:
+            failures.append(f"expected exactly 2 collisions, got {len(coll)}: {coll}")
+        elif not any("v1.2.0" in c and "unversioned" in c for c in coll):
+            failures.append(f"version info missing from collision: {coll}")
+        elif any("foo-old" in c for c in coll):
             failures.append("archived skill leaked into collision")
+
+        # (4) command names mirror the loader: a nameless skill registers
+        # under its directory name at ANY depth (upstream uses the SKILL.md's
+        # parent name without a depth guard); the platform gate excludes skills
+        # Hermes would not register a command for. The environment/apps gates
+        # need a live Hermes, so the offline mirror must fail open and say so.
+        cmd_home = Path(td) / "cmd-home"
+        _write(cmd_home / "skills/named/SKILL.md",
+               "---\nname: git_helper\ndescription: named\nversion: 3.0.0\n---\nbody\n")
+        _write(cmd_home / "skills/git-helper/SKILL.md",
+               "---\ndescription: no name; directory is the command\n---\nbody\n")
+        _write(cmd_home / "skills/collection/git-helper/SKILL.md",
+               "---\ndescription: nested nameless copy\n---\nbody\n")
+        _write(cmd_home / "skills/deploy/SKILL.md",
+               "---\nname: deploy\ndescription: d\n---\nbody\n")
+        other = {"darwin": "linux", "linux": "windows", "win32": "macos"}.get(sys.platform, "linux")
+        _write(cmd_home / "skills/deploy-elsewhere/SKILL.md",
+               f"---\nname: deploy\ndescription: d\nplatforms: [{other}]\n---\nbody\n")
+        _write(cmd_home / "skills/deploy-dockered/SKILL.md",
+               "---\nname: deploy\ndescription: d\nenvironments: [docker]\n---\nbody\n")
+        _write(cmd_home / "skills/empty-name/SKILL.md",
+               "---\nname: \"\"\ndescription: d\n---\nbody\n")
+        _write(cmd_home / "skills/empty-owner/SKILL.md",
+               "---\nname: empty-name\ndescription: d\n---\nbody\n")
+        # a blank platform entry matches every OS upstream, so it must not
+        # exclude the skill
+        _write(cmd_home / "skills/deploy-blank/SKILL.md",
+               "---\nname: deploy\ndescription: d\nplatforms: [\"\"]\n---\nbody\n")
+
+        checks._store().clear()
+        checks._hermes_home_from_library = lambda: str(cmd_home)
+        cr = checks.check_commands()
+        cdetail = cr.get("detail") or []
+        coll = [d for d in cdetail if "normalize to" in d]
+        # named + 2 nameless git-helper copies = 2 collisions. The deploy
+        # family yields 2 more: the dockered and blank-platform variants stay
+        # (the mirror cannot evaluate `environments:`, so it fails open) and
+        # only `deploy-elsewhere` is platform-gated out. 4 total.
+        if cr["status"] != "informational" or len(coll) != 4:
+            failures.append(f"command-name mirror: expected 4 collisions, got {cr['status']} / {coll}")
+        if any("deploy-elsewhere" in d for d in cdetail):
+            failures.append("platform-gated skill invented a collision")
+        if any("empty-name" in d for d in cdetail):
+            failures.append("empty `name` fell back to the directory name")
+        if not any("collection" in d for d in cdetail):
+            failures.append("nested nameless copy no longer registers a command")
+
+        # the offline mirror must disclose that it saw only the platform gate
+        quiet_home = Path(td) / "quiet-home"
+        _write(quiet_home / "skills/alpha/SKILL.md",
+               "---\nname: alpha\ndescription: a\n---\nbody\n")
+        _write(quiet_home / "skills/beta/SKILL.md",
+               "---\nname: beta\ndescription: b\n---\nbody\n")
+        checks._store().clear()
+        checks._hermes_home_from_library = lambda: str(quiet_home)
+        cr_quiet = checks.check_commands()
+        if cr_quiet["status"] != "informational" or "mirror" not in cr_quiet.get("reason", ""):
+            failures.append(f"offline mirror did not disclose its gate coverage: {cr_quiet}")
+
+        # (5) the catalog path counts only `unique` entries and refuses a
+        # different profile's home (shadowed/ambiguous copies are reached by
+        # path, so reporting them would be a false collision).
+        fake_tools = types.ModuleType("tools")
+        fake_skills = types.ModuleType("tools.skills_tool")
+        fake_skills._skill_catalog = lambda: [
+            {"name": "git_helper", "path": str(cmd_home / "skills/named/SKILL.md"), "status": "unique"},
+            {"name": "git-helper", "path": str(cmd_home / "skills/git-helper/SKILL.md"), "status": "unique"},
+            {"name": "git-helper", "path": str(cmd_home / "skills/collection/git-helper/SKILL.md"), "status": "shadowed"},
+        ]
+        fake_tools.skills_tool = fake_skills
+        fake_hc = types.ModuleType("hermes_constants")
+        fake_hc.get_hermes_home = lambda: str(cmd_home)
+        with mock.patch.dict(sys.modules, {
+            "tools": fake_tools,
+            "tools.skills_tool": fake_skills,
+            "hermes_constants": fake_hc,
+        }):
+            checks._store().clear()
+            # restore the home patch: section 4 pointed it at quiet_home
+            checks._hermes_home_from_library = lambda: str(cmd_home)
+            catalog = checks._catalog_command_entries(str(cmd_home))
+            if catalog is None or len(catalog) != 2:
+                failures.append(f"catalog path: expected 2 unique entries, got {catalog}")
+            cr2 = checks.check_commands()
+            c2 = [d for d in (cr2.get("detail") or []) if "normalize to" in d]
+            if len(c2) != 1:
+                failures.append(f"catalog path: expected 1 collision, got {c2}")
+            fake_hc.get_hermes_home = lambda: str(cmd_home) + "-other"
+            if checks._catalog_command_entries(str(cmd_home)) is not None:
+                failures.append("catalog path: accepted a different profile's home")
+
+        # (6) a catalog that resolves but yields nothing usable must not be
+        # reported as an empty (healthy) command set — fall back to the mirror
+        # instead (Qodo finding 1).
+        bad_home = Path(td) / "bad-catalog-home"
+        _write(bad_home / "skills/alpha/SKILL.md",
+               "---\nname: alpha\ndescription: a\n---\nbody\n")
+        _write(bad_home / "skills/beta/SKILL.md",
+               "---\nname: beta\ndescription: b\n---\nbody\n")
+        fake_skills2 = types.ModuleType("tools.skills_tool")
+        fake_skills2._skill_catalog = lambda: [
+            {"name": 12345, "path": None, "status": "unique"},
+            {"status": "shadowed"},
+        ]
+        fake_tools2 = types.ModuleType("tools")
+        fake_tools2.skills_tool = fake_skills2
+        fake_hc2 = types.ModuleType("hermes_constants")
+        fake_hc2.get_hermes_home = lambda: str(bad_home)
+        with mock.patch.dict(sys.modules, {
+            "tools": fake_tools2,
+            "tools.skills_tool": fake_skills2,
+            "hermes_constants": fake_hc2,
+        }):
+            checks._store().clear()
+            checks._hermes_home_from_library = lambda: str(bad_home)
+            if checks._catalog_command_entries(str(bad_home)) is not None:
+                failures.append("malformed catalog entries were silently accepted")
+            cr3 = checks.check_commands()
+            if cr3["status"] == "healthy" or "mirror" not in cr3.get("reason", ""):
+                failures.append(
+                    f"an unusable catalog was reported as an empty command set: {cr3}"
+                )
+            fake_skills2._skill_catalog = lambda: [
+                {"name": "alpha", "path": str(bad_home / "skills/alpha/SKILL.md"),
+                 "status": ["unique"]},
+            ]
+            if checks._catalog_command_entries(str(bad_home)) is not None:
+                failures.append("unhashable catalog status was not rejected")
+            cr6 = checks.check_commands()
+            if "mirror" not in cr6.get("reason", ""):
+                failures.append(f"unhashable status did not fall back to the mirror: {cr6}")
+
+        # (7) a valid catalog with no unique entries is an authoritative empty
+        # command set. The disk pair below would collide if the mirror ran, so
+        # a fallback is visible; shadowed/ambiguous-only catalogs must behave
+        # the same as an empty list (disabled entries are filtered upstream).
+        empty_home = Path(td) / "empty-catalog-home"
+        _write(empty_home / "skills/alpha-one/SKILL.md",
+               "---\nname: alpha\ndescription: a\n---\nbody\n")
+        _write(empty_home / "skills/alpha-two/SKILL.md",
+               "---\nname: alpha\ndescription: b\n---\nbody\n")
+        fake_skills3 = types.ModuleType("tools.skills_tool")
+        fake_skills3._skill_catalog = lambda: []
+        fake_tools3 = types.ModuleType("tools")
+        fake_tools3.skills_tool = fake_skills3
+        fake_hc3 = types.ModuleType("hermes_constants")
+        fake_hc3.get_hermes_home = lambda: str(empty_home)
+        with mock.patch.dict(sys.modules, {
+            "tools": fake_tools3,
+            "tools.skills_tool": fake_skills3,
+            "hermes_constants": fake_hc3,
+        }):
+            checks._store().clear()
+            checks._hermes_home_from_library = lambda: str(empty_home)
+            if checks._catalog_command_entries(str(empty_home)) != []:
+                failures.append("valid empty catalog was not preserved as []")
+            cr4 = checks.check_commands()
+            if cr4["status"] != "healthy" or any(
+                    "normalize to" in d for d in (cr4.get("detail") or [])):
+                failures.append(f"valid empty catalog fell back to the mirror: {cr4}")
+            fake_skills3._skill_catalog = lambda: [
+                {"name": "alpha", "path": str(empty_home / "skills/alpha-one/SKILL.md"),
+                 "status": "shadowed"},
+                {"name": "alpha", "path": str(empty_home / "skills/alpha-two/SKILL.md"),
+                 "status": "ambiguous"},
+            ]
+            if checks._catalog_command_entries(str(empty_home)) != []:
+                failures.append("non-unique-only catalog was not preserved as []")
+            cr5 = checks.check_commands()
+            if cr5["status"] != "healthy" or any(
+                    "normalize to" in d for d in (cr5.get("detail") or [])):
+                failures.append(f"non-unique-only catalog fell back to the mirror: {cr5}")
+
+        # (8) skill names use Hermes' Unicode-preserving slug; bundle names do
+        # not. `report` and `report报告` must not be reported as a collision.
+        unicode_home = Path(td) / "unicode-home"
+        _write(unicode_home / "skills/report/SKILL.md",
+               "---\nname: report\ndescription: ascii\n---\nbody\n")
+        _write(unicode_home / "skills/report-cn/SKILL.md",
+               "---\nname: report报告\ndescription: unicode\n---\nbody\n")
+        fake_skills4 = types.ModuleType("tools.skills_tool")
+        fake_skills4._skill_catalog = lambda: [
+            {"name": "report", "path": str(unicode_home / "skills/report/SKILL.md"),
+             "status": "unique"},
+            {"name": "report报告", "path": str(unicode_home / "skills/report-cn/SKILL.md"),
+             "status": "unique"},
+        ]
+        fake_tools4 = types.ModuleType("tools")
+        fake_tools4.skills_tool = fake_skills4
+        fake_hc4 = types.ModuleType("hermes_constants")
+        fake_hc4.get_hermes_home = lambda: str(unicode_home)
+        with mock.patch.dict(sys.modules, {
+            "tools": fake_tools4,
+            "tools.skills_tool": fake_skills4,
+            "hermes_constants": fake_hc4,
+        }):
+            checks._store().clear()
+            checks._hermes_home_from_library = lambda: str(unicode_home)
+            if checks._skill_slug("report报告") != "report报告":
+                failures.append("skill slug stripped Unicode letters")
+            if checks._bundle_slug("report报告") != "report":
+                failures.append("bundle slug no longer strips Unicode letters")
+            cr6 = checks.check_commands()
+            if cr6["status"] != "healthy" or any(
+                    "normalize to" in d for d in (cr6.get("detail") or [])):
+                failures.append(f"Unicode skill names reported a false collision: {cr6}")
 
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
         return 1
-    print("OK: skill-library checks behave as expected (bundled label, hidden-dir skip, versioned collisions)")
+    print("OK: skill-library checks behave as expected (catalog validity, Unicode slugs, bundled label, hidden-dir skip, versioned collisions)")
     return 0
 
 
