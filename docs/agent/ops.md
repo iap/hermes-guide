@@ -191,18 +191,22 @@ The REST comments view lists findings but not resolution state, and
 
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-gh api graphql -f query='
-query($owner:String!,$repo:String!,$pr:Int!){
+gh api graphql --paginate -f query='
+query($owner:String!,$repo:String!,$pr:Int!,$endCursor:String){
   repository(owner:$owner,name:$repo){pullRequest(number:$pr){
-    reviewThreads(first:100){nodes{id isResolved isOutdated path line
-      comments(first:1){nodes{author{login} body}}}}}}
+    reviewThreads(first:100,after:$endCursor){
+      pageInfo{hasNextPage endCursor}
+      nodes{id isResolved isOutdated path line
+        comments(first:1){nodes{author{login} body}}}}}}
 }' -F owner="${REPO%/*}" -F repo="${REPO#*/}" -F pr=<PR> \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)'
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|"\(.path):\(.line) \(.id) \(.comments.nodes[0].author.login)"'
 ```
 
-Treat the result as binary: `OK: 0 unresolved review threads` means clear; any
-row is a thread to triage before replying. `isOutdated: true` only means the
-anchor moved to a newer commit — it is not evidence the finding was fixed.
+`--paginate` follows `endCursor` until `hasNextPage` is false; never declare a
+PR clear from one page. Treat the result as binary: no rows after paging means
+clear (report `OK: 0 unresolved review threads`); any row is a thread to triage
+before replying. `isOutdated: true` only means the anchor moved to a newer
+commit — it is not evidence the finding was fixed.
 Resolve by the thread node's `PRRT_…` id, which is what
 `addPullRequestReviewThreadReply` and `resolveReviewThread` accept; ids carried
 in a review body are not thread nodes:
