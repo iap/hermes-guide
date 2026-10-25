@@ -8,8 +8,9 @@ row below. Do not read [ops.md](ops.md) end to end unless the task spans rows.
 |---|---|
 | Adding or renaming a tracked path, workflow, or docs file | [layout.md](layout.md) |
 | Changing `hermes guide --json`, finding IDs, or envelope shape | [ops.md — JSON contract](ops.md#the-hermes-guide---json-document-phase-4-contract) and the finding-ID bullets under [Rules the gates enforce](ops.md#rules-the-gates-enforce-detail) |
-| Adding a check or a `tools/check_*.py` / `tools/test_*.py` | [ops.md — rules the gates enforce](ops.md#rules-the-gates-enforce-detail) ("Checks return data" and "A new tool") |
+| Adding a check or a `tools/check_*.py` / `tools/test_*.py` | [ops.md — rules the gates enforce](ops.md#rules-the-gates-enforce-detail) ("Checks return data" and "A new tool") and [Testing Requirements](ops.md#testing-requirements); wire new tests into `.github/workflows/reusable-ci.yml` |
 | Writing or trimming a skill | [CONTRIBUTING.md](../../CONTRIBUTING.md#adding-or-changing-a-skill) (growth policy included). Not ops.md |
+| Committing or publishing a branch | [ops.md — Commit signing](ops.md#commit-signing) and [What belongs in git](ops.md#what-belongs-in-git) |
 | Replying to a reviewer bot | [ops.md — Reviewer-bot threads](ops.md#reviewer-bot-threads) |
 | Merging to master | [ops.md — Pre-merge cross-check](ops.md#pre-merge-cross-check) and [Branch protection](ops.md#branch-protection) |
 | Claiming Windows, macOS, or WSL behavior | [ops.md — Multi-environment maintenance](ops.md#multi-environment-maintenance) |
