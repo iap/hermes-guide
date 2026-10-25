@@ -155,6 +155,18 @@ Most `check_*.py` scripts are static linters that read files or parse AST — th
 
 CI (`reusable-ci.yml`, ubuntu+windows × Python 3.11/3.12) is authoritative. The pre-commit hook (`.pre-commit-config.yaml`) and `check_gates.py` run the hermetic subset locally so mistakes fail at commit time rather than in CI. `validate-claim.yml` independently re-runs the hermetic tier against PR heads to verify self-reported pass claims. If a test needs network or a live Hermes install, it runs only in CI — declare it skipped in your PR validation table rather than leaving it blank. Degraded host (e.g. `hermes plugins doctor . --ci` times out): `check_gates.py` + `py_compile` suffice locally; record doctor as `not run` with the cause in Notes. The authoritative gate list is `python tools/check_gates.py --list` plus `reusable-ci.yml` — prose summaries elsewhere may lag it.
 
+### Local interpreter
+
+The plugin's only dependency is PyYAML (`pyproject.toml`), so any Python >= 3.11 carrying it runs the suite. Build the local env on the 3.11 floor — the oldest leg CI runs — not on the host default, or a green local run proves nothing CI will reproduce:
+
+```sh
+uv venv --python 3.11
+uv pip install "PyYAML>=6.0,<7"
+uv run --no-sync python tools/check_gates.py
+```
+
+`uv pip install` and `uv run` resolve `.venv` per platform, so the block needs no shell-specific interpreter path (POSIX `.venv/bin/python`, Windows `.venv\Scripts\python.exe`). `--no-sync` matters: bare `uv run` writes a `uv.lock` into the clone, which then appears as an untracked file and can be committed by accident. `.venv/` and `venv/` are gitignored; `uv.lock` is not, and this repo deliberately carries none. Do not move `reusable-ci.yml` or `.pre-commit-config.yaml` to uv: with one dependency there is nothing to resolve, and the pre-commit hook calls `python` from `PATH` by design (`language: system`). `uv` is a convenience for creating the env, not a project tool — the version pin is what matters.
+
 Git history walks on the Hermes checkout (`~/.hermes/hermes-agent`, ~1 GB across ~190 packs) can hang for minutes: prefer `git show <rev>:<path>` or a shallow/blobless clone over range logs there, and never let a checkout walk gate a local verdict.
 
 ### Inventory
