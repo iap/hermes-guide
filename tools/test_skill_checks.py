@@ -268,6 +268,9 @@ def main(argv: list[str]) -> int:
             ]
             if checks._catalog_command_entries(str(bad_home)) is not None:
                 failures.append("unhashable catalog status was not rejected")
+            cr6 = checks.check_commands()
+            if "mirror" not in cr6.get("reason", ""):
+                failures.append(f"unhashable status did not fall back to the mirror: {cr6}")
 
         # (7) a valid catalog with no unique entries is an authoritative empty
         # command set. The disk pair below would collide if the mirror ran, so
