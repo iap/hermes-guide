@@ -65,6 +65,11 @@ _EXCLUDE_ANYWHERE = {
 _EXCLUDE_ROOT_ONLY = {"tools", "dist", "coverage"}
 _EXCLUDE_DIRS = _EXCLUDE_ANYWHERE | _EXCLUDE_ROOT_ONLY
 
+# Windows reparse tags that denote links. Other reparse tags (cloud
+# placeholders, dedup, WOF compression) are still ordinary project files.
+_IO_REPARSE_TAG_SYMLINK = 0xA000000C
+_IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+
 # A "mode" string is a write mode if it contains any of these flags.
 _WRITE_FLAGS = "wax+"
 
@@ -247,21 +252,32 @@ def scan(path: Path, ignore_selftest: bool = False) -> list[str]:
     return hits
 
 
+def _is_link_reparse_tag(tag: int) -> bool:
+    """True for the Windows reparse tags that denote a link or junction."""
+    return tag in (_IO_REPARSE_TAG_SYMLINK, _IO_REPARSE_TAG_MOUNT_POINT)
+
+
 def _is_reparse_point(path: Path) -> bool:
-    """True for symlinks and Windows junctions.
+    """True for symlinks and Windows junctions, not every reparse point.
 
     os.walk() stops at symlinked directories but still descends into junctions,
-    and it lists symlinked files. Neither is project source.
+    and it lists symlinked files. Neither is project source. A non-link
+    reparse point (cloud placeholder, dedup, WOF) is still a project file and
+    must stay in scope; rejecting every reparse attribute would let a mutation
+    in such a file pass unscanned (CodeRabbit finding).
     """
     if os.path.islink(path):
         return True
     if os.name != "nt":
         return False
     try:
-        attrs = os.lstat(path).st_file_attributes
+        status = os.lstat(path)
     except OSError:
         return False
-    return bool(attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    attrs = getattr(status, "st_file_attributes", 0)
+    if not attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        return False
+    return _is_link_reparse_tag(getattr(status, "st_reparse_tag", 0))
 
 
 def _is_excluded(name: str, at_root: bool = False) -> bool:
@@ -473,6 +489,15 @@ def selftest() -> int:
                 linked not in _python_sources(plain),
                 "file symlinks are not scanned",
             )
+        expect_tree(
+            _is_link_reparse_tag(_IO_REPARSE_TAG_SYMLINK)
+            and _is_link_reparse_tag(_IO_REPARSE_TAG_MOUNT_POINT),
+            "symlink and junction reparse tags are links",
+        )
+        expect_tree(
+            not _is_link_reparse_tag(0x80000017),
+            "non-link reparse tags stay project source",
+        )
         expect_tree(
             _is_excluded("VENV") == (os.name == "nt"),
             "case variant excluded only where the filesystem is case-insensitive",

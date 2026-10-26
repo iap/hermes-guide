@@ -105,7 +105,10 @@ def selftest() -> int:
 
     # Outside a quote the same shape is a genuine record boundary and must
     # survive as evidence rather than being folded into the credential value.
-    command = "hook run " + continuation + MARK_BAD + " failed"
+    # A credential must sit immediately before the continuation; otherwise a
+    # wrong fold leaves the marker untouched and the assertion below passes
+    # even when folding is broken (CodeRabbit finding).
+    command = "hook --password " + continuation + MARK_BAD + " failed"
     doctor = "Checking hooks...\n  " + command + "\n"
     checks._run = lambda cmd, timeout=20: (0, doctor, "")
     result = checks.check_hooks()
