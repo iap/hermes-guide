@@ -84,6 +84,20 @@ reclaims disk on large DBs; `hermes sessions repair` fixes a malformed schema so
 sessions reappear. Run these on a session you are not currently in, since they
 operate on the live database.
 
+## Disk hygiene beyond state.db
+
+`state.db` is only one consumer. Ephemeral files (test/temp/cron-output tracked by
+the `disk-cleanup` plugin), `request_dump_*.json`, cache scratch, and old logs
+are cleaned separately and do not shrink `state.db`:
+
+```bash
+# In a session: /disk-cleanup status | dry-run | quick | deep
+# Full procedure: load the `hermes-disk-housekeeping` skill
+```
+
+Resolve `$HERMES_HOME` first (`hermes config path`); never assume `~/.hermes`.
+The `storage` scope of `hermes guide` reports only `state.db` size.
+
 > [!CAUTION]
 > Pruning is lossy by design — it deletes raw message rows. Compaction creates
 > no backup itself, and nothing guarantees a recent archive already exists
