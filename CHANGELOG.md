@@ -6,11 +6,13 @@ All notable changes to hermes-guide are documented here.
 
 ### Bug Fixes
 
+- **redact**: stop AUTH matching --author, add regression cases ([#352](https://github.com/iap/hermes-guide/pull/352))
 - **hooks**: fold quoted continuations and prune nested artifacts ([#365](https://github.com/iap/hermes-guide/pull/365))
 - **hooks**: redact continued credentials and scope mutation scans ([#361](https://github.com/iap/hermes-guide/pull/361))
 
 ### Documentation
 
+- **agents**: correct the hooks default and --deep opt-in ([#352](https://github.com/iap/hermes-guide/pull/352))
 - name the upstream catalog path and point contributors at the interpreter setup ([#358](https://github.com/iap/hermes-guide/pull/358))
 - **agent**: record the local interpreter and pin it to the CI floor ([#356](https://github.com/iap/hermes-guide/pull/356))
 
