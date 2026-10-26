@@ -18,6 +18,8 @@ All notable changes to hermes-guide are documented here.
 
 ### Chores
 
+- **changelog**: complete the v0.8.12 section ([#366](https://github.com/iap/hermes-guide/pull/366))
+- **changelog**: cover the release PR changes ([#367](https://github.com/iap/hermes-guide/pull/367))
 - Configure CodeRabbit as a manual second reviewer after Qodo (#355)
 - **review**: require a trigger for regex/parser findings ([#354](https://github.com/iap/hermes-guide/pull/354))
 
