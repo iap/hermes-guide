@@ -25,6 +25,7 @@ tracked top-level path and every `.github/` file.
 | `tools/render_docs.py` | Renders the generated blocks in README.md, AGENTS.md, and docs/findings.md |
 | `tools/pr_metadata_labels.py` | PR label/priority parser shared by the labelling workflows |
 | `tests/check_scanner_hygiene.py` | Scanner-hygiene guard — lives under `tests/` (not `tools/`) because the upstream install scanner rates its literal attack-string fixtures dangerous outside a tests directory |
+| `tests/test_hook_redaction.py` | Deep-hook credential regression — synthetic credential fixtures stay under `tests/` for install-scanner hygiene |
 | `docs/agent/` | On-demand agent/maintainer deep ops (this tree); not injected every turn |
 | `docs/findings.md` | Generated catalog of stable finding ids with scope, impact, and fix (source: `checks.FINDING_IDS`) |
 | `assets/` | Binary documentation assets referenced from README.md (concept banner); never edited by hand |
@@ -56,9 +57,9 @@ tracked top-level path and every `.github/` file.
 Keep the layout stable: plugin Python at the repo root, skills under
 `skills/<name>/`, plugin-registered skills under `plugin-skills/<name>/`
 (deliberately outside `skills/`, whose contents drive the generated counts and
-the tap install loop), harness scripts under `tools/` — with one exception:
-`tests/check_scanner_hygiene.py` lives under `tests/` because the upstream
-install scanner rates its literal attack-string fixtures dangerous anywhere
-else. Do not add ad-hoc scripts at the root or under `skills/` that CI or
+the tap install loop), harness scripts under `tools/` — except scripts with
+literal attack-string or credential fixtures, which live under `tests/` because
+the upstream install scanner rates those fixtures dangerous anywhere else.
+Do not add ad-hoc scripts at the root or under `skills/` that CI or
 agents are expected to run. New maintainer deep-ops prose goes under
 `docs/agent/`, not a new top-level file, unless a human asks for one.
