@@ -2,15 +2,31 @@
 
 All notable changes to hermes-guide are documented here.
 
-## v0.8.12 (2026-10-25)
+## v0.8.12 (2026-10-26)
 
 ### Bug Fixes
 
-- **redact**: stop AUTH matching --author, add regression cases
+- **redact**: stop AUTH matching --author, add regression cases ([#352](https://github.com/iap/hermes-guide/pull/352))
+- **hooks**: fold quoted continuations and prune nested artifacts ([#365](https://github.com/iap/hermes-guide/pull/365))
+- **hooks**: redact continued credentials and scope mutation scans ([#361](https://github.com/iap/hermes-guide/pull/361))
 
 ### Documentation
 
-- **agents**: correct the hooks default and --deep opt-in
+- **agents**: correct the hooks default and --deep opt-in ([#352](https://github.com/iap/hermes-guide/pull/352))
+- name the upstream catalog path and point contributors at the interpreter setup ([#358](https://github.com/iap/hermes-guide/pull/358))
+- **agent**: record the local interpreter and pin it to the CI floor ([#356](https://github.com/iap/hermes-guide/pull/356))
+
+### Chores
+
+- **changelog**: complete the v0.8.12 section ([#366](https://github.com/iap/hermes-guide/pull/366))
+- **changelog**: cover the release PR changes ([#367](https://github.com/iap/hermes-guide/pull/367))
+- Configure CodeRabbit as a manual second reviewer after Qodo (#355)
+- **review**: require a trigger for regex/parser findings ([#354](https://github.com/iap/hermes-guide/pull/354))
+
+### Tests
+
+- **gen_changelog**: disable tag signing in fixture commits ([#357](https://github.com/iap/hermes-guide/pull/357))
+- **hooks**: pin marker and rc precedence over the healthy summary ([#353](https://github.com/iap/hermes-guide/pull/353))
 
 ## v0.8.11 (2026-10-25)
 

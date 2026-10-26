@@ -14,7 +14,13 @@ static check; the capabilities model is what actually blocks it at runtime.
 
 AST parsing (rather than line-based regex) makes the guard multiline-aware, so a
 write call split across lines can't slip through. Scanned: ``*.py`` under the
-repo root, excluding ``tools/`` (CI-time utilities). ``tests/`` IS scanned —
+repo root, excluding ``tools/`` (CI-time utilities) and the explicit environment,
+dependency, generated-output, and cache directories in ``_EXCLUDE_DIRS``.
+Exclusions apply only at the scan root: ``.venv`` and ``node_modules`` are
+root-level artifacts, and matching a basename anywhere in the tree would skip
+project source that happens to live under a directory named ``coverage``.
+Untracked and hidden project sources are still scanned without needing Git.
+``tests/`` IS scanned —
 the scanner-hygiene guard lives there — but writes lexically inside a
 ``selftest`` function are fixtures by convention (tempdir scaffolding for the
 regression table) and exempt; everything else in ``tests/`` enforces the same
@@ -31,13 +37,39 @@ Usage:
 from __future__ import annotations
 
 import ast
+import os
+import stat
 import sys
 from pathlib import Path
 
-# CI-time utilities excluded from the scan (not plugin runtime code).
-# `tests/` is deliberately NOT excluded: the scanner-hygiene guard lives
-# there, and only its `selftest` fixtures may write (see detect_code).
-_EXCLUDE_DIRS = {"tools"}
+# CI-time utilities, local environments, dependencies and generated artifacts
+# are not plugin source. Split the list by scope:
+#
+# - ANYWHERE: never project source at any depth. A nested `.venv`,
+#   `node_modules` or `.git` is still third-party/VCS data, and scanning it
+#   both slows the gate and can flag dependency writes as project mutations.
+# - ROOT ONLY: artifact-shaped names that can legitimately be project source
+#   below the root (`tests/coverage/`, `plugin/dist/`). Pruning these only at
+#   the scan root preserves the CodeRabbit finding from PR #359 (a nested
+#   `tests/coverage/test_mutation.py` must still be scanned).
+#
+# Most names mirror .gitignore. Keep this explicit instead of ignoring all
+# hidden directories or all Git-ignored paths: new/untracked plugin Python
+# must still be checked, including in an installed source tree. `tests/` is
+# deliberately NOT excluded: the scanner-hygiene guard lives there, and only
+# its `selftest` fixtures may write (see detect_code).
+_EXCLUDE_ANYWHERE = {
+    ".git", ".venv", "venv", "node_modules", "__pycache__",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox",
+}
+_EXCLUDE_ROOT_ONLY = {"tools", "dist", "coverage"}
+_EXCLUDE_DIRS = _EXCLUDE_ANYWHERE | _EXCLUDE_ROOT_ONLY
+
+# Windows reparse tags that denote links. Other reparse tags (cloud
+# placeholders, dedup, WOF compression) are still ordinary project files.
+_IO_REPARSE_TAG_SYMLINK = 0xA000000C
+_IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+_IO_REPARSE_TAG_LX_SYMLINK = 0xA000001D
 
 # A "mode" string is a write mode if it contains any of these flags.
 _WRITE_FLAGS = "wax+"
@@ -221,6 +253,81 @@ def scan(path: Path, ignore_selftest: bool = False) -> list[str]:
     return hits
 
 
+def _is_link_reparse_tag(tag: int) -> bool:
+    """True for the Windows reparse tags that denote a link or junction."""
+    return tag in (
+        _IO_REPARSE_TAG_SYMLINK,
+        _IO_REPARSE_TAG_MOUNT_POINT,
+        _IO_REPARSE_TAG_LX_SYMLINK,
+    )
+
+
+def _is_reparse_point(path: Path) -> bool:
+    """True for symlinks and Windows junctions, not every reparse point.
+
+    os.walk() stops at symlinked directories but still descends into junctions,
+    and it lists symlinked files. Neither is project source. A non-link
+    reparse point (cloud placeholder, dedup, WOF) is still a project file and
+    must stay in scope; rejecting every reparse attribute would let a mutation
+    in such a file pass unscanned (CodeRabbit finding).
+    """
+    if os.path.islink(path):
+        return True
+    if os.name != "nt":
+        return False
+    try:
+        status = os.lstat(path)
+    except OSError:
+        return False
+    attrs = getattr(status, "st_file_attributes", 0)
+    if not attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        return False
+    return _is_link_reparse_tag(getattr(status, "st_reparse_tag", 0))
+
+
+def _is_excluded(name: str, at_root: bool = False) -> bool:
+    """True when `name` is a non-source directory on this platform.
+
+    Windows resolves directory names case-insensitively, so ``VENV`` and
+    ``venv`` are the same directory there; a case-sensitive check would
+    traverse it and rate third-party dependency code as project source.
+    ``at_root`` adds the artifact-shaped names that are only excluded at the
+    scan root (see ``_EXCLUDE_ROOT_ONLY``).
+    """
+    excluded = _EXCLUDE_DIRS if at_root else _EXCLUDE_ANYWHERE
+    if os.name == "nt":
+        return name.lower() in {entry.lower() for entry in excluded}
+    return name in excluded
+
+
+def _python_sources(root: Path) -> list[Path]:
+    """Find project Python without descending into non-source directories.
+
+    Environment/dependency/VCS directories are pruned at any depth; the
+    artifact-shaped names that can be project source below the root
+    (``tools``, ``dist``, ``coverage``) are pruned only at the scan root.
+    That keeps ``tests/coverage/test_mutation.py`` in scope without scanning a
+    nested ``.venv`` or ``node_modules``. An explicit scan root is always
+    inspected, even when its own basename is excluded. Like Path.rglob(),
+    os.walk() does not follow directory symlinks.
+    """
+    root = Path(root)
+    targets: list[Path] = []
+    for directory, dirnames, filenames in os.walk(root):
+        current = Path(directory)
+        at_root = current == root
+        dirnames[:] = sorted(
+            name for name in dirnames
+            if not _is_excluded(name, at_root=at_root)
+            and not _is_reparse_point(current / name)
+        )
+        targets.extend(
+            current / name for name in filenames
+            if Path(name).match("*.py") and not _is_reparse_point(current / name)
+        )
+    return sorted(targets)
+
+
 # Regression table: (snippet, should_be_detected). Covers open() signatures,
 # keyword/positional/multiline modes, pathlib writes, module functions, and
 # read-only negatives.
@@ -285,6 +392,10 @@ _FIXTURE_CASES: list[tuple[str, bool, bool]] = [
 
 def selftest() -> int:
     """Verify the detector against the regression table; exit non-zero on drift."""
+    import contextlib
+    import io
+    import tempfile
+
     failures = 0
     for snippet, expect in _SELFTEST_CASES:
         detected = bool(detect_code(snippet))
@@ -306,10 +417,128 @@ def selftest() -> int:
                 f"SELFTEST FAIL: expected detected={expect} got={detected} for: {snippet!r}",
                 file=sys.stderr,
             )
+
+    tree_cases = 0
+
+    def expect_tree(condition: bool, label: str) -> None:
+        nonlocal failures, tree_cases
+        tree_cases += 1
+        if not condition:
+            failures += 1
+            print(f"SELFTEST FAIL: source traversal: {label}", file=sys.stderr)
+
+    with tempfile.TemporaryDirectory() as temporary:
+        # No Git checkout is needed, and the explicitly requested root's own
+        # name must not hide its Python sources.
+        root = Path(temporary) / ".venv"
+        root.mkdir()
+        mutation = "Path('out').write_text('x')\n"
+        project = {
+            "plugin.py": mutation,
+            "upper.PY": mutation,
+            "plugin/nested/untracked.py": mutation,
+            ".project/hooks.py": mutation,
+            "vendor/owned.py": mutation,
+            "build/owned.py": mutation,
+            "tests/fixtures.py": "def selftest():\n    Path('out').write_text('x')\n",
+            "tests/helper.py": "def helper():\n    Path('out').write_text('x')\n",
+            # Project source under a directory whose name is also an exclusion
+            # artifact: a root-level exclusion must not skip it.
+            "tests/coverage/test_mutation.py": mutation,
+            "plugin/dist/owned.py": mutation,
+        }
+        for relative, source in project.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(source, encoding="utf-8")
+        # Root-level artifact directories are pruned; nested ones are project
+        # source and must be scanned.
+        plain = Path(temporary) / "plain"
+        plain.mkdir()
+        (plain / "owned.py").write_text(mutation, encoding="utf-8")
+        for name in _EXCLUDE_DIRS:
+            dependency = plain / name / "package" / "mutates.py"
+            dependency.parent.mkdir(parents=True, exist_ok=True)
+            dependency.write_text(mutation, encoding="utf-8")
+        # Environment, dependency and VCS directories are never project source
+        # at any depth, not only at the scan root.
+        nested_artifacts = [
+            "vendor/.venv/package/mutates.py",
+            "vendor/node_modules/package/mutates.py",
+            "vendor/.git/hooks/mutates.py",
+            "vendor/__pycache__/mutates.py",
+        ]
+        for relative in nested_artifacts:
+            dependency = plain / relative
+            dependency.parent.mkdir(parents=True, exist_ok=True)
+            dependency.write_text(mutation, encoding="utf-8")
+        expect_tree(
+            {path.relative_to(plain).as_posix() for path in _python_sources(plain)}
+            == {"owned.py"},
+            "root-level artifact directories and nested environments are pruned",
+        )
+        expect_tree(
+            not (
+                {path.relative_to(plain).as_posix() for path in _python_sources(plain)}
+                & set(nested_artifacts)
+            ),
+            "nested environment/dependency/vcs directories are pruned",
+        )
+        linked = plain / "linked.py"
+        try:
+            os.symlink(plain / "owned.py", linked)
+        except OSError:
+            pass
+        else:
+            expect_tree(
+                linked not in _python_sources(plain),
+                "file symlinks are not scanned",
+            )
+        expect_tree(
+            _is_link_reparse_tag(_IO_REPARSE_TAG_SYMLINK)
+            and _is_link_reparse_tag(_IO_REPARSE_TAG_MOUNT_POINT)
+            and _is_link_reparse_tag(_IO_REPARSE_TAG_LX_SYMLINK),
+            "symlink and junction reparse tags are links",
+        )
+        expect_tree(
+            not _is_link_reparse_tag(0x80000017),
+            "non-link reparse tags stay project source",
+        )
+        expect_tree(
+            _is_excluded("VENV") == (os.name == "nt"),
+            "case variant excluded only where the filesystem is case-insensitive",
+        )
+
+        # Match rglob's platform convention: Windows also matches .PY.
+        expected_targets = set(project)
+        if os.name != "nt":
+            expected_targets.remove("upper.PY")
+        targets = _python_sources(root)
+        expect_tree(
+            {path.relative_to(root).as_posix() for path in targets} == expected_targets,
+            "retain nested and artifact-named source under an excluded root name",
+        )
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
+            status = main(["check_no_mutation.py", str(root)])
+        expect_tree(status == 1, "new project mutations must fail the gate")
+        for relative in project:
+            detected = f"{root / relative}:" in stderr.getvalue()
+            expect_tree(
+                detected == (relative in expected_targets and relative != "tests/fixtures.py"),
+                f"mutation detection and selftest exemption for {relative}",
+            )
+        for relative in project:
+            if relative != "tests/fixtures.py":
+                (root / relative).write_text("value = 1\n", encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+            status = main(["check_no_mutation.py", str(root)])
+        expect_tree(status == 0, "ignored dependency mutations must not fail the gate")
+
     if failures:
         print(f"{failures} selftest case(s) failed", file=sys.stderr)
         return 1
-    print(f"selftest OK: {len(_SELFTEST_CASES) + len(_FIXTURE_CASES)} cases")
+    print(f"selftest OK: {len(_SELFTEST_CASES) + len(_FIXTURE_CASES) + tree_cases} cases")
     return 0
 
 
@@ -318,11 +547,7 @@ def main(argv: list[str]) -> int:
         return selftest()
 
     root = Path(argv[1]) if len(argv) > 1 else Path(".")
-    targets = [
-        p
-        for p in sorted(root.rglob("*.py"))
-        if not any(part in _EXCLUDE_DIRS for part in p.relative_to(root).parts)
-    ]
+    targets = _python_sources(root)
     if not targets:
         print("No Python files found to scan", file=sys.stderr)
         return 1

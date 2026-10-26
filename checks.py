@@ -33,6 +33,7 @@ import shlex
 import subprocess
 import sys
 import time
+from bisect import bisect_right
 from contextlib import suppress
 
 import yaml
@@ -1103,6 +1104,129 @@ _BEARER_TOKEN_RE = re.compile(
 _PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")
 _URL_CRED_RE = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@\s]+@")
 
+_RECORD_MARKERS = "\u2717\u26a0\u2713\u2139"
+_RECORD_BOUNDARY_RE = re.compile(r"[ \t]*[" + _RECORD_MARKERS + r"](?=[ \t\r\n]|$)")
+
+
+def _continuation_spans(text):
+    """Spans of backslash-newlines that continue the shell word.
+
+    Quote-aware: a doctor marker at the start of the continuation line is a
+    record boundary only when it is outside a quoted credential. A regex
+    lookahead cannot know that state, so a password split as
+    ``PASSWORD="correct\\`` / ``✗ horse"`` used to stay unfolded and leak the
+    tail. Fold inside single/double quotes unconditionally; outside quotes,
+    preserve a genuine marker record. Escaped backslash pairs are consumed
+    unchanged, matching shell rules.
+    """
+    spans = []
+    quote = None
+    i = 0
+    length = len(text)
+    while i < length:
+        char = text[i]
+        if char == "\n":
+            # A bare newline ends the logical record. Reset quote state so a
+            # malformed/unclosed quote in one record cannot swallow a later
+            # record's marker as credential text (Qodo finding).
+            quote = None
+            i += 1
+            continue
+        if quote is not None:
+            if char == "\\":
+                if quote == "'" and i + 1 < length and text[i + 1] == "'":
+                    # Single quotes have no escapes: the quote closes here.
+                    quote = None
+                    i += 2
+                    continue
+                if i + 1 < length and text[i + 1] == "\\":
+                    i += 2  # escaped backslash is a literal
+                    continue
+                if i + 1 < length and text[i + 1] == quote:
+                    i += 2  # escaped quote, stays inside the string
+                    continue
+                j = i + 1
+                if j < length and text[j] == "\r":
+                    j += 1
+                if j < length and text[j] == "\n":
+                    spans.append((i, j + 1))
+                    i = j + 1
+                    continue
+                i += 1
+                continue
+            if char == quote:
+                quote = None
+            i += 1
+            continue
+        if char in ("'", '"'):
+            quote = char
+            i += 1
+            continue
+        if char == "\\":
+            if i + 1 < length and text[i + 1] == "\\":
+                i += 2  # escaped backslash is a literal, not a continuation
+                continue
+            j = i + 1
+            if j < length and text[j] == "\r":
+                j += 1
+            if j < length and text[j] == "\n":
+                if _RECORD_BOUNDARY_RE.match(text, j + 1):
+                    i = j + 1  # genuine doctor record boundary
+                    continue
+                spans.append((i, j + 1))
+                i = j + 1
+                continue
+            if i + 1 < length and text[i + 1] not in ("\n", "\r"):
+                # Escaped character outside quotes (`\"`, `\'`): the quote is
+                # literal and must not open quote state (Qodo finding).
+                i += 2
+                continue
+        i += 1
+    return spans
+
+
+def _redact_hook_matches(pattern, replacement, text):
+    """Match logical shell words, replacing only their original source spans.
+
+    A continuation can split a credential key, separator or value. Matching a
+    folded view covers each form without changing unrelated doctor evidence.
+    Rebuild that view per pass to preserve the existing nested-value ordering.
+    """
+    if "\\\n" not in text and "\\\r\n" not in text:
+        return pattern.sub(replacement, text)
+
+    spans = _continuation_spans(text)
+    if not spans:
+        return pattern.sub(replacement, text)
+
+    chunks = []
+    boundaries = []
+    skipped = [0]
+    cursor = 0
+    for start, end in spans:
+        chunks.append(text[cursor:start])
+        boundaries.append(start - skipped[-1])
+        skipped.append(skipped[-1] + (end - start))
+        cursor = end
+    chunks.append(text[cursor:])
+    logical = "".join(chunks)
+
+    chunks = []
+    cursor = 0
+    for match in pattern.finditer(logical):
+        redacted = replacement(match)
+        if redacted == match.group():
+            # In particular, python/sort -u are not basic-auth credentials.
+            continue
+        start = match.start() + skipped[bisect_right(boundaries, match.start())]
+        # Map the last matched character, excluding any continuation after it.
+        last = match.end() - 1
+        end = last + skipped[bisect_right(boundaries, last)] + 1
+        chunks.extend((text[cursor:start], redacted))
+        cursor = end
+    chunks.append(text[cursor:])
+    return "".join(chunks)
+
 
 def _redact_hook_output(text):
     """Strip credential-looking values from `hermes hooks doctor` output.
@@ -1135,18 +1259,19 @@ def _redact_hook_output(text):
     # leaving the rest of the password visible (Greptile / CodeRabbit
     # regression). `_BEARER_RE` runs after so an unquoted
     # `Authorization: Bearer <token>` is still masked before `_CRED_RE`.
-    text = _CRED_FLAG_RE.sub(lambda m: f"{m.group('key')} ***", text)
+    text = _redact_hook_matches(_CRED_FLAG_RE, lambda m: f"{m.group('key')} ***", text)
     # Standalone bearer pairs next: the flag rule already masked a quoted value
     # as a whole, so `--password "private Bearer abc"` cannot leak here;
     # an unquoted `"Bearer" <token>` must be masked before `_CRED_RE`
     # consumes the scheme word.
-    text = _BEARER_TOKEN_RE.sub(lambda m: f"{m.group(0).split()[0]} ***", text)
+    text = _redact_hook_matches(_BEARER_TOKEN_RE, lambda m: f"{m.group(0).split()[0]} ***", text)
     # Authorization (and common proxy/auth header variants): its value is
     # `scheme credential`, and the generic key rule would otherwise match the
     # header name and leave the token behind.
-    text = _BEARER_RE.sub(lambda m: f"{m.group('key')}=***", text)
-    text = _CRED_RE.sub(_red, text)
-    text = _CRED_SHORT_USER_RE.sub(
+    text = _redact_hook_matches(_BEARER_RE, lambda m: f"{m.group('key')}=***", text)
+    text = _redact_hook_matches(_CRED_RE, _red, text)
+    text = _redact_hook_matches(
+        _CRED_SHORT_USER_RE,
         lambda m: (
             f"{m.group('key')} ***"
             if ":" in (m.group("val") or "")
@@ -1154,8 +1279,8 @@ def _redact_hook_output(text):
         ),
         text,
     )
-    text = _PROVIDER_KEY_RE.sub("***", text)
-    text = _URL_CRED_RE.sub(lambda m: f"{m.group('scheme')}***@", text)
+    text = _redact_hook_matches(_PROVIDER_KEY_RE, lambda m: "***", text)
+    text = _redact_hook_matches(_URL_CRED_RE, lambda m: f"{m.group('scheme')}***@", text)
     return text
 
 
