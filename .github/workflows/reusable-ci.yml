@@ -86,7 +86,7 @@ jobs:
           # against the base ref (a depth-1 checkout makes it silently skip).
           fetch-depth: 0
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
           # No `cache:` here on purpose. The repo has no requirements files,
@@ -610,7 +610,7 @@ jobs:
           # fails closed on a shallow clone (it cannot verify tag ranges).
           fetch-depth: 0
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"
 
