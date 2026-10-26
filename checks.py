@@ -1134,6 +1134,14 @@ def _continuation_spans(text):
             continue
         if quote is not None:
             if char == "\\":
+                if quote == "'" and i + 1 < length and text[i + 1] == "'":
+                    # Single quotes have no escapes: the quote closes here.
+                    quote = None
+                    i += 2
+                    continue
+                if i + 1 < length and text[i + 1] == "\\":
+                    i += 2  # escaped backslash is a literal
+                    continue
                 if i + 1 < length and text[i + 1] == quote:
                     i += 2  # escaped quote, stays inside the string
                     continue

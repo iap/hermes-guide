@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import ast
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -246,6 +247,23 @@ def scan(path: Path, ignore_selftest: bool = False) -> list[str]:
     return hits
 
 
+def _is_reparse_point(path: Path) -> bool:
+    """True for symlinks and Windows junctions.
+
+    os.walk() stops at symlinked directories but still descends into junctions,
+    and it lists symlinked files. Neither is project source.
+    """
+    if os.path.islink(path):
+        return True
+    if os.name != "nt":
+        return False
+    try:
+        attrs = os.lstat(path).st_file_attributes
+    except OSError:
+        return False
+    return bool(attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
 def _is_excluded(name: str, at_root: bool = False) -> bool:
     """True when `name` is a non-source directory on this platform.
 
@@ -275,12 +293,16 @@ def _python_sources(root: Path) -> list[Path]:
     root = Path(root)
     targets: list[Path] = []
     for directory, dirnames, filenames in os.walk(root):
-        at_root = Path(directory) == root
+        current = Path(directory)
+        at_root = current == root
         dirnames[:] = sorted(
-            name for name in dirnames if not _is_excluded(name, at_root=at_root)
+            name for name in dirnames
+            if not _is_excluded(name, at_root=at_root)
+            and not _is_reparse_point(current / name)
         )
         targets.extend(
-            Path(directory) / name for name in filenames if Path(name).match("*.py")
+            current / name for name in filenames
+            if Path(name).match("*.py") and not _is_reparse_point(current / name)
         )
     return sorted(targets)
 
@@ -441,6 +463,16 @@ def selftest() -> int:
             ),
             "nested environment/dependency/vcs directories are pruned",
         )
+        linked = plain / "linked.py"
+        try:
+            os.symlink(plain / "owned.py", linked)
+        except OSError:
+            pass
+        else:
+            expect_tree(
+                linked not in _python_sources(plain),
+                "file symlinks are not scanned",
+            )
         expect_tree(
             _is_excluded("VENV") == (os.name == "nt"),
             "case variant excluded only where the filesystem is case-insensitive",

@@ -163,6 +163,19 @@ def selftest() -> int:
     text = "tool --password " + marker + continuation + " ./run.sh"
     assert checks._redact_hook_output(text) == "tool --password ***" + continuation + " ./run.sh"
     count += 1
+    # Backslash parity and single-quote semantics decide whether the closing
+    # quote really closes; a wrong state hides the next doctor record.
+    for quote, counts in ((double_quote, (0, 2)), (single_quote, (0, 1, 2, 3))):
+        for backslashes in counts:
+            for newline in ("\n", "\r\n"):
+                text = (
+                    "PASSWORD=" + quote + "SECRETvalue" + chr(92) * backslashes
+                    + quote + chr(92) + newline + MARK_BAD + " next"
+                )
+                out = checks._redact_hook_output(text)
+                assert "SECRETvalue" not in out, (quote, backslashes, newline, out)
+                assert MARK_BAD + " next" in out, (quote, backslashes, newline, out)
+                count += 1
     print(f"OK: {count} continued-credential and diagnostic-boundary cases passed")
     return 0
 
