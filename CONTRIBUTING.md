@@ -328,7 +328,9 @@ version, your platform (native Windows or POSIX), and the output of
 3. Run the gates. `python tools/check_gates.py` is the fast tier;
    `python tools/render_docs.py --write` refreshes generated blocks; see
    [AGENTS.md](AGENTS.md) and [docs/agent/ops.md](docs/agent/ops.md) for the
-   full list and what CI adds on top.
+   full list and what CI adds on top. Which interpreter and dependency setup the
+   suite needs is in
+   [docs/agent/ops.md](docs/agent/ops.md#local-interpreter).
 4. Fill in the PR template — **Environment** and **Validation Results** are read
    by workflows, not just by reviewers. The validation table is machine-checked:
    `validate-claim.yml` re-runs the hermetic gates against your head and fails the
