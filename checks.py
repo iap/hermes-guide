@@ -2852,6 +2852,15 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "Check file permissions on the reported `state.db` path and re-run "
         "`hermes guide storage`.",
     ),
+    "STORAGE_NOT_REGULAR": (
+        "state.db not a regular file",
+        "The `state.db` path exists but is not a regular file (a directory, "
+        "FIFO, or symlink to a non-file), so no session database can be read "
+        "or measured there.",
+        "Inspect the reported `state.db` path; it is not a database. Remove or "
+        "rename the directory/FIFO/symlink, then restart the session so Hermes "
+        "recreates a real `state.db`.",
+    ),
     "STORAGE_LARGE": (
         "state.db large",
         "A large session database takes longer to back up, uses more disk, and "
@@ -2912,6 +2921,11 @@ def check_storage():
     try:
         lst = os.lstat(db_path)
     except FileNotFoundError:
+        # Genuine absence = a profile Hermes has not run yet: "nothing to audit"
+        # (same precedent as the sessions check's absent agent.log). Deliberate —
+        # not a revert of 5b8a3e9: a missing DB is not a broken host, and an
+        # unexpected absence on a used host means the home/profile resolution
+        # is wrong, which HOME_UNRESOLVED already covers.
         return {
             "status": "healthy",
             "reason": "no state.db yet (nothing to audit)",
@@ -2926,7 +2940,7 @@ def check_storage():
         }
     if not stat.S_ISREG(lst.st_mode) and not stat.S_ISLNK(lst.st_mode):
         return {
-            "id": "STORAGE_UNREADABLE",
+            "id": "STORAGE_NOT_REGULAR",
             "status": "unknown",
             "reason": "state.db is not a regular file",
             "detail": db_path,
@@ -2942,7 +2956,7 @@ def check_storage():
         }
     if not stat.S_ISREG(st.st_mode):
         return {
-            "id": "STORAGE_UNREADABLE",
+            "id": "STORAGE_NOT_REGULAR",
             "status": "unknown",
             "reason": "state.db is not a regular file",
             "detail": db_path,
