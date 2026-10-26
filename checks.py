@@ -2907,8 +2907,8 @@ def check_storage():
     db_path = os.path.join(home, _STORAGE_DB_NAME)
     if not os.path.lexists(db_path):
         return {
-            "status": "healthy",
-            "reason": "no state.db yet (nothing to audit)",
+            "status": "unknown",
+            "reason": "state.db not found (not yet created)",
             "detail": db_path,
         }
     try:
