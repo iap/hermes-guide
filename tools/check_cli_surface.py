@@ -64,7 +64,7 @@ SESSION_PREFIXES = ("/",)
 # --fast and --json); globals apply on top.
 PLUGIN_COMMANDS = {
     "guide": ({"config", "mcp", "skills", "commands", "hooks", "plugins",
-               "memories", "sessions", "update"}, {"--fast", "--deep", "--json"}),
+               "memories", "sessions", "storage", "update"}, {"--fast", "--deep", "--json"}),
 }
 
 
