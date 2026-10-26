@@ -169,6 +169,7 @@ Disk full is a *capacity* problem, not a load problem: the host can be idle
 while writes fail. Treat it as a separate branch:
 
 1. Confirm with `df -h` on the volume holding `$HERMES_HOME` (`hermes config path`).
+   On native Windows, use `Get-PSDrive -PSProvider FileSystem` (or `Get-Volume`) instead.
 2. If `state.db` dominates, follow `diagnosing-memory` (`references/state_db.md`)
    and the `storage` scope of `hermes guide` — do not delete `-wal`/`-shm` by hand.
 3. For ephemeral files, caches, cron output, request dumps and scratch, run
@@ -176,6 +177,12 @@ while writes fail. Treat it as a separate branch:
    The `disk-cleanup` plugin tracks and ages these out automatically.
 4. Reclaiming *disk* does not relieve *memory* pressure — never present a
    cleanup as a fix for swapping (see section 4).
+
+> Provenance: verified 2026-10-27 against the live install — `/disk-cleanup`
+> slash command and the `disk-cleanup` plugin (`plugins/disk-cleanup/disk_cleanup.py`),
+> the `hermes-disk-housekeeping` skill, and standard OS disk commands (`df`, PowerShell
+> `Get-PSDrive`/`Get-Volume`). No upstream source citations are added; claims are limited
+> to commands and surfaces verified live.
 
 ---
 
