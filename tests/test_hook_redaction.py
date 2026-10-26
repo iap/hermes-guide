@@ -87,6 +87,68 @@ def selftest() -> int:
             assert MARK_BAD in text and MARK_WARN in text, result
             count += 1
 
+    # A doctor marker at the start of a continuation line is NOT a record
+    # boundary when it sits inside a quoted credential. The old regex-only
+    # folding leaked the quoted tail; quote-aware folding must mask it whole.
+    for prefix in (MARK_BAD, MARK_WARN, "\u2713", "\u2139"):
+        command = (
+            "PASSWORD=" + double_quote + "correct" + continuation
+            + prefix + " horse" + double_quote
+        )
+        for doctor in (
+            # shlex.quote puts the command inside outer single quotes, so this
+            # form exercises the outer-quote path. The raw form below is the
+            # one that actually exercises the inner double-quote state
+            # (CodeRabbit finding).
+            "Checking hooks...\n  [pre_tool] bash -c " + shlex.quote(command) + "\n",
+            "Checking hooks...\n  [pre_tool] " + command + "\n",
+        ):
+            checks._run = lambda cmd, timeout=20, d=doctor: (0, d, "")
+            result = checks.check_hooks()
+            text = result["detail"]
+            assert "correct" not in text and "horse" not in text, (prefix, result)
+            assert "***" in text, result
+            count += 1
+
+    # Outside a quote the same shape is a genuine record boundary and must
+    # survive as evidence rather than being folded into the credential value.
+    # A credential must sit immediately before the continuation; otherwise a
+    # wrong fold leaves the marker untouched and the assertion below passes
+    # even when folding is broken (CodeRabbit finding).
+    command = "hook --password " + continuation + MARK_BAD + " failed"
+    doctor = "Checking hooks...\n  " + command + "\n"
+    checks._run = lambda cmd, timeout=20: (0, doctor, "")
+    result = checks.check_hooks()
+    assert MARK_BAD + " failed" in result["detail"], result
+    count += 1
+
+    # A malformed record with an unclosed quote must not carry quote state into
+    # the next record and swallow its status marker (Qodo finding 2).
+    command = (
+        "hook echo " + double_quote + "unterminated\n"
+        "  [pre_tool] --password secret"
+        + continuation + MARK_BAD + " failed"
+    )
+    doctor = "Checking hooks...\n" + command + "\n"
+    checks._run = lambda cmd, timeout=20: (0, doctor, "")
+    result = checks.check_hooks()
+    assert "secret" not in result["detail"], result
+    assert MARK_BAD + " failed" in result["detail"], result
+    count += 1
+
+    # An escaped literal quote outside quotes must not open quote state
+    # (Qodo finding 3).
+    command = (
+        "hook echo " + chr(92) + double_quote + " literal and --password secret"
+        + continuation + MARK_BAD + " failed"
+    )
+    doctor = "Checking hooks...\n  " + command + "\n"
+    checks._run = lambda cmd, timeout=20: (0, doctor, "")
+    result = checks.check_hooks()
+    assert "secret" not in result["detail"], result
+    assert MARK_BAD + " failed" in result["detail"], result
+    count += 1
+
     # Matching sees logical shell words; unrelated evidence keeps its spelling.
     unchanged = [
         "node " + continuation + "  ./run.sh",
@@ -111,6 +173,19 @@ def selftest() -> int:
     text = "tool --password " + marker + continuation + " ./run.sh"
     assert checks._redact_hook_output(text) == "tool --password ***" + continuation + " ./run.sh"
     count += 1
+    # Backslash parity and single-quote semantics decide whether the closing
+    # quote really closes; a wrong state hides the next doctor record.
+    for quote, counts in ((double_quote, (0, 2)), (single_quote, (0, 1, 2, 3))):
+        for backslashes in counts:
+            for newline in ("\n", "\r\n"):
+                text = (
+                    "PASSWORD=" + quote + "SECRETvalue" + chr(92) * backslashes
+                    + quote + chr(92) + newline + MARK_BAD + " next"
+                )
+                out = checks._redact_hook_output(text)
+                assert "SECRETvalue" not in out, (quote, backslashes, newline, out)
+                assert MARK_BAD + " next" in out, (quote, backslashes, newline, out)
+                count += 1
     print(f"OK: {count} continued-credential and diagnostic-boundary cases passed")
     return 0
 

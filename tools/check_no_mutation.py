@@ -38,20 +38,38 @@ from __future__ import annotations
 
 import ast
 import os
+import stat
 import sys
 from pathlib import Path
 
 # CI-time utilities, local environments, dependencies and generated artifacts
-# are not plugin source. Most names mirror .gitignore; .git and the standard
-# test/lint/automation caches are also not source. Keep this explicit instead
-# of ignoring all hidden directories or all Git-ignored paths: new/untracked
-# plugin Python must still be checked, including in an installed source tree.
-# `tests/` is deliberately NOT excluded: the scanner-hygiene guard lives
-# there, and only its `selftest` fixtures may write (see detect_code).
-_EXCLUDE_DIRS = {
-    "tools", ".git", ".venv", "venv", "node_modules", "dist", "coverage",
-    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox",
+# are not plugin source. Split the list by scope:
+#
+# - ANYWHERE: never project source at any depth. A nested `.venv`,
+#   `node_modules` or `.git` is still third-party/VCS data, and scanning it
+#   both slows the gate and can flag dependency writes as project mutations.
+# - ROOT ONLY: artifact-shaped names that can legitimately be project source
+#   below the root (`tests/coverage/`, `plugin/dist/`). Pruning these only at
+#   the scan root preserves the CodeRabbit finding from PR #359 (a nested
+#   `tests/coverage/test_mutation.py` must still be scanned).
+#
+# Most names mirror .gitignore. Keep this explicit instead of ignoring all
+# hidden directories or all Git-ignored paths: new/untracked plugin Python
+# must still be checked, including in an installed source tree. `tests/` is
+# deliberately NOT excluded: the scanner-hygiene guard lives there, and only
+# its `selftest` fixtures may write (see detect_code).
+_EXCLUDE_ANYWHERE = {
+    ".git", ".venv", "venv", "node_modules", "__pycache__",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox",
 }
+_EXCLUDE_ROOT_ONLY = {"tools", "dist", "coverage"}
+_EXCLUDE_DIRS = _EXCLUDE_ANYWHERE | _EXCLUDE_ROOT_ONLY
+
+# Windows reparse tags that denote links. Other reparse tags (cloud
+# placeholders, dedup, WOF compression) are still ordinary project files.
+_IO_REPARSE_TAG_SYMLINK = 0xA000000C
+_IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+_IO_REPARSE_TAG_LX_SYMLINK = 0xA000001D
 
 # A "mode" string is a write mode if it contains any of these flags.
 _WRITE_FLAGS = "wax+"
@@ -235,34 +253,77 @@ def scan(path: Path, ignore_selftest: bool = False) -> list[str]:
     return hits
 
 
-def _is_excluded(name: str) -> bool:
+def _is_link_reparse_tag(tag: int) -> bool:
+    """True for the Windows reparse tags that denote a link or junction."""
+    return tag in (
+        _IO_REPARSE_TAG_SYMLINK,
+        _IO_REPARSE_TAG_MOUNT_POINT,
+        _IO_REPARSE_TAG_LX_SYMLINK,
+    )
+
+
+def _is_reparse_point(path: Path) -> bool:
+    """True for symlinks and Windows junctions, not every reparse point.
+
+    os.walk() stops at symlinked directories but still descends into junctions,
+    and it lists symlinked files. Neither is project source. A non-link
+    reparse point (cloud placeholder, dedup, WOF) is still a project file and
+    must stay in scope; rejecting every reparse attribute would let a mutation
+    in such a file pass unscanned (CodeRabbit finding).
+    """
+    if os.path.islink(path):
+        return True
+    if os.name != "nt":
+        return False
+    try:
+        status = os.lstat(path)
+    except OSError:
+        return False
+    attrs = getattr(status, "st_file_attributes", 0)
+    if not attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        return False
+    return _is_link_reparse_tag(getattr(status, "st_reparse_tag", 0))
+
+
+def _is_excluded(name: str, at_root: bool = False) -> bool:
     """True when `name` is a non-source directory on this platform.
 
     Windows resolves directory names case-insensitively, so ``VENV`` and
     ``venv`` are the same directory there; a case-sensitive check would
     traverse it and rate third-party dependency code as project source.
+    ``at_root`` adds the artifact-shaped names that are only excluded at the
+    scan root (see ``_EXCLUDE_ROOT_ONLY``).
     """
+    excluded = _EXCLUDE_DIRS if at_root else _EXCLUDE_ANYWHERE
     if os.name == "nt":
-        return name.lower() in {entry.lower() for entry in _EXCLUDE_DIRS}
-    return name in _EXCLUDE_DIRS
+        return name.lower() in {entry.lower() for entry in excluded}
+    return name in excluded
 
 
 def _python_sources(root: Path) -> list[Path]:
     """Find project Python without descending into non-source directories.
 
-    Exclusions apply only at the scan root. ``.venv`` and ``node_modules`` are
-    root-level artifacts; matching a basename anywhere in the tree would skip
-    project source that happens to live under a directory named ``coverage``.
-    An explicit scan root is always inspected, even when its own basename is
-    excluded. Like Path.rglob(), os.walk() does not follow directory symlinks.
+    Environment/dependency/VCS directories are pruned at any depth; the
+    artifact-shaped names that can be project source below the root
+    (``tools``, ``dist``, ``coverage``) are pruned only at the scan root.
+    That keeps ``tests/coverage/test_mutation.py`` in scope without scanning a
+    nested ``.venv`` or ``node_modules``. An explicit scan root is always
+    inspected, even when its own basename is excluded. Like Path.rglob(),
+    os.walk() does not follow directory symlinks.
     """
     root = Path(root)
     targets: list[Path] = []
     for directory, dirnames, filenames in os.walk(root):
-        if Path(directory) == root:
-            dirnames[:] = sorted(name for name in dirnames if not _is_excluded(name))
+        current = Path(directory)
+        at_root = current == root
+        dirnames[:] = sorted(
+            name for name in dirnames
+            if not _is_excluded(name, at_root=at_root)
+            and not _is_reparse_point(current / name)
+        )
         targets.extend(
-            Path(directory) / name for name in filenames if Path(name).match("*.py")
+            current / name for name in filenames
+            if Path(name).match("*.py") and not _is_reparse_point(current / name)
         )
     return sorted(targets)
 
@@ -399,10 +460,49 @@ def selftest() -> int:
             dependency = plain / name / "package" / "mutates.py"
             dependency.parent.mkdir(parents=True, exist_ok=True)
             dependency.write_text(mutation, encoding="utf-8")
+        # Environment, dependency and VCS directories are never project source
+        # at any depth, not only at the scan root.
+        nested_artifacts = [
+            "vendor/.venv/package/mutates.py",
+            "vendor/node_modules/package/mutates.py",
+            "vendor/.git/hooks/mutates.py",
+            "vendor/__pycache__/mutates.py",
+        ]
+        for relative in nested_artifacts:
+            dependency = plain / relative
+            dependency.parent.mkdir(parents=True, exist_ok=True)
+            dependency.write_text(mutation, encoding="utf-8")
         expect_tree(
             {path.relative_to(plain).as_posix() for path in _python_sources(plain)}
             == {"owned.py"},
-            "root-level artifact directories are pruned",
+            "root-level artifact directories and nested environments are pruned",
+        )
+        expect_tree(
+            not (
+                {path.relative_to(plain).as_posix() for path in _python_sources(plain)}
+                & set(nested_artifacts)
+            ),
+            "nested environment/dependency/vcs directories are pruned",
+        )
+        linked = plain / "linked.py"
+        try:
+            os.symlink(plain / "owned.py", linked)
+        except OSError:
+            pass
+        else:
+            expect_tree(
+                linked not in _python_sources(plain),
+                "file symlinks are not scanned",
+            )
+        expect_tree(
+            _is_link_reparse_tag(_IO_REPARSE_TAG_SYMLINK)
+            and _is_link_reparse_tag(_IO_REPARSE_TAG_MOUNT_POINT)
+            and _is_link_reparse_tag(_IO_REPARSE_TAG_LX_SYMLINK),
+            "symlink and junction reparse tags are links",
+        )
+        expect_tree(
+            not _is_link_reparse_tag(0x80000017),
+            "non-link reparse tags stay project source",
         )
         expect_tree(
             _is_excluded("VENV") == (os.name == "nt"),

@@ -285,6 +285,12 @@ jobs:
         if: inputs.run-full-gate
         run: python tests/test_hook_redaction.py
 
+      - name: Mutation guard traversal self-test
+        # Windows is the platform that exercises case-folding; run the
+        # traversal/exclusion table on every matrix leg, not only ubuntu.
+        if: inputs.run-full-gate
+        run: python tools/check_no_mutation.py --selftest
+
       - name: Finding-contract regression test
         # AST scan of checks.py plus run_all() fixtures - no Hermes, no
         # $HERMES_HOME. Pins stable ids and registry-expanded impact/fix.
