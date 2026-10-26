@@ -1104,12 +1104,65 @@ _BEARER_TOKEN_RE = re.compile(
 _PROVIDER_KEY_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk[-_][A-Za-z0-9_-]{16,})\b")
 _URL_CRED_RE = re.compile(r"(?i)\b(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@\s]+@")
 
-# Consume escaped backslash pairs unchanged; only an unpaired backslash can
-# continue a line. Doctor status lines stay separate records; a marker without
-# its following whitespace can be part of a credential rather than a status.
-_HOOK_CONTINUATION_RE = re.compile(
-    r"\\\\|\\\r?\n(?![ \t]*[\u2717\u26a0\u2713\u2139](?=[ \t\r\n]|$))"
-)
+_RECORD_MARKERS = "\u2717\u26a0\u2713\u2139"
+_RECORD_BOUNDARY_RE = re.compile(r"[ \t]*[" + _RECORD_MARKERS + r"](?=[ \t\r\n]|$)")
+
+
+def _continuation_spans(text):
+    """Spans of backslash-newlines that continue the shell word.
+
+    Quote-aware: a doctor marker at the start of the continuation line is a
+    record boundary only when it is outside a quoted credential. A regex
+    lookahead cannot know that state, so a password split as
+    ``PASSWORD="correct\\`` / ``✗ horse"`` used to stay unfolded and leak the
+    tail. Fold inside single/double quotes unconditionally; outside quotes,
+    preserve a genuine marker record. Escaped backslash pairs are consumed
+    unchanged, matching shell rules.
+    """
+    spans = []
+    quote = None
+    i = 0
+    length = len(text)
+    while i < length:
+        char = text[i]
+        if quote is not None:
+            if char == "\\":
+                if i + 1 < length and text[i + 1] == quote:
+                    i += 2  # escaped quote, stays inside the string
+                    continue
+                j = i + 1
+                if j < length and text[j] == "\r":
+                    j += 1
+                if j < length and text[j] == "\n":
+                    spans.append((i, j + 1))
+                    i = j + 1
+                    continue
+                i += 1
+                continue
+            if char == quote:
+                quote = None
+            i += 1
+            continue
+        if char in ("'", '"'):
+            quote = char
+            i += 1
+            continue
+        if char == "\\":
+            if i + 1 < length and text[i + 1] == "\\":
+                i += 2  # escaped backslash is a literal, not a continuation
+                continue
+            j = i + 1
+            if j < length and text[j] == "\r":
+                j += 1
+            if j < length and text[j] == "\n":
+                if _RECORD_BOUNDARY_RE.match(text, j + 1):
+                    i = j + 1  # genuine doctor record boundary
+                    continue
+                spans.append((i, j + 1))
+                i = j + 1
+                continue
+        i += 1
+    return spans
 
 
 def _redact_hook_matches(pattern, replacement, text):
@@ -1122,19 +1175,19 @@ def _redact_hook_matches(pattern, replacement, text):
     if "\\\n" not in text and "\\\r\n" not in text:
         return pattern.sub(replacement, text)
 
+    spans = _continuation_spans(text)
+    if not spans:
+        return pattern.sub(replacement, text)
+
     chunks = []
     boundaries = []
     skipped = [0]
     cursor = 0
-    for match in _HOOK_CONTINUATION_RE.finditer(text):
-        if not match.group().endswith("\n"):
-            continue
-        chunks.append(text[cursor:match.start()])
-        boundaries.append(match.start() - skipped[-1])
-        skipped.append(skipped[-1] + match.end() - match.start())
-        cursor = match.end()
-    if cursor == 0:
-        return pattern.sub(replacement, text)
+    for start, end in spans:
+        chunks.append(text[cursor:start])
+        boundaries.append(start - skipped[-1])
+        skipped.append(skipped[-1] + (end - start))
+        cursor = end
     chunks.append(text[cursor:])
     logical = "".join(chunks)
 

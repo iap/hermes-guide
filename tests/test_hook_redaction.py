@@ -87,6 +87,31 @@ def selftest() -> int:
             assert MARK_BAD in text and MARK_WARN in text, result
             count += 1
 
+    # A doctor marker at the start of a continuation line is NOT a record
+    # boundary when it sits inside a quoted credential. The old regex-only
+    # folding leaked the quoted tail; quote-aware folding must mask it whole.
+    for prefix in (MARK_BAD, MARK_WARN, "\u2713", "\u2139"):
+        command = (
+            "PASSWORD=" + double_quote + "correct" + continuation
+            + prefix + " horse" + double_quote
+        )
+        doctor = "Checking hooks...\n  [pre_tool] bash -c " + shlex.quote(command) + "\n"
+        checks._run = lambda cmd, timeout=20: (0, doctor, "")
+        result = checks.check_hooks()
+        text = result["detail"]
+        assert "correct" not in text and "horse" not in text, (prefix, result)
+        assert "***" in text, result
+        count += 1
+
+    # Outside a quote the same shape is a genuine record boundary and must
+    # survive as evidence rather than being folded into the credential value.
+    command = "hook run " + continuation + MARK_BAD + " failed"
+    doctor = "Checking hooks...\n  " + command + "\n"
+    checks._run = lambda cmd, timeout=20: (0, doctor, "")
+    result = checks.check_hooks()
+    assert MARK_BAD + " failed" in result["detail"], result
+    count += 1
+
     # Matching sees logical shell words; unrelated evidence keeps its spelling.
     unchanged = [
         "node " + continuation + "  ./run.sh",
