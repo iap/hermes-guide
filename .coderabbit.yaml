@@ -70,7 +70,7 @@ reviews:
         If an existing review already identifies a defect, add a comment only
         when contributing new evidence or a distinct impact. Another reviewer's
         approval does not establish correctness.
-    - path: "*.py"
+    - path: "**/*.py"
       instructions: |
         Prioritize filesystem/config mutation, secret leakage, malformed input,
         timeout handling, and native Windows/POSIX behavior. Plugin checks return

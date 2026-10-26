@@ -206,6 +206,28 @@ def case_hooks_redact_credentials(checks):
         + cred("short-user-hook", "curl -u " + user_cred + " https://example.test")
         + cred("attached-user-hook", "curl -u" + user_cred + " https://example.test")
         + cred("unbuffered-hook", "python -u /tmp/hook.py")
+        # `--author` and `AUTHOR=` must NOT be treated as credentials: the
+        # word `AUTH` alone was over-matched and corrupted the report.
+        + cred("author-hook", "git commit --author " + s + "Jane Doe" + s + " -m x")
+        + cred("author-env-hook", "AUTHOR=Jane Doe")
+        # compound AUTH names ARE credentials and must still be masked
+        + cred("basic-auth-hook", "BASIC_AUTH=" + s + "alice:" + api_key + s)
+        + cred("auth-header-hook", "AUTH_HEADER=" + s + "Basic " + basic + s)
+        # quoted password containing an auth header must mask the whole value
+        # (CodeRabbit regression: bearer pass consumed the closing quote)
+        + cred("quoted-auth-in-password-hook",
+               "hook --password " + s + "private X-Auth: Bearer abc" + s + " ./run.sh")
+        # unquoted bearer in flag/assignment values must mask the whole value
+        # (Greptile regression: `Bearer` was consumed alone, leaking the token)
+        + cred("unquoted-bearer-flag-hook", "tool --password Bearer secret-token")
+        + cred("unquoted-bearer-assign-hook", "AUTH_HEADER=Bearer secret-token")
+        # compound auth flags must still be masked (not excluded by the
+        # auth-mode/type/method exclusion)
+        + cred("compound-auth-flag-hook", "tool --auth-mode-password hunter2")
+        # non-Authorization auth headers must mask bearer tokens
+        + cred("x-auth-header-hook", "curl -H " + s + "X-Auth: Bearer opaque-value" + s)
+        # quoted multi-word auth headers must mask the whole value
+        + cred("quoted-x-auth-hook", "curl -H " + s + "X-Auth: " + s + "Bearer secret-token" + s + s)
         + cred("agent-hook", "curl --user-agent Mozilla/5.0 https://example.test")
         # a quoted flag value containing its own assignment: the whole quoted
         # value must be masked before the inner KEY=value rule runs
@@ -233,7 +255,11 @@ def case_hooks_redact_credentials(checks):
                  "shell-quoted-hook", "shell-escaped-hook", "user-hook",
                  "user-eq-hook", "proxy-hook", "short-user-hook",
                  "attached-user-hook", "unbuffered-hook", "agent-hook",
-                 "nested-flag", "normal-hook"):
+                 "author-hook", "author-env-hook", "basic-auth-hook",
+                 "auth-header-hook", "nested-flag", "normal-hook",
+                 "unquoted-bearer-flag-hook", "unquoted-bearer-assign-hook",
+                 "compound-auth-flag-hook", "x-auth-header-hook",
+                 "quoted-x-auth-hook", "quoted-auth-in-password-hook"):
         assert hook in text, text
     # the rest of the line must survive: script path and status text
     assert "node /tmp/hook.js" in text, text
@@ -242,18 +268,70 @@ def case_hooks_redact_credentials(checks):
     assert "curl --proxy-user ***" in text, text
     assert "curl -u ***" in text, text
     assert "python -u /tmp/hook.py" in text, text
+    # non-credential `AUTH` words survive untouched. Assert each command
+    # separately: a shared `Jane Doe` string would let one fixture's failure be
+    # masked by the other still matching (Greptile finding).
+    assert "git commit --author " + s + "Jane Doe" + s + " -m x" in text, text
+    assert "AUTHOR=Jane Doe" in text, text
+    # compound AUTH names are credentials and must still be masked
+    assert "BASIC_AUTH=" in text and "alice:" not in text, text
+    # an auth-mode flag must not split `Bearer <token>` past the bearer rule
+    # unquoted bearer tokens must not leak
+    assert "secret-token" not in text, text
+    # compound auth flag values must not leak
+    assert "hunter2" not in text, text
+    # non-Authorization header bearer tokens must not leak
+    assert "opaque-value" not in text, text
+    # quoted multi-word auth headers must not leak
+    assert "secret-token" not in text, text
+    # quoted password containing an auth header must not leak
+    assert "private" not in text, text
+    assert "opaque-two" not in text, text
     assert "curl --user-agent Mozilla/5.0" in text, text
     assert "***" in text, text
     print("OK: hook doctor output is redacted before it reaches the report")
 
 
-def case_hooks_marker_beats_healthy_summary(checks):
-    """A failure marker outranks the healthy summary; a bad rc stays unknown.
+def case_hooks_redact_bearer_edges(checks):
+    """Bearer edges: quoted schemes, suffixes, escapes, and a false positive."""
+    s = chr(34)
 
-    Gemma's review worried that a keyword match could report healthy when the
-    doctor also printed a failure. Pin both directions: the per-hook marker
-    wins over the summary line, and a non-zero rc never becomes healthy.
-    """
+    def cred(name, value):
+        return "  " + MARK_BAD + " " + name + "   " + value + "\n"
+
+    doctor_out = (
+        "Shell hooks\n"
+        + cred("auth-mode-hook", "tool --auth-mode Bearer opaque-token")
+        + cred("quoted-bearer-hook", "curl --password " + s + "private Bearer abc" + s)
+        + cred("quoted-scheme-hook", "tool --auth-mode=" + s + "Bearer" + s + " opaque-two")
+        + cred("bearer-suffix-hook", "tool Bearer " + s + "secret" + s + "qsuffix")
+        + cred("not-bearer-hook", "echo NotBearer diagnostic")
+        + cred("escaped-bearer-hook", "tool --oauth2-bearer " + s + "abc" + chr(92) + s + "esctok" + s)
+        + cred("quoted-assignment-hook", "PASSWORD=" + s + "private Bearer abcplane" + s)
+        + cred("oauth2-bearer-hook", "tool --oauth2-bearer oauthtok")
+        + cred("multiline-hook", "PASSWORD=" + s + "firstline\nsecondline" + s)
+    )
+    checks._hermes_candidates = lambda: ["/fake/hermes"]
+    checks._run = lambda cmd, timeout=20: (0, doctor_out, "")
+    checks._check_allowlist_json = lambda home=None: None
+
+    env = checks.check_hooks()
+    text = str(env.get("detail") or "")
+    for secret in ("opaque-token", "opaque-two", "qsuffix", "esctok", "abcplane"):
+        assert secret not in text, text
+    assert "private Bearer" not in text, text
+    assert "oauthtok" not in text, text
+    assert "secondline" not in text, text
+    assert "NotBearer diagnostic" in text, text
+    for hook in ("auth-mode-hook", "quoted-bearer-hook", "quoted-scheme-hook",
+                 "bearer-suffix-hook", "not-bearer-hook", "escaped-bearer-hook",
+                 "quoted-assignment-hook", "oauth2-bearer-hook", "multiline-hook"):
+        assert hook in text, text
+    print("OK: bearer redaction covers quoted schemes, suffixes and false positives")
+
+
+def case_hooks_marker_beats_healthy_summary(checks):
+    """A failure marker outranks the healthy summary; a bad rc stays unknown."""
     doctor_out = (
         "All shell hooks look healthy\n"
         f"  {MARK_BAD} broken-hook   exit code 3\n"
@@ -396,6 +474,7 @@ def main() -> int:
         case_hooks_unaffected_when_allowlist_fine,
         case_hooks_marker_beats_healthy_summary,
         case_hooks_redact_credentials,
+        case_hooks_redact_bearer_edges,
         case_allowlist_reuses_caller_home,
         case_plugins_disabled_wins_over_bundled,
         case_plugins_nested_user_key_not_bundled,
@@ -409,7 +488,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} failure(s)")
         return 1
-    print("\nOK: 11 check-envelope case(s) passed")
+    print("\nOK: 12 check-envelope case(s) passed")
     return 0
 
 
