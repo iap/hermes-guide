@@ -42,16 +42,27 @@ import sys
 from pathlib import Path
 
 # CI-time utilities, local environments, dependencies and generated artifacts
-# are not plugin source. Most names mirror .gitignore; .git and the standard
-# test/lint/automation caches are also not source. Keep this explicit instead
-# of ignoring all hidden directories or all Git-ignored paths: new/untracked
-# plugin Python must still be checked, including in an installed source tree.
-# `tests/` is deliberately NOT excluded: the scanner-hygiene guard lives
-# there, and only its `selftest` fixtures may write (see detect_code).
-_EXCLUDE_DIRS = {
-    "tools", ".git", ".venv", "venv", "node_modules", "dist", "coverage",
-    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox",
+# are not plugin source. Split the list by scope:
+#
+# - ANYWHERE: never project source at any depth. A nested `.venv`,
+#   `node_modules` or `.git` is still third-party/VCS data, and scanning it
+#   both slows the gate and can flag dependency writes as project mutations.
+# - ROOT ONLY: artifact-shaped names that can legitimately be project source
+#   below the root (`tests/coverage/`, `plugin/dist/`). Pruning these only at
+#   the scan root preserves the CodeRabbit finding from PR #359 (a nested
+#   `tests/coverage/test_mutation.py` must still be scanned).
+#
+# Most names mirror .gitignore. Keep this explicit instead of ignoring all
+# hidden directories or all Git-ignored paths: new/untracked plugin Python
+# must still be checked, including in an installed source tree. `tests/` is
+# deliberately NOT excluded: the scanner-hygiene guard lives there, and only
+# its `selftest` fixtures may write (see detect_code).
+_EXCLUDE_ANYWHERE = {
+    ".git", ".venv", "venv", "node_modules", "__pycache__",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox",
 }
+_EXCLUDE_ROOT_ONLY = {"tools", "dist", "coverage"}
+_EXCLUDE_DIRS = _EXCLUDE_ANYWHERE | _EXCLUDE_ROOT_ONLY
 
 # A "mode" string is a write mode if it contains any of these flags.
 _WRITE_FLAGS = "wax+"
@@ -235,32 +246,39 @@ def scan(path: Path, ignore_selftest: bool = False) -> list[str]:
     return hits
 
 
-def _is_excluded(name: str) -> bool:
+def _is_excluded(name: str, at_root: bool = False) -> bool:
     """True when `name` is a non-source directory on this platform.
 
     Windows resolves directory names case-insensitively, so ``VENV`` and
     ``venv`` are the same directory there; a case-sensitive check would
     traverse it and rate third-party dependency code as project source.
+    ``at_root`` adds the artifact-shaped names that are only excluded at the
+    scan root (see ``_EXCLUDE_ROOT_ONLY``).
     """
+    excluded = _EXCLUDE_DIRS if at_root else _EXCLUDE_ANYWHERE
     if os.name == "nt":
-        return name.lower() in {entry.lower() for entry in _EXCLUDE_DIRS}
-    return name in _EXCLUDE_DIRS
+        return name.lower() in {entry.lower() for entry in excluded}
+    return name in excluded
 
 
 def _python_sources(root: Path) -> list[Path]:
     """Find project Python without descending into non-source directories.
 
-    Exclusions apply only at the scan root. ``.venv`` and ``node_modules`` are
-    root-level artifacts; matching a basename anywhere in the tree would skip
-    project source that happens to live under a directory named ``coverage``.
-    An explicit scan root is always inspected, even when its own basename is
-    excluded. Like Path.rglob(), os.walk() does not follow directory symlinks.
+    Environment/dependency/VCS directories are pruned at any depth; the
+    artifact-shaped names that can be project source below the root
+    (``tools``, ``dist``, ``coverage``) are pruned only at the scan root.
+    That keeps ``tests/coverage/test_mutation.py`` in scope without scanning a
+    nested ``.venv`` or ``node_modules``. An explicit scan root is always
+    inspected, even when its own basename is excluded. Like Path.rglob(),
+    os.walk() does not follow directory symlinks.
     """
     root = Path(root)
     targets: list[Path] = []
     for directory, dirnames, filenames in os.walk(root):
-        if Path(directory) == root:
-            dirnames[:] = sorted(name for name in dirnames if not _is_excluded(name))
+        at_root = Path(directory) == root
+        dirnames[:] = sorted(
+            name for name in dirnames if not _is_excluded(name, at_root=at_root)
+        )
         targets.extend(
             Path(directory) / name for name in filenames if Path(name).match("*.py")
         )
@@ -399,10 +417,29 @@ def selftest() -> int:
             dependency = plain / name / "package" / "mutates.py"
             dependency.parent.mkdir(parents=True, exist_ok=True)
             dependency.write_text(mutation, encoding="utf-8")
+        # Environment, dependency and VCS directories are never project source
+        # at any depth, not only at the scan root.
+        nested_artifacts = [
+            "vendor/.venv/package/mutates.py",
+            "vendor/node_modules/package/mutates.py",
+            "vendor/.git/hooks/mutates.py",
+            "vendor/__pycache__/mutates.py",
+        ]
+        for relative in nested_artifacts:
+            dependency = plain / relative
+            dependency.parent.mkdir(parents=True, exist_ok=True)
+            dependency.write_text(mutation, encoding="utf-8")
         expect_tree(
             {path.relative_to(plain).as_posix() for path in _python_sources(plain)}
             == {"owned.py"},
-            "root-level artifact directories are pruned",
+            "root-level artifact directories and nested environments are pruned",
+        )
+        expect_tree(
+            not (
+                {path.relative_to(plain).as_posix() for path in _python_sources(plain)}
+                & set(nested_artifacts)
+            ),
+            "nested environment/dependency/vcs directories are pruned",
         )
         expect_tree(
             _is_excluded("VENV") == (os.name == "nt"),
