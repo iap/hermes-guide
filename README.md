@@ -12,7 +12,7 @@ found during diagnosis may still be reported upstream.
 It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. The plugin is **read-only** (no config writes; empty `capabilities:`). It ships two independent things:
 
 1. **A plugin.** `/hermes-doctor` in a session, `hermes guide` in a terminal. Read-only health checks across <!-- BEGIN GENERATED: intro-scopes -->
-`config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`, `update`
+`config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`, `storage`, `update`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
 **Twenty-two troubleshooting skills** — one install guide, one configuration map, nineteen per-surface `diagnosing-*` playbooks, one other skill (`hermes-post-update`).
