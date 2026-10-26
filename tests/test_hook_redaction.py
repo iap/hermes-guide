@@ -112,6 +112,33 @@ def selftest() -> int:
     assert MARK_BAD + " failed" in result["detail"], result
     count += 1
 
+    # A malformed record with an unclosed quote must not carry quote state into
+    # the next record and swallow its status marker (Qodo finding 2).
+    command = (
+        "hook echo " + double_quote + "unterminated\n"
+        "  [pre_tool] --password secret"
+        + continuation + MARK_BAD + " failed"
+    )
+    doctor = "Checking hooks...\n" + command + "\n"
+    checks._run = lambda cmd, timeout=20: (0, doctor, "")
+    result = checks.check_hooks()
+    assert "secret" not in result["detail"], result
+    assert MARK_BAD + " failed" in result["detail"], result
+    count += 1
+
+    # An escaped literal quote outside quotes must not open quote state
+    # (Qodo finding 3).
+    command = (
+        "hook echo " + chr(92) + double_quote + " literal and --password secret"
+        + continuation + MARK_BAD + " failed"
+    )
+    doctor = "Checking hooks...\n  " + command + "\n"
+    checks._run = lambda cmd, timeout=20: (0, doctor, "")
+    result = checks.check_hooks()
+    assert "secret" not in result["detail"], result
+    assert MARK_BAD + " failed" in result["detail"], result
+    count += 1
+
     # Matching sees logical shell words; unrelated evidence keeps its spelling.
     unchanged = [
         "node " + continuation + "  ./run.sh",

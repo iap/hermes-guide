@@ -1125,6 +1125,13 @@ def _continuation_spans(text):
     length = len(text)
     while i < length:
         char = text[i]
+        if char == "\n":
+            # A bare newline ends the logical record. Reset quote state so a
+            # malformed/unclosed quote in one record cannot swallow a later
+            # record's marker as credential text (Qodo finding).
+            quote = None
+            i += 1
+            continue
         if quote is not None:
             if char == "\\":
                 if i + 1 < length and text[i + 1] == quote:
@@ -1160,6 +1167,11 @@ def _continuation_spans(text):
                     continue
                 spans.append((i, j + 1))
                 i = j + 1
+                continue
+            if i + 1 < length and text[i + 1] not in ("\n", "\r"):
+                # Escaped character outside quotes (`\"`, `\'`): the quote is
+                # literal and must not open quote state (Qodo finding).
+                i += 2
                 continue
         i += 1
     return spans
