@@ -95,13 +95,20 @@ def selftest() -> int:
             "PASSWORD=" + double_quote + "correct" + continuation
             + prefix + " horse" + double_quote
         )
-        doctor = "Checking hooks...\n  [pre_tool] bash -c " + shlex.quote(command) + "\n"
-        checks._run = lambda cmd, timeout=20: (0, doctor, "")
-        result = checks.check_hooks()
-        text = result["detail"]
-        assert "correct" not in text and "horse" not in text, (prefix, result)
-        assert "***" in text, result
-        count += 1
+        for doctor in (
+            # shlex.quote puts the command inside outer single quotes, so this
+            # form exercises the outer-quote path. The raw form below is the
+            # one that actually exercises the inner double-quote state
+            # (CodeRabbit finding).
+            "Checking hooks...\n  [pre_tool] bash -c " + shlex.quote(command) + "\n",
+            "Checking hooks...\n  [pre_tool] " + command + "\n",
+        ):
+            checks._run = lambda cmd, timeout=20, d=doctor: (0, d, "")
+            result = checks.check_hooks()
+            text = result["detail"]
+            assert "correct" not in text and "horse" not in text, (prefix, result)
+            assert "***" in text, result
+            count += 1
 
     # Outside a quote the same shape is a genuine record boundary and must
     # survive as evidence rather than being folded into the credential value.
