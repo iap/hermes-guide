@@ -399,9 +399,18 @@ slower same-model output.
 Never merge on green CI alone. Immediately before merging a PR, verify: all
 checks pass (not pending), every review thread resolved (fixed or declined with
 file:line evidence — never auto-resolved to unblock), both reviewers heard
-where present (a silent bot is not an approving bot; trigger CodeRabbit after
-Qodo lands when coverage matters), `mergeStateStatus` is `CLEAN`, and the merge
-is explicitly authorized. Report the checklist result, then merge.
+where present (a silent bot is not an approving bot), `mergeStateStatus` is
+`CLEAN`, and the merge is explicitly authorized. Report the checklist result,
+then merge.
+
+**CodeRabbit is required once Qodo has run, not an optional extra.** Qodo
+reviews automatically; CodeRabbit does not (`auto_review.enabled: false`), so it
+only runs when someone posts `@coderabbitai full review` on the PR. A Qodo-clean
+verdict is the trigger for that mention, never a substitute for it. Sequence:
+Qodo clean → post `@coderabbitai full review` → wait for its report → merge. If
+Qodo never ran (no Qodo comment on the PR), say so and ask before merging. On a
+merged PR CodeRabbit can still review the diff, but that is a second pass, not a
+gate — label it as such in the result.
 
 When another session has announced a cross-check of a PR, its author waits for
 that verdict — or an explicit `go` — before merging. Green CI and resolved
