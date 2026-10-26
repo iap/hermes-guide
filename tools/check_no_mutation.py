@@ -69,6 +69,7 @@ _EXCLUDE_DIRS = _EXCLUDE_ANYWHERE | _EXCLUDE_ROOT_ONLY
 # placeholders, dedup, WOF compression) are still ordinary project files.
 _IO_REPARSE_TAG_SYMLINK = 0xA000000C
 _IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+_IO_REPARSE_TAG_LX_SYMLINK = 0xA000001D
 
 # A "mode" string is a write mode if it contains any of these flags.
 _WRITE_FLAGS = "wax+"
@@ -254,7 +255,11 @@ def scan(path: Path, ignore_selftest: bool = False) -> list[str]:
 
 def _is_link_reparse_tag(tag: int) -> bool:
     """True for the Windows reparse tags that denote a link or junction."""
-    return tag in (_IO_REPARSE_TAG_SYMLINK, _IO_REPARSE_TAG_MOUNT_POINT)
+    return tag in (
+        _IO_REPARSE_TAG_SYMLINK,
+        _IO_REPARSE_TAG_MOUNT_POINT,
+        _IO_REPARSE_TAG_LX_SYMLINK,
+    )
 
 
 def _is_reparse_point(path: Path) -> bool:
@@ -491,7 +496,8 @@ def selftest() -> int:
             )
         expect_tree(
             _is_link_reparse_tag(_IO_REPARSE_TAG_SYMLINK)
-            and _is_link_reparse_tag(_IO_REPARSE_TAG_MOUNT_POINT),
+            and _is_link_reparse_tag(_IO_REPARSE_TAG_MOUNT_POINT)
+            and _is_link_reparse_tag(_IO_REPARSE_TAG_LX_SYMLINK),
             "symlink and junction reparse tags are links",
         )
         expect_tree(
