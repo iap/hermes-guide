@@ -28,6 +28,7 @@ import contextvars
 import importlib
 import json
 import os
+import stat
 import re
 import shlex
 import subprocess
@@ -2905,19 +2906,45 @@ def check_storage():
             "detail": None,
         }
     db_path = os.path.join(home, _STORAGE_DB_NAME)
-    if not os.path.lexists(db_path):
+    # Probe with lstat first so a dangling symlink is still "present" (its
+    # target is what matters), and so a permission error on the path surfaces
+    # as STORAGE_UNREADABLE instead of being mistaken for absence.
+    try:
+        lst = os.lstat(db_path)
+    except FileNotFoundError:
         return {
             "status": "healthy",
             "reason": "no state.db yet (nothing to audit)",
             "detail": db_path,
         }
-    try:
-        st = os.stat(db_path)
     except OSError as exc:
         return {
             "id": "STORAGE_UNREADABLE",
             "status": "unknown",
             "reason": f"cannot stat state.db: {exc}",
+            "detail": db_path,
+        }
+    if not stat.S_ISREG(lst.st_mode) and not stat.S_ISLNK(lst.st_mode):
+        return {
+            "id": "STORAGE_UNREADABLE",
+            "status": "unknown",
+            "reason": "state.db is not a regular file",
+            "detail": db_path,
+        }
+    try:
+        st = os.stat(db_path) if stat.S_ISLNK(lst.st_mode) else lst
+    except OSError as exc:
+        return {
+            "id": "STORAGE_UNREADABLE",
+            "status": "unknown",
+            "reason": f"cannot stat state.db: {exc}",
+            "detail": db_path,
+        }
+    if not stat.S_ISREG(st.st_mode):
+        return {
+            "id": "STORAGE_UNREADABLE",
+            "status": "unknown",
+            "reason": "state.db is not a regular file",
             "detail": db_path,
         }
     size = st.st_size
@@ -2936,7 +2963,6 @@ def check_storage():
         }
     if size >= _STORAGE_WARN_BYTES:
         return {
-            "id": "STORAGE_LARGE",
             "status": "informational",
             "reason": f"state.db is growing ({mb:.0f} MiB) — consider reclaiming space",
             "detail": [
