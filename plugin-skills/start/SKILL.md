@@ -39,7 +39,7 @@ Sequence it by reachability:
 
 When the subsystem is already named (MCP, hooks, cron, voice, ...), go
 straight to its playbook when installed — `hermes guide <scope>` covers only
-the nine scopes below; cron and voice, for example, are playbook-only.
+the ten scopes below; cron and voice, for example, are playbook-only.
 
 ## Step 1 — baseline before guessing
 
