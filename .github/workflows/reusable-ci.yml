@@ -280,6 +280,11 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_check_envelopes.py
 
+      - name: Hook credential redaction regression
+        # Synthetic credential fixtures belong under tests/ for scanner hygiene.
+        if: inputs.run-full-gate
+        run: python tests/test_hook_redaction.py
+
       - name: Finding-contract regression test
         # AST scan of checks.py plus run_all() fixtures - no Hermes, no
         # $HERMES_HOME. Pins stable ids and registry-expanded impact/fix.
