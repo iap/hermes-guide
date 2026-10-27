@@ -61,8 +61,8 @@ def _load_checks():
 def main() -> int:
     checks = _load_checks()
     labels = checks.labels()
-    if len(labels) != 9:
-        failures.append(f"expected 9 check labels, got {labels}")
+    if len(labels) != 10:
+        failures.append(f"expected 10 check labels, got {labels}")
 
     calls: list = []
     lock = threading.Lock()

@@ -1,7 +1,7 @@
 ---
 name: start
 description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, diagnostics, triage, routing]
@@ -39,7 +39,7 @@ Sequence it by reachability:
 
 When the subsystem is already named (MCP, hooks, cron, voice, ...), go
 straight to its playbook when installed — `hermes guide <scope>` covers only
-the nine scopes below; cron and voice, for example, are playbook-only.
+the ten scopes below; cron and voice, for example, are playbook-only.
 
 ## Step 1 — baseline before guessing
 
@@ -68,7 +68,7 @@ Run the health check and read its lines:
 - In a session: `/hermes-doctor`, or `/hermes-doctor <scope>`.
 
 Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
-`memories`, `sessions`, `update`.
+`memories`, `sessions`, `storage`, `update`.
 
 The check writes nothing. The `hooks` scope is in-process by default (config,
 consent, exec bit) and executes nothing; `--deep` opts into `hermes hooks
@@ -161,4 +161,4 @@ full set.
 - One-shot (`hermes -z`) sessions do not auto-discover skills — name this skill
   or the target playbook explicitly.
 
-*Facts (re-)verified 2026-10-23 against this repo's `checks.py` `_CHECKS` (nine scopes) and `check_update_lock` (writable non-blocking probe, POSIX read-only fallback for a root-owned lock, released immediately, no content written, never deleted); `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17; --fast clause corrected 2026-10-17: it suppresses per-check hermes subprocesses, not the single CLI launch, and points at Step 2 rather than a no-baseline route that does not exist in this file — `sessions` and `update` shipped earlier but were missing here; update-scope lock probe disclosed 2026-10-22 (the earlier "every other scope reads state only" claim omitted it). `--json` preference, ordered reporting, and the three-option rule added 2026-10-23: `--json` contract taken from this repo's `hermes guide --json` tests (`tools/test_json_output.py`, #336); the fallback shape observed live on the host (Hermes Agent v0.22.2+1915.gdd519c7.dirty, hermes-guide 0.8.7) where `hermes guide config --json` exits `2` with `unrecognized arguments: --json`; the fallback wording keys off `hermes guide --help` listing `--json` rather than a hard version; commands cited (`hermes config path`, `hermes doctor --fix`/`--live`, `hermes setup`, `hermes skills install`/`tap`, `hermes plugins install`/`update`/`list`, `hermes hooks doctor`, `hermes gateway status`) re-verified live on v0.22.2. Review-round corrections 2026-10-23 (re-checked against the repo source, no new live facts): the JSON document's `checks` is an object keyed by scope (from `_build_json_payload` in this repo's `__init__.py`), not an array; `id`/`impact`/`fix` apply to `broken`/`unknown` envelopes only — informational lines carry reason and detail and route without invented metadata. Default-hooks correction 2026-10-24: the plugin's default `hooks` check is in-process; `--deep` opts into `hermes hooks doctor`. Re-verify before reuse.*
+*Facts (re-)verified 2026-10-23 against this repo's `checks.py` `_CHECKS` (ten scopes) and `check_update_lock` (writable non-blocking probe, POSIX read-only fallback for a root-owned lock, released immediately, no content written, never deleted); `__init__.py` (`--fast` flag, exit codes); in-repo routing targets verified in `skills/`. Scope list corrected from seven to nine 2026-10-17; --fast clause corrected 2026-10-17: it suppresses per-check hermes subprocesses, not the single CLI launch, and points at Step 2 rather than a no-baseline route that does not exist in this file — `sessions` and `update` shipped earlier but were missing here; update-scope lock probe disclosed 2026-10-22 (the earlier "every other scope reads state only" claim omitted it). `--json` preference, ordered reporting, and the three-option rule added 2026-10-23: `--json` contract taken from this repo's `hermes guide --json` tests (`tools/test_json_output.py`, #336); the fallback shape observed live on the host (Hermes Agent v0.22.2+1915.gdd519c7.dirty, hermes-guide 0.8.7) where `hermes guide config --json` exits `2` with `unrecognized arguments: --json`; the fallback wording keys off `hermes guide --help` listing `--json` rather than a hard version; commands cited (`hermes config path`, `hermes doctor --fix`/`--live`, `hermes setup`, `hermes skills install`/`tap`, `hermes plugins install`/`update`/`list`, `hermes hooks doctor`, `hermes gateway status`) re-verified live on v0.22.2. Review-round corrections 2026-10-23 (re-checked against the repo source, no new live facts): the JSON document's `checks` is an object keyed by scope (from `_build_json_payload` in this repo's `__init__.py`), not an array; `id`/`impact`/`fix` apply to `broken`/`unknown` envelopes only — informational lines carry reason and detail and route without invented metadata. Default-hooks correction 2026-10-24: the plugin's default `hooks` check is in-process; `--deep` opts into `hermes hooks doctor`. Re-verify before reuse.*

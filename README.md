@@ -12,7 +12,7 @@ found during diagnosis may still be reported upstream.
 It **complements — never replaces —** Hermes's own diagnostics (`hermes doctor`, `hermes verify`, and the per-surface helpers): it covers the gaps they leave. The plugin is **read-only** (no config writes; empty `capabilities:`). It ships two independent things:
 
 1. **A plugin.** `/hermes-doctor` in a session, `hermes guide` in a terminal. Read-only health checks across <!-- BEGIN GENERATED: intro-scopes -->
-`config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`, `update`
+`config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`, `storage`, `update`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
 **Twenty-two troubleshooting skills** — one install guide, one configuration map, nineteen per-surface `diagnosing-*` playbooks, one other skill (`hermes-post-update`).
@@ -86,7 +86,7 @@ as a plugin.
 ## Use the plugin
 
 - **In a session:** `/hermes-doctor` for every surface, or `/hermes-doctor mcp` for one.
-- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy. On a degraded host — where every `hermes` launch replays a minutes-long update tail — `hermes guide --fast` runs all nine checks in-process with no subprocess.
+- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy. On a degraded host — where every `hermes` launch replays a minutes-long update tail — `hermes guide --fast` runs all ten checks in-process with no subprocess.
 - **Deep hooks:** `hermes guide hooks --deep` (or `/hermes-doctor hooks --deep`) runs `hermes hooks doctor`, which executes each approved hook once. The default hooks check runs nothing.
 - **Machine-readable:** `hermes guide mcp --json` prints one JSON document instead of the report — envelopes unchanged, top-level `status` derived, update notice suppressed (exit codes above still apply). Agents and scripts parse that document; plain `grep`-style consumers keep the text output.
 - **Finding ids:** every broken or unknown result carries a stable `id`, `impact`, and `fix`; the [finding catalog](docs/findings.md) lists scope separately, and `--json` emits those keys in each finding envelope under its scope key.

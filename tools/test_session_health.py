@@ -184,7 +184,7 @@ def test_malformed_lines_never_crash():
 def test_sessions_label_registered():
     checks = _load_checks()
     assert "sessions" in checks.labels()
-    assert len(checks.labels()) == 9
+    assert len(checks.labels()) == 10
 
 
 def main() -> int:

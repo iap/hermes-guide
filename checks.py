@@ -28,6 +28,7 @@ import contextvars
 import importlib
 import json
 import os
+import stat
 import re
 import shlex
 import subprocess
@@ -2844,6 +2845,30 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "and `hermes --version` at "
         "https://github.com/iap/hermes-guide/issues.",
     ),
+    "STORAGE_UNREADABLE": (
+        "state.db unreadable",
+        "The session database cannot be stat'd, so its size and health could "
+        "not be audited.",
+        "Check file permissions on the reported `state.db` path and re-run "
+        "`hermes guide storage`.",
+    ),
+    "STORAGE_NOT_REGULAR": (
+        "state.db not a regular file",
+        "The `state.db` path exists but is not a regular file (a directory, "
+        "FIFO, or symlink to a non-file), so no session database can be read "
+        "or measured there.",
+        "Inspect the reported `state.db` path; it is not a database. Remove or "
+        "rename the directory/FIFO/symlink, then restart the session so Hermes "
+        "recreates a real `state.db`.",
+    ),
+    "STORAGE_LARGE": (
+        "state.db large",
+        "A large session database takes longer to back up, uses more disk, and "
+        "makes `optimize-storage` slower to reclaim space.",
+        "Stop the gateway and all sessions, then run `hermes sessions "
+        "optimize-storage` (see `hermes sessions optimize-storage --help`). "
+        "Do not use `--force` while holders are live.",
+    ),
 }
 
 _FINDING_STATUSES = ("broken", "unknown")
@@ -2867,6 +2892,106 @@ def _attach_finding(result):
     return result
 
 
+# --- state.db storage audit --------------------------------------------------
+
+_STORAGE_DB_NAME = "state.db"
+_STORAGE_WARN_BYTES = 512 * 1024 * 1024  # 512 MiB
+_STORAGE_BROKEN_BYTES = 1024 * 1024 * 1024  # 1 GiB
+
+
+def check_storage():
+    """Read-only audit of $HERMES_HOME/state.db size.
+
+    Reports size and warns when the session database grows large enough to
+    slow `hermes sessions optimize-storage` or reclaim space. Never mutates
+    anything; reads only file metadata.
+    """
+    home = _hermes_home()
+    if not home:
+        return {
+            "id": "HOME_UNRESOLVED",
+            "status": "unknown",
+            "reason": "cannot resolve $HERMES_HOME",
+            "detail": None,
+        }
+    db_path = os.path.join(home, _STORAGE_DB_NAME)
+    # Probe with lstat first so a dangling symlink is still "present" (its
+    # target is what matters), and so a permission error on the path surfaces
+    # as STORAGE_UNREADABLE instead of being mistaken for absence.
+    try:
+        lst = os.lstat(db_path)
+    except FileNotFoundError:
+        # Genuine absence = a profile Hermes has not run yet: "nothing to audit"
+        # (same precedent as the sessions check's absent agent.log). Deliberate —
+        # not a revert of 5b8a3e9: a missing DB is not a broken host, and an
+        # unexpected absence on a used host means the home/profile resolution
+        # is wrong, which HOME_UNRESOLVED already covers.
+        return {
+            "status": "healthy",
+            "reason": "no state.db yet (nothing to audit)",
+            "detail": db_path,
+        }
+    except OSError as exc:
+        return {
+            "id": "STORAGE_UNREADABLE",
+            "status": "unknown",
+            "reason": f"cannot stat state.db: {exc}",
+            "detail": db_path,
+        }
+    if not stat.S_ISREG(lst.st_mode) and not stat.S_ISLNK(lst.st_mode):
+        return {
+            "id": "STORAGE_NOT_REGULAR",
+            "status": "unknown",
+            "reason": "state.db is not a regular file",
+            "detail": db_path,
+        }
+    try:
+        st = os.stat(db_path) if stat.S_ISLNK(lst.st_mode) else lst
+    except OSError as exc:
+        return {
+            "id": "STORAGE_UNREADABLE",
+            "status": "unknown",
+            "reason": f"cannot stat state.db: {exc}",
+            "detail": db_path,
+        }
+    if not stat.S_ISREG(st.st_mode):
+        return {
+            "id": "STORAGE_NOT_REGULAR",
+            "status": "unknown",
+            "reason": "state.db is not a regular file",
+            "detail": db_path,
+        }
+    size = st.st_size
+    mb = size / (1024 * 1024)
+    gb = size / (1024 * 1024 * 1024)
+    if size >= _STORAGE_BROKEN_BYTES:
+        return {
+            "id": "STORAGE_LARGE",
+            "status": "broken",
+            "reason": f"state.db is large ({gb:.2f} GiB) — reclaim space",
+            "detail": [
+                db_path,
+                f"size: {gb:.2f} GiB ({mb:.0f} MiB)",
+                "Run `hermes sessions optimize-storage` after stopping the gateway and all sessions (see `hermes sessions optimize-storage --help`). Do not use `--force` while holders are live.",
+            ],
+        }
+    if size >= _STORAGE_WARN_BYTES:
+        return {
+            "status": "informational",
+            "reason": f"state.db is growing ({mb:.0f} MiB) — consider reclaiming space",
+            "detail": [
+                db_path,
+                f"size: {mb:.0f} MiB",
+                "If disk space is tight, run `hermes sessions optimize-storage` offline (gateway stopped, all sessions closed). See `hermes sessions optimize-storage --help`.",
+            ],
+        }
+    return {
+        "status": "healthy",
+        "reason": f"state.db size OK ({mb:.0f} MiB)",
+        "detail": db_path,
+    }
+
+
 # --- runner ---------------------------------------------------------------
 
 _CHECKS = [
@@ -2886,6 +3011,7 @@ _CHECKS = [
     # logs/agent.log) — "session" singular is avoided for the same
     # collision-safety reason as "memories" above.
     ("sessions", check_session_health),
+    ("storage", check_storage),
     # Label is "update" (the hermes-agent update lock audited for stale
     # dead-owner state) — "upgrade" is not a Hermes term, so no alias.
     ("update", check_update_lock),
