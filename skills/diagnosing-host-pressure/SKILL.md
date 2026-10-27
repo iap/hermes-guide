@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.3
+version: 1.3.4
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -162,6 +162,29 @@ against the interpreter that failed to load it.
    inside budget.
 6. Escalate to Hermes bugs only for what survives step 5 — at that point route
    to `diagnosing-plugins` or `diagnosing-gateway`.
+
+## 5b. Disk full (distinct from host pressure)
+
+Disk full is a *capacity* problem, not a load problem: the host can be idle
+while writes fail. Treat it as a separate branch:
+
+1. Confirm with `df -h` on the volume holding `$HERMES_HOME` (`hermes config path`).
+   On native Windows, use `Get-PSDrive -PSProvider FileSystem` (or `Get-Volume`) instead.
+2. If `state.db` dominates, follow `diagnosing-memory` (`references/state_db.md`)
+   and the `storage` scope of `hermes guide` — do not delete `-wal`/`-shm` by hand.
+3. For ephemeral files, caches, cron output, request dumps and scratch, run
+   `/disk-cleanup` in a session (or the `hermes-disk-housekeeping` skill).
+   The `disk-cleanup` plugin tracks and ages these out automatically.
+4. Reclaiming *disk* does not relieve *memory* pressure — never present a
+   cleanup as a fix for swapping (see section 4).
+
+> Provenance: verified 2026-10-27 against the live install — `/disk-cleanup`
+> slash command and the `disk-cleanup` plugin (`plugins/disk-cleanup/disk_cleanup.py`),
+> the `hermes-disk-housekeeping` skill, and standard OS disk commands (`df`, PowerShell
+> `Get-PSDrive`/`Get-Volume`). No upstream source citations are added; claims are limited
+> to commands and surfaces verified live.
+
+---
 
 ## 6. Report shape
 

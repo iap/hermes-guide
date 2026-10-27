@@ -2973,6 +2973,7 @@ def check_storage():
                 db_path,
                 f"size: {gb:.2f} GiB ({mb:.0f} MiB)",
                 "Run `hermes sessions optimize-storage` after stopping the gateway and all sessions (see `hermes sessions optimize-storage --help`). Do not use `--force` while holders are live.",
+                "For ephemeral files and caches (test/temp/cron-output, request dumps, scratch), run `/disk-cleanup` in a session or follow the `hermes-disk-housekeeping` skill.",
             ],
         }
     if size >= _STORAGE_WARN_BYTES:
@@ -2983,6 +2984,7 @@ def check_storage():
                 db_path,
                 f"size: {mb:.0f} MiB",
                 "If disk space is tight, run `hermes sessions optimize-storage` offline (gateway stopped, all sessions closed). See `hermes sessions optimize-storage --help`.",
+                "For ephemeral files and caches (test/temp/cron-output, request dumps, scratch), run `/disk-cleanup` in a session or follow the `hermes-disk-housekeeping` skill.",
             ],
         }
     return {
