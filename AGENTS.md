@@ -57,6 +57,20 @@ Repo layout encyclopedia: [docs/agent/layout.md](docs/agent/layout.md).
 | Generated doc blocks | `tools/render_docs.py`, never by hand |
 | Agent deep-ops prose | `docs/agent/`, not a longer AGENTS.md |
 
+## Stacked PRs
+
+When a follow-up naturally splits off an in-flight change, open it as a **new
+PR stacked on that PR** (head branch based on the other PR's head branch),
+*not* as an independent branch off `master`. GitHub stacks:
+- Merge the **top** PR to land the whole stack in one operation (bottom PR
+  first, then top).
+- Merge the **bottom** PR to land only that layer.
+Each PR still needs its own checks green and review threads resolved before the
+stack can merge — GitHub will not merge a stack until the lower PR is approved
+with passing checks.
+
+See https://docs.github.com/en/pull-requests/get-started/about-stacked-prs
+
 ## Run this before you claim done
 
 ```bash
