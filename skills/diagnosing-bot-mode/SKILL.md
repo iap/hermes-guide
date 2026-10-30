@@ -1,7 +1,7 @@
 ---
 name: diagnosing-bot-mode
 description: Diagnose Hermes Bot Mode issues — bots not appearing, profile conflicts, bot-to-bot messaging failures, model/memory/skill routing per bot, and gateway connectivity.
-version: 1.0.4
+version: 1.0.5
 metadata:
   hermes:
     tags: [hermes, bot-mode, troubleshooting]
@@ -62,6 +62,16 @@ ui_meta:
 - `diagnosing-gateway` — for gateway connectivity and platform allowlist issues
 - `diagnosing-cron` — for routine/cron job scheduling problems
 - `diagnosing-memory` — for memory provider configuration
+
+## Apply and verify
+
+After applying fixes:
+
+1. Re-test the failing scenario to confirm the symptom is resolved.
+2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
+3. Verify logs/config show the expected state with no new errors.
+4. If the issue was environment-specific, confirm it works in your actual setup.
+
 
 ## Report
 

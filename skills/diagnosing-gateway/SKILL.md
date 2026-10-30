@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.1.7
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -61,6 +61,16 @@ Separately from platforms, Hermes manages named third-party accounts via Nous Po
 - `diagnosing-bot-mode` — for bot-specific gateway issues
 - `diagnosing-voice` — for voice message transcription issues
 - `diagnosing-host-pressure` — when several platforms fail at once or adapters are discarded after a load timeout; rule out host pressure before editing tokens or allowlists
+
+## Apply and verify
+
+After applying fixes:
+
+1. Re-test the failing scenario to confirm the symptom is resolved.
+2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
+3. Verify logs/config show the expected state with no new errors.
+4. If the issue was environment-specific, confirm it works in your actual setup.
+
 
 ## Report
 

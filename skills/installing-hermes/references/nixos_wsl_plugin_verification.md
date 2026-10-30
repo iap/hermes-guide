@@ -120,6 +120,20 @@ If developing plugins (iterating on a repo like `hermes-guide`):
 
 4. **If staying on Nix**: update plugins via a pinned declarative source in your Nix config (`extraPlugins` with `pkgs.fetchFromGitHub` pinned to a `rev` + `hash`), then `nixos-rebuild switch`. Direct `git pull` in `~/.hermes/plugins/<name>/` is an explicit **development-only** path that bypasses the install/update security scan and re-pinning controls.
 
+**End-to-end update test (verified 2026-10-30)**:
+- `hermes plugins update hermes-guide` → blocked by security scan (139 findings, CAUTION verdict)
+- Working path: `hermes plugins install iap/hermes-guide --force --ref <40-hex-SHA> --yes-deps`
+  - `--force` on `install` only (not `update`) — moves the pinned SHA
+  - `--yes-deps` required for non-interactive installs when deps are missing
+  - Without `--yes-deps`: prints "Non-interactive install — skipping dependency install" then fails
+  - The error message's suggestion to "run hermes plugins enable" is misleading
+- After update, `hermes plugins list` may show stale version (reads cached state, not plugin.yaml)
+  - Verify via `grep '^version:' plugin.yaml` instead
+- Scanner scans entire repo (tests, docs, CI configs) producing false positives
+  - Known upstream issue: #118155, #132155
+- The scan error message says "Use --force to override" but `update` has no `--force` flag
+  - Known upstream issue: #125928, #134561
+
 ## Debugging Failed Plugin Loads
 
 | Symptom | Likely Cause | Fix |

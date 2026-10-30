@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.13
+version: 1.1.14
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -58,6 +58,16 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 4. Check filters (pitfall 3) before blaming the connection.
 5. Apply the fix, then `/reload-mcp` (or restart), and confirm the `mcp__<server>__*` tools appear (`/context`).
 6. Re-run the detector: `hermes guide mcp` headless or `/hermes-doctor mcp` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
+
+## Apply and verify
+
+After applying fixes:
+
+1. Re-test the failing scenario to confirm the symptom is resolved.
+2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
+3. Verify logs/config show the expected state with no new errors.
+4. If the issue was environment-specific, confirm it works in your actual setup.
+
 
 ## Report
 

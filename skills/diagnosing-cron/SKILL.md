@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cron
 description: Diagnose Hermes cron job issues — jobs not firing, scheduler dead, wedged fire-claim, timezone issues, and delivery failures.
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, cron, scheduling, troubleshooting]
@@ -66,6 +66,16 @@ hermes cron create "0 9 * * 1-5" \
 - `hermes-configuration-guide` — for $HERMES_HOME resolution and config.yaml structure
 - `diagnosing-gateway` — for gateway connectivity and platform issues
 - `diagnosing-bot-mode` — for bot routine/cron integration
+
+## Apply and verify
+
+After applying fixes:
+
+1. Re-test the failing scenario to confirm the symptom is resolved.
+2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
+3. Verify logs/config show the expected state with no new errors.
+4. If the issue was environment-specific, confirm it works in your actual setup.
+
 
 ## Report
 
