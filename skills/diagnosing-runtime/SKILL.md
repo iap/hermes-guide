@@ -1,7 +1,7 @@
 ---
 name: diagnosing-runtime
 description: "Diagnose Hermes runtime failures — CLI commands that produce no output, exit 0 with no diagnostic text, hang, or return empty (e.g. hermes guide prints nothing, hermes --version is blank). Covers stuck source updates, broken node dependencies, and recovery routes when the runtime itself is the problem."
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, runtime, cli, node, update, recovery, troubleshooting]
@@ -179,23 +179,24 @@ If none of the above resolves the issue:
 
 ## Report
 
-This skill diagnoses Hermes runtime failures — commands producing no output, exit 0 with no text, hangs, or empty results. When you run the diagnostic workflow, present findings in the standard format below.
+This skill diagnoses Hermes runtime failures — commands producing no output, exit 0 with no text, hangs, or empty results. Apply this report based on Step 1 probe results:
+
+- **CLI-wide failure** (`hermes --version` hangs/empty): treat as runtime/venv/shim issue. Focus on Steps 2,3,5-6 (updates, PM tools, direct inspection).
+- **CLI works but `hermes guide` prints nothing**: treat as plugin load failure (Step 4). Do **not** assume the whole CLI is broken.
 
 ### Summary
-The Hermes CLI/runtime is non-functional (no output, hangs, or returns empty) due to a stuck update, broken environment, or plugin/runtime issue blocking normal operation.
+Adjust to match the probe: for CLI-wide failure, state the interpreter/venv/runtime is non-functional; for guide-only failure, state the guide plugin failed to load while the CLI is usable.
 
 ### Findings
 | Severity | What | Evidence |
 |---|---|---|
-| HIGH | CLI produces no output or hangs | `hermes --version` / `hermes guide` exit 0 with empty output or timeout |
+| HIGH | CLI unusable (`hermes --version` empty/hang) | Probe shows classic CLI fails |
 | MEDIUM | Stuck source update blocking all commands | "finishing an interrupted source update" message or update lock present |
-| MEDIUM | Plugin load failures prevent normal operation | `hermes plugins list` fails or `load timed out` messages |
+| MEDIUM | Guide/plugin load failure (CLI works) | `hermes --version` works but `hermes guide` prints nothing or times out; check `hermes plugins list`/logs |
 
 ### Recommended Fix
-1. Check for stuck updates (`hermes update`, inspect `<git common dir>/hermes-update.lock`). Follow liveness checks per diagnosing-cli-tui.
-2. Verify runtime dependencies with `hermes pm doctor` if TUI/node involved.
-3. Check plugin load health (`hermes plugins list`, logs).
-4. If CLI is completely broken, inspect config/logs directly under `$HERMES_HOME` and escalate to `installing-hermes` as last resort.
+1. **If CLI-wide broken:** Check for stuck updates (`hermes update`, inspect `<git common dir>/hermes-update.lock`). Follow liveness checks per diagnosing-cli-tui. Verify runtime deps with `hermes pm doctor` if needed. Inspect config/logs directly under `$HERMES_HOME` if CLI unusable; escalate to `installing-hermes` as last resort.
+2. **If guide-only broken:** Follow Step 4 (plugin load health) - check `hermes plugins list`, logs for timeouts/import errors. Disable failing plugin if needed, restart session. See `diagnosing-plugins`. 
 
 ### References
 - `$HERMES_HOME/config.yaml` and logs (`$HERMES_HOME/logs/`)
