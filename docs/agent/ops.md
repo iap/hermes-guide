@@ -414,10 +414,11 @@ a second pass, not a gate — label it as such in the result.
 
 When CodeRabbit reports findings: convert the PR to **Draft** (GitHub blocks
 merging a draft natively — stronger than any label; a `[!wip]` label is
-optional and only cosmetic) → apply fixes → re-verify with the hermetic gates
-(`check_gates.py`) and the affected `tools/test_*.py`, and re-check the findings
-(no false positives on the fix adjustment) → convert back to ready-for-review →
-run the merge checks above. When CodeRabbit reports zero findings, skip the draft
+optional and only cosmetic) → **triage the findings: fix the confirmed ones and
+document the disposition (false positive / accepted risk) of the rest** → apply
+fixes → re-verify with the hermetic gates (`check_gates.py`) and the affected
+`tools/test_*.py`, and re-check the findings (no false positives on the fix
+adjustment) → convert back to ready-for-review → run the merge checks above. When CodeRabbit reports zero findings, skip the draft
 step and go straight to the merge checks. A silent or empty CodeRabbit run
 counts as "not heard", not "clean".
 
