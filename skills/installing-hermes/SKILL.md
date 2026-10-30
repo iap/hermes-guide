@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.1.3
+version: 1.1.4
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -93,6 +93,8 @@ path` before trusting it.
 
 ## NixOS / WSL2 gotchas (worked example)
 
+> **Plugin verification on NixOS WSL**: see `references/nixos_wsl_plugin_verification.md` for the plugin install target checklist, `requires_hermes` enforcement, and the standard-vs-Nix install plugin target difference.
+
 1. **Node builds run with `CI=1` by design now.** The pre-pm installer's npm
    workspace step — whose postinstall could open `/dev/tty` and hang a
    non-interactive shell — is gone: PM owns node builds and
@@ -108,7 +110,21 @@ path` before trusting it.
    (or Docker) for supported setups and offer a dedicated flake with default and
    smaller package outputs. A Nix-built bundle is an excellent *fallback* binary
    (immutable, independent of the venv), not the primary install path.
-4. **tirith is gone.** The pre-exec security scanner (`tools/tirith_security.py`) was removed upstream in 2026-10; its config block is replaced by a generic `Security` section plus LSP post-write lint (enabled by default). A `tirith`-era install may still carry `.tirith-install-failed` and stale `tirith_*` keys — harmless leftovers, not active config.
+4. **Nix uses uv2nix (build-time only)** — "there is no runtime pip, no venv
+   activation, no npm install." Plugin management on Nix is **declarative** via
+   `extraPlugins`/`extraPythonPackages` in the NixOS module, NOT via
+   `hermes plugins install/update` (which requires runtime `uv.lock` that Nix
+   doesn't ship). Standard installer is recommended for plugin development.
+5. **WSL VM may need restart** — `WSAETIMEDOUT` on any `wsl -d nixos` command
+   means the VM hasn't booted: run `wsl --shutdown` on the Windows host, wait
+   5 seconds, then `wsl -d nixos` to start fresh.
+6. **Existing fork checkout can become a standard install** — if `~/.hermes/hermes-agent`
+   is already a git checkout (e.g., your fork), the standard installer refuses to
+   overwrite it. Instead of moving it aside, set up the venv manually using the
+   Nix Python 3.14: `cd ~/.hermes/hermes-agent && /nix/store/...-python3-3.14.x/bin/python -m venv .venv && .venv/bin/pip install -e .`
+   This gives proper version reporting (from git), `uv.lock` access, and working
+   `hermes plugins install/update` — without losing your fork's custom changes.
+7. **tirith is gone.** The pre-exec security scanner (`tools/tirith_security.py`) was removed upstream in 2026-10; its config block is replaced by a generic `Security` section plus LSP post-write lint (enabled by default). A `tirith`-era install may still carry `.tirith-install-failed` and stale `tirith_*` keys — harmless leftovers, not active config.
 
 ## Dual-install coexistence
 

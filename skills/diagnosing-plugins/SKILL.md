@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and sub-category selection keys.
-version: 1.2.14
+version: 1.2.15
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -56,6 +56,7 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 8. **It's not really a plugin** — TTS/STT command providers are config-driven (`tts.providers.<name>` / `stt.providers.<name>` with `type: command`); MCP integrations are `mcp_servers:` entries; gateway hooks are directories. → Route to the right surface: **`diagnosing-mcp`**, **`diagnosing-hooks`**, or the config docs.
 9. **Core plugin gone after update (e.g. Spotify)** — some bundled plugins moved to the catalog; an enabled entry with no matching directory is not a broken install. → `hermes plugins install <name>` from the catalog (or remove it from `plugins.enabled`).
 10. **Installed directory exists but the plugin is never listed** — discovery could not read the directory, so it skipped it and moved on: `Skipping unreadable plugin directory <path>: [WinError 5] Access is denied` (Windows) or `Permission denied` (POSIX). `hermes plugins list` simply omits the plugin, and `hermes update` / `hermes pm install` adds `Could not inspect plugin manifest <path>/plugin.yaml`. → Check the ACL: `icacls <path>` failing with `Access is denied`, or on Windows `dir /q` showing an owner other than you, means the DACL grants your account no read (an orphaned owner SID does this). Fix from an **elevated** prompt — `takeown /f <path> /r /d Y` then `icacls <path> /grant "<you>:(OI)(CI)F" /T` — or delete the directory and reinstall the plugin, then confirm it appears in `hermes plugins list`. Skipping one unreadable directory is deliberate: it must not abort discovery for every other plugin (`hermes_cli/plugins_discovery.py::scan_directory`; `hermes_cli/config.py::_platform_plugin_manifests`).
+11. **`hermes plugins update` blocked by security scan** — community plugins with many LOW findings (e.g., persistence warnings) get a "Blocked (community source + caution verdict)" decision. → **Fix 1:** set `plugins.scan_on_install: false` in `config.yaml` to bypass (security trade-off). **Fix 2:** manually `git pull` in `~/.hermes/plugins/<name>/` to update without the scan. **Fix 3:** if the plugin is pinned to an exact SHA, use `hermes plugins install <source> --force --ref <new-sha>` (pitfall 6).
 
 ## 5. Localization workflow
 
