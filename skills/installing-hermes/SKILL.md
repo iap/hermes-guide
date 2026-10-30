@@ -123,7 +123,7 @@ path` before trusting it.
 6. **Existing fork checkout can become a standard install** — if `~/.hermes/hermes-agent`
    is already a git checkout (e.g., your fork), the standard installer refuses to
    overwrite it. Instead of moving it aside, set up the venv manually using the
-   Nix Python 3.14: `cd ~/.hermes/hermes-agent && ~/.nix-profile/bin/python3 -m venv .venv && .venv/bin/pip install -e .`
+   Nix Python 3.14: `cd ~/.hermes/hermes-agent && ~/.nix-profile/bin/python3 -m venv .venv && .venv/bin/pip install -e . && source .venv/bin/activate` (or use `.venv/bin/hermes` directly)
    This gives proper version reporting (from git), `uv.lock` access, and working
    `hermes plugins install/update` — without losing your fork's custom changes.
 7. **tirith is gone.** The pre-exec security scanner (`tools/tirith_security.py`) was removed upstream in 2026-10; its config block is replaced by a generic `Security` section plus LSP post-write lint (enabled by default). A `tirith`-era install may still carry `.tirith-install-failed` and stale `tirith_*` keys — harmless leftovers, not active config.

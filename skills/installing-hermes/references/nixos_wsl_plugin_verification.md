@@ -8,8 +8,8 @@ targets, and the diagnostic checklist.
 
 | Type | Code Location | Plugin Target | Mutable? |
 |---|---|---|---|
-| **Standard (reviewable two-step)** | `$HERMES_HOME/hermes-agent/` (git checkout) | `$HERMES_HOME/plugins/` | ✅ Yes |
-| **Nix flake / NixOS module** | `/nix/store/...-hermes-agent-<ver>/` (immutable) | `$HERMES_HOME/plugins/` | ❌ Nix store code is immutable, but plugin dir is mutable |
+| **Standard (reviewable two-step)** | `$HERMES_HOME/hermes-agent/` (git checkout) | `$HERMES_HOME/plugins/` | Yes |
+| **Nix flake / NixOS module** | `/nix/store/...-hermes-agent-<ver>/` (immutable) | `$HERMES_HOME/plugins/` | No (Nix store code is immutable, but plugin dir is mutable) |
 
 **Key finding**: On a Nix-installed Hermes, `hermes plugins install` writes to `$HERMES_HOME/plugins/` (mutable, correct target) — NOT the Nix store. The `--dry-run` flag does NOT exist for `hermes plugins install`; use `hermes plugins list` and `ls -la "$HERMES_HOME/plugins/"` to verify the target instead.
 
@@ -33,8 +33,8 @@ hermes plugins list
 
 # 4. Verify plugin install target (no --dry-run flag exists)
 hermes plugins list | grep <plugin-name>
-ls -la "$HERMES_HOME/plugins/<plugin-name>"/
-# Target should be $HERMES_HOME/plugins/ (mutable, correct)
+ls -la "${HERMES_HOME:-$HOME/.hermes}/plugins/<plugin-name>"/
+# Target should be ${HERMES_HOME:-$HOME/.hermes}/plugins/ (mutable, correct)
 # If it's in /nix/store/, that's the catalog metadata only — not the actual plugin
 
 # 5. Check install sync status
