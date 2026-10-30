@@ -122,8 +122,8 @@ If developing plugins (iterating on a repo like `hermes-guide`):
 
 **End-to-end update test (verified 2026-10-30)**:
 - `hermes plugins update hermes-guide` → blocked by security scan (139 findings, CAUTION verdict)
-- Working path for pinned moves or non-interactive dep installs: `hermes plugins install iap/hermes-guide --force --ref <40-hex-SHA> --yes-deps`
-  - `--force` on `install` moves/reinstalls; for unpinned updates blocked by a **caution** verdict, `hermes plugins update <name> --force` accepts it (dangerous verdicts remain blocked)
+- Working path: `hermes plugins install iap/hermes-guide --force --ref <40-hex-SHA> --yes-deps`
+  - `--force` on `install` only (not `update`) — moves the pinned SHA
   - `--yes-deps` required for non-interactive installs when deps are missing
   - Without `--yes-deps`: prints "Non-interactive install — skipping dependency install" then fails
   - The error message's suggestion to "run hermes plugins enable" is misleading
@@ -131,7 +131,8 @@ If developing plugins (iterating on a repo like `hermes-guide`):
   - Verify via `grep '^version:' "$HERMES_HOME/plugins/hermes-guide/plugin.yaml"`
 - Scanner scans entire repo (tests, docs, CI configs) producing false positives
   - Known upstream issue: #118155, #132155
-- For caution verdicts on unpinned updates, prefer `hermes plugins update <name> --force` when available; dangerous verdicts remain blocked
+- The scan error message says "Use --force to override" but `update` has no `--force` flag
+  - Known upstream issue: #125928, #134561
 
 ## Debugging Failed Plugin Loads
 
