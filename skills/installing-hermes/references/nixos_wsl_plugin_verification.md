@@ -8,10 +8,10 @@ targets, and the diagnostic checklist.
 
 | Type | Code Location | Plugin Target | Mutable? |
 |---|---|---|---|
-| **Standard (reviewable two-step)** | `$HERMES_HOME/hermes-agent/` (git checkout) | `~/.hermes/plugins/` | ✅ Yes |
-| **Nix flake / NixOS module** | `/nix/store/...-hermes-agent-<ver>/` (immutable) | `~/.hermes/plugins/` (verified) | ❌ Nix store code is immutable, but plugin dir is mutable |
+| **Standard (reviewable two-step)** | `$HERMES_HOME/hermes-agent/` (git checkout) | `$HERMES_HOME/plugins/` | ✅ Yes |
+| **Nix flake / NixOS module** | `/nix/store/...-hermes-agent-<ver>/` (immutable) | `$HERMES_HOME/plugins/` | ❌ Nix store code is immutable, but plugin dir is mutable |
 
-**Key finding**: On a Nix-installed Hermes, `hermes plugins install` writes to `~/.hermes/plugins/` (mutable, correct target) — NOT the Nix store. The `--dry-run` flag does NOT exist for `hermes plugins install`; use `hermes plugins list` and `ls -la ~/.hermes/plugins/` to verify the target instead.
+**Key finding**: On a Nix-installed Hermes, `hermes plugins install` writes to `$HERMES_HOME/plugins/` (mutable, correct target) — NOT the Nix store. The `--dry-run` flag does NOT exist for `hermes plugins install`; use `hermes plugins list` and `ls -la "$HERMES_HOME/plugins/"` to verify the target instead.
 
 ## Verification Checklist
 
@@ -33,8 +33,8 @@ hermes plugins list
 
 # 4. Verify plugin install target (no --dry-run flag exists)
 hermes plugins list | grep <plugin-name>
-ls -la ~/.hermes/plugins/<plugin-name>/
-# Target should be ~/.hermes/plugins/ (mutable, correct)
+ls -la "$HERMES_HOME/plugins/<plugin-name>"/
+# Target should be $HERMES_HOME/plugins/ (mutable, correct)
 # If it's in /nix/store/, that's the catalog metadata only — not the actual plugin
 
 # 5. Check install sync status
@@ -59,7 +59,8 @@ Plugin `plugin.yaml` fields that matter:
 - `capabilities`: Declared capabilities must be supported by Hermes version
 
 **Enforcement point**: `hermes_cli/plugins_manifest.py::requires_hermes_error()`
-compares running version via PEP440 tuple parsing; unsatisfied → plugin skipped
+compares running version using a simplified three-segment integer tuple
+(not PEP 440); unparseable versions are permissive. Unsatisfied → plugin skipped
 before import, error recorded.
 
 ## NixOS WSL Specific Gotchas
@@ -91,11 +92,12 @@ The standard installer is the only clean solution for plugin development on WSL.
 From the Hermes Nix setup docs (Tier 2 platform — "For a supported setup, use one of the standard installation paths"):
 
 - **uv2nix, not runtime uv**: "every Python dependency is a Nix derivation built by uv2nix... There is no runtime pip, no venv activation, no npm install."
-- **Plugin management on Nix is declarative**: NixOS module uses `extraPlugins` and `extraPythonPackages` — NOT `hermes plugins install/update` CLI. The CLI flow requires runtime venv sync via `uv.lock`, which Nix doesn't ship.
+- **Plugin management on NixOS module is declarative**: the NixOS module uses `extraPlugins` and `extraPythonPackages` — NOT `hermes plugins install/update` CLI — because CLI config commands are blocked by the `HERMES_MANAGED` guard. The CLI flow also requires runtime venv sync via `uv.lock`, which the Nix build doesn't ship.
+- **Nix flake installs (`nix run` / `nix profile install`) DO support the standard CLI**: after install, `hermes plugins install <name>` works for catalog plugins, and `hermes plugins update` works for unpinned plugins. The NixOS module is the only path where the CLI is blocked.
 - **Container mode** (`container.enable = true`): Runs in an Ubuntu container where apt/pip/npm self-installs persist across restarts — an alternative for plugin development if you stay on Nix.
 - **No compiler by default**: Native builds fail; use prebuilt wheels or Nix flake overlay.
 
-This confirms: `hermes plugins install/update` cannot work on a Nix bundle because the PM system's Python venv sync requires `uv.lock` in the repo root, which the Nix build doesn't include (read-only store). The version check (0.0.0) is a secondary blocker.
+This confirms: on the **NixOS module** (not Nix flake), `hermes plugins install/update` cannot work because the PM system's Python venv sync requires `uv.lock` in the repo root (not shipped in the read-only Nix store) and CLI config commands are blocked by the `HERMES_MANAGED` guard. The version check (0.0.0) is a secondary blocker. For Nix flake installs, the standard CLI works normally.
 
 ## Recommended Workflow for Plugin Development on NixOS WSL
 
@@ -116,15 +118,14 @@ If developing plugins (iterating on a repo like `hermes-guide`):
 
 3. **Or use Nix flake overlay** for declarative plugin management (reproducible, but slower iteration)
 
-4. **If staying on Nix**: update plugins via `git pull` in `~/.hermes/plugins/<name>/`
-   instead of `hermes plugins update` (blocked by version check)
+4. **If staying on Nix**: update plugins via a pinned declarative source in your Nix config (`extraPlugins` with `pkgs.fetchFromGitHub` pinned to a `rev` + `hash`), then `nixos-rebuild switch`. Direct `git pull` in `~/.hermes/plugins/<name>/` is an explicit **development-only** path that bypasses the install/update security scan and re-pinning controls.
 
 ## Debugging Failed Plugin Loads
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
 | Plugin installed but not loading | `requires_hermes` floor not met | Upgrade Hermes or check version |
-| `hermes plugins update` blocked | Nix Hermes reports 0.0.0 < 0.21 | Update via `git pull` in `~/.hermes/plugins/<name>/` |
+| `hermes plugins update` blocked | NixOS module (HERMES_MANAGED + no uv.lock) | Use pinned declarative source + `nixos-rebuild switch`; or switch to standard install for plugin dev |
 | `hermes pm install` Python venv sync fails | uv.lock not in Nix store (read-only) | External tools still install; sync warning cleared |
 | Native dep build fails | No compiler available | Add to nix-ld libs or use prebuilt wheel |
 | WSAETIMEDOUT on any command | WSL VM not started | `wsl -d nixos` on Windows host |
