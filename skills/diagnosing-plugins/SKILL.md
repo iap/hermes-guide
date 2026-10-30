@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and sub-category selection keys.
-version: 1.2.15
+version: 1.2.20
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -51,12 +51,13 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 3. **Project plugin ignored** — `.hermes/plugins/` is disabled by default. → Set `HERMES_ENABLE_PROJECT_PLUGINS=true` before starting Hermes, and only for trusted repos.
 4. **Plugin in `list` but nothing loads at all** — `register()` raised (bad code, missing dependency). → Check `hermes logs` for the load error; fix the plugin or its requirements. If the log instead says `load timed out after Ns` (optionally followed by `called register_*() after its load timed out; ignored`), the loader's own budget expired before `import()` + `register()` returned. That budget covers the **plugin's** work as much as the host's, so the message alone does not tell you which one was too slow — a slow import or a blocking `register()` reaches the same deadline on a healthy host. Compare the configured `plugins.load_timeout_seconds` against what that plugin's import and `register()` actually do, and run `diagnosing-host-pressure` (`bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh`) to rule the host in or out. Only treat it as host pressure once the probe says so. Re-run the same load once before blaming either side: a cold first load — fresh install, pin change, empty caches — can exceed the default on a slow host and pass on immediate retry. The loader's per-plugin budget is configurable: `plugins.load_timeout_seconds` in `config.yaml` (default 10; negatives and non-numbers fall back to 10 with a warning; values above 600 clamp to 600; `0` disables the deadline and loads the plugin inline) — raise it or set it to `0` only once the probe or a repeated pattern establishes the cause, then restart.
 5. **Edits to a bundled plugin don't apply** — a same-name user plugin at `$HERMES_HOME/plugins/<name>/` overrides the bundled copy. → Edit the user copy (the one that actually wins) or remove it.
-6. **`hermes plugins update` refuses** — the install is pinned to an exact commit SHA. → Choose a new commit explicitly: `hermes plugins install <source> --force --ref <new-sha>`.
+6. **`hermes plugins update` refuses** — the install is pinned to an exact commit SHA. → Choose a new commit explicitly: `hermes plugins install <source> --force --ref <new-sha>`. Note: `--force` exists on `install` only, NOT on `update` (which takes just a name). To bypass a security-scan block on `update`, temporarily set `plugins.scan_on_install: false` then restore to `true`. Manual `git pull` in the plugin checkout bypasses the supported scan path and is not recommended.
+6b. **CLI surface check fails on skill edits** — citing a non-existent CLI flag/subcommand in a skill causes `tools/check_cli_surface.py` to fail. Verify flags against the live CLI or the CLI surface test before adding them to skills; when the review says a flag exists in upstream but not in the checked CLI, revert to the supported form.
 7. **Plugin edits after install lost on update** — updates autostash and re-apply local edits, but conflicts can drop them. → Keep plugin customizations in your own fork/repo and install from that.
 8. **It's not really a plugin** — TTS/STT command providers are config-driven (`tts.providers.<name>` / `stt.providers.<name>` with `type: command`); MCP integrations are `mcp_servers:` entries; gateway hooks are directories. → Route to the right surface: **`diagnosing-mcp`**, **`diagnosing-hooks`**, or the config docs.
 9. **Core plugin gone after update (e.g. Spotify)** — some bundled plugins moved to the catalog; an enabled entry with no matching directory is not a broken install. → `hermes plugins install <name>` from the catalog (or remove it from `plugins.enabled`).
 10. **Installed directory exists but the plugin is never listed** — discovery could not read the directory, so it skipped it and moved on: `Skipping unreadable plugin directory <path>: [WinError 5] Access is denied` (Windows) or `Permission denied` (POSIX). `hermes plugins list` simply omits the plugin, and `hermes update` / `hermes pm install` adds `Could not inspect plugin manifest <path>/plugin.yaml`. → Check the ACL: `icacls <path>` failing with `Access is denied`, or on Windows `dir /q` showing an owner other than you, means the DACL grants your account no read (an orphaned owner SID does this). Fix from an **elevated** prompt — `takeown /f <path> /r /d Y` then `icacls <path> /grant "<you>:(OI)(CI)F" /T` — or delete the directory and reinstall the plugin, then confirm it appears in `hermes plugins list`. Skipping one unreadable directory is deliberate: it must not abort discovery for every other plugin (`hermes_cli/plugins_discovery.py::scan_directory`; `hermes_cli/config.py::_platform_plugin_manifests`).
-11. **`hermes plugins update` blocked by security scan** — community plugins with many LOW findings (e.g., persistence warnings) get a "Blocked (community source + caution verdict)" decision. → **Fix 1:** if the plugin is pinned to an exact SHA, use `hermes plugins install <source> --force --ref <new-sha>` (pitfall 6). **Fix 2:** if you temporarily set `plugins.scan_on_install: false` in `config.yaml` to bypass the scan, restore it to `true` after the update. Manual `git pull` in the plugin checkout bypasses the supported scan path and is not recommended.
+11. **`hermes plugins update` blocked by security scan** — community plugins with many LOW findings (e.g., persistence warnings) get a "Blocked (community source + caution verdict)" decision. → **Fix 1:** if the plugin is pinned to an exact SHA, use `hermes plugins install <source> --force --ref <new-sha>` (pitfall 6). **Fix 2:** if you temporarily set `plugins.scan_on_install: false` in `config.yaml` to bypass the scan, restore it to `true` after the update. Manual `git pull` in the plugin checkout bypasses the supported scan path and is not recommended. **Non-interactive installs** with missing dependencies require `--yes-deps` (without it: "Non-interactive install — skipping dependency install" then "Reinstall declined"). The scan error message says "Use --force to override" but `update` has no `--force` flag — known upstream issue. If a displayed version looks stale, check the discovered plugin directory and its manifest (the list reads installed manifests). Scanner scans the entire repo (tests, docs, CI configs) producing false positives — known upstream issue.
 
 ## 5. Localization workflow
 
@@ -66,6 +67,16 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 4. Sub-category plugin (memory/context/model-provider/platform) → check its selection key in config, not `plugins.enabled`.
 5. Restart the session/gateway and verify: tools appear in `/tools list`, commands in `/` autocomplete, hooks via `hermes hooks list`.
 6. Re-run the detector: `hermes guide plugins` headless or `/hermes-doctor plugins` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
+
+## Apply and verify
+
+After applying fixes:
+
+1. Re-test the failing scenario to confirm the symptom is resolved.
+2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
+3. Verify logs/config show the expected state with no new errors.
+4. If the issue was environment-specific, confirm it works in your actual setup.
+
 
 ## Report
 

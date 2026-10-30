@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.1.0
+version: 1.1.1
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -301,6 +301,15 @@ per the canonical list, then the second.
 If the user is asking "where is X configured?" rather than "X is broken", load `hermes-configuration-guide` instead of a diagnostic skill. The configuration guide maps each extension surface to its config location and points to the right diagnostic skill if something is wrong.
 
 ---
+
+## Apply and verify
+
+After routing and applying fixes:
+
+1. Confirm the routed skill's recommendations resolved the reported symptom.
+2. Re-run `hermes guide` to see if findings changed or resolved.
+3. Test the original failing scenario to verify it's fixed.
+4. If multiple symptoms existed, verify each one is addressed.
 
 ## 5. Report format
 

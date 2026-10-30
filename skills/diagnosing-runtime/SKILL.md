@@ -1,7 +1,7 @@
 ---
 name: diagnosing-runtime
 description: "Diagnose Hermes runtime failures — CLI commands that produce no output, exit 0 with no diagnostic text, hang, or return empty (e.g. hermes guide prints nothing, hermes --version is blank). Covers stuck source updates, broken node dependencies, and recovery routes when the runtime itself is the problem."
-version: 1.0.0
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, runtime, cli, node, update, recovery, troubleshooting]
@@ -176,5 +176,35 @@ If none of the above resolves the issue:
 - **`diagnosing-desktop`:** Desktop app specifically won't launch
 - **`diagnosing-plugins`:** A specific plugin won't load (but CLI works)
 - **`installing-hermes`:** Fresh install or complete reinstall needed
+
+## Report
+
+This skill diagnoses Hermes runtime failures — commands producing no output, exit 0 with no text, hangs, or empty results. Apply this report based on Step 1 probe results:
+
+- **CLI-wide failure** (`hermes --version` hangs/empty): treat as runtime/venv/shim issue. Focus on Steps 2,3,5-6 (updates, PM tools, direct inspection).
+- **CLI works but `hermes guide` prints nothing**: treat as plugin load failure (Step 4). Do **not** assume the whole CLI is broken.
+
+### Summary
+Adjust to match the probe: for CLI-wide failure, state the interpreter/venv/runtime is non-functional; for guide-only failure, state the guide plugin failed to load while the CLI is usable.
+
+### Findings
+| Severity | What | Evidence |
+|---|---|---|
+| HIGH | CLI unusable (`hermes --version` empty/hang) | Probe shows classic CLI fails |
+| MEDIUM | Stuck source update blocking all commands | "finishing an interrupted source update" message or update lock present |
+| MEDIUM | Guide/plugin load failure (CLI works) | `hermes --version` works but `hermes guide` prints nothing or times out; check `hermes plugins list`/logs |
+
+### Recommended Fix
+1. **If CLI-wide broken:** Check for stuck updates (`hermes update`, inspect `<git common dir>/hermes-update.lock`). Follow liveness checks per diagnosing-cli-tui. Verify runtime deps with `hermes pm doctor` if needed. Inspect config/logs directly under `$HERMES_HOME` if CLI unusable; escalate to `installing-hermes` as last resort.
+2. **If guide-only broken:** Follow Step 4 (plugin load health) - check `hermes plugins list`, logs for timeouts/import errors. Disable failing plugin if needed, restart session. See `diagnosing-plugins`. 
+
+### References
+- `$HERMES_HOME/config.yaml` and logs (`$HERMES_HOME/logs/`)
+- `hermes_cli/update_lock.py`, `hermes_cli/venv_sync.py`
+- `diagnosing-cli-tui` (stale lock handling)
+- `diagnosing-path` (interpreter/venv resolution)
+- `diagnosing-plugins` (plugin load issues)
+
+---
 
 *Facts verified 2026-10-16 against upstream source at `9bda154d` (v0.21.7): PM-versioned tool layout under `$HERMES_HOME/tools/` (live: `node-26.7.0-win32-x64`; `pm doctor`/`install [names]`/`repair` in `hermes pm --help`); owed-tail marker `source-completion-pending` (`hermes_cli/venv_sync.py`); checkout lock names (`hermes_cli/update_lock.py`); platform selection keys over `plugins.enabled` (see diagnosing-plugins). Re-verify before reuse.*

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source') — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.10
+version: 1.2.13
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -71,6 +71,16 @@ Second load-bearing fact: **`GitHubAuth().is_authenticated()` checks presence, n
 When probing the `.env` token, use Hermes's own loader — `agent.secret_scope.get_secret("GITHUB_TOKEN")` under the Hermes venv — and send the result to the §2 API probe. Ad-hoc text scans of `.env` can false-clear a token (a wrong grep pattern reads "token present" as "token absent" and sends you chasing the wrong layer).
 
 **Automate it:** the §1–§2 probes are cron-able — a monthly health check that reports the method and the env-token probe status catches a dying token before installs break.
+
+## 5. Apply and verify
+
+After applying fixes:
+
+1. Identify the auth method via `GitHubAuth().auth_method()` (note: `is_authenticated()` only confirms a token/credential is present — it does not prove validity). 
+2. Validate the credential against the GitHub API per §2 (e.g., `GET https://api.github.com/rate_limit` with the active credential; `401` = invalid/revoked, `200` = token alive). If the fix targets a specific repo, probe `GET /repos/<owner>/<repo>` with that credential as well.
+3. Test the failing operation (e.g., `hermes skills tap add ...` or the install that failed) — it should succeed or fail for a different reason.
+4. If using a token in `.env`, confirm it was removed/refreshed and no longer causes 401s.
+5. For rate limits, confirm method changed (anonymous → gh-cli/pat) gives expected behavior.
 
 ## Report
 

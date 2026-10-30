@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, provider/auth failures, and credential pool exhaustion.
-version: 1.3.1
+version: 1.3.2
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -168,6 +168,16 @@ Older configs use a top-level `custom_providers:` list with `base_url` instead o
 > Hostnames, base URLs, and key values stay forbidden everywhere.
 
 Every diagnosis ends in a concrete action: a `providers:` field edit or a `hermes model` command, then `hermes gateway restart` to apply.
+
+## Apply and verify
+
+After applying fixes:
+
+1. Re-test the failing scenario to confirm the symptom is resolved.
+2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
+3. Verify logs/config show the expected state with no new errors.
+4. If the issue was environment-specific, confirm it works in your actual setup.
+
 
 ## Report
 
