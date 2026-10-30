@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.5
+version: 1.3.6
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -190,7 +190,7 @@ while writes fail. Treat it as a separate branch:
 
 After applying fixes:
 
-1. Re-run the probe/diagnostics to confirm pressure conditions changed (e.g., `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh`).
+1. Re-run the probe/diagnostics to confirm pressure conditions changed (e.g., `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` from the repo root, or the installed copy at `$HERMES_HOME/skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh`).
 2. Re-test the failing Hermes operations to confirm they no longer hang/time out.
 3. Check resource usage has stabilized or improved.
 4. If disk cleanup was done, verify space is reclaimed without breaking state.db.

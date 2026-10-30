@@ -1,8 +1,8 @@
 # Comprehensive Review of hermes-guide Skills
 
-Review date: 2026-10-30  
+Review date: 2026-10-30  (snapshot; counts reflect the tree at review time — 22 skills total)
 Reviewer: Subagent  
-Skills reviewed: 23  
+Skills reviewed: 22  
 
 ## Executive Summary
 
@@ -11,6 +11,7 @@ The hermes-guide skills are generally well-structured diagnostic playbooks with 
 ## Comparison Against Guidelines
 
 ### Skill Authoring (CONTRIBUTING.md)
+
 Per CONTRIBUTING.md §"Adding or changing a skill":
 - **Frontmatter**: Must have exactly 3 keys (name, description, version) plus metadata.hermes with tags/related_skills. ✅ All skills have frontmatter with these elements.
 - **Naming**: `diagnosing-<surface>` for playbooks, lowercase kebab-case, ≤20 chars for new skills. ✅ All follow conventions (exemptions noted for pre-existing long names).
@@ -20,6 +21,7 @@ Per CONTRIBUTING.md §"Adding or changing a skill":
 - **Routing**: diagnosing-* skills need entries in config map routing, README table, skill-drift.yml dropdown. This is external to SKILL.md content.
 
 ### Content Rules (CONTRIBUTING.md)
+
 - **Ground in installed Hermes**: Cite paths/symbols. Many skills do this well (e.g., diagnosing-path cites hermes_cli/*, diagnosing-auth cites tools/skills_hub_github.py).
 - **End on action**: "Every diagnosis resolves to a `hermes <subcommand>` or a specific file + field edit, followed by a `/reload-*` or a restart." Most diagnosing skills do this.
 - **Name exact command**: Generally followed.
@@ -29,6 +31,7 @@ Per CONTRIBUTING.md §"Adding or changing a skill":
 - **Citations must resolve**: Skills cite specific files; provenance footers mention commits.
 
 ### Growth Policy
+
 - Size budget ~200 lines or more than one surface → split/spill to references/. diagnosing-triage is 310 lines (router - different category), diagnosing-path is 279 lines (complex venv/path logic), diagnosing-host-pressure is 212 lines. Some are long but justified by complexity.
 - Single router is diagnosing-triage.
 
@@ -60,24 +63,28 @@ Per CONTRIBUTING.md §"Adding or changing a skill":
 - diagnosing-voice - Has Report only
 - hermes-configuration-guide - Reference/map skill, different category, no verification (acceptable for reference)
 
-**Finding:** 16/23 skills lack explicit "how to verify the fix worked" verification sections/checklists. Diagnostic skills especially need concrete verification steps users can run after applying fixes.
+**Finding:** 16/22 skills lack explicit "how to verify the fix worked" verification sections/checklists. Diagnostic skills especially need concrete verification steps users can run after applying fixes.
 
 ## Structural Analysis
 
 ### Report Sections
+
 - Present in: diagnosing-auth, bot-mode, browser, cli-tui, commands, cron, desktop, gateway, hooks, mcp, memory, path, plugins, providers, runtime? diagnosing-runtime has NO Report section (line 1-172, ends at Step 5 continuation without Report). Also diagnosing-host-pressure has "Report shape" (different naming) but no "## Report" header. diagnosing-triage has "Report format" but no "## Report". hermes-configuration-guide no Report. hermes-post-update no Report. installing-hermes has Report.
 - **Gap:** diagnosing-runtime missing Report section entirely - problematic for a diagnostic skill.
 
 ### Pitfalls Sections
+
 - Explicit "## Pitfalls": diagnosing-auth has "## 3. Pitfalls (symptom → cause → fix)" (has pitfalls), diagnosing-host-pressure has "## 6. Pitfalls and gotchas", diagnosing-path doesn't have explicit "Pitfalls" header. Many have troubleshooting info in tables but not labeled as Pitfalls section.
 - **Inconsistency:** Some call it "Pitfalls", some integrate into workflow. Not all diagnostic skills have consolidated pitfall sections.
 
 ### Workflows/Localization
+
 - Some have "Localization workflow", "How to inspect/localize" sections. Not consistently present.
 
 ## Issues Found
 
 ### Critical/High Priority
+
 1. **diagnosing-runtime incomplete** - No Report section, version 1.0.0 suggests newer/incomplete. Has long description (303 chars) but missing key diagnostic skill sections. Needs Report section with findings/recommendations format.
 2. **Missing verification templates** - 16 skills lack explicit verification/checklist sections. Users need concrete "verify fix worked" steps. This is important for diagnostic effectiveness.
 3. **Description format** - Many descriptions are too long and don't follow "name the surface and symptom; do not spend it on adjectives" guidance. Some read like full documentation. Should be more concise.
@@ -85,21 +92,24 @@ Per CONTRIBUTING.md §"Adding or changing a skill":
 5. **Inconsistent structure** - Different section names ("Apply and verify" vs "Verification checklist" vs no section), different organization makes skills harder to use consistently.
 
 ### Medium Priority  
-6. **Provenance footers** - Some skills may lack the dated upstream-anchored footer format specified in CONTRIBUTING.md. Need to verify each skill that has been re-verified has the footer in the required format.
-7. **diagnosing-triage is very long (310 lines)** - It's a router (meta-skill), so different category is fine per AGENTS.md ("one configuration map (hermes-configuration-guide), nineteen diagnosing-* playbooks, one other skill (hermes-post-update)"). diagnosing-triage is counted separately? Let us count again from AGENTS: "twenty-two skills/<name>/SKILL.md files: one install guide (installing-hermes), one configuration map (hermes-configuration-guide), nineteen diagnosing-* playbooks, one other skill (hermes-post-update)". So 1+1+19+1 = 22 total. We have 23 skill directories including diagnosing-triage? Let us count diagnosing-* vs others.
+
+1. **Provenance footers** - Some skills may lack the dated upstream-anchored footer format specified in CONTRIBUTING.md. Need to verify each skill that has been re-verified has the footer in the required format.
+2. **diagnosing-triage is very long (310 lines)** - It's a router (meta-skill), so different category is fine per AGENTS.md ("one configuration map (hermes-configuration-guide), nineteen diagnosing-* playbooks, one other skill (hermes-post-update)"). diagnosing-triage is counted separately? Let us count again from AGENTS: "twenty-two skills/<name>/SKILL.md files: one install guide (installing-hermes), one configuration map (hermes-configuration-guide), nineteen diagnosing-* playbooks, one other skill (hermes-post-update)". So 1+1+19+1 = 22 total. We have 23 skill directories including diagnosing-triage? Let us count diagnosing-* vs others.
 Looking at our list: diagnosing-auth through diagnosing-voice are 19 skills (auth,browser,bot-mode,cli-tui,commands,cron,desktop,gateway,hooks,host-pressure,mcp,memory,path,plugins,providers,runtime,skills,triage,voice = 19). Plus hermes-configuration-guide, hermes-post-update, installing-hermes = 3 more, total 22. That matches AGENTS.md count of 22. And diagnosing-triage is one of those 19 diagnosing-* playbooks (it's described as meta-skill/router). Correct.
 
-8. **hermes-configuration-guide** - It's a reference/map, not a diagnostic playbook. No verification/pitfalls needed per its category. Structure is fine for its purpose.
-9. **Some skills have very long descriptions** (>250 chars) that violate "name the surface and the symptom; do not spend it on adjectives" - e.g. diagnosing-auth (316), diagnosing-runtime (303), diagnosing-desktop (266), diagnosing-path (259).
+3. **hermes-configuration-guide** - It's a reference/map, not a diagnostic playbook. No verification/pitfalls needed per its category. Structure is fine for its purpose.
+4. **Some skills have very long descriptions** (>250 chars) that violate "name the surface and the symptom; do not spend it on adjectives" - e.g. diagnosing-auth (316), diagnosing-runtime (303), diagnosing-desktop (266), diagnosing-path (259).
 
 ### Low Priority
-10. **Inconsistent "When to use" sections** - Some have them, some don't. Not explicitly required but helps usability.
-11. **Tags/related_skills** - Generally present, seem reasonable.
-12. **No obvious reusable verification template file** - Each skill implements verification differently. Could benefit from a standard template/checklist pattern.
+
+1. **Inconsistent "When to use" sections** - Some have them, some don't. Not explicitly required but helps usability.
+2. **Tags/related_skills** - Generally present, seem reasonable.
+3. **No obvious reusable verification template file** - Each skill implements verification differently. Could benefit from a standard template/checklist pattern.
 
 ## Specific Recommendations
 
 ### High Priority
+
 1. **Add verification sections to diagnostic skills missing them** - Create a consistent "## Verification" or "## Apply and verify" section for all diagnosing-* skills. Include concrete commands/checks to confirm the fix worked. Pattern from diagnosing-cli-tui or diagnosing-desktop can be adapted.
 2. **Fix diagnosing-runtime** - Add Report section in standard format (Summary, Findings, Recommended Fix, References). This is a diagnostic skill that needs proper report structure.
 3. **Trim and rewrite skill descriptions** to follow CONTRIBUTING.md: "Name the surface and the symptom; do not spend it on adjectives." Keep them concise (under ~80-120 chars ideally). Example: diagnosing-auth could become "Diagnose hub install auth failures (missing/found-in-any-source, token/rate limits)."
@@ -107,16 +117,19 @@ Looking at our list: diagnosing-auth through diagnosing-voice are 19 skills (aut
 5. **Standardize verification section naming** - Pick one pattern like "## Verification" or "## Apply and verify" and use consistently across diagnostic skills.
 
 ### Medium Priority
-6. **Add Report sections** where missing in a usable form - diagnosing-runtime definitely needs it.
-7. **Review provenance footers** - Ensure skills that have been re-verified have proper footers with dates and commit hashes. Some older skills might need updating.
-8. **Consider splitting very long skills** if they cover multiple surfaces (CONTRIBUTING says "If a section would need a second `## Routing` entry to be found, it belongs in another skill"). Most seem focused.
-9. **Add pitfalls sections** where missing for complex diagnostic skills.
+
+1. **Add Report sections** where missing in a usable form - diagnosing-runtime definitely needs it.
+2. **Review provenance footers** - Ensure skills that have been re-verified have proper footers with dates and commit hashes. Some older skills might need updating.
+3. **Consider splitting very long skills** if they cover multiple surfaces (CONTRIBUTING says "If a section would need a second `## Routing` entry to be found, it belongs in another skill"). Most seem focused.
+4. **Add pitfalls sections** where missing for complex diagnostic skills.
 
 ### Low Priority  
-10. **Create a verification template** in docs or as a reference that skill authors can copy from for consistency.
-11. **Improve navigation** in long skills (TOC) if helpful.
+
+1. **Create a verification template** in docs or as a reference that skill authors can copy from for consistency.
+2. **Improve navigation** in long skills (TOC) if helpful.
 
 ## Notable Strengths
+
 - Excellent use of source file citations with line numbers/symbols
 - Good tables for pitfalls, symptoms, routing
 - Provenance footers with detailed verification history show care about accuracy
