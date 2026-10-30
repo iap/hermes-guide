@@ -2,6 +2,16 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.8.13 (next release)
+
+### Features
+
+- **storage**: add read-only `hermes guide storage` check — reports `$HERMES_HOME/state.db` size; >=512 MiB informational, >=1 GiB broken with `hermes sessions optimize-storage` guidance (no `--force` while holders are live) ([#371](https://github.com/iap/hermes-guide/pull/371))
+
+### Documentation
+
+- **disk-hygiene**: add `5b. Disk full` branch to `diagnosing-host-pressure`; cross-reference `/disk-cleanup` and `hermes-disk-housekeeping` from the storage check and `diagnosing-memory` ([#373](https://github.com/iap/hermes-guide/pull/373))
+
 ## v0.8.12 (2026-10-26)
 
 ### Bug Fixes
