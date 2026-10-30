@@ -44,9 +44,7 @@ hermes guide
   (hermes-configuration-guide Step 0), then re-run the probes.
 - `hermes plugins list` failing → Step 4 (plugin load health) directly.
 
-- `hermes --version` empty/hanging → the classic CLI is Python, not node:
-  suspect the interpreter/venv/shim (see `diagnosing-path`), then continue
-  with Step 5 (direct inspection) here — not Step 3.
+- `hermes --version` empty/hanging → first check for a stuck source update / `hermes-update.lock` (Step 2 lock liveness); only if no lock is blocking, suspect the interpreter/venv/shim (see `diagnosing-path`), then continue with Step 5 (direct inspection) here — not Step 3.
 - Version works but `hermes guide` prints nothing → stay here: the guide
   plugin itself fails to load — continue with Step 4 (plugin load health),
   not `diagnosing-triage` (triage's baseline needs a working guide).
