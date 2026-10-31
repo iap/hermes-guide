@@ -31,8 +31,10 @@ Key points:
   and surfaced only — never auto-installed), `config_schema` (mismatch
   reporting only — no default merge on install).
 - `register(ctx)`: `register_command`, `register_cli_command`, `register_hook`.
-- Slash command handler: `handler(raw_args: str, **context)` with opt-in
-  context keywords (`source`, `session_id`, `session_key`, `platform`).
+- Slash command handler: at `cedf4a3d` (baseline), handlers receive only
+  `raw_args: str`. Context keywords (`source`, `session_id`, `session_key`,
+  `platform`) were introduced later in `06e8c5bc` — use `**context` to opt
+  in, but only on Hermes versions that include that commit.
 - `ctx.get_config(key, default)` requires a key. Use
   `hermes_constants.get_hermes_home()` for the home path.
 - Capabilities: omit `capabilities:` for read-only. Enforced by CI.
@@ -63,11 +65,12 @@ Key points:
   directory fails the count and routing gates.
 - **Handler signature drift.** `register_command`'s docstring summarizes the
   handler as `fn(raw_args: str)`, but the real contract lives in
-  `hermes_cli/plugin_command_dispatch.py::invoke_plugin_command` — it passes
-  `raw_args` plus opt-in context keywords (`source`, `session_id`,
-  `session_key`, `platform`). A handler that declares `ctx` as a positional
-  parameter raises `TypeError` at invocation. Always read the dispatch module,
-  not just the registration docstring.
+  `hermes_cli/plugin_command_dispatch.py::invoke_plugin_command` (introduced
+  in `06e8c5bc`) — it passes `raw_args` plus opt-in context keywords
+  (`source`, `session_id`, `session_key`, `platform`). At `cedf4a3d`, only
+  `raw_args` is passed. A handler that declares `ctx` as a positional
+  parameter raises `TypeError` at invocation. Always read the dispatch module
+  for the target Hermes revision.
 - **render_docs word-list ceiling.** `_word_num()` in `render_docs.py`
   spells numbers up to twenty-three. Adding a twenty-fourth skill
   deliberately requires extending `_WORDS`. The guard exists so a new skill
@@ -95,4 +98,4 @@ Key points:
 - **Every diagnosis should end in a concrete action** followed by a `/reload-*`
   or restart.
 
-*Facts verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/plugins.py` (VALID_HOOKS, register_hook, register_command handler contract), `hermes_cli/plugin_command_dispatch.py` (invoke_plugin_command signature), `hermes_cli/plugins_manifest.py` (requires_hermes), `hermes_cli/skills_hub.py` (tap install), `tools/render_docs.py` (_word_num ceiling, selftest guard), `tools/test_skill_counts.py` (README table + issue template parity), and the official docs (hermes-agent.nousresearch.com/docs). Plugin manifest fields and skill frontmatter verified against this repo's own `plugin.yaml` and `skills/*/SKILL.md`. Re-verify before reuse.*
+*Facts verified 2026-10-31 against upstream source: `hermes_cli/plugins.py` at `cedf4a3d` (VALID_HOOKS, register_hook, register_command — documents `fn(raw_args: str)` only); `hermes_cli/plugin_command_dispatch.py` introduced in `06e8c5bc` (context-keyword contract); `hermes_cli/plugins_manifest.py` at `cedf4a3d` (requires_hermes, python_dependencies, config_schema); `hermes_cli/skills_hub.py` at `cedf4a3d` (tap install); `tools/render_docs.py` (_word_num ceiling, selftest guard); `tools/test_skill_counts.py` (README table + issue template parity); and the official docs (hermes-agent.nousresearch.com/docs). Plugin manifest fields and skill frontmatter verified against this repo's own `plugin.yaml` and `skills/*/SKILL.md`. Re-verify before reuse.*

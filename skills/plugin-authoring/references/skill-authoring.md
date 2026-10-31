@@ -91,9 +91,11 @@ python tools/test_skill_counts.py        # CI-tier: README table + issue templat
 After creating a new plugin or skill:
 
 ```bash
-# Plugin: verify it loads
+# Plugin: verify it's enabled (discovery check)
 hermes plugins list
-# Should show your plugin with status "loaded"
+# Reports enabled / disabled / not enabled — not "loaded".
+# To confirm the plugin actually loaded and registered, invoke one of
+# its commands or tools (e.g. /my-command).
 
 # Skill: verify it's discovered
 hermes skills list
@@ -103,7 +105,8 @@ hermes skills list
 python tools/check_gates.py
 ```
 
-Pass: plugin appears in `hermes plugins list` as loaded; skill appears in
+Pass: plugin appears in `hermes plugins list` as enabled; invoking a
+plugin command confirms it loaded; skill appears in
 `hermes skills list` from the intended source; all 12 hermetic gates pass.
 
 Fail: plugin not listed — check `plugin.yaml` syntax and that the directory is

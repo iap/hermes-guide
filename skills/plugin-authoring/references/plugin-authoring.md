@@ -88,7 +88,7 @@ def register(ctx):
   (imported from `hermes_constants`) for the active Hermes home path
 
 Handler signatures:
-- Slash command: `handler(raw_args: str, **context) -> str` (context keywords: `source`, `session_id`, `session_key`, `platform`; opt in by name)
+- Slash command: at `cedf4a3d` (baseline), handlers receive only `raw_args: str`. Context keywords (`source`, `session_id`, `session_key`, `platform`) were introduced in `06e8c5bc` — use `**context` to opt in, but only on Hermes versions that include that commit.
 - CLI: `handler_fn(args)` returns exit code; `setup_fn(parser)` adds arguments
 
 ### Hooks
