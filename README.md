@@ -134,6 +134,7 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 | `installing-hermes` | Install routes — install.sh/Desktop/Nix, what each creates on disk, config bootstrap, update/uninstall, and the gotchas (PM-era runtime layout, NixOS specifics) |
 | `hermes-configuration-guide` | The map: resolving `$HERMES_HOME`, where each surface is configured, instruction files, orphaned/legacy settings, and routing to the diagnostic skills |
 | `hermes-post-update` | Verify and clean up after a Hermes update — gateway restart, plugin migrations, config changes, health checks, cleanup opportunities |
+| `plugin-authoring` | Author Hermes plugins (plugin.yaml + register(ctx), commands, hooks, capabilities, read-only contract) and skills (SKILL.md frontmatter, versioning, provenance, verification) |
 | `diagnosing-mcp` | MCP servers that won't connect, expose no tools, fail OAuth, or ignore `mcp_servers:` config |
 | `diagnosing-skills` | Skills not discovered, shadowed, hidden by platform/toolset conditions, or stuck "user-modified" |
 | `diagnosing-commands` | Missing or overridden slash commands — skills-as-commands, bundles, plugin commands, per-platform permissions |

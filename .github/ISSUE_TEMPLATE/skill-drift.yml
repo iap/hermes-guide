@@ -9,6 +9,7 @@ body:
       options:
         - hermes-configuration-guide
         - hermes-post-update
+        - plugin-authoring
         - installing-hermes
         - diagnosing-mcp
         - diagnosing-skills
