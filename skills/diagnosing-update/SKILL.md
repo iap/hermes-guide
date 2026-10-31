@@ -33,8 +33,8 @@ Goal: reduce any update problem to one concrete fix — a lock removal, a retry,
 ls ~/.hermes/installs/*/source-completion-pending 2>/dev/null
 # If owner PID is dead, the lock is genuinely wedged.
 # DO NOT delete the lock while a holder exists.
-# Wait for the holder to finish, or kill the stale process:
-ps aux | grep hermes
+# Identify the exact holder PID from the lock file before acting.
+# Wait for the holder to finish, or use a supported stop procedure.
 # Then retry:
 hermes update
 ```
@@ -47,7 +47,7 @@ hermes update
 
 **Fix:**
 ```bash
-# Safe to remove (human confirmation required):
+# Safe to remove (human confirmation required) — exact paths only:
 rm ~/.hermes/installs/*/source-completion-pending
 rm ~/.hermes/installs/*/source-completion-attempts
 # Then retry:
@@ -64,8 +64,11 @@ hermes update
 ```bash
 hermes config path           # verify $HERMES_HOME
 ls ~/.hermes/installs/       # check install directories
-# If layout is non-standard, prefer hermes update; manual fallback:
-cd ~/.hermes/hermes-agent && git pull && pip install -e .
+# If layout is non-standard, prefer hermes update.
+# Manual fallback requires locating the actual install directory first:
+ls ~/.hermes/installs/       # identify the install root
+# Then run from that directory:
+# cd <install-root> && git pull && pip install -e .
 ```
 
 ### macOS < 13 node toolchain issue

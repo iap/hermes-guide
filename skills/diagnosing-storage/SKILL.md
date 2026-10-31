@@ -29,7 +29,7 @@ Goal: reduce any storage problem to one concrete fix — a database optimization
 
 **Fix:**
 ```bash
-hermes sessions optimize-storage   # reclaim space
+hermes sessions optimize-storage   # reclaim space (stop gateway first)
 # Or prune old sessions:
 hermes sessions list --limit 50
 hermes sessions delete <session_id>
@@ -46,7 +46,7 @@ hermes sessions delete <session_id>
 df -h /                          # check disk usage
 du -sh ~/.hermes/*               # Hermes breakdown
 # Clean caches:
-find ~/.hermes/cache/scratch -type f -delete  # scratch files (24h TTL anyway)
+find ~/.hermes/cache/scratch -maxdepth 1 -type f -delete  # scratch files (24h TTL anyway)
 # Prune old sessions:
 hermes sessions optimize-storage
 # See hermes-disk-housekeeping skill for full cleanup

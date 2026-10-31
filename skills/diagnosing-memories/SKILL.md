@@ -18,8 +18,8 @@ Goal: reduce any memory store problem to one concrete fix — a trim, a dedup, o
 
 - `hermes guide` — runs `check_memory_hygiene` (store audit)
 - `hermes memory status` — provider/store health
-- `cat ~/.hermes/memories/MEMORY.md` — agent notes store
-- `cat ~/.hermes/memories/USER.md` — user profile store
+- `cat "$(hermes config path | sed 's|config.yaml||')memories/MEMORY.md"` — agent notes store
+- `cat "$(hermes config path | sed 's|config.yaml||')memories/USER.md"` — user profile store
 
 ## 2. Common failures
 

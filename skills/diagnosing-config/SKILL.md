@@ -30,10 +30,11 @@ Goal: reduce any config problem to one concrete fix — a YAML syntax correction
 **Fix:**
 ```bash
 hermes config path          # verify the path
-ls -la $(hermes config path)  # check existence
+cfg=$(hermes config path)
+ls -la "$cfg"  # check existence
 # If missing, create minimal config:
-mkdir -p $(dirname $(hermes config path))
-echo "model:" > $(hermes config path)
+mkdir -p "$(dirname "$cfg")"
+echo "model:" > "$cfg"
 ```
 
 ### Config does not parse (YAML syntax error)
@@ -45,7 +46,7 @@ echo "model:" > $(hermes config path)
 **Fix:**
 ```bash
 # Validate YAML syntax
-python -c "import yaml; yaml.safe_load(open('$(hermes config path)'))"
+python -c "import yaml; yaml.safe_load(open('$cfg'))"
 # Common fixes:
 # - Replace tabs with spaces
 # - Quote strings with colons: "key: value" not key: value

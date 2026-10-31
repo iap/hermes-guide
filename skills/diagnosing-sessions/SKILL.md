@@ -17,7 +17,7 @@ Goal: reduce any session problem to one concrete fix — a fresh session, a mode
 - `hermes guide` — runs `check_session_health` (runaway session audit)
 - `hermes sessions list` — all sessions with metadata
 - `hermes sessions list --limit 50` — find session by ID
-- `hermes sessions optimize-storage` — reclaim space
+- `hermes sessions optimize-storage` — reclaim space (stop gateway first)
 - `tail -100 ~/.hermes/logs/agent.log` — recent session activity
 
 ## 2. Common failures
