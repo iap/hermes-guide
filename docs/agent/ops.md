@@ -400,8 +400,10 @@ Never merge on green CI alone. Immediately before merging a PR, verify: all
 checks pass (not pending), every review thread resolved (fixed or declined with
 file:line evidence — never auto-resolved to unblock), both reviewers heard
 where present (a silent bot is not an approving bot), `mergeStateStatus` is
-`CLEAN`, and the merge is explicitly authorized. Report the checklist result,
-then merge.
+`CLEAN`, and the merge is explicitly authorized. When enumerating threads, use `gh api graphql`
+reviewThreads for resolution state and full bodies; REST `pulls/<n>/comments`
+only for quick inline enumeration (Greptile bodies live there, not in
+`reviews`). Report the checklist result, then merge.
 
 **CodeRabbit is required once Qodo has run, not an optional extra.** Qodo
 reviews automatically; CodeRabbit does not (`auto_review.enabled: false`), so it
