@@ -25,6 +25,75 @@ try:
 except ImportError:
     yaml = None
 
+# Minimal YAML fallback for environments without PyYAML (e.g. legacy-mac CI).
+# Handles the flat scalar/list/mapping structure of plugin.yaml.
+def _minimal_yaml_parse(text: str) -> dict:
+    """Parse a simple YAML file into a dict. Handles scalars, lists, and
+    one level of nested mapping (config_schema). Not a full YAML parser."""
+    result = {}
+    current_key = None
+    current_list = None
+    current_map = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if line.startswith(" ") or line.startswith("\t"):
+            # Nested content
+            if current_map is not None:
+                # key: value
+                if ":" in stripped:
+                    k, _, v = stripped.partition(":")
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if v == "" or v == "{}" or v == "[]":
+                        v = {} if v == "{}" else ([] if v == "[]" else None)
+                    elif v.lower() in ("true", "false"):
+                        v = v.lower() == "true"
+                    elif v.isdigit():
+                        v = int(v)
+                    current_map[k] = v
+            elif current_list is not None and stripped.startswith("- "):
+                current_list.append(stripped[2:].strip().strip('"').strip("'"))
+            continue
+        # Top-level key
+        if ":" in stripped:
+            key, _, val = stripped.partition(":")
+            key = key.strip()
+            val = val.strip()
+            if val == "" or val is None:
+                # Could be a mapping or list follows
+                current_key = key
+                current_list = None
+                current_map = {}
+                result[key] = current_map
+            elif val.startswith("[") and val.endswith("]"):
+                items = [x.strip().strip('"').strip("'") for x in val[1:-1].split(",") if x.strip()]
+                result[key] = items
+                current_key = None
+                current_list = None
+                current_map = None
+            elif val.lower() in ("true", "false"):
+                result[key] = val.lower() == "true"
+                current_key = None
+                current_list = None
+                current_map = None
+            elif val.isdigit():
+                result[key] = int(val)
+                current_key = None
+                current_list = None
+                current_map = None
+            else:
+                result[key] = val.strip('"').strip("'")
+                current_key = None
+                current_list = None
+                current_map = None
+    # Clean up empty maps that should be None
+    for k, v in list(result.items()):
+        if isinstance(v, dict) and not v:
+            result[k] = None
+    return result
+
 
 def _load_manifest(plugin_dir: Path) -> tuple[dict | None, str]:
     """Load and parse the plugin manifest. Returns (data, format) or (None, error)."""
@@ -37,8 +106,8 @@ def _load_manifest(plugin_dir: Path) -> tuple[dict | None, str]:
                     return json.loads(text), name
                 if yaml:
                     return yaml.safe_load(text), name
-                # Fallback: try yaml via simple parse
-                return None, f"PyYAML not available to parse {name}"
+                # Fallback: minimal parser for environments without PyYAML
+                return _minimal_yaml_parse(text), name
             except Exception as e:
                 return None, f"Failed to parse {name}: {e}"
     return None, "No manifest found (plugin.yaml/yml/json)"
