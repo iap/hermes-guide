@@ -1,7 +1,7 @@
 ---
 name: diagnosing-storage
 description: Diagnose Hermes storage issues — state.db size, disk pressure, session database bloat, and cleanup opportunities.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, storage, disk, troubleshooting]
@@ -77,7 +77,7 @@ hermes --version
 ls -la ~/.hermes/state.db
 file ~/.hermes/state.db
 # Fix permissions:
-chmod 644 ~/.hermes/state.db
+chmod 600 ~/.hermes/state.db
 # If corrupted, back up and let Hermes recreate:
 mv ~/.hermes/state.db ~/.hermes/state.db.bak
 hermes --version
