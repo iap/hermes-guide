@@ -1,7 +1,7 @@
 ---
 name: plugin-authoring
 description: "Author Hermes plugins (plugin.yaml + register(ctx)) and skills (SKILL.md) — scaffolding, registration, hooks, commands, capabilities, versioning, provenance, and the read-only contract."
-version: 1.5.0
+version: 1.5.1
 metadata:
   hermes:
     tags: [hermes, plugin, skill, authoring, guide]
@@ -94,6 +94,16 @@ Key points:
   `hermes_cli/plugins.py` and grows across releases. Read the installed source.
 - **Hardcoded venv paths.** Use `project_venv_dir()` / `committed_venv()` /
   `project_python()` — never hardcode `venv/` or `.venv/`.
+- **CLI commands in skills are validated.** Every backtick command in a
+  SKILL.md is checked by `tools/check_cli_surface.py` against the installed
+  Hermes CLI. Verify commands with `hermes <cmd> --help` before writing them
+  — `hermes sessions show` does not exist (use `hermes sessions list`).
+- **Secure file permissions in recommendations.** Never recommend `chmod 644`
+  on sensitive files like `state.db` — use `chmod 600` to preserve
+  owner-only access. Conversation/tool history must not be world-readable.
+- **Manual update commands must reinstall deps.** `git pull` alone leaves the
+  runtime environment out of sync. Always include `pip install -e .` or
+  prefer `hermes update`.
 - **Confusing Hermes with Claude Code.** Hermes has no standalone command files
   (commands come from built-ins, skills-as-slash, bundles, and plugins); hooks
   span four separate systems; plugins are `plugin.yaml` + `register(ctx)`, not
