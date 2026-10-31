@@ -1,7 +1,7 @@
 ---
 name: plugin-authoring
 description: "Author Hermes plugins (plugin.yaml + register(ctx)) and skills (SKILL.md) — scaffolding, registration, hooks, commands, capabilities, versioning, provenance, and the read-only contract."
-version: 1.4.0
+version: 1.5.0
 metadata:
   hermes:
     tags: [hermes, plugin, skill, authoring, guide]
@@ -75,7 +75,7 @@ Key points:
   parameter raises `TypeError` at invocation. Always read the dispatch module
   for the target Hermes revision.
 - **render_docs word-list ceiling.** `_word_num()` in `render_docs.py`
-  spells numbers up to twenty-three. Adding a twenty-fourth skill
+  spells numbers up to twenty-eight. Adding a twenty-ninth skill
   deliberately requires extending `_WORDS`. The guard exists so a new skill
   count forces someone to look at the prose rather than silently producing
   a number.

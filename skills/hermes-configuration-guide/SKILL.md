@@ -5,7 +5,7 @@ version: 1.4.5
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
-    related_skills: [installing-hermes, diagnosing-runtime, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice]
+    related_skills: [installing-hermes, diagnosing-runtime, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, diagnosing-config, diagnosing-storage, diagnosing-sessions, diagnosing-update, diagnosing-memories]
 ---
 
 # Hermes Configuration Guide
@@ -116,6 +116,11 @@ Notes:
 - A `/command` missing, wrong, or overridden → **`diagnosing-commands`**
 - A hook not firing, blocked consent, or behaving unexpectedly → **`diagnosing-hooks`**
 - A plugin not loading, not enabled, or missing capabilities → **`diagnosing-plugins`**
+- Config file missing, unparseable, or orphaned settings → **`diagnosing-config`**
+- Storage / disk pressure, state.db bloat, or cleanup → **`diagnosing-storage`**
+- Session runaway, loop signature, or context bloat → **`diagnosing-sessions`**
+- Update lock stale, dead owner, or update failures → **`diagnosing-update`**
+- Memory store over-limit, duplicates, or mis-targeted entries → **`diagnosing-memories`**
 - Auth/API failures on hub installs (`Could not fetch from any source`, GitHub 401, rate-limit 403) → **`diagnosing-auth`**; model-provider credential pool issues (OpenAI/Anthropic/OpenRouter key failures, exhaustion, cooldown) → **`diagnosing-providers`** Step 5
 - Memory not persisting ("it forgot"), an external memory provider silently unavailable, or `MEMORY.md`/`USER.md` errors → **`diagnosing-memory`**
 - Desktop app build/launch failures, wrong backend, or blank window → **`diagnosing-desktop`**; terminal/TUI rendering issues are `diagnosing-cli-tui`, not desktop
