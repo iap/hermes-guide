@@ -1,7 +1,7 @@
 ---
 name: diagnosing-skills
 description: Diagnose Hermes skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits.
-version: 1.1.8
+version: 1.1.9
 metadata:
   hermes:
     tags: [hermes, skills, troubleshooting]
@@ -78,14 +78,25 @@ When the same skill exists in several roots (local copy vs external dir vs plugi
 5. Apply the fix and verify with `skill_view(name)` or by invoking `/<name>`.
 6. Re-run the detector: `hermes guide skills` headless or `/hermes-doctor skills` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
 
-## Apply and verify
+## Verification
 
 After applying fixes:
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+# Confirm the skill is now discovered from the correct source
+hermes skills list
+
+# Confirm the model sees the right content
+# (run as an agent tool call: skill_view(name='<name>'))
+
+# Re-scan without restarting
+# /reload-skills  (in-session)
+
+# Re-run the health check
+hermes guide skills
+```
+
+Expected: `hermes skills list` shows the skill from the intended source; `hermes guide skills` exits `0` with `+` for the affected skill.
 
 
 ## Report

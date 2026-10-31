@@ -1,7 +1,7 @@
 ---
 name: diagnosing-runtime
 description: "Diagnose Hermes runtime failures — CLI commands that produce no output, exit 0 with no diagnostic text, hang, or return empty (e.g. hermes guide prints nothing, hermes --version is blank). Covers stuck source updates, broken node dependencies, and recovery routes when the runtime itself is the problem."
-version: 1.0.4
+version: 1.0.5
 metadata:
   hermes:
     tags: [hermes, runtime, cli, node, update, recovery, troubleshooting]
@@ -174,6 +174,26 @@ If none of the above resolves the issue:
 - **`diagnosing-desktop`:** Desktop app specifically won't launch
 - **`diagnosing-plugins`:** A specific plugin won't load (but CLI works)
 - **`installing-hermes`:** Fresh install or complete reinstall needed
+
+## Verification
+
+After applying fixes:
+
+```bash
+# Re-run the Step 1 probes in order
+hermes --version
+hermes config path
+hermes plugins list
+hermes guide
+
+# If node/TUI was the issue
+hermes pm doctor
+
+# Check for new errors
+tail -20 "$HERMES_HOME/logs/errors.log"
+```
+
+Expected: `hermes --version` prints a version string; `hermes guide` prints scope output with no timeouts; `hermes pm doctor` exits clean; no new `load timed out` lines in errors.log.
 
 ## Report
 
