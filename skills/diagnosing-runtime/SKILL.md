@@ -1,7 +1,7 @@
 ---
 name: diagnosing-runtime
 description: "Diagnose Hermes runtime failures — CLI commands that produce no output, exit 0 with no diagnostic text, hang, or return empty (e.g. hermes guide prints nothing, hermes --version is blank). Covers stuck source updates, broken node dependencies, and recovery routes when the runtime itself is the problem."
-version: 1.0.5
+version: 1.0.6
 metadata:
   hermes:
     tags: [hermes, runtime, cli, node, update, recovery, troubleshooting]
@@ -189,7 +189,8 @@ hermes guide
 hermes pm doctor
 
 # Check for new errors (resolve active home via hermes config path)
-cfg=$(hermes config path); tail -20 "$(dirname "$cfg")/logs/errors.log"
+# Record before the fix: baseline=$(wc -l < "$(dirname "$(hermes config path)")/logs/errors.log")
+cfg=$(hermes config path); tail -n +"$((baseline + 1))" "$(dirname "$cfg")/logs/errors.log" | grep -n "load timed out" || true
 ```
 
 Expected: `hermes --version` prints a version string; `hermes guide` prints scope output with no timeouts; `hermes pm doctor` exits clean; no new `load timed out` lines in errors.log.

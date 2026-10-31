@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.11
+version: 1.1.12
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -80,14 +80,15 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 
 ## Verification
 
-Shell hooks (registered via `hermes hooks`) are checked with `hermes hooks list` / `hermes hooks doctor`; gateway `HOOK.yaml` handlers use a separate event system and are checked via gateway logs, not these commands.
+Shell hooks (registered via `hermes hooks`) are checked with `hermes hooks list` / `hermes hooks doctor`; gateway `HOOK.yaml` handlers use a separate event system and are checked via gateway logs, not these commands. Plugin hooks are checked via `hermes plugins list` and their callback output; outbound webhooks are fire-and-forget — verify them via receiver logs. Consent approval (`allowed`/`not allowlisted`) applies to **shell hooks only** — gateway, plugin, and outbound hooks do not use the shell consent allowlist, and outbound webhooks make no blocking decision.
 
 ```bash
 # Confirm consent state (shell hooks only)
 hermes hooks list
 ```
 
-Pass: the hook's `(event, command)` pair shows `allowed` (not `not allowlisted`).
+Pass: the shell hook's `(event, command)` pair shows `allowed` (not `not allowlisted`). Gateway/plugin/outbound hooks are not subject to this check.
+
 Fail: still `not allowlisted` — start an interactive session (`hermes --cli`) and accept the TTY prompt for this specific hook.
 
 ```bash
@@ -96,6 +97,7 @@ hermes hooks doctor
 ```
 
 Pass: no `exec bit missing` / permission errors.
+
 Fail: fix the script's executable bit (`chmod +x`) or permissions, then re-run.
 
 ```bash
@@ -103,8 +105,9 @@ Fail: fix the script's executable bit (`chmod +x`) or permissions, then re-run.
 hermes hooks test <event>
 ```
 
-Pass: hook executes and returns without error; blocking hooks show the expected allow/block decision.
-Fail: error or no output — check `hermes logs` for the handler error and fix the script or handler.
+Pass: hook executes without error; blocking hooks show the expected allow/block decision. An observer hook returning no stdout is a valid success (the JSON response is optional).
+
+Fail: an error, or — for blocking hooks — an incorrect allow/block decision. Check `hermes logs` for the handler error and fix the script or handler.
 
 ## Report
 

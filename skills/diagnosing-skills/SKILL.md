@@ -1,7 +1,7 @@
 ---
 name: diagnosing-skills
 description: Diagnose Hermes skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits.
-version: 1.1.9
+version: 1.1.10
 metadata:
   hermes:
     tags: [hermes, skills, troubleshooting]
@@ -96,7 +96,7 @@ hermes skills list
 hermes guide skills
 ```
 
-Expected: `hermes skills list` shows the skill from the intended source; `hermes guide skills` exits `0` with `+` for the affected skill (or `~` for informational missing-guide-skill hints, which is acceptable).
+Expected: `hermes skills list` shows the skill from the intended source; `hermes guide skills` exits `0` and reports no skill issues. The check prints one marker for the aggregate scope, not one per skill: `+` when healthy, `~` for an informational result (e.g. missing-guide-skill hints, which is acceptable).
 
 
 ## Report

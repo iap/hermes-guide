@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.7
+version: 1.3.8
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -197,11 +197,15 @@ bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh
 # (installed copy)
 bash "${HERMES_HOME:-$HOME/.hermes}/skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh"
 
-# Confirm plugins now load inside budget (post-restart entries only — inspect timestamps)
-grep -n "Failed to load plugin" "$(dirname "$(hermes config path)")/logs/errors.log" | tail -20
+# Confirm plugins now load inside budget (post-restart entries only).
+# errors.log is append-only, so bound the check: record the line count BEFORE
+# the restart (resolution step 5), then inspect only entries added after it:
+#   hp_baseline=$(wc -l < "$(dirname "$(hermes config path)")/logs/errors.log")
+cfg=$(hermes config path)
+tail -n +"$((hp_baseline + 1))" "$(dirname "$cfg")/logs/errors.log" | grep -n "Failed to load plugin" || true
 
 # Inspect gateway state for platform health (not just key presence)
-python3 -c "import json,sys; d=json.load(open('$(dirname $(hermes config path))/gateway_state.json')); print({k:v.get('state') for k,v in d.get('platforms',{}).items()})"
+HERMES_CONFIG_PATH="$(hermes config path)" python3 -c 'import json, os, pathlib; d=json.load(open(pathlib.Path(os.environ["HERMES_CONFIG_PATH"]).parent / "gateway_state.json")); print({k: v.get("state") for k, v in d.get("platforms", {}).items()})'
 
 # Confirm gateway is running without restarting again (restart already happened during resolution)
 hermes gateway status

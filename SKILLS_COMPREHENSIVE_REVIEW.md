@@ -63,7 +63,7 @@ Per CONTRIBUTING.md §"Adding or changing a skill":
 - diagnosing-voice - Has Report only
 - hermes-configuration-guide - Reference/map skill, different category, no verification (acceptable for reference)
 
-**Finding (2026-10-31):** All 22 skills now carry an explicit verification/checklist/apply-verify section. The earlier 16/22 gap was closed by adding standardized `## Verification` sections (see `docs/agent/verification-template.md`).
+**Finding (2026-10-31):** All 22 skills, except the exempt reference skill `hermes-configuration-guide`, now carry an explicit verification/checklist/apply-verify section. The earlier 16/22 gap was closed by adding standardized `## Verification` sections (see `docs/agent/verification-template.md`).
 
 ## Structural Analysis
 

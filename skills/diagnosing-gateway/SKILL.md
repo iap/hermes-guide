@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.1.9
+version: 1.1.10
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -76,8 +76,11 @@ Pass: output shows the process running and each configured platform connected (n
 Fail: platform still disconnected — re-run `hermes gateway setup` for that platform, then `hermes gateway restart`.
 
 ```bash
-# Confirm no new errors since the fix
-cfg=$(hermes config path); tail -20 "$(dirname "$cfg")/logs/gateway.log"
+# Confirm no new errors since the fix (POSIX shell; use Git Bash/WSL on Windows)
+cfg=$(hermes config path)
+before=$(wc -l < "$(dirname "$cfg")/logs/gateway.log")
+hermes gateway restart
+tail -n +"$((before + 1))" "$(dirname "$cfg")/logs/gateway.log" | grep -E 'ERROR|token' || true
 ```
 
 Pass: no `ERROR` or `token` lines after the restart timestamp.

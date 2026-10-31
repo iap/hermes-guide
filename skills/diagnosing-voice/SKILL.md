@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.11
+version: 1.0.12
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -91,17 +91,22 @@ After applying fixes:
 # Check current voice state and provider config (in-session)
 # /voice status
 
-# Watch for voice errors in real time
+# Watch for voice errors in real time — run this in a SECOND terminal;
+# it is a live stream and does not return, so later commands in this
+# block are unreachable while it runs.
 hermes logs --follow
 
-# PM-era: confirm ffmpeg is present
+# Bounded alternative for a sequential run: recent errors only
+hermes logs errors
+
+# PM-era installs: confirm ffmpeg is present
 hermes pm status
 
-# Older checkout: confirm ffmpeg binary
+# Older checkouts only: confirm the system ffmpeg binary
 ffmpeg -version
 ```
 
-Expected: `/voice status` shows the configured provider; no `ffmpeg not found` or provider auth errors in `hermes logs --follow`; `ffmpeg -version` prints a version (ffmpeg on PATH).
+Expected: `/voice status` shows the configured provider; no `ffmpeg not found` or provider auth errors in the log stream (`hermes logs --follow` in a second terminal, or `hermes logs errors`); on a PM-era install `hermes pm status` lists ffmpeg, on an older checkout `ffmpeg -version` prints a version.
 
 
 ## Report
