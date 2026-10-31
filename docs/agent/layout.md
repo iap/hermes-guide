@@ -48,7 +48,6 @@ tracked top-level path and every `.github/` file.
 | `CLAUDE.md` | `@AGENTS.md` import — the Claude Code entry point |
 | `CONTRIBUTING.md` | The authoring standard: naming, content rules, voice |
 | `README.md` | User-facing overview, catalog install, skill table |
-| `SKILLS_COMPREHENSIVE_REVIEW.md` | Comprehensive review of skills structure, verification coverage, and recommendations |
 | `SECURITY.md` | Security policy |
 | `CHANGELOG.md` | Release history generated from conventional commits |
 | `LICENSE` | MIT |
