@@ -97,7 +97,7 @@ Key points:
 - **CLI commands in skills are validated.** Every backtick command in a
   SKILL.md is checked by `tools/check_cli_surface.py` against the installed
   Hermes CLI. Verify commands with `hermes <cmd> --help` before writing them
-  — `hermes sessions show` does not exist (use `hermes sessions list`).
+  — hermes sessions show does not exist (use hermes sessions list).
 - **Secure file permissions in recommendations.** Never recommend `chmod 644`
   on sensitive files like `state.db` — use `chmod 600` to preserve
   owner-only access. Conversation/tool history must not be world-readable.
