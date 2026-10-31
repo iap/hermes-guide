@@ -484,7 +484,7 @@ Declined: <one-line reason> (`path:line` evidence).
 
 Thread reply (outdated anchor):
 ```
-Addressed (anchor moved): <one-line what changed>.
+Addressed (anchor moved): <one-line what changed> (`path:line` evidence).
 ```
 
 PR summary (final status, ≤ 4 lines):
