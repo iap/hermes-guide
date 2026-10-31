@@ -1,7 +1,7 @@
 ---
 name: plugin-authoring
 description: "Author Hermes plugins (plugin.yaml + register(ctx)) and skills (SKILL.md) — scaffolding, registration, hooks, commands, capabilities, versioning, provenance, and the read-only contract."
-version: 1.2.0
+version: 1.3.0
 metadata:
   hermes:
     tags: [hermes, plugin, skill, authoring, guide]
@@ -83,6 +83,10 @@ Key points:
 - **Repository-only checks.** `python tools/check_gates.py`,
   `tools/render_docs.py`, and `tools/test_skill_counts.py` are for
   contributions to hermes-guide. External projects use their own CI.
+- **Bot review threads.** Qodo runs automatically; CodeRabbit requires
+  `@coderabbitai full review`. Resolve every thread with file:line evidence
+  before merge — never auto-resolve to unblock. A silent or empty
+  CodeRabbit run counts as "not heard", not "clean".
 - **Hardcoded hook event names.** The valid set is `VALID_HOOKS` in
   `hermes_cli/plugins.py` and grows across releases. Read the installed source.
 - **Hardcoded venv paths.** Use `project_venv_dir()` / `committed_venv()` /
