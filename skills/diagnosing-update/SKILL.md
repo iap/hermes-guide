@@ -64,8 +64,8 @@ hermes update
 ```bash
 hermes config path           # verify $HERMES_HOME
 ls ~/.hermes/installs/       # check install directories
-# If layout is non-standard, update manually:
-cd ~/.hermes/hermes-agent && git pull
+# If layout is non-standard, prefer hermes update; manual fallback:
+cd ~/.hermes/hermes-agent && git pull && pip install -e .
 ```
 
 ### macOS < 13 node toolchain issue
