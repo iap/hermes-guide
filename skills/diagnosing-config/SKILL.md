@@ -111,4 +111,4 @@ Fail: config check shows broken — re-check YAML syntax and $HERMES_HOME.
 - `diagnosing-path` — path resolution issues
 - `diagnosing-plugins` — plugin config issues
 
-*Facts verified 2026-11-01 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/config.py` (load_config, config path resolution), `hermes_constants.py` (get_hermes_home). Re-verify before reuse.*
+*Facts re-verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/config.py` (load_config, config path resolution), `hermes_constants.py` (get_hermes_home). Re-verify before reuse.*

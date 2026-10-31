@@ -93,4 +93,4 @@ Fail: session health check flags runaway — start fresh session and split work.
 - `diagnosing-storage` — disk and database issues
 - `hermes-disk-housekeeping` — cleanup procedures
 
-*Facts verified 2026-11-01 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_session_health), `hermes_constants.py` (get_hermes_home). Re-verify before reuse.*
+*Facts re-verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_session_health), `hermes_constants.py` (get_hermes_home). Re-verify before reuse.*

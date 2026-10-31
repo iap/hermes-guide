@@ -107,4 +107,4 @@ Fail: memory hygiene check shows broken — address the specific finding.
 - `hermes-disk-housekeeping` — storage cleanup
 - `hermes-configuration-guide` — memory configuration
 
-*Facts verified 2026-11-01 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_memory_hygiene), `hermes_constants.py` (BUILTIN_MEMORY_STORES, MEMORY_ENTRY_DELIMITER). Re-verify before reuse.*
+*Facts re-verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_memory_hygiene), `hermes_constants.py` (BUILTIN_MEMORY_STORES, MEMORY_ENTRY_DELIMITER). Re-verify before reuse.*

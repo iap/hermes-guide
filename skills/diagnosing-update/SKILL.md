@@ -111,4 +111,4 @@ Fail: update check shows broken — check for stale locks or layout issues.
 - `installing-hermes` — install/reinstall procedures
 - `diagnosing-path` — path resolution issues
 
-*Facts verified 2026-11-01 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_update_lock), `hermes_cli/plugins_cmd_update.py`. Re-verify before reuse.*
+*Facts re-verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_update_lock), `hermes_cli/plugins_cmd_update.py`. Re-verify before reuse.*
