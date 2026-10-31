@@ -77,6 +77,9 @@ Key points:
   appear in the README skill table AND the `.github/ISSUE_TEMPLATE/
   skill-drift.yml` dropdown. `tools/test_skill_counts.py` (CI-tier)
   enforces this — run it after adding a skill.
+- **Repository-only checks.** `python tools/check_gates.py`,
+  `tools/render_docs.py`, and `tools/test_skill_counts.py` are for
+  contributions to hermes-guide. External projects use their own CI.
 - **Hardcoded hook event names.** The valid set is `VALID_HOOKS` in
   `hermes_cli/plugins.py` and grows across releases. Read the installed source.
 - **Hardcoded venv paths.** Use `project_venv_dir()` / `committed_venv()` /
