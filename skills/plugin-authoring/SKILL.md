@@ -55,8 +55,10 @@ Key fields:
 - `requires_hermes` — version constraint; unsatisfied builds skip the plugin.
 - `capabilities:` — omit entirely or keep empty for read-only plugins. A
   non-empty capabilities block requires user consent at install.
-- `python_dependencies` — pip-installable deps; Hermes installs them into the
-  plugin's venv.
+- `python_dependencies` — pip-installable deps; Hermes **validates and
+  surfaces** them (never auto-installs). Authors must install deps into the
+  plugin venv themselves (e.g. `pip install -r requirements.txt` in the
+  plugin directory).
 
 ### register(ctx)
 
@@ -84,6 +86,13 @@ def register(ctx):
     )
     # Hooks (optional):
     ctx.register_hook("on_session_start", _on_start)
+
+
+# --- Define these callbacks above register() or import them ---
+# def _handle_command(raw_args: str, **context) -> str: ...
+# def _setup_cli(parser): ...
+# def _run_cli(args) -> int: ...
+# def _on_start(**context): ...
 ```
 
 `ctx` exposes:
@@ -91,9 +100,10 @@ def register(ctx):
 - `register_cli_command(name, help, setup_fn, handler_fn)` — `hermes <name>` subcommand
 - `register_hook(event, callback)` — plugin hook (CLI + gateway)
 - `register_skill(name, path, ...)` — register a bundled skill
-- `hermes_home` — `Path` to the active Hermes home
-- `config` — loaded config dict
-- `get_config(key, default)` — read a config value
+- `get_config(key, default)` — read a plugin-relative config value (requires a
+  key; there is no bare `get_config()` or `ctx.config` attribute)
+- There is no `ctx.hermes_home` attribute; use `hermes_constants.get_hermes_home()`
+  (imported from `hermes_constants`) for the active Hermes home path
 
 Handler signatures:
 - Slash command: `handler(raw_args: str, **context) -> str` (context keywords: `source`, `session_id`, `session_key`, `platform`; opt in by name)
@@ -107,7 +117,10 @@ or list. Common hooks: `on_session_start`, `on_session_end`, `pre_tool_call`,
 `post_tool_call`, `pre_llm_call`.
 
 Plugin hooks can block (`pre_tool_call`), inject context (`pre_llm_call`), or
-continue (`pre_verify`). Callback timeouts: default 30s, hard cap 600s. Policy
+continue (`pre_verify`). Callback timeouts: default 30s, hard cap 600s, but only for an **allowlist**
+of bounded hooks (e.g. `pre_tool_call`, `post_tool_call`, `pre_llm_call`).
+Hooks like `on_session_finalize` run synchronously without this timeout —
+authors relying on a universal timeout can leave a session blocked. Policy
 hooks (pre_tool_call) fail closed on timeout; others fail open.
 
 ### Commands
@@ -128,13 +141,18 @@ fails if it finds any. The empty-capabilities convention is enforced by CI.
 ### Config schema
 
 Declare user-configurable settings under `config_schema:` in `plugin.yaml`.
-Hermes merges these into the user's config on install. Types: `bool`, `str`,
+Hermes uses `config_schema` to report setting mismatches (it does **not**
+write defaults into the user's config on install). Authors must supply
+defaults when reading settings, e.g. `ctx.get_config("proactive", False)`.
+Types: `bool`, `str`,
 `int`, `float`, `list`, `dict`.
 
 ### Read-only inspection pattern
 
-Read config via `ctx.get_config()` or `yaml.safe_load()` on the config path.
-Read state via `Path(ctx.hermes_home) / "..."`. Never write to these paths.
+Read config via `ctx.get_config("key", default)` (requires a key) or
+`yaml.safe_load()` on the config path (`hermes_constants.get_hermes_home() /
+"config.yaml"`). Read state via `hermes_constants.get_hermes_home() / "..."`.
+Never write to these paths.
 
 ## Skill authoring
 
@@ -237,7 +255,7 @@ hermes plugins list
 hermes skills list
 # Should show your skill from the intended source
 
-# Run the hermetic gates
+# For contributions to this repository, run the hermetic gates
 python tools/check_gates.py
 ```
 
@@ -253,16 +271,6 @@ the `name:` frontmatter field and the path is under `skills/`.
 - **Untracked skill directory breaks pre-commit.** `git add skills/<name>/`
   before committing — the gates read the working tree and an untracked
   directory fails the count and routing gates.
-- **render_docs word-list ceiling.** `_word_num()` in `render_docs.py`
-  only spells numbers up to twenty-two. Adding a twenty-third skill
-  deliberately requires extending `_WORDS` AND updating the selftest
-  (remove the guard that expects `_word_num(23)` to raise). The guard
-  exists so a twenty-third skill forces someone to look at the prose
-  rather than silently producing "23".
-- **README table + issue template parity.** Every shipped skill must
-  appear in the README skill table AND the `.github/ISSUE_TEMPLATE/
-  skill-drift.yml` dropdown. `tools/test_skill_counts.py` (CI-tier)
-  enforces this — run it after adding a skill.
 - **Handler signature drift.** `register_command`'s docstring summarizes the
   handler as `fn(raw_args: str)`, but the real contract lives in
   `hermes_cli/plugin_command_dispatch.py::invoke_plugin_command` — it passes
@@ -270,6 +278,15 @@ the `name:` frontmatter field and the path is under `skills/`.
   `session_key`, `platform`). A handler that declares `ctx` as a positional
   parameter raises `TypeError` at invocation. Always read the dispatch module,
   not just the registration docstring.
+- **render_docs word-list ceiling.** `_word_num()` in `render_docs.py`
+  spells numbers up to twenty-three. Adding a twenty-fourth skill
+  deliberately requires extending `_WORDS`. The guard exists so a new skill
+  count forces someone to look at the prose rather than silently producing
+  a number.
+- **README table + issue template parity.** Every shipped skill must
+  appear in the README skill table AND the `.github/ISSUE_TEMPLATE/
+  skill-drift.yml` dropdown. `tools/test_skill_counts.py` (CI-tier)
+  enforces this — run it after adding a skill.
 - **Hardcoded hook event names.** The valid set is `VALID_HOOKS` in
   `hermes_cli/plugins.py` and grows across releases. Read the installed source.
 - **Hardcoded venv paths.** Use `project_venv_dir()` / `committed_venv()` /
