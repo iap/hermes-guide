@@ -1,7 +1,7 @@
 ---
 name: plugin-authoring
 description: "Author Hermes plugins (plugin.yaml + register(ctx)) and skills (SKILL.md) — scaffolding, registration, hooks, commands, capabilities, versioning, provenance, and the read-only contract."
-version: 1.1.0
+version: 1.2.0
 metadata:
   hermes:
     tags: [hermes, plugin, skill, authoring, guide]
@@ -263,6 +263,13 @@ the `name:` frontmatter field and the path is under `skills/`.
   appear in the README skill table AND the `.github/ISSUE_TEMPLATE/
   skill-drift.yml` dropdown. `tools/test_skill_counts.py` (CI-tier)
   enforces this — run it after adding a skill.
+- **Handler signature drift.** `register_command`'s docstring summarizes the
+  handler as `fn(raw_args: str)`, but the real contract lives in
+  `hermes_cli/plugin_command_dispatch.py::invoke_plugin_command` — it passes
+  `raw_args` plus opt-in context keywords (`source`, `session_id`,
+  `session_key`, `platform`). A handler that declares `ctx` as a positional
+  parameter raises `TypeError` at invocation. Always read the dispatch module,
+  not just the registration docstring.
 - **Hardcoded hook event names.** The valid set is `VALID_HOOKS` in
   `hermes_cli/plugins.py` and grows across releases. Read the installed source.
 - **Hardcoded venv paths.** Use `project_venv_dir()` / `committed_venv()` /
