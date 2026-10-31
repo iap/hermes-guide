@@ -15,7 +15,7 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`, `storage`, `update`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
-**Twenty-two troubleshooting skills** — one install guide, one configuration map, nineteen per-surface `diagnosing-*` playbooks, one other skill (`hermes-post-update`).
+**Twenty-three troubleshooting skills** — one install guide, one configuration map, nineteen per-surface `diagnosing-*` playbooks, two other skills (`hermes-post-update`, `plugin-authoring`).
 <!-- END GENERATED: intro-inventory -->
 
 Enabling the plugin additionally registers one router skill (`hermes-guide:start`) in
@@ -121,7 +121,7 @@ hermes skills install iap/hermes-guide/skills/diagnosing-mcp
 
 <!-- BEGIN GENERATED: install-all-loop -->
 ```bash
-for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-runtime diagnosing-skills diagnosing-triage diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes; do hermes skills install "iap/hermes-guide/skills/$s"; done
+for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-runtime diagnosing-skills diagnosing-triage diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes plugin-authoring; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
 <!-- END GENERATED: install-all-loop -->
 
