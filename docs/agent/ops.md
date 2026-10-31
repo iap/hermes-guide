@@ -426,24 +426,46 @@ around. When a check fails:
 6. **Never force-merge or bypass a failing gate** without the above steps
    documented.
 
-**CodeRabbit is required once Qodo has run, not an optional extra.** Qodo
-reviews automatically; CodeRabbit does not (`auto_review.enabled: false`), so it
-only runs when someone posts `@coderabbitai full review` on the PR. A Qodo-clean
-verdict is the trigger for that mention, never a substitute for it. Sequence:
-Qodo clean → post `@coderabbitai full review` → wait for its report → act on
-findings → merge. If Qodo never ran (no Qodo comment on the PR), say so and ask
-before merging. On a merged PR CodeRabbit can still review the diff, but that is
-a second pass, not a gate — label it as such in the result.
+**Two-bot review sequence (Qodo first, CodeRabbit second).** Qodo reviews
+automatically on every PR; CodeRabbit does not (`auto_review.enabled: false`),
+so it only runs when someone posts `@coderabbitai full review`. The sequence:
 
-When CodeRabbit reports findings: convert the PR to **Draft** (GitHub blocks
-merging a draft natively — stronger than any label; a `[!wip]` label is
-optional and only cosmetic) → **triage the findings: fix the confirmed ones and
-document the disposition (false positive / accepted risk) of the rest** → apply
-fixes → re-verify with the hermetic gates (`check_gates.py`) and the affected
-`tools/test_*.py`, and re-check the findings (no false positives on the fix
-adjustment) → convert back to ready-for-review → run the merge checks above. When CodeRabbit reports zero findings, skip the draft
-step and go straight to the merge checks. A silent or empty CodeRabbit run
-counts as "not heard", not "clean".
+1. **Qodo (first reviewer).** Wait for Qodo's comment. For each finding:
+   cross-check against the live code and upstream source — confirm it is a
+   real defect, not a false positive. Fix confirmed findings; reply to each
+   thread with file:line evidence of the fix or a reasoned decline. Re-run
+   Qodo (it updates its comment on new commits) until it reports clean.
+   A silent or missing Qodo comment counts as "not heard", not "clean".
+2. **Trigger CodeRabbit (second reviewer).** Only after Qodo is clean, post
+   `@coderabbitai full review`. Wait for its report. For each finding:
+   cross-check against the live code — confirm it is real, not a false
+   positive, and that the recommended fix is correct for this repo's
+   conventions. Fix confirmed findings; reply to each thread with file:line
+   evidence or a reasoned decline. Re-run CodeRabbit if needed.
+3. **Re-check Qodo.** CodeRabbit fixes may introduce new Qodo findings.
+   Re-run Qodo and resolve any new findings before proceeding.
+4. **Merge checks.** Only when both bots are clean: verify all CI checks
+   pass (not pending), every review thread resolved with evidence, both
+   bots heard, `mergeStateStatus` is `CLEAN`, and merge is explicitly
+   authorized.
+
+**Deep review operations.** Prefer `gh api graphql` with `reviewThreads` for
+resolution state and full bodies. Fall back to REST `pulls/<n>/comments` only
+for quick inline enumeration (Greptile bodies live there, not in `reviews`).
+
+**No draft conversion.** Do not convert the PR to draft to block merging.
+Resolve threads by replying with file:line evidence or a reasoned decline.
+A `[!wip]` label is optional and cosmetic only.
+
+**False-positive discipline.** Every bot finding must be cross-checked against
+the actual code and upstream source before implementing a fix. A finding that
+contradicts the live contract (e.g. a handler signature that does not match
+the dispatch module) is declined with evidence, not blindly fixed. A fix that
+introduces a new finding is re-verified before merge.
+
+If Qodo never ran (no Qodo comment on the PR), say so and ask before merging.
+On a merged PR CodeRabbit can still review the diff, but that is a second
+pass, not a gate — label it as such in the result.
 
 When another session has announced a cross-check of a PR, its author waits for
 that verdict — or an explicit `go` — before merging. Green CI and resolved
