@@ -1,7 +1,7 @@
 ---
 name: diagnosing-runtime
 description: "Diagnose Hermes runtime failures — CLI commands that produce no output, exit 0 with no diagnostic text, hang, or return empty (e.g. hermes guide prints nothing, hermes --version is blank). Covers stuck source updates, broken node dependencies, and recovery routes when the runtime itself is the problem."
-version: 1.0.3
+version: 1.0.4
 metadata:
   hermes:
     tags: [hermes, runtime, cli, node, update, recovery, troubleshooting]
@@ -44,9 +44,7 @@ hermes guide
   (hermes-configuration-guide Step 0), then re-run the probes.
 - `hermes plugins list` failing → Step 4 (plugin load health) directly.
 
-- `hermes --version` empty/hanging → the classic CLI is Python, not node:
-  suspect the interpreter/venv/shim (see `diagnosing-path`), then continue
-  with Step 5 (direct inspection) here — not Step 3.
+- `hermes --version` empty/hanging → first check for a stuck source update / `hermes-update.lock` (Step 2 lock liveness); only if no lock is blocking, suspect the interpreter/venv/shim (see `diagnosing-path`), then continue with Step 5 (direct inspection) here — not Step 3.
 - Version works but `hermes guide` prints nothing → stay here: the guide
   plugin itself fails to load — continue with Step 4 (plugin load health),
   not `diagnosing-triage` (triage's baseline needs a working guide).
@@ -181,13 +179,15 @@ If none of the above resolves the issue:
 
 This skill diagnoses Hermes runtime failures — commands producing no output, exit 0 with no text, hangs, or empty results. Apply this report based on Step 1 probe results:
 
-- **CLI-wide failure** (`hermes --version` hangs/empty): treat as runtime/venv/shim issue. Focus on Steps 2,3,5-6 (updates, PM tools, direct inspection).
+- **CLI-wide failure** (`hermes --version` hangs/empty): first check for a stuck source update / `hermes-update.lock` — a stale lock blocks every command. Only treat as runtime/venv/shim if no lock is present. Focus on Steps 2, 5-6 (updates, PM tools, direct inspection); check Step 3 (node dependencies) only when a TUI or desktop probe fails.
 - **CLI works but `hermes guide` prints nothing**: treat as plugin load failure (Step 4). Do **not** assume the whole CLI is broken.
 
 ### Summary
+
 Adjust to match the probe: for CLI-wide failure, state the interpreter/venv/runtime is non-functional; for guide-only failure, state the guide plugin failed to load while the CLI is usable.
 
 ### Findings
+
 | Severity | What | Evidence |
 |---|---|---|
 | HIGH | CLI unusable (`hermes --version` empty/hang) | Probe shows classic CLI fails |
@@ -195,10 +195,12 @@ Adjust to match the probe: for CLI-wide failure, state the interpreter/venv/runt
 | MEDIUM | Guide/plugin load failure (CLI works) | `hermes --version` works but `hermes guide` prints nothing or times out; check `hermes plugins list`/logs |
 
 ### Recommended Fix
-1. **If CLI-wide broken:** Check for stuck updates (`hermes update`, inspect `<git common dir>/hermes-update.lock`). Follow liveness checks per diagnosing-cli-tui. Verify runtime deps with `hermes pm doctor` if needed. Inspect config/logs directly under `$HERMES_HOME` if CLI unusable; escalate to `installing-hermes` as last resort.
-2. **If guide-only broken:** Follow Step 4 (plugin load health) - check `hermes plugins list`, logs for timeouts/import errors. Disable failing plugin if needed, restart session. See `diagnosing-plugins`. 
+
+1. **If CLI-wide broken:** Check for stuck updates (`hermes update`, inspect `<git common dir>/hermes-update.lock`, or `<install root>/.hermes-update.lock` for a ZIP install without `.git`). Follow liveness checks per diagnosing-cli-tui. Verify runtime deps with `hermes pm doctor` if needed. Inspect config/logs directly under `$HERMES_HOME` if CLI unusable; escalate to `installing-hermes` as last resort.
+2. **If guide-only broken:** Follow Step 4 (plugin load health) - check `hermes plugins list`, logs for timeouts/import errors. Disable failing plugin if needed (`hermes plugins disable <name>`), restart session. See `diagnosing-plugins`. 
 
 ### References
+
 - `$HERMES_HOME/config.yaml` and logs (`$HERMES_HOME/logs/`)
 - `hermes_cli/update_lock.py`, `hermes_cli/venv_sync.py`
 - `diagnosing-cli-tui` (stale lock handling)

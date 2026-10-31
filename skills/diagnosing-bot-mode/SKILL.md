@@ -1,7 +1,7 @@
 ---
 name: diagnosing-bot-mode
 description: Diagnose Hermes Bot Mode issues — bots not appearing, profile conflicts, bot-to-bot messaging failures, model/memory/skill routing per bot, and gateway connectivity.
-version: 1.0.5
+version: 1.0.6
 metadata:
   hermes:
     tags: [hermes, bot-mode, troubleshooting]
@@ -68,7 +68,7 @@ ui_meta:
 After applying fixes:
 
 1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
+2. Re-run the verification commands cited in the fix (e.g., `hermes profile list`, `hermes gateway status`, `hermes logs --lines 50`) and confirm the expected state.
 3. Verify logs/config show the expected state with no new errors.
 4. If the issue was environment-specific, confirm it works in your actual setup.
 
