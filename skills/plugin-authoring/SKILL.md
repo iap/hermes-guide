@@ -1,7 +1,7 @@
 ---
 name: plugin-authoring
 description: "Author Hermes plugins (plugin.yaml + register(ctx)) and skills (SKILL.md) — scaffolding, registration, hooks, commands, capabilities, versioning, provenance, and the read-only contract."
-version: 1.0.0
+version: 1.1.0
 metadata:
   hermes:
     tags: [hermes, plugin, skill, authoring, guide]
@@ -221,6 +221,7 @@ After adding or editing a skill, run:
 python tools/render_docs.py --write
 python tools/check_skill_version_bump.py origin/master
 python tools/check_skill_provenance.py
+python tools/test_skill_counts.py        # CI-tier: README table + issue template parity
 ```
 
 ### Verification
@@ -252,6 +253,16 @@ the `name:` frontmatter field and the path is under `skills/`.
 - **Untracked skill directory breaks pre-commit.** `git add skills/<name>/`
   before committing — the gates read the working tree and an untracked
   directory fails the count and routing gates.
+- **render_docs word-list ceiling.** `_word_num()` in `render_docs.py`
+  only spells numbers up to twenty-two. Adding a twenty-third skill
+  deliberately requires extending `_WORDS` AND updating the selftest
+  (remove the guard that expects `_word_num(23)` to raise). The guard
+  exists so a twenty-third skill forces someone to look at the prose
+  rather than silently producing "23".
+- **README table + issue template parity.** Every shipped skill must
+  appear in the README skill table AND the `.github/ISSUE_TEMPLATE/
+  skill-drift.yml` dropdown. `tools/test_skill_counts.py` (CI-tier)
+  enforces this — run it after adding a skill.
 - **Hardcoded hook event names.** The valid set is `VALID_HOOKS` in
   `hermes_cli/plugins.py` and grows across releases. Read the installed source.
 - **Hardcoded venv paths.** Use `project_venv_dir()` / `committed_venv()` /
@@ -267,4 +278,4 @@ the `name:` frontmatter field and the path is under `skills/`.
 - **Every diagnosis should end in a concrete action** followed by a `/reload-*`
   or restart.
 
-*Facts verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/plugins.py` (VALID_HOOKS, register_hook), `hermes_cli/plugins_manifest.py` (requires_hermes), `hermes_cli/skills_hub.py` (tap install), and the official docs (hermes-agent.nousresearch.com/docs). Plugin manifest fields and skill frontmatter verified against this repo's own `plugin.yaml` and `skills/*/SKILL.md`. Re-verify before reuse.*
+*Facts verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/plugins.py` (VALID_HOOKS, register_hook), `hermes_cli/plugins_manifest.py` (requires_hermes), `hermes_cli/skills_hub.py` (tap install), `tools/render_docs.py` (_word_num ceiling, selftest guard), `tools/test_skill_counts.py` (README table + issue template parity), and the official docs (hermes-agent.nousresearch.com/docs). Plugin manifest fields and skill frontmatter verified against this repo's own `plugin.yaml` and `skills/*/SKILL.md`. Re-verify before reuse.*
