@@ -15,7 +15,7 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`, `storage`, `update`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
-**Twenty-three troubleshooting skills** — one install guide, one configuration map, nineteen per-surface `diagnosing-*` playbooks, two other skills (`hermes-post-update`, `plugin-authoring`).
+**Twenty-eight troubleshooting skills** — one install guide, one configuration map, twenty-four per-surface `diagnosing-*` playbooks, two other skills (`hermes-post-update`, `plugin-authoring`).
 <!-- END GENERATED: intro-inventory -->
 
 Enabling the plugin additionally registers one router skill (`hermes-guide:start`) in
@@ -121,7 +121,7 @@ hermes skills install iap/hermes-guide/skills/diagnosing-mcp
 
 <!-- BEGIN GENERATED: install-all-loop -->
 ```bash
-for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-runtime diagnosing-skills diagnosing-triage diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes plugin-authoring; do hermes skills install "iap/hermes-guide/skills/$s"; done
+for s in diagnosing-auth diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-config diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memories diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-providers diagnosing-runtime diagnosing-sessions diagnosing-skills diagnosing-storage diagnosing-triage diagnosing-update diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes plugin-authoring; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
 <!-- END GENERATED: install-all-loop -->
 
@@ -149,6 +149,11 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 | `diagnosing-providers` | Model provider issues — custom endpoints flooding the picker with hundreds of models, `discover_models` misbehaving, persisted catalogs bloating `config.yaml`, provider/auth failures |
 | `diagnosing-bot-mode` | Bot Mode issues — bots not appearing, profile conflicts, bot-to-bot messaging, model/memory/skill routing per bot |
 | `diagnosing-voice` | Voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, voice transcription |
+| `diagnosing-config` | Config file missing, unparseable, or orphaned settings |
+| `diagnosing-storage` | Storage and disk pressure — state.db bloat, cleanup opportunities |
+| `diagnosing-sessions` | Session health — runaway sessions, loop signatures, context bloat |
+| `diagnosing-update` | Update lock stale, dead owner, or update failures |
+| `diagnosing-memories` | Memory store hygiene — over-limit, duplicates, mis-targeted entries |
 | `diagnosing-browser` | Browser automation issues — CDP connection failures, Chrome 144+ compatibility, Playwright setup, agent-browser gating |
 | `diagnosing-cron` | Cron job issues — jobs not firing, scheduler dead, wedged fire-claim, timezone issues, delivery failures |
 | `diagnosing-gateway` | Gateway & messaging issues — bot not responding, platform allowlist, token validation, gateway connectivity |

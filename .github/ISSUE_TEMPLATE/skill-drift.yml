@@ -29,6 +29,11 @@ body:
         - diagnosing-cron
         - diagnosing-gateway
         - diagnosing-host-pressure
+        - diagnosing-config
+        - diagnosing-storage
+        - diagnosing-sessions
+        - diagnosing-update
+        - diagnosing-memories
         - diagnosing-runtime
         - checks.py / constants.py
         - Other / multiple skills
