@@ -37,6 +37,12 @@ Key fields:
 - `requires_hermes` — version constraint; unsatisfied builds skip the plugin.
 - `capabilities:` — omit entirely or keep empty for read-only plugins. A
   non-empty capabilities block requires user consent at install.
+- `kind:` — optional; one of `exclusive`, `model-provider`, `backend`,
+  `platform`. Determines the activation path: standard plugins activate via
+  `plugins.enabled: [name]` in config; exclusive/model-provider plugins
+  activate via category selection keys, not `plugins.enabled`.
+- File format: `plugin.yaml`, `plugin.yml`, or `plugin.json` (portable
+  Agent Plugin format — all three are accepted by the manifest loader).
 - `python_dependencies` — pip-installable deps; Hermes **validates and
   surfaces** them (never auto-installs). Authors must install deps into the
   plugin venv themselves (e.g. `pip install -r requirements.txt` in the
@@ -211,3 +217,6 @@ python tools/check_install_scan.py --src /path/to/hermes-agent
 - **Dispatch contract:** `hermes_cli/plugin_command_dispatch.py::invoke_plugin_command`
 - **Plugin examples:** `plugins/` directory in hermes-agent (browser/, image_gen/, model-providers/, platforms/)
 - **Catalog format:** `plugin-catalog/*.yaml` in hermes-agent
+- **Plugin examples:** `plugins/` directory in hermes-agent
+  (browser/, image_gen/, model-providers/, platforms/) — use as reference
+  implementations.
