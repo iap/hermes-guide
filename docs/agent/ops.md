@@ -455,8 +455,7 @@ for quick inline enumeration (Greptile bodies live there, not in `reviews`).
 
 **No draft conversion.** Do not convert the PR to draft to block merging.
 Resolve threads by replying with file:line evidence or a reasoned decline.
-A `wip` label (if it exists in the repo) is optional and cosmetic only —
-there is no `[!wip]` label on this repository; use it only if created first.
+A `wip` label exists in the repo and is optional and cosmetic only.
 
 **Comment discipline.** Prefer not posting a PR-level comment when thread
 replies suffice — the thread reply is the evidence record. When a summary
