@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.6
+version: 1.3.9
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -186,14 +186,32 @@ while writes fail. Treat it as a separate branch:
 
 ---
 
-## Apply and verify
+## Verification
 
 After applying fixes:
 
-1. Re-run the probe/diagnostics to confirm pressure conditions changed (e.g., `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` from the repo root, or `bash "${HERMES_HOME:-$HOME/.hermes}/skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh"` for the installed copy).
-2. Re-test the failing Hermes operations to confirm they no longer hang/time out.
-3. Check resource usage has stabilized or improved.
-4. If disk cleanup was done, verify space is reclaimed without breaking state.db.
+```bash
+# Re-run the probe — must exit 0 (no pressure) before declaring done
+# (repo checkout)
+bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh
+# (installed copy)
+bash "${HERMES_HOME:-$HOME/.hermes}/skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh"
+
+# Confirm plugins now load inside budget (post-restart entries only).
+# errors.log is append-only, so bound the check: record the line count BEFORE
+# the restart (resolution step 5), then inspect only entries added after it:
+#   hp_baseline=$(wc -l < "$(dirname "$(hermes config path)")/logs/errors.log")
+cfg=$(hermes config path)
+tail -n +"$((hp_baseline + 1))" "$(dirname "$cfg")/logs/errors.log" | grep -n "Failed to load plugin" || true
+
+# Inspect gateway state for platform health (not just key presence)
+HERMES_CONFIG_PATH="$(hermes config path)" python3 -c 'import json, os, pathlib; d=json.load(open(pathlib.Path(os.environ.get("HERMES_CONFIG_PATH")).parent / "gateway_state.json")); print({k: v.get("state") for k, v in d.get("platforms", {}).items()})'
+
+# Confirm gateway is running without restarting again (restart already happened during resolution)
+hermes gateway status
+```
+
+Expected: probe exits `0`; no new `Failed to load plugin` lines after the restart timestamp; each expected platform shows a healthy state (not retrying/failed); gateway status shows running.
 
 ## 6. Report shape
 

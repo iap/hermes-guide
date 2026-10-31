@@ -1,7 +1,7 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.10
+version: 1.0.12
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
@@ -83,14 +83,30 @@ Spoken turns run on a voice route (`agent/voice_turn_route.py`) that may select 
 - `diagnosing-cli-tui` — for Windows CLI/TUI rendering and encoding issues
 - `diagnosing-auth` — for provider API key and token issues
 
-## Apply and verify
+## Verification
 
 After applying fixes:
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+# Check current voice state and provider config (in-session)
+# /voice status
+
+# Watch for voice errors in real time — run this in a SECOND terminal;
+# it is a live stream and does not return, so later commands in this
+# block are unreachable while it runs.
+hermes logs --follow
+
+# Bounded alternative for a sequential run: recent errors only
+hermes logs errors
+
+# PM-era installs: confirm ffmpeg is present
+hermes pm status
+
+# Older checkouts only: confirm the system ffmpeg binary
+ffmpeg -version
+```
+
+Expected: `/voice status` shows the configured provider; no `ffmpeg not found` or provider auth errors in the log stream (`hermes logs --follow` in a second terminal, or `hermes logs errors`); on a PM-era install `hermes pm status` lists ffmpeg, on an older checkout `ffmpeg -version` prints a version.
 
 
 ## Report

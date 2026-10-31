@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -302,14 +302,19 @@ If the user is asking "where is X configured?" rather than "X is broken", load `
 
 ---
 
-## Apply and verify
+## Verification
 
 After routing and applying fixes:
 
-1. Confirm the routed skill's recommendations resolved the reported symptom.
-2. Re-run `hermes guide` to see if findings changed or resolved.
-3. Test the original failing scenario to verify it's fixed.
-4. If multiple symptoms existed, verify each one is addressed.
+```bash
+# Re-run the full baseline
+hermes guide
+
+# Or re-run only the affected scope
+hermes guide <scope>
+```
+
+Expected: the original `x`/`?` finding that triggered routing is gone or resolved to `+`; informational `~` hints may remain; the original failing scenario no longer reproduces.
 
 ## 5. Report format
 

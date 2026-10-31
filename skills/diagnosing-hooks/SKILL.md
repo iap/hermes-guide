@@ -1,7 +1,7 @@
 ---
 name: diagnosing-hooks
 description: Diagnose Hermes hooks that do not fire — gateway HOOK.yaml hooks, plugin hooks, shell hooks stuck on consent, and outbound webhooks — using hermes hooks doctor.
-version: 1.1.10
+version: 1.1.12
 metadata:
   hermes:
     tags: [hermes, hooks, troubleshooting]
@@ -78,15 +78,36 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 5. Apply the fix, restart the session/gateway, re-test.
 6. Re-run the detector: `hermes guide hooks --deep` headless or `/hermes-doctor hooks --deep` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved. The unqualified `hermes guide hooks` / `/hermes-doctor hooks` inspects static state (config, consent, exec bit) and never executes a hook — use it when you only need to confirm registration. Add `--deep` when the diagnosis turns on runtime behavior (a hook that runs but misbehaves) or mtime drift, because that flag is what runs `hermes hooks doctor`.
 
-## Apply and verify
+## Verification
 
-After applying fixes:
+Shell hooks (registered via `hermes hooks`) are checked with `hermes hooks list` / `hermes hooks doctor`; gateway `HOOK.yaml` handlers use a separate event system and are checked via gateway logs, not these commands. Plugin hooks are checked via `hermes plugins list` and their callback output; outbound webhooks are fire-and-forget — verify them via receiver logs. Consent approval (`allowed`/`not allowlisted`) applies to **shell hooks only** — gateway, plugin, and outbound hooks do not use the shell consent allowlist, and outbound webhooks make no blocking decision.
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+# Confirm consent state (shell hooks only)
+hermes hooks list
+```
 
+Pass: the shell hook's `(event, command)` pair shows `allowed` (not `not allowlisted`). Gateway/plugin/outbound hooks are not subject to this check.
+
+Fail: still `not allowlisted` — start an interactive session (`hermes --cli`) and accept the TTY prompt for this specific hook.
+
+```bash
+# Verify executable bit (shell hooks only)
+hermes hooks doctor
+```
+
+Pass: no `exec bit missing` / permission errors.
+
+Fail: fix the script's executable bit (`chmod +x`) or permissions, then re-run.
+
+```bash
+# Optional: fire the hook against a synthetic payload (only with explicit approval — runs the hook)
+hermes hooks test <event>
+```
+
+Pass: hook executes without error; blocking hooks show the expected allow/block decision. An observer hook returning no stdout is a valid success (the JSON response is optional).
+
+Fail: an error, or — for blocking hooks — an incorrect allow/block decision. Check `hermes logs` for the handler error and fix the script or handler.
 
 ## Report
 

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.1.8
+version: 1.1.10
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -62,15 +62,29 @@ Separately from platforms, Hermes manages named third-party accounts via Nous Po
 - `diagnosing-voice` — for voice message transcription issues
 - `diagnosing-host-pressure` — when several platforms fail at once or adapters are discarded after a load timeout; rule out host pressure before editing tokens or allowlists
 
-## Apply and verify
+## Verification
 
-After applying fixes:
+The gateway is healthy when `hermes gateway status` shows the process running and all configured platforms connected with no auth errors in the log.
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+# Confirm gateway process and platform connections
+hermes gateway status
+```
 
+Pass: output shows the process running and each configured platform connected (no auth errors).
+
+Fail: platform still disconnected — re-run `hermes gateway setup` for that platform, then `hermes gateway restart`.
+
+```bash
+# Confirm no new errors since the fix (POSIX shell; use Git Bash/WSL on Windows)
+cfg=$(hermes config path)
+before=$(wc -l < "$(dirname "$cfg")/logs/gateway.log")
+hermes gateway restart
+tail -n +"$((before + 1))" "$(dirname "$cfg")/logs/gateway.log" | grep -E 'ERROR|token' || true
+```
+
+Pass: no `ERROR` or `token` lines after the restart timestamp.
+Fail: token errors persist — the credential was not saved; re-run `hermes gateway setup` and confirm the token field.
 
 ## Report
 

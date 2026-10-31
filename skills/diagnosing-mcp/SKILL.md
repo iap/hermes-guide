@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.14
+version: 1.1.16
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -59,15 +59,26 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 5. Apply the fix, then `/reload-mcp` (or restart), and confirm the `mcp__<server>__*` tools appear (`/context`).
 6. Re-run the detector: `hermes guide mcp` headless or `/hermes-doctor mcp` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
 
-## Apply and verify
+## Verification
 
-After applying fixes:
+The server is healthy when `hermes mcp test <name>` succeeds and its tools appear in the active session.
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+# Confirm server connectivity (dedicated probe)
+hermes mcp test <name>
+```
 
+Pass: probe reports connected/available; no connection error.
+Fail: server still fails — re-check the pitfall matched in step 3 and re-apply the fix.
+
+```bash
+# Confirm tools visible in the active session
+# (run inside a hermes session)
+/context
+```
+
+Pass: `mcp-<server>` toolset appears with at least one tool. If the entry's `tools.include`/`exclude` filters intentionally remove everything callable (e.g. `tools.include: []`), no toolset is created — by design (section 1) — and its absence is not a failure.
+Fail: tools the configuration intends to expose are absent — `/reload-mcp` and check `hermes logs errors` for a new spawn or OAuth error.
 
 ## Report
 

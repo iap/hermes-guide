@@ -1,7 +1,7 @@
 ---
 name: diagnosing-runtime
 description: "Diagnose Hermes runtime failures — CLI commands that produce no output, exit 0 with no diagnostic text, hang, or return empty (e.g. hermes guide prints nothing, hermes --version is blank). Covers stuck source updates, broken node dependencies, and recovery routes when the runtime itself is the problem."
-version: 1.0.4
+version: 1.0.6
 metadata:
   hermes:
     tags: [hermes, runtime, cli, node, update, recovery, troubleshooting]
@@ -152,8 +152,7 @@ ls "$HERMES_HOME/plugins/"
 ls "$HERMES_HOME/skills/" | head -20
 
 # Recent errors
-tail -50 "$HERMES_HOME/logs/errors.log"
-tail -50 "$HERMES_HOME/logs/agent.log"
+cfg=$(hermes config path); d=$(dirname "$cfg"); tail -50 "$d/logs/errors.log"; tail -50 "$d/logs/agent.log"
 ```
 
 This lets you diagnose config-level issues (wrong paths, missing files,
@@ -174,6 +173,27 @@ If none of the above resolves the issue:
 - **`diagnosing-desktop`:** Desktop app specifically won't launch
 - **`diagnosing-plugins`:** A specific plugin won't load (but CLI works)
 - **`installing-hermes`:** Fresh install or complete reinstall needed
+
+## Verification
+
+After applying fixes:
+
+```bash
+# Re-run the Step 1 probes in order
+hermes --version
+hermes config path
+hermes plugins list
+hermes guide
+
+# If node/TUI was the issue
+hermes pm doctor
+
+# Check for new errors (resolve active home via hermes config path)
+# Record before the fix: baseline=$(wc -l < "$(dirname "$(hermes config path)")/logs/errors.log")
+cfg=$(hermes config path); tail -n +"$((baseline + 1))" "$(dirname "$cfg")/logs/errors.log" | grep -n "load timed out" || true
+```
+
+Expected: `hermes --version` prints a version string; `hermes guide` prints scope output with no timeouts; `hermes pm doctor` exits clean; no new `load timed out` lines in errors.log.
 
 ## Report
 

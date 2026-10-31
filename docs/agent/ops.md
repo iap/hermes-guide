@@ -405,6 +405,27 @@ reviewThreads for resolution state and full bodies; REST `pulls/<n>/comments`
 only for quick inline enumeration (Greptile bodies live there, not in
 `reviews`). Report the checklist result, then merge.
 
+### CI failure triage (before merge)
+
+A red CI gate is a signal that something is unknown — not a label to work
+around. When a check fails:
+
+1. **Read the actual failure**, not just the red badge. Identify the failing
+   step and its error message. "Environmental" is a hypothesis, not a
+   conclusion.
+2. **Classify**: regression from this PR, pre-existing on the base branch, or
+   environmental. Reproduce locally where possible (hermetic gates first;
+   CI-tier checks with `--src`); compare against the same check on the base
+   branch.
+3. **Fix regressions** before merging. Do not merge a known regression.
+4. **Environmental or pre-existing failures**: document them in the PR
+   validation table with evidence (run ID, error text, base-branch comparison).
+   Do not merge silently; obtain explicit authorization.
+5. **Re-run CI** after any fix — a single green run on the fixed commit is
+   required before merge. "It should pass now" is not verification.
+6. **Never force-merge or bypass a failing gate** without the above steps
+   documented.
+
 **CodeRabbit is required once Qodo has run, not an optional extra.** Qodo
 reviews automatically; CodeRabbit does not (`auto_review.enabled: false`), so it
 only runs when someone posts `@coderabbitai full review` on the PR. A Qodo-clean
