@@ -96,7 +96,7 @@ def register(ctx):
 - `get_config(key, default)` — read a config value
 
 Handler signatures:
-- Slash command: `handler(args: str, ctx) -> str`
+- Slash command: `handler(raw_args: str, **context) -> str` (context keywords: `source`, `session_id`, `session_key`, `platform`; opt in by name)
 - CLI: `handler_fn(args)` returns exit code; `setup_fn(parser)` adds arguments
 
 ### Hooks
@@ -278,4 +278,4 @@ the `name:` frontmatter field and the path is under `skills/`.
 - **Every diagnosis should end in a concrete action** followed by a `/reload-*`
   or restart.
 
-*Facts verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/plugins.py` (VALID_HOOKS, register_hook), `hermes_cli/plugins_manifest.py` (requires_hermes), `hermes_cli/skills_hub.py` (tap install), `tools/render_docs.py` (_word_num ceiling, selftest guard), `tools/test_skill_counts.py` (README table + issue template parity), and the official docs (hermes-agent.nousresearch.com/docs). Plugin manifest fields and skill frontmatter verified against this repo's own `plugin.yaml` and `skills/*/SKILL.md`. Re-verify before reuse.*
+*Facts verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/plugins.py` (VALID_HOOKS, register_hook, register_command handler contract), `hermes_cli/plugin_command_dispatch.py` (invoke_plugin_command signature), `hermes_cli/plugins_manifest.py` (requires_hermes), `hermes_cli/skills_hub.py` (tap install), `tools/render_docs.py` (_word_num ceiling, selftest guard), `tools/test_skill_counts.py` (README table + issue template parity), and the official docs (hermes-agent.nousresearch.com/docs). Plugin manifest fields and skill frontmatter verified against this repo's own `plugin.yaml` and `skills/*/SKILL.md`. Re-verify before reuse.*
