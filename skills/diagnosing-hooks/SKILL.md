@@ -80,18 +80,26 @@ After a timeout the same callback is suppressed for **60s** (`_HOOK_TIMEOUT_SUPP
 
 ## Verification
 
-The hook is working when `hermes hooks list` shows it approved and `hermes hooks test` fires it without error.
+Shell hooks (registered via `hermes hooks`) are checked with `hermes hooks list` / `hermes hooks doctor`; gateway `HOOK.yaml` handlers use a separate event system and are checked via gateway logs, not these commands.
 
 ```bash
-# Confirm consent state and exec bit
+# Confirm consent state (shell hooks only)
 hermes hooks list
 ```
 
-Pass: the hook's `(event, command)` pair shows `consent: approved` and no `exec bit missing` warning.
-Fail: still `not approved` — start an interactive session (`hermes --cli`) and accept the TTY prompt for this specific hook.
+Pass: the hook's `(event, command)` pair shows `allowed` (not `not allowlisted`).
+Fail: still `not allowlisted` — start an interactive session (`hermes --cli`) and accept the TTY prompt for this specific hook.
 
 ```bash
-# Fire the hook against a synthetic payload
+# Verify executable bit (shell hooks only)
+hermes hooks doctor
+```
+
+Pass: no `exec bit missing` / permission errors.
+Fail: fix the script's executable bit (`chmod +x`) or permissions, then re-run.
+
+```bash
+# Optional: fire the hook against a synthetic payload (only with explicit approval — runs the hook)
 hermes hooks test <event>
 ```
 

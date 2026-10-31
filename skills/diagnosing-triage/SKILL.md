@@ -314,7 +314,7 @@ hermes guide
 hermes guide <scope>
 ```
 
-Expected: the `x`/`?`/`~` line that triggered routing is gone or resolved to `+`; the original failing scenario no longer reproduces.
+Expected: the original `x`/`?` finding that triggered routing is gone or resolved to `+`; informational `~` hints may remain; the original failing scenario no longer reproduces.
 
 ## 5. Report format
 

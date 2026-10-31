@@ -101,7 +101,7 @@ hermes pm status
 ffmpeg -version
 ```
 
-Expected: `/voice status` shows the configured provider; no `ffmpeg not found` or provider auth errors in `hermes logs --follow`; `hermes pm status` lists ffmpeg as installed.
+Expected: `/voice status` shows the configured provider; no `ffmpeg not found` or provider auth errors in `hermes logs --follow`; `ffmpeg -version` prints a version (ffmpeg on PATH).
 
 
 ## Report

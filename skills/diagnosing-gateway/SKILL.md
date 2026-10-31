@@ -71,12 +71,13 @@ The gateway is healthy when `hermes gateway status` shows the process running an
 hermes gateway status
 ```
 
-Pass: output shows `gateway: running` and each configured platform listed as connected.
+Pass: output shows the process running and each configured platform connected (no auth errors).
+
 Fail: platform still disconnected — re-run `hermes gateway setup` for that platform, then `hermes gateway restart`.
 
 ```bash
 # Confirm no new errors since the fix
-tail -20 "$(hermes config path | xargs dirname)/logs/gateway.log"
+cfg=$(hermes config path); tail -20 "$(dirname "$cfg")/logs/gateway.log"
 ```
 
 Pass: no `ERROR` or `token` lines after the restart timestamp.

@@ -152,8 +152,7 @@ ls "$HERMES_HOME/plugins/"
 ls "$HERMES_HOME/skills/" | head -20
 
 # Recent errors
-tail -50 "$HERMES_HOME/logs/errors.log"
-tail -50 "$HERMES_HOME/logs/agent.log"
+cfg=$(hermes config path); d=$(dirname "$cfg"); tail -50 "$d/logs/errors.log"; tail -50 "$d/logs/agent.log"
 ```
 
 This lets you diagnose config-level issues (wrong paths, missing files,
@@ -189,8 +188,8 @@ hermes guide
 # If node/TUI was the issue
 hermes pm doctor
 
-# Check for new errors
-tail -20 "$HERMES_HOME/logs/errors.log"
+# Check for new errors (resolve active home via hermes config path)
+cfg=$(hermes config path); tail -20 "$(dirname "$cfg")/logs/errors.log"
 ```
 
 Expected: `hermes --version` prints a version string; `hermes guide` prints scope output with no timeouts; `hermes pm doctor` exits clean; no new `load timed out` lines in errors.log.

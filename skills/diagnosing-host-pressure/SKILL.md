@@ -192,17 +192,22 @@ After applying fixes:
 
 ```bash
 # Re-run the probe — must exit 0 (no pressure) before declaring done
+# (repo checkout)
 bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh
+# (installed copy)
+bash "${HERMES_HOME:-$HOME/.hermes}/skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh"
 
-# Confirm plugins now load inside budget
-grep -hoE "Failed to load plugin '[^']+'" "${HERMES_HOME:-$HOME/.hermes}/logs/errors.log" | sort | uniq -c | sort -rn
+# Confirm plugins now load inside budget (post-restart entries only — inspect timestamps)
+grep -n "Failed to load plugin" "$(dirname "$(hermes config path)")/logs/errors.log" | tail -20
 
-# Restart the gateway and re-check gateway_state
-hermes gateway restart
-cat "${HERMES_HOME:-$HOME/.hermes}/gateway_state.json"
+# Inspect gateway state for platform health (not just key presence)
+python3 -c "import json,sys; d=json.load(open('$(dirname $(hermes config path))/gateway_state.json')); print({k:v.get('state') for k,v in d.get('platforms',{}).items()})"
+
+# Confirm gateway is running without restarting again (restart already happened during resolution)
+hermes gateway status
 ```
 
-Expected: probe exits `0`; no new plugin-load-timeout lines since the restart; `gateway_state.json` lists the expected platforms.
+Expected: probe exits `0`; no new `Failed to load plugin` lines after the restart timestamp; each expected platform shows a healthy state (not retrying/failed); gateway status shows running.
 
 ## 6. Report shape
 

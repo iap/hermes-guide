@@ -61,15 +61,15 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 
 ## Verification
 
-The server is healthy when `hermes mcp` shows it as available and its tools appear in `/context`.
+The server is healthy when `hermes mcp test <name>` succeeds and its tools appear in the active session.
 
 ```bash
-# Confirm server status and tool registration
-hermes mcp
+# Confirm server connectivity (dedicated probe)
+hermes mcp test <name>
 ```
 
-Pass: the server entry shows `available`; `mcp__<server>__*` tools are listed.
-Fail: server still shows `failed` or tools absent — re-check the pitfall matched in step 3 and re-apply the fix.
+Pass: probe reports connected/available; no connection error.
+Fail: server still fails — re-check the pitfall matched in step 3 and re-apply the fix.
 
 ```bash
 # Confirm tools visible in the active session

@@ -96,7 +96,7 @@ hermes skills list
 hermes guide skills
 ```
 
-Expected: `hermes skills list` shows the skill from the intended source; `hermes guide skills` exits `0` with `+` for the affected skill.
+Expected: `hermes skills list` shows the skill from the intended source; `hermes guide skills` exits `0` with `+` for the affected skill (or `~` for informational missing-guide-skill hints, which is acceptable).
 
 
 ## Report
