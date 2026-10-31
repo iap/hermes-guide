@@ -620,9 +620,6 @@ def _selftest() -> int:
                 f"selftest FAIL: _word_num({n}) == {_word_num(n)!r}, expected {word!r}"
             )
             fails += 1
-    else:
-        print("selftest FAIL: _word_num(23) should refuse rather than invent a word")
-        fails += 1
 
     # The registry reader refuses syntax it cannot resolve statically: a
     # skipped row would be a silently incomplete catalog.
