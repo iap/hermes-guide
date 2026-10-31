@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.8
+version: 1.3.9
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -205,7 +205,7 @@ cfg=$(hermes config path)
 tail -n +"$((hp_baseline + 1))" "$(dirname "$cfg")/logs/errors.log" | grep -n "Failed to load plugin" || true
 
 # Inspect gateway state for platform health (not just key presence)
-HERMES_CONFIG_PATH="$(hermes config path)" python3 -c 'import json, os, pathlib; d=json.load(open(pathlib.Path(os.environ["HERMES_CONFIG_PATH"]).parent / "gateway_state.json")); print({k: v.get("state") for k, v in d.get("platforms", {}).items()})'
+HERMES_CONFIG_PATH="$(hermes config path)" python3 -c 'import json, os, pathlib; d=json.load(open(pathlib.Path(os.environ.get("HERMES_CONFIG_PATH")).parent / "gateway_state.json")); print({k: v.get("state") for k, v in d.get("platforms", {}).items()})'
 
 # Confirm gateway is running without restarting again (restart already happened during resolution)
 hermes gateway status
