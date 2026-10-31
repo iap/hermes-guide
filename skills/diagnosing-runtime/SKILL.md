@@ -179,7 +179,7 @@ If none of the above resolves the issue:
 
 This skill diagnoses Hermes runtime failures — commands producing no output, exit 0 with no text, hangs, or empty results. Apply this report based on Step 1 probe results:
 
-- **CLI-wide failure** (`hermes --version` hangs/empty): first check for a stuck source update / `hermes-update.lock` — a stale lock blocks every command. Only treat as runtime/venv/shim if no lock is present. Focus on Steps 2,3,5-6 (updates, PM tools, direct inspection).
+- **CLI-wide failure** (`hermes --version` hangs/empty): first check for a stuck source update / `hermes-update.lock` — a stale lock blocks every command. Only treat as runtime/venv/shim if no lock is present. Focus on Steps 2, 5-6 (updates, PM tools, direct inspection); check Step 3 (node dependencies) only when a TUI or desktop probe fails.
 - **CLI works but `hermes guide` prints nothing**: treat as plugin load failure (Step 4). Do **not** assume the whole CLI is broken.
 
 ### Summary

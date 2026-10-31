@@ -42,7 +42,6 @@ Per CONTRIBUTING.md §"Adding or changing a skill":
 - diagnosing-desktop: Has "## 6. Apply and verify" with concrete steps
 - diagnosing-memory: Has "## 5. Apply and verify" 
 - diagnosing-path: Has verification integrated (and provenance footer showing verification happened)
-- diagnosing-runtime: Has "Facts re-verified" footer but no explicit verification section in body
 - hermes-post-update: Has "## 3. Verify after update" with checklist items
 - installing-hermes: Has verification references
 
@@ -58,6 +57,7 @@ Per CONTRIBUTING.md §"Adding or changing a skill":
 - diagnosing-mcp - Has Report only
 - diagnosing-plugins - Has Report only
 - diagnosing-providers - Has Report only
+- diagnosing-runtime - Has Report section with summary/findings/recommended fix but no step-by-step "verify it worked" checklist
 - diagnosing-skills - Has Report only
 - diagnosing-triage - Has "Report format" but it's a router, no verification of routing
 - diagnosing-voice - Has Report only
@@ -94,8 +94,7 @@ Per CONTRIBUTING.md §"Adding or changing a skill":
 ### Medium Priority  
 
 1. **Provenance footers** - Some skills may lack the dated upstream-anchored footer format specified in CONTRIBUTING.md. Need to verify each skill that has been re-verified has the footer in the required format.
-2. **diagnosing-triage is very long (310 lines)** - It's a router (meta-skill), so different category is fine per AGENTS.md ("one configuration map (hermes-configuration-guide), nineteen diagnosing-* playbooks, one other skill (hermes-post-update)"). diagnosing-triage is counted separately? Let us count again from AGENTS: "twenty-two skills/<name>/SKILL.md files: one install guide (installing-hermes), one configuration map (hermes-configuration-guide), nineteen diagnosing-* playbooks, one other skill (hermes-post-update)". So 1+1+19+1 = 22 total. We have 23 skill directories including diagnosing-triage? Let us count diagnosing-* vs others.
-Looking at our list: diagnosing-auth through diagnosing-voice are 19 skills (auth,browser,bot-mode,cli-tui,commands,cron,desktop,gateway,hooks,host-pressure,mcp,memory,path,plugins,providers,runtime,skills,triage,voice = 19). Plus hermes-configuration-guide, hermes-post-update, installing-hermes = 3 more, total 22. That matches AGENTS.md count of 22. And diagnosing-triage is one of those 19 diagnosing-* playbooks (it's described as meta-skill/router). Correct.
+2. **diagnosing-triage is very long (310 lines)** - It's a router (meta-skill), so different category is fine per AGENTS.md. It is one of the 19 diagnosing-* playbooks (22 skill directories total: 19 diagnosing-* + 3 others). Correct.
 
 3. **hermes-configuration-guide** - It's a reference/map, not a diagnostic playbook. No verification/pitfalls needed per its category. Structure is fine for its purpose.
 4. **Some skills have very long descriptions** (>250 chars) that violate "name the surface and the symptom; do not spend it on adjectives" - e.g. diagnosing-auth (316), diagnosing-runtime (303), diagnosing-desktop (266), diagnosing-path (259).
