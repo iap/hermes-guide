@@ -17,10 +17,12 @@ Run: python3 tools/test_session_health.py
 from __future__ import annotations
 
 import os
+import collections
 import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -187,6 +189,70 @@ def test_sessions_label_registered():
     assert len(checks.labels()) == 10
 
 
+def test_repair_signature_without_free_model():
+    checks = _load_checks()
+    lines = _turn_lines("paid-loop", turns=16, tool_turns=20,
+                        in_tokens=70000, repairs=1)
+    stats = checks._session_stats(lines)
+    assert stats["paid-loop"]["repairs"] == 1, stats
+    assert "paid-loop)" not in stats, stats
+    checks._hermes_home = lambda: _home_with_log(lines)
+    assert checks.check_session_health()["status"] == "broken"
+
+
+def test_compaction_reanchor_is_not_a_repair():
+    checks = _load_checks()
+    lines = _turn_lines("paid-loop", turns=16, tool_turns=20, in_tokens=70000)
+    lines.append("Re-anchored stale current_turn_user_idx 12 -> 5 (session=paid-loop)\n")
+    stats = checks._session_stats(lines)
+    assert stats["paid-loop"]["repairs"] == 0, stats
+    checks._hermes_home = lambda: _home_with_log(lines)
+    assert checks.check_session_health()["status"] == "informational"
+
+    lines.append("Re-anchored current_turn_user_idx 12 -> 5 after alternation repair (session=paid-loop)\n")
+    assert checks._session_stats(lines)["paid-loop"]["repairs"] == 1
+    assert checks.check_session_health()["status"] == "broken"
+
+
+def test_tail_matches_sequential_read():
+    checks = _load_checks()
+    for ending in ("\n", "\r\n", "\r"):
+        for terminated in (True, False):
+            with tempfile.TemporaryDirectory() as td:
+                path = Path(td) / "agent.log"
+                text = ending.join(f"line {i}: café\u2028continued" for i in range(15000))
+                if terminated:
+                    text += ending
+                path.write_bytes(text.encode("utf-8"))
+                for count in (1, 3000, 20000):
+                    with path.open(encoding="utf-8", errors="replace") as fh:
+                        expected = list(collections.deque(fh, maxlen=count))
+                    assert checks._read_log_tail(path, count) == expected
+                path.write_bytes(b"")
+                assert checks._read_log_tail(path, 3000) == []
+
+    # Place CRLF across the reverse reader's 64 KiB block boundary.
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "agent.log"
+        path.write_bytes(b"older\r\n" * 5000 + b"edge\r\n" + b"x" * 65535)
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            expected = list(collections.deque(fh, maxlen=3000))
+        assert checks._read_log_tail(path, 3000) == expected
+
+
+def test_tail_does_not_read_old_log_prefix():
+    checks = _load_checks()
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "agent.log"
+        path.write_bytes(b"old log line\n" * 100000 + b"recent\n" * 3000)
+        with path.open("rb") as fh:
+            with patch("builtins.open", return_value=fh):
+                with patch.object(fh, "read", wraps=fh.read) as read:
+                    tail = checks._read_log_tail(path, 3000)
+                    assert tail == ["recent\n"] * 3000
+                    assert sum(call.args[0] for call in read.call_args_list) <= 65536
+
+
 def main() -> int:
     cases = [
         test_runaway_signature_is_broken,
@@ -199,6 +265,10 @@ def main() -> int:
         test_missing_log_is_healthy,
         test_malformed_lines_never_crash,
         test_sessions_label_registered,
+        test_repair_signature_without_free_model,
+        test_compaction_reanchor_is_not_a_repair,
+        test_tail_matches_sequential_read,
+        test_tail_does_not_read_old_log_prefix,
     ]
     failed = 0
     for case in cases:

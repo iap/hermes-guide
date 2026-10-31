@@ -61,6 +61,8 @@ def main(argv: list[str]) -> int:
 
         import hermes_guide.checks as checks  # noqa: E402
 
+        # `_run` is stubbed below; discovery must not require a live install.
+        checks._hermes_candidates = lambda: ["fixture-hermes"]
         home = Path(td) / "home"
         home.mkdir()
         allowlist = home / "shell-hooks-allowlist.json"
