@@ -200,6 +200,20 @@ def test_repair_signature_without_free_model():
     assert checks.check_session_health()["status"] == "broken"
 
 
+def test_compaction_reanchor_is_not_a_repair():
+    checks = _load_checks()
+    lines = _turn_lines("paid-loop", turns=16, tool_turns=20, in_tokens=70000)
+    lines.append("Re-anchored stale current_turn_user_idx 12 -> 5 (session=paid-loop)\n")
+    stats = checks._session_stats(lines)
+    assert stats["paid-loop"]["repairs"] == 0, stats
+    checks._hermes_home = lambda: _home_with_log(lines)
+    assert checks.check_session_health()["status"] == "informational"
+
+    lines.append("Re-anchored current_turn_user_idx 12 -> 5 after alternation repair (session=paid-loop)\n")
+    assert checks._session_stats(lines)["paid-loop"]["repairs"] == 1
+    assert checks.check_session_health()["status"] == "broken"
+
+
 def test_tail_matches_sequential_read():
     checks = _load_checks()
     for ending in ("\n", "\r\n", "\r"):
@@ -252,6 +266,7 @@ def main() -> int:
         test_malformed_lines_never_crash,
         test_sessions_label_registered,
         test_repair_signature_without_free_model,
+        test_compaction_reanchor_is_not_a_repair,
         test_tail_matches_sequential_read,
         test_tail_does_not_read_old_log_prefix,
     ]

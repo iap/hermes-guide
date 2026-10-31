@@ -2155,7 +2155,7 @@ _API_CALL_RE = re.compile(
     r"\[(\S+)\] agent\.conversation_loop: API call #\d+: model=(\S+).*?in=(\d+)"
 )
 _REPAIR_RE = re.compile(
-    r"(?:alternation repair|Re-anchored|Repaired \d+ message-alternation violations)"
+    r"(?:alternation repair|Repaired \d+ message-alternation violations)"
     r".*?session=([^\s)]+)"
 )
 
