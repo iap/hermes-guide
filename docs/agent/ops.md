@@ -457,6 +457,44 @@ for quick inline enumeration (Greptile bodies live there, not in `reviews`).
 Resolve threads by replying with file:line evidence or a reasoned decline.
 A `[!wip]` label is optional and cosmetic only.
 
+**Comment discipline.** Prefer not posting a PR-level comment when thread
+replies suffice — the thread reply is the evidence record. When a summary
+comment is necessary (e.g. both bots heard, final status), keep it short and
+essential: one line per bot/finding, no prose, no per-finding enumeration.
+The goal is a human-readable status, not a changelog. Bad: a 5000-character
+comment listing every finding. Good:
+
+```
+Qodo: clean (3 findings fixed: chmod 600, pip install, provenance).
+CodeRabbit: clean (15 findings fixed: portability, safety, quoting).
+CI: 13/13 gates pass. 0 unresolved threads. Ready for merge.
+```
+
+**Comment templates.** Use these exact shapes; do not improvise longer forms.
+
+Thread reply (fix applied):
+```
+Fixed: <one-line what changed> (`path:line`).
+```
+
+Thread reply (declined):
+```
+Declined: <one-line reason> (`path:line` evidence).
+```
+
+Thread reply (outdated anchor):
+```
+Addressed (anchor moved): <one-line what changed>.
+```
+
+PR summary (final status, ≤ 4 lines):
+```
+Qodo: <clean | N findings fixed>.
+CodeRabbit: <clean | N findings fixed>.
+CI: <pass | fail>. Threads: <N unresolved>.
+<Ready for merge | Blocked: reason>.
+```
+
 **False-positive discipline.** Every bot finding must be cross-checked against
 the actual code and upstream source before implementing a fix. A finding that
 contradicts the live contract (e.g. a handler signature that does not match
