@@ -29,70 +29,127 @@ except ImportError:
 # Handles the flat scalar/list/mapping structure of plugin.yaml.
 def _minimal_yaml_parse(text: str) -> dict:
     """Parse a simple YAML file into a dict. Handles scalars, lists, and
-    one level of nested mapping (config_schema). Not a full YAML parser."""
+    two levels of nested mapping (config_schema). Not a full YAML parser."""
     result = {}
     current_key = None
     current_list = None
     current_map = None
+    current_sub_key = None
+    current_sub_map = None
+    indent_stack = []
+
     for line in text.splitlines():
+        if not line.strip() or line.strip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
         stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+
+        if indent == 0:
+            # Top-level key
+            if ":" in stripped:
+                key, _, val = stripped.partition(":")
+                key = key.strip()
+                val = val.strip()
+                if val == "" or val is None:
+                    current_key = key
+                    current_list = None
+                    current_map = {}
+                    current_sub_key = None
+                    current_sub_map = None
+                    result[key] = current_map
+                elif val.startswith("[") and val.endswith("]"):
+                    items = [x.strip().strip('"').strip("'") for x in val[1:-1].split(",") if x.strip()]
+                    result[key] = items
+                    current_key = None
+                    current_list = None
+                    current_map = None
+                    current_sub_key = None
+                    current_sub_map = None
+                elif val.lower() in ("true", "false"):
+                    result[key] = val.lower() == "true"
+                    current_key = None
+                    current_list = None
+                    current_map = None
+                    current_sub_key = None
+                    current_sub_map = None
+                elif val.isdigit():
+                    result[key] = int(val)
+                    current_key = None
+                    current_list = None
+                    current_map = None
+                    current_sub_key = None
+                    current_sub_map = None
+                else:
+                    result[key] = val.strip('"').strip("'")
+                    current_key = None
+                    current_list = None
+                    current_map = None
+                    current_sub_key = None
+                    current_sub_map = None
             continue
-        if line.startswith(" ") or line.startswith("\t"):
-            # Nested content
-            if current_map is not None:
-                # key: value
-                if ":" in stripped:
-                    k, _, v = stripped.partition(":")
-                    k = k.strip()
-                    v = v.strip().strip('"').strip("'")
-                    if v == "" or v == "{}" or v == "[]":
-                        v = {} if v == "{}" else ([] if v == "[]" else None)
-                    elif v.lower() in ("true", "false"):
-                        v = v.lower() == "true"
-                    elif v.isdigit():
-                        v = int(v)
-                    current_map[k] = v
-            elif current_list is not None and stripped.startswith("- "):
+
+        # Nested (indent > 0)
+        if current_map is None:
+            continue
+
+        if indent <= 2:
+            # First-level nested under current_key
+            if stripped.startswith("- "):
+                if current_list is None:
+                    current_list = []
+                    result[current_key] = current_list
+                    current_map = None
                 current_list.append(stripped[2:].strip().strip('"').strip("'"))
+                current_sub_key = None
+                current_sub_map = None
+                continue
+            if ":" in stripped:
+                k, _, v = stripped.partition(":")
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if v == "" or v is None:
+                    current_sub_key = k
+                    current_sub_map = {}
+                    current_map[k] = current_sub_map
+                elif v.lower() in ("true", "false"):
+                    current_map[k] = v.lower() == "true"
+                    current_sub_key = None
+                    current_sub_map = None
+                elif v.isdigit():
+                    current_map[k] = int(v)
+                    current_sub_key = None
+                    current_sub_map = None
+                elif v.startswith("[") and v.endswith("]"):
+                    items = [x.strip().strip('"').strip("'") for x in v[1:-1].split(",") if x.strip()]
+                    current_map[k] = items
+                    current_sub_key = None
+                    current_sub_map = None
+                else:
+                    current_map[k] = v
+                    current_sub_key = None
+                    current_sub_map = None
             continue
-        # Top-level key
-        if ":" in stripped:
-            key, _, val = stripped.partition(":")
-            key = key.strip()
-            val = val.strip()
-            if val == "" or val is None:
-                # Could be a mapping or list follows
-                current_key = key
-                current_list = None
-                current_map = {}
-                result[key] = current_map
-            elif val.startswith("[") and val.endswith("]"):
-                items = [x.strip().strip('"').strip("'") for x in val[1:-1].split(",") if x.strip()]
-                result[key] = items
-                current_key = None
-                current_list = None
-                current_map = None
-            elif val.lower() in ("true", "false"):
-                result[key] = val.lower() == "true"
-                current_key = None
-                current_list = None
-                current_map = None
-            elif val.isdigit():
-                result[key] = int(val)
-                current_key = None
-                current_list = None
-                current_map = None
+
+        # Deeper nesting (indent > 2) — under current_sub_key
+        if current_sub_map is not None and ":" in stripped:
+            k, _, v = stripped.partition(":")
+            k = k.strip()
+            v = v.strip().strip('"').strip("'")
+            if v.lower() in ("true", "false"):
+                current_sub_map[k] = v.lower() == "true"
+            elif v.isdigit():
+                current_sub_map[k] = int(v)
+            elif v == "":
+                current_sub_map[k] = None
             else:
-                result[key] = val.strip('"').strip("'")
-                current_key = None
-                current_list = None
-                current_map = None
-    # Clean up empty maps that should be None
+                current_sub_map[k] = v
+
+    # Clean up empty maps
     for k, v in list(result.items()):
         if isinstance(v, dict) and not v:
             result[k] = None
     return result
+
 
 
 def _load_manifest(plugin_dir: Path) -> tuple[dict | None, str]:
