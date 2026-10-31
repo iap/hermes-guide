@@ -36,7 +36,7 @@ Hermes source and is not a fork of `hermes-agent`.
 
 <!-- BEGIN GENERATED: inventory -->
 - **Plugin** — `plugin.yaml` + `__init__.py` / `checks.py` / `constants.py`. Registers `/hermes-doctor` and `hermes guide` (ten read-only health checks: config, mcp, skills, commands, hooks, plugins, memories, sessions, storage, update).
-- **Skills** — `twenty-two` `skills/<name>/SKILL.md` files: one install guide (`installing-hermes`), one configuration map (`hermes-configuration-guide`), nineteen `diagnosing-*` playbooks, one other skill (`hermes-post-update`). They install separately, through the skills tap.
+- **Skills** — `twenty-three` `skills/<name>/SKILL.md` files: one install guide (`installing-hermes`), one configuration map (`hermes-configuration-guide`), nineteen `diagnosing-*` playbooks, two other skills (`hermes-post-update`, `plugin-authoring`). They install separately, through the skills tap.
 <!-- END GENERATED: inventory -->
 
 Catalog install: `hermes plugins install hermes-guide`. Skills: `hermes skills
@@ -57,24 +57,10 @@ Repo layout encyclopedia: [docs/agent/layout.md](docs/agent/layout.md).
 | Generated doc blocks | `tools/render_docs.py`, never by hand |
 | Agent deep-ops prose | `docs/agent/`, not a longer AGENTS.md |
 
-## Stacked PRs
-
-When a follow-up naturally splits off an in-flight change, open it as a **new
-PR stacked on that PR** (head branch based on the other PR's head branch),
-*not* as an independent branch off `master`. GitHub stacks:
-- Merge the **top** PR to land the whole stack in one operation (bottom PR
-  first, then top).
-- Merge the **bottom** PR to land only that layer.
-Each PR still needs its own checks green and review threads resolved before the
-stack can merge — GitHub will not merge a stack until the lower PR is approved
-with passing checks.
-
-See https://docs.github.com/en/pull-requests/get-started/about-stacked-prs
-
 ## Run this before you claim done
 
 ```bash
-python tools/check_gates.py          # the hermetic tier — 12 gates, no network/Hermes (four read the git index)
+python tools/check_gates.py          # hermetic tier — no network/Hermes; count via --list (four read the git index)
 python -m py_compile __init__.py checks.py constants.py
 hermes plugins doctor . --ci         # needs a local Hermes; if it times out on a degraded host, record `not run` with cause
 ```
@@ -161,14 +147,8 @@ host in the PR Environment block.
 
 > [!WARNING]
 > **On hosts whose macOS < 13, do not let a full `hermes update` re-resolve the
-> node tool.** Node v25+ needs a libc++ symbol Monterey never exported
-> (`__libcpp_verbose_abort`); staged-node verification fails, the update tail
-> stays owed, and every command burns a multi-minute retry loop. Keep
-> `pm/lock.json` node pinned to a runnable 24.x with official nodejs.org SHASUMS
-> digests, keep `--without cua-driver` (same dyld class), and if the tail stays
-> owed, clear `~/.hermes/installs/<install-id>/source-completion-{pending,attempts}`
-> and let one uninterrupted `hermes` command finish it. Tracked upstream:
-> NousResearch/hermes-agent#137512 (#130574 skip-Node, #141649 cua-driver).
+> node tool.** Handling, pins, and upstream tracking live in
+> [ops.md — Host limitation register](docs/agent/ops.md#host-limitation-register).
 
 ## Before you finish
 

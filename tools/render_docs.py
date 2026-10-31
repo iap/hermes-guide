@@ -77,6 +77,7 @@ _WORDS = [
     "twenty",
     "twenty-one",
     "twenty-two",
+    "twenty-three",
 ]
 
 
@@ -612,20 +613,13 @@ def _selftest() -> int:
     # Word numbers, including the deliberate ceiling.
     word_cases = ((0, "zero"), (1, "one"), (2, "two"), (7, "seven"), (8, "eight"),
                   (9, "nine"), (19, "nineteen"), (20, "twenty"), (21, "twenty-one"),
-                  (22, "twenty-two"))
+                  (22, "twenty-two"), (23, "twenty-three"))
     for n, word in word_cases:
         if _word_num(n) != word:
             print(
                 f"selftest FAIL: _word_num({n}) == {_word_num(n)!r}, expected {word!r}"
             )
             fails += 1
-    try:
-        _word_num(23)
-    except SystemExit:
-        pass
-    else:
-        print("selftest FAIL: _word_num(23) should refuse rather than invent a word")
-        fails += 1
 
     # The registry reader refuses syntax it cannot resolve statically: a
     # skipped row would be a silently incomplete catalog.

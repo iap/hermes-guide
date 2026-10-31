@@ -238,6 +238,9 @@ metadata:
   map's `## Routing` section, and an entry in the README table and the
   `.github/ISSUE_TEMPLATE/skill-drift.yml` dropdown. `render_docs.py` refreshes
   the generated blocks; the rest is yours to edit.
+- **Verification.** Every `diagnosing-*` skill carries a concrete
+  `## Verification` (or `## Apply and verify`) section. Use the scaffold in
+  [docs/agent/verification-template.md](docs/agent/verification-template.md).
 
 ### Content rules
 
@@ -340,6 +343,22 @@ version, your platform (native Windows or POSIX), and the output of
 
 Because this repo is maintained from several platforms in parallel, a claim
 verified on one host is not verified on the others. Name the platform in the PR.
+
+### Stacked PRs
+
+When a follow-up naturally splits off an in-flight change, open it as a **new
+PR stacked on that PR** (head branch based on the other PR's head branch),
+*not* as an independent branch off `master`. GitHub stacks:
+
+- Merge the **top** PR to land the whole stack in one operation (bottom PR
+  first, then top).
+- Merge the **bottom** PR to land only that layer.
+
+Each PR still needs its own checks green and review threads resolved before the
+stack can merge — GitHub will not merge a stack until the lower PR is approved
+with passing checks.
+
+See https://docs.github.com/en/pull-requests/get-started/about-stacked-prs
 
 ## Cutting a release
 
