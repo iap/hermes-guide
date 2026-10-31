@@ -26,6 +26,7 @@ side-effect free; proactive runs (session start/end) always stay in-process.
 import collections
 import contextvars
 import importlib
+import io
 import json
 import os
 import stat
@@ -2154,8 +2155,34 @@ _API_CALL_RE = re.compile(
     r"\[(\S+)\] agent\.conversation_loop: API call #\d+: model=(\S+).*?in=(\d+)"
 )
 _REPAIR_RE = re.compile(
-    r"(?:alternation repair|Re-anchored).*?session=(\S+)"
+    r"(?:alternation repair|Re-anchored|Repaired \d+ message-alternation violations)"
+    r".*?session=([^\s)]+)"
 )
+
+
+def _read_log_tail(path, max_lines):
+    """Read the last lines by seeking backwards, avoiding a full log scan.
+
+    Decode after joining blocks so a UTF-8 character crossing a block boundary
+    survives. Count universal newlines as the original text reader does, and
+    read one extra newline to discard any incomplete first line.
+    """
+    blocks: list[bytes] = []
+    newlines = 0
+    with open(path, "rb") as fh:
+        fh.seek(0, os.SEEK_END)
+        position = fh.tell()
+        while position and newlines <= max_lines:
+            size = min(position, 65536)
+            position -= size
+            fh.seek(position)
+            block = fh.read(size)
+            newlines += block.count(b"\n") + block.count(b"\r") - block.count(b"\r\n")
+            if blocks and block.endswith(b"\r") and blocks[-1].startswith(b"\n"):
+                newlines -= 1
+            blocks.append(block)
+    text = b"".join(reversed(blocks)).decode("utf-8", errors="replace")
+    return list(collections.deque(io.StringIO(text, newline=None), maxlen=max_lines))
 
 
 def _session_stats(lines):
@@ -2238,10 +2265,7 @@ def check_session_health():
         return {"status": "healthy", "reason": "no agent activity logged yet (nothing to audit)",
                 "detail": log_path}
     try:
-        with open(log_path, encoding="utf-8", errors="replace") as fh:
-            # Bounded tail: never load the whole log (multi-MB files at
-            # proactive session boundaries).
-            lines = collections.deque(fh, maxlen=_SESSION_LOG_TAIL_LINES)
+        lines = _read_log_tail(log_path, _SESSION_LOG_TAIL_LINES)
     except OSError as exc:
         return {
             "id": "SESSIONS_LOG_UNREADABLE",

@@ -60,6 +60,9 @@ def _load_checks():
 
 def main() -> int:
     checks = _load_checks()
+    # The launch boundary is stubbed below; keep candidate discovery hermetic
+    # too, so a machine without Hermes can exercise the normal-run recorder.
+    checks._hermes_candidates = lambda: ["fixture-hermes"]
     labels = checks.labels()
     if len(labels) != 10:
         failures.append(f"expected 10 check labels, got {labels}")
