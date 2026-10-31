@@ -135,3 +135,79 @@ Read config via `ctx.get_config("key", default)` (requires a key) or
 `yaml.safe_load()` on the config path (`hermes_constants.get_hermes_home() /
 "config.yaml"`). Read state via `hermes_constants.get_hermes_home() / "..."`.
 Never write to these paths.
+
+## Plugin structure verification checklist
+
+Use this checklist to verify a plugin meets official Hermes standards. Run
+through each item and report pass/fail.
+
+### Manifest (plugin.yaml)
+
+| # | Check | Pass criteria |
+|---|---|---|
+| 1 | `name` present | String, matches directory name |
+| 2 | `version` present | Quoted semver string (`"1.0.0"`) |
+| 3 | `manifest_version` | Must be `1` |
+| 4 | `api_version` | Must be `1` |
+| 5 | `description` | Non-empty string |
+| 6 | `requires_hermes` | Semver constraint (e.g. `">=0.21"`) |
+| 7 | `license` | Present (e.g. `MIT`) |
+| 8 | `python_dependencies` | List of pip specs (validated, never auto-installed) |
+| 9 | `capabilities` | Omitted or empty for read-only plugins |
+| 10 | `config_schema` | Each entry has `type`, `default`, `description` |
+| 11 | `kind` | If present: `exclusive`, `model-provider`, `backend`, or `platform` |
+| 12 | File format | `plugin.yaml`, `plugin.yml`, or `plugin.json` (portable) |
+
+### Registration (__init__.py)
+
+| # | Check | Pass criteria |
+|---|---|---|
+| 13 | `register(ctx)` defined | Function exists and is callable |
+| 14 | `__version__` matches manifest | Same as `plugin.yaml` version |
+| 15 | Commands use correct API | `ctx.register_command(name, handler, description)` |
+| 16 | CLI commands use correct API | `ctx.register_cli_command(name, help, setup_fn, handler_fn)` |
+| 17 | Hooks use correct API | `ctx.register_hook(event, callback)` |
+| 18 | Hook events from `VALID_HOOKS` | Read from `hermes_cli/plugins.py`, not hardcoded |
+| 19 | Handler signature correct | `handler(raw_args: str, **context)` or `fn(raw_args)` |
+
+### Read-only contract
+
+| # | Check | Pass criteria |
+|---|---|---|
+| 20 | No `capabilities:` block | Omitted entirely for read-only |
+| 21 | No config mutation | No writes to config files |
+| 22 | No state mutation | No writes to `~/.hermes/` paths |
+| 23 | AST scan clean | `check_no_mutation.py` passes |
+
+### Activation
+
+| # | Check | Pass criteria |
+|---|---|---|
+| 24 | Standard plugin | Activates via `plugins.enabled: [name]` in config |
+| 25 | Exclusive/model-provider | Activates via category selection keys, not `plugins.enabled` |
+| 26 | Config schema defaults | Authors supply defaults when reading (`ctx.get_config("key", default)`) |
+
+### Verification commands
+
+```bash
+# Manifest validation
+python -c "import yaml; yaml.safe_load(open('plugin.yaml'))"
+
+# Hermetic gates (for hermes-guide contributions)
+python tools/check_gates.py
+
+# Read-only contract
+python tools/check_no_mutation.py
+
+# Install scan (CI-tier, needs Hermes checkout)
+python tools/check_install_scan.py --src /path/to/hermes-agent
+```
+
+### Official reference
+
+- **Manifest schema:** `hermes_cli/plugins_manifest.py` (`_config_schema_entries`, `validate_config_schema`)
+- **Registration API:** `hermes_cli/plugins.py` (`register_command`, `register_cli_command`, `register_hook`)
+- **Hook events:** `hermes_cli/plugins.py::VALID_HOOKS` (read from installed source)
+- **Dispatch contract:** `hermes_cli/plugin_command_dispatch.py::invoke_plugin_command`
+- **Plugin examples:** `plugins/` directory in hermes-agent (browser/, image_gen/, model-providers/, platforms/)
+- **Catalog format:** `plugin-catalog/*.yaml` in hermes-agent

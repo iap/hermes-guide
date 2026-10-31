@@ -1,7 +1,7 @@
 ---
 name: plugin-authoring
 description: "Author Hermes plugins (plugin.yaml + register(ctx)) and skills (SKILL.md) — scaffolding, registration, hooks, commands, capabilities, versioning, provenance, and the read-only contract."
-version: 1.3.0
+version: 1.4.0
 metadata:
   hermes:
     tags: [hermes, plugin, skill, authoring, guide]
@@ -41,6 +41,9 @@ Key points:
 - Hooks: valid events in `VALID_HOOKS` (`hermes_cli/plugins.py`). Timeouts
   (30s default, 600s cap) apply only to bounded allowlist; `on_session_finalize`
   runs synchronously without timeout.
+- **Verification checklist:** `references/plugin-authoring.md` contains a
+  26-item checklist to verify a plugin meets official Hermes standards
+  (manifest, registration, read-only contract, activation).
 
 ## Skill authoring (summary)
 
