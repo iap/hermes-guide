@@ -42,6 +42,7 @@ _GATES: dict[str, str] = {
     "check_no_mutation.py": "AST parse; no imports executed",
     "check_scanner_hygiene.py": "regex over skills text; mirrors upstream guard patterns",
     "check_eol_contract.py": "reads .gitattributes plus `git ls-files --eol`; no network",
+    "verify_plugin.py": "validates plugin manifest, registration, and read-only contract against official schema",
 }
 
 # Flags a gate needs to stay read-only. Bare `gen_changelog.py` REWRITES

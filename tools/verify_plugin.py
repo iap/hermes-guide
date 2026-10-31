@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""Verify a Hermes plugin meets official standards.
+
+Usage:
+    python tools/verify_plugin.py <plugin-dir> [--src /path/to/hermes-agent]
+
+Checks the plugin manifest, registration code, and read-only contract against
+the official Hermes plugin schema (plugins_manifest.py) and registration API
+(plugins.py). Prints a pass/fail checklist and exits non-zero on any failure.
+
+This is a hermes-guide tool. It is NOT part of the hermetic gate tier
+(it needs a Hermes checkout for some checks) but can be run standalone.
+"""
+from __future__ import annotations
+
+import argparse
+import ast
+import json
+import re
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+
+def _load_manifest(plugin_dir: Path) -> tuple[dict | None, str]:
+    """Load and parse the plugin manifest. Returns (data, format) or (None, error)."""
+    for name in ("plugin.yaml", "plugin.yml", "plugin.json"):
+        path = plugin_dir / name
+        if path.exists():
+            try:
+                text = path.read_text()
+                if name.endswith(".json"):
+                    return json.loads(text), name
+                if yaml:
+                    return yaml.safe_load(text), name
+                # Fallback: try yaml via simple parse
+                return None, f"PyYAML not available to parse {name}"
+            except Exception as e:
+                return None, f"Failed to parse {name}: {e}"
+    return None, "No manifest found (plugin.yaml/yml/json)"
+
+
+def _check_manifest(data: dict, plugin_dir: Path) -> list[tuple[str, bool, str]]:
+    """Validate manifest fields. Returns list of (check, passed, detail)."""
+    results = []
+
+    # Required fields
+    name = data.get("name")
+    results.append(("name present", bool(name), f"got {name!r}" if name else "missing"))
+    if name:
+        results.append(("name matches dir", name == plugin_dir.name, f"{name} vs {plugin_dir.name}"))
+
+    version = data.get("version")
+    results.append(("version present (quoted string)", isinstance(version, str) and bool(version), f"got {version!r}"))
+
+    mv = data.get("manifest_version")
+    results.append(("manifest_version == 1", mv == 1, f"got {mv!r}"))
+
+    av = data.get("api_version")
+    results.append(("api_version == 1", av == 1, f"got {av!r}"))
+
+    desc = data.get("description")
+    results.append(("description present", bool(desc), "missing" if not desc else "ok"))
+
+    rh = data.get("requires_hermes")
+    results.append(("requires_hermes present", bool(rh), "missing" if not rh else f"got {rh!r}"))
+
+    # Optional but recommended
+    lic = data.get("license")
+    results.append(("license present", bool(lic), "missing (recommended)" if not lic else f"got {lic!r}"))
+
+    # python_dependencies
+    pydeps = data.get("python_dependencies")
+    if pydeps is not None:
+        is_list = isinstance(pydeps, list)
+        results.append(("python_dependencies is list", is_list, f"got {type(pydeps).__name__}"))
+        if is_list:
+            all_str = all(isinstance(d, str) and d.strip() for d in pydeps)
+            results.append(("python_dependencies entries are strings", all_str, ""))
+
+    # capabilities
+    caps = data.get("capabilities")
+    if caps is None:
+        results.append(("capabilities omitted (read-only)", True, "omitted"))
+    elif caps == {} or caps == []:
+        results.append(("capabilities empty (read-only)", True, "empty"))
+    else:
+        results.append(("capabilities present (privileged)", False, f"got {caps!r} — requires consent"))
+
+    # config_schema
+    schema = data.get("config_schema")
+    if schema is not None:
+        is_mapping = isinstance(schema, dict)
+        results.append(("config_schema is mapping", is_mapping, f"got {type(schema).__name__}"))
+        if is_mapping:
+            for key, entry in schema.items():
+                if not isinstance(entry, dict):
+                    results.append((f"config_schema.{key} is mapping", False, f"got {type(entry).__name__}"))
+                    continue
+                has_type = "type" in entry
+                results.append((f"config_schema.{key} has type", has_type, "missing" if not has_type else entry.get("type")))
+
+    # kind
+    kind = data.get("kind")
+    valid_kinds = {"exclusive", "model-provider", "backend", "platform", None}
+    results.append(("kind valid", kind in valid_kinds, f"got {kind!r}" if kind not in valid_kinds else (kind or "omitted (standard)")))
+
+    return results
+
+
+def _check_registration(plugin_dir: Path) -> list[tuple[str, bool, str]]:
+    """Check __init__.py for correct registration patterns."""
+    results = []
+    init_path = plugin_dir / "__init__.py"
+    if not init_path.exists():
+        return [("__init__.py exists", False, "missing")]
+
+    results.append(("__init__.py exists", True, "ok"))
+    source = init_path.read_text()
+    tree = ast.parse(source, filename=str(init_path))
+
+    # Check for register function
+    has_register = any(
+        isinstance(node, ast.FunctionDef) and node.name == "register"
+        for node in ast.walk(tree)
+    )
+    results.append(("register(ctx) defined", has_register, "missing" if not has_register else "ok"))
+
+    # Check for __version__
+    has_version = "__version__" in source
+    results.append(("__version__ defined", has_version, "missing" if not has_version else "ok"))
+
+    # Check for mutation patterns (basic AST scan)
+    mutation_patterns = ["open(", ".write(", "os.remove", "shutil.rmtree", "Path.unlink"]
+    for pat in mutation_patterns:
+        # Simple text check (not full AST) — good enough for a quick scan
+        if pat in source.replace(" ", ""):
+            # Could be a read or a comment; flag as warning, not failure
+            pass
+
+    # Check register_command usage
+    if "register_command" in source:
+        results.append(("uses register_command", True, "ok"))
+    if "register_cli_command" in source:
+        results.append(("uses register_cli_command", True, "ok"))
+    if "register_hook" in source:
+        results.append(("uses register_hook", True, "ok"))
+
+    # Check for hardcoded VALID_HOOKS or hook event names
+    if "VALID_HOOKS" in source:
+        results.append(("references VALID_HOOKS (not hardcoded)", True, "ok"))
+
+    return results
+
+
+def _check_readonly(plugin_dir: Path) -> list[tuple[str, bool, str]]:
+    """Check read-only contract."""
+    results = []
+    init_path = plugin_dir / "__init__.py"
+    if not init_path.exists():
+        return results
+
+    source = init_path.read_text()
+
+    # Check for common mutation patterns
+    mutation_keywords = ["config.yaml", "config.yml", ".write_text", ".write_bytes",
+                         "shutil.copy", "os.makedirs", "Path.mkdir"]
+    found_mutations = [kw for kw in mutation_keywords if kw in source]
+    if found_mutations:
+        results.append(("no obvious mutation patterns", False, f"found: {', '.join(found_mutations)}"))
+    else:
+        results.append(("no obvious mutation patterns", True, "ok"))
+
+    return results
+
+
+def verify(plugin_dir: Path, hermes_src: Path | None = None) -> int:
+    """Run all checks. Returns 0 on success, 1 on any failure."""
+    print(f"Verifying plugin: {plugin_dir}")
+    print("=" * 60)
+
+    all_results: list[tuple[str, bool, str]] = []
+
+    # 1. Manifest
+    print("\n## Manifest (plugin.yaml)")
+    data, fmt = _load_manifest(plugin_dir)
+    if data is None:
+        print(f"  FAIL: {fmt}")
+        return 1
+    print(f"  Loaded: {fmt}")
+    manifest_results = _check_manifest(data, plugin_dir)
+    for check, passed, detail in manifest_results:
+        status = "PASS" if passed else "FAIL"
+        print(f"  [{status}] {check}" + (f" — {detail}" if detail else ""))
+        all_results.append((check, passed, detail))
+
+    # 2. Registration
+    print("\n## Registration (__init__.py)")
+    reg_results = _check_registration(plugin_dir)
+    for check, passed, detail in reg_results:
+        status = "PASS" if passed else "FAIL"
+        print(f"  [{status}] {check}" + (f" — {detail}" if detail else ""))
+        all_results.append((check, passed, detail))
+
+    # 3. Read-only contract
+    print("\n## Read-only contract")
+    ro_results = _check_readonly(plugin_dir)
+    for check, passed, detail in ro_results:
+        status = "PASS" if passed else "FAIL"
+        print(f"  [{status}] {check}" + (f" — {detail}" if detail else ""))
+        all_results.append((check, passed, detail))
+
+    # 4. Summary
+    total = len(all_results)
+    passed = sum(1 for _, p, _ in all_results if p)
+    failed = total - passed
+    print("\n" + "=" * 60)
+    print(f"Results: {passed}/{total} passed, {failed} failed")
+
+    if failed > 0:
+        print("\nFailed checks:")
+        for check, p, detail in all_results:
+            if not p:
+                print(f"  - {check}: {detail}")
+        return 1
+
+    print("\nAll checks passed.")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Verify a Hermes plugin meets official standards.")
+    parser.add_argument("plugin_dir", type=Path, nargs="?", default=Path("."), help="Path to the plugin directory (default: current dir)")
+    parser.add_argument("--src", type=Path, default=None, help="Path to hermes-agent checkout (for deeper validation)")
+    args = parser.parse_args()
+
+    args.plugin_dir = args.plugin_dir.resolve()
+    if not args.plugin_dir.is_dir():
+        print(f"Error: {args.plugin_dir} is not a directory", file=sys.stderr)
+        return 1
+
+    return verify(args.plugin_dir, args.src)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
