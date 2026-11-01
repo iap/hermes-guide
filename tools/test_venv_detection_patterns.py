@@ -149,7 +149,7 @@ def case_resolve_venv_venv_dir():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def case_resolve_venv_virtual_env():
+def case_resolve_venv_active_prefix_wins():
     import shutil
     import tempfile
 
@@ -158,8 +158,12 @@ def case_resolve_venv_virtual_env():
     (venv / "pyvenv.cfg").write_text("home = x\n")
     try:
         with mock.patch.dict(os.environ, {"VIRTUAL_ENV": str(venv)}, clear=False):
-            result = resolve_venv(root)
-            assert result == venv
+            with mock.patch.object(sys, "base_prefix", "/nonexistent-base"):
+                with mock.patch.object(sys, "prefix", str(venv)):
+                    if hasattr(sys, "real_prefix"):
+                        delattr(sys, "real_prefix")
+                    result = resolve_venv(root)
+                    assert result == venv
     finally:
         shutil.rmtree(root, ignore_errors=True)
         shutil.rmtree(venv, ignore_errors=True)
@@ -241,6 +245,9 @@ def case_probe_shell_valid():
 
 
 def main() -> int:
+    if not __debug__:
+        print("error: assertions are disabled (python -O); re-run without -O", file=sys.stderr)
+        return 2
     cases = [v for k, v in globals().items() if k.startswith("case_")]
     failures = []
     for case in cases:
