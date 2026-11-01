@@ -131,6 +131,24 @@ def case_resolve_venv_none():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def case_resolve_venv_dotvenv_only():
+    import shutil
+    import tempfile
+
+    root = Path(tempfile.mkdtemp())
+    (root / ".venv").mkdir()
+    try:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("VIRTUAL_ENV", None)
+            with mock.patch.object(sys, "base_prefix", sys.prefix):
+                if hasattr(sys, "real_prefix"):
+                    delattr(sys, "real_prefix")
+                result = resolve_venv(root)
+                assert result == root / ".venv"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def case_resolve_venv_venv_dir():
     import shutil
     import tempfile
@@ -186,9 +204,7 @@ def case_activate_venv_command_posix():
     if sys.platform != "win32":
         venv = Path("/tmp/test venv")
         cmd = activate_venv_command(venv)
-        assert "source" in cmd
-        assert "/tmp/test venv/bin/activate" in cmd
-        assert "'" in cmd
+        assert cmd == "source '/tmp/test venv/bin/activate'"
 
 
 def case_venv_bin_dir_windows():
