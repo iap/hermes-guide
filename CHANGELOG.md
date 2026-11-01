@@ -9,7 +9,7 @@ All notable changes to hermes-guide are documented here.
 - **skills**: add diagnosing-backup, diagnosing-profiles, diagnosing-secrets
 - **skills**: update routing, docs, and render_docs for coverage matrix
 - **skills**: complete diagnostic coverage matrix (5 new skills)
-- **tools**: add verify_plugin.py — validates plugin against official Hermes standards
+- **tools**: add verify_plugin.py — checks plugin manifest, registration, and read-only patterns
 - **skills**: add plugin structure verification checklist (26 items)
 - **skills**: add plugin-authoring skill (plugins + skills creation guide)
 - **storage**: add state.db storage check
