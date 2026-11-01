@@ -101,6 +101,20 @@ Pass: memory hygiene check shows healthy; stores within limits.
 
 Fail: memory hygiene check shows broken — address the specific finding.
 
+## Verification
+
+After applying the fix:
+
+```bash
+hermes guide               # memory hygiene check healthy
+hermes memory status       # provider/store health ok
+```
+
+Pass: memory hygiene check shows healthy; stores within limits.
+
+Fail: memory hygiene check shows broken — address the specific finding.
+
+
 ## 4. Related
 
 - `diagnosing-memory` — memory provider and "forgot" issues

@@ -95,6 +95,21 @@ Pass: storage check shows healthy; state.db size is reasonable.
 
 Fail: storage check shows warning — re-check disk usage and state.db.
 
+## Verification
+
+After applying the fix:
+
+```bash
+hermes guide               # storage check healthy
+du -sh ~/.hermes/state.db  # size reasonable
+hermes sessions optimize-storage  # completes without error (stop gateway first)
+```
+
+Pass: storage check shows healthy; state.db size is reasonable.
+
+Fail: storage check shows warning — re-check disk usage and state.db.
+
+
 ## 4. Related
 
 - `hermes-disk-housekeeping` — full disk cleanup procedures

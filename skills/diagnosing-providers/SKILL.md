@@ -169,14 +169,18 @@ Older configs use a top-level `custom_providers:` list with `base_url` instead o
 
 Every diagnosis ends in a concrete action: a `providers:` field edit or a `hermes model` command, then `hermes gateway restart` to apply.
 
-## Apply and verify
+## Verification
 
-After applying fixes:
+After applying the fix:
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+hermes model                  # provider resolves correctly
+hermes guide                  # provider check healthy
+```
+
+Pass: model command works; no provider errors in logs.
+
+Fail: re-check the pitfall matched and re-apply the fix.
 
 
 ## Report

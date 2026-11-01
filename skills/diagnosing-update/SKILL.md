@@ -108,6 +108,21 @@ Pass: update check shows healthy; `hermes update` completes.
 
 Fail: update check shows broken — check for stale locks or layout issues.
 
+## Verification
+
+After applying the fix:
+
+```bash
+hermes guide               # update check healthy
+hermes update              # completes without error
+hermes --version           # shows expected version
+```
+
+Pass: update check shows healthy; `hermes update` completes.
+
+Fail: update check shows broken — check for stale locks or layout issues.
+
+
 ## 4. Related
 
 - `hermes-post-update` — post-update verification and cleanup

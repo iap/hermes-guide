@@ -87,6 +87,21 @@ Pass: session health check shows healthy; new sessions work.
 
 Fail: session health check flags runaway — start fresh session and split work.
 
+## Verification
+
+After applying the fix:
+
+```bash
+hermes guide               # session health check passes
+hermes sessions list       # sessions load correctly
+hermes  # new session works
+```
+
+Pass: session health check shows healthy; new sessions work.
+
+Fail: session health check flags runaway — start fresh session and split work.
+
+
 ## 4. Related
 
 - `diagnosing-host-pressure` — OOM and host load

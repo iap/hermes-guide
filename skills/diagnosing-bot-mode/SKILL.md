@@ -63,14 +63,19 @@ ui_meta:
 - `diagnosing-cron` — for routine/cron job scheduling problems
 - `diagnosing-memory` — for memory provider configuration
 
-## Apply and verify
+## Verification
 
-After applying fixes:
+After applying the fix:
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Re-run the verification commands cited in the fix (e.g., `hermes profile list`, `hermes gateway status`, `hermes logs --lines 50`) and confirm the expected state.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+hermes gateway status          # gateway running (bots require it)
+hermes profile list            # bot profiles exist
+hermes logs --lines 50        # no new errors
+```
+
+Pass: gateway running, bot profiles present, no errors in logs.
+
+Fail: re-check the pitfall matched and re-apply the fix.
 
 
 ## Report

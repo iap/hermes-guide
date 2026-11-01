@@ -106,6 +106,23 @@ Pass: config check shows healthy; `hermes config show` reflects your edits.
 
 Fail: config check shows broken — re-check YAML syntax and $HERMES_HOME.
 
+## Verification
+
+After applying the fix:
+
+```bash
+# Confirm config parses
+hermes config path          # resolves correctly
+hermes config show          # dumps effective config
+hermes doctor               # no config errors
+hermes guide               # config check healthy
+```
+
+Pass: config check shows healthy; `hermes config show` reflects your edits.
+
+Fail: config check shows broken — re-check YAML syntax and $HERMES_HOME.
+
+
 ## 4. Related
 
 - `hermes-configuration-guide` — full config map and key reference
