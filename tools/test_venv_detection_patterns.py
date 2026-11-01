@@ -30,25 +30,33 @@ probe_shell = mod.probe_shell
 
 
 def case_is_venv_active_false():
-    # In a non-venv environment, should be False
-    with mock.patch.object(sys, "base_prefix", sys.prefix):
-        if hasattr(sys, "real_prefix"):
-            delattr(sys, "real_prefix")
-        assert is_venv_active() is False
+    had_real = hasattr(sys, "real_prefix")
+    saved = getattr(sys, "real_prefix", None)
+    if had_real:
+        delattr(sys, "real_prefix")
+    try:
+        with mock.patch.object(sys, "base_prefix", sys.prefix):
+            assert is_venv_active() is False
+    finally:
+        if had_real:
+            sys.real_prefix = saved
 
 
 def case_find_venv_dirs_empty():
+    import shutil
     import tempfile
+
     root = Path(tempfile.mkdtemp())
     try:
         assert find_venv_dirs(root) == []
     finally:
-        import shutil
         shutil.rmtree(root, ignore_errors=True)
 
 
 def case_find_venv_dirs_venv():
+    import shutil
     import tempfile
+
     root = Path(tempfile.mkdtemp())
     (root / "venv").mkdir()
     (root / "venv" / "pyvenv.cfg").write_text("home = x\n")
@@ -57,12 +65,13 @@ def case_find_venv_dirs_venv():
         assert len(result) == 1
         assert result[0] == root / "venv"
     finally:
-        import shutil
         shutil.rmtree(root, ignore_errors=True)
 
 
 def case_find_venv_dirs_dotvenv():
+    import shutil
     import tempfile
+
     root = Path(tempfile.mkdtemp())
     (root / ".venv").mkdir()
     (root / ".venv" / "pyvenv.cfg").write_text("home = x\n")
@@ -71,12 +80,13 @@ def case_find_venv_dirs_dotvenv():
         assert len(result) == 1
         assert result[0] == root / ".venv"
     finally:
-        import shutil
         shutil.rmtree(root, ignore_errors=True)
 
 
 def case_find_venv_dirs_both():
+    import shutil
     import tempfile
+
     root = Path(tempfile.mkdtemp())
     (root / "venv").mkdir()
     (root / "venv" / "pyvenv.cfg").write_text("home = x\n")
@@ -88,24 +98,26 @@ def case_find_venv_dirs_both():
         assert result[0] == root / "venv"
         assert result[1] == root / ".venv"
     finally:
-        import shutil
         shutil.rmtree(root, ignore_errors=True)
 
 
 def case_find_venv_dirs_no_pyvenv_cfg():
+    import shutil
     import tempfile
+
     root = Path(tempfile.mkdtemp())
-    (root / "venv").mkdir()  # no pyvenv.cfg
+    (root / "venv").mkdir()
     try:
         result = find_venv_dirs(root)
         assert result == []
     finally:
-        import shutil
         shutil.rmtree(root, ignore_errors=True)
 
 
 def case_resolve_venv_none():
+    import shutil
     import tempfile
+
     root = Path(tempfile.mkdtemp())
     try:
         with mock.patch.dict(os.environ, {}, clear=False):
@@ -116,12 +128,13 @@ def case_resolve_venv_none():
                 result = resolve_venv(root)
                 assert result is None
     finally:
-        import shutil
         shutil.rmtree(root, ignore_errors=True)
 
 
 def case_resolve_venv_venv_dir():
+    import shutil
     import tempfile
+
     root = Path(tempfile.mkdtemp())
     (root / "venv").mkdir()
     try:
@@ -133,12 +146,13 @@ def case_resolve_venv_venv_dir():
                 result = resolve_venv(root)
                 assert result == root / "venv"
     finally:
-        import shutil
         shutil.rmtree(root, ignore_errors=True)
 
 
 def case_resolve_venv_virtual_env():
+    import shutil
     import tempfile
+
     root = Path(tempfile.mkdtemp())
     venv = Path(tempfile.mkdtemp())
     (venv / "pyvenv.cfg").write_text("home = x\n")
@@ -147,7 +161,6 @@ def case_resolve_venv_virtual_env():
             result = resolve_venv(root)
             assert result == venv
     finally:
-        import shutil
         shutil.rmtree(root, ignore_errors=True)
         shutil.rmtree(venv, ignore_errors=True)
 
@@ -170,6 +183,33 @@ def case_activate_venv_command_posix():
         cmd = activate_venv_command(venv)
         assert "source" in cmd
         assert "activate" in cmd
+        assert "'" in cmd or '"' in cmd
+
+
+def case_venv_bin_dir_windows():
+    if sys.platform == "win32":
+        venv = Path("C:/test_venv")
+        assert venv_bin_dir(venv) == venv / "Scripts"
+
+
+def case_venv_python_path_windows():
+    if sys.platform == "win32":
+        venv = Path("C:/test_venv")
+        assert venv_python_path(venv) == venv / "Scripts" / "python.exe"
+
+
+def case_activate_venv_command_windows_cmd():
+    if sys.platform == "win32":
+        venv = Path("C:/test venv")
+        cmd = activate_venv_command(venv, shell="cmd")
+        assert "activate.bat" in cmd
+
+
+def case_activate_venv_command_windows_powershell():
+    if sys.platform == "win32":
+        venv = Path("C:/test venv")
+        cmd = activate_venv_command(venv, shell="powershell")
+        assert "Activate.ps1" in cmd
 
 
 def case_probe_shell_none():
@@ -183,7 +223,9 @@ def case_probe_shell_none():
 
 
 def case_probe_shell_valid():
+    import shutil
     import tempfile
+
     venv = Path(tempfile.mkdtemp())
     (venv / "pyvenv.cfg").write_text("home = x\n")
     saved = os.environ.get("VIRTUAL_ENV")
@@ -195,7 +237,6 @@ def case_probe_shell_valid():
             os.environ.pop("VIRTUAL_ENV", None)
         else:
             os.environ["VIRTUAL_ENV"] = saved
-        import shutil
         shutil.rmtree(venv, ignore_errors=True)
 
 
