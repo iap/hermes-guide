@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, Node/npm resolution errors, 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.8
+version: 1.1.9
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -84,7 +84,7 @@ Precedence throughout: **explicit env var > `config.yaml` > auto-detection**.
 
 Hermes configuration is **YAML** — edit `config.yaml`, never JSON syntax.
 
-## 6. Apply and verify
+## Apply and verify
 
 After fixing: close any running desktop app, then `hermes desktop` (a source change triggers the stamp rebuild automatically; use `--force-build` after upstream updates or when in doubt, `--build-only` to validate a build without launching). Confirm via `hermes logs gui -f` that the backend announces its port and the window renders. There is no `/reload-desktop` — a running app must be closed and relaunched.
 

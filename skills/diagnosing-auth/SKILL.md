@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source') — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.13
+version: 1.2.14
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -72,7 +72,7 @@ When probing the `.env` token, use Hermes's own loader — `agent.secret_scope.g
 
 **Automate it:** the §1–§2 probes are cron-able — a monthly health check that reports the method and the env-token probe status catches a dying token before installs break.
 
-## 5. Apply and verify
+## Apply and verify
 
 After applying fixes:
 

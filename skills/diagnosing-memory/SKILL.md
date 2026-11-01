@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.8
+version: 1.2.9
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -99,7 +99,7 @@ Two name traps that are **not** this surface:
 
 Hermes configuration is **YAML** — edit `config.yaml`, never JSON syntax.
 
-## 5. Apply and verify
+## Apply and verify
 
 There is no `/reload-memory`: built-in memory is snapshotted at session start, so **restart the session** after any config/`.env`/plugin fix. Then confirm with `hermes memory status` (all lines ✓, or provider lines as intended) and, for built-in, ask the agent to remember something and check the file changed on disk.
 
