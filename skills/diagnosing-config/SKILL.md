@@ -1,7 +1,7 @@
 ---
 name: diagnosing-config
 description: Diagnose Hermes configuration issues — config.yaml not parsing, missing file, wrong path, orphaned settings, and legacy key migration.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, config, troubleshooting]
@@ -105,6 +105,23 @@ hermes guide               # config check healthy
 Pass: config check shows healthy; `hermes config show` reflects your edits.
 
 Fail: config check shows broken — re-check YAML syntax and $HERMES_HOME.
+
+## Verification
+
+After applying the fix:
+
+```bash
+# Confirm config parses
+hermes config path          # resolves correctly
+hermes config show          # dumps effective config
+hermes doctor               # no config errors
+hermes guide               # config check healthy
+```
+
+Pass: config check shows healthy; `hermes config show` reflects your edits.
+
+Fail: config check shows broken — re-check YAML syntax and $HERMES_HOME.
+
 
 ## 4. Related
 

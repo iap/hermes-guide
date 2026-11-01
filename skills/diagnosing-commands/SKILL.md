@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.7
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -45,14 +45,18 @@ Multiple leading `/skill` tokens stack in one message — the cap is **`_MAX_STA
 5. Apply the fix, `/reload-skills` or restart as appropriate, confirm via autocomplete or invocation.
 6. Re-run the detector: `hermes guide commands` headless or `/hermes-doctor commands` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
 
-## Apply and verify
+## Verification
 
-After applying fixes:
+After applying the fix:
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+hermes guide commands          # command check healthy
+/help                         # command appears in list
+```
+
+Pass: command check shows healthy; command appears in `/help`.
+
+Fail: re-check the pitfall matched and re-apply the fix.
 
 
 ## Report

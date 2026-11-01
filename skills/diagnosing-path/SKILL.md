@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths, including the PM-era no-in-tree-venv case."
-version: 1.5.13
+version: 1.5.14
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -253,6 +253,23 @@ Symptom: the update tail prints staged-entry verification failures naming `dyld`
 ### `No module named 'x._x'` although the package is installed
 
 Symptom: an import that works standalone fails inside Hermes with a missing C-extension submodule. Cause: interpreter/site-packages mismatch — e.g. a stale shim running Python 3.12 while PM forces a 3.14-built dependency tree onto its path; the extension tag doesn't match so the submodule is unresolvable. → Compare the `Python:` line of `hermes --version` across every `hermes` on PATH (`which -a hermes`; check what each shim execs) against the durable launcher (`hermes-agent/.hermes/bin/hermes`, bound to the PM-store Python). Use the durable launcher; refresh or remove stale shims. Never `pip install` into the PM store to work around it — that drifts from the resolved `uv.lock` and PM reports the environment not-current; instead restore with `hermes pm install`, then close and relaunch Hermes before retrying.
+
+
+## Verification
+
+After applying the fix:
+
+```bash
+# Confirm the venv resolves correctly
+python -c "from hermes_constants import project_venv_dir; print(project_venv_dir('.'))"
+# Confirm the package is installed in the resolved venv
+$(python -c "from hermes_constants import project_venv_dir, venv_bin_dir; print(venv_bin_dir(project_venv_dir('.')))")/python -c "import hermes_agent; print(hermes_agent.__file__)"
+```
+
+Pass: venv resolves to the correct directory and the package imports.
+
+Fail: check which venv directories exist and resolve manually.
+
 
 ## See Also
 

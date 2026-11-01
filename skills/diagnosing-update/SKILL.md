@@ -1,7 +1,7 @@
 ---
 name: diagnosing-update
 description: Diagnose Hermes update issues — stale update lock, dead owner PID, wedged checkout, and update failures.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, update, troubleshooting]
@@ -107,6 +107,21 @@ hermes --version           # shows expected version
 Pass: update check shows healthy; `hermes update` completes.
 
 Fail: update check shows broken — check for stale locks or layout issues.
+
+## Verification
+
+After applying the fix:
+
+```bash
+hermes guide               # update check healthy
+hermes update              # completes without error
+hermes --version           # shows expected version
+```
+
+Pass: update check shows healthy; `hermes update` completes.
+
+Fail: update check shows broken — check for stale locks or layout issues.
+
 
 ## 4. Related
 

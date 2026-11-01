@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and sub-category selection keys.
-version: 1.2.21
+version: 1.2.22
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]
@@ -68,14 +68,19 @@ Three ways to flip: `hermes plugins` (interactive), `hermes plugins enable <name
 5. Restart the session/gateway and verify: tools appear in `/tools list`, commands in `/` autocomplete, hooks via `hermes hooks list`.
 6. Re-run the detector: `hermes guide plugins` headless or `/hermes-doctor plugins` in-session; `+` means healthy, `~` means informational, and `x`/`?` means unresolved.
 
-## Apply and verify
+## Verification
 
-After applying fixes:
+After applying the fix:
 
-1. Re-test the failing scenario to confirm the symptom is resolved.
-2. Run any relevant `hermes ...` commands or checks mentioned in the fix.
-3. Verify logs/config show the expected state with no new errors.
-4. If the issue was environment-specific, confirm it works in your actual setup.
+```bash
+hermes plugins list           # plugin shows enabled
+hermes plugins capabilities <name>  # capabilities granted
+hermes guide plugins          # plugin check healthy
+```
+
+Pass: plugin enabled with correct capabilities; no load errors in logs.
+
+Fail: re-check the pitfall matched and re-apply the fix.
 
 
 ## Report

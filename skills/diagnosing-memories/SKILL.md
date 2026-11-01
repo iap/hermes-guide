@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memories
 description: Diagnose Hermes memory store issues — MEMORY.md/USER.md over-limit, duplicates, mis-targeted entries, and undated dynamic stores.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, memory, troubleshooting]
@@ -100,6 +100,20 @@ cat ~/.hermes/memories/MEMORY.md  # entries within limit
 Pass: memory hygiene check shows healthy; stores within limits.
 
 Fail: memory hygiene check shows broken — address the specific finding.
+
+## Verification
+
+After applying the fix:
+
+```bash
+hermes guide               # memory hygiene check healthy
+hermes memory status       # provider/store health ok
+```
+
+Pass: memory hygiene check shows healthy; stores within limits.
+
+Fail: memory hygiene check shows broken — address the specific finding.
+
 
 ## 4. Related
 

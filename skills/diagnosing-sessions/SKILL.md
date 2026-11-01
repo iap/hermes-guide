@@ -1,7 +1,7 @@
 ---
 name: diagnosing-sessions
 description: Diagnose Hermes session issues — runaway sessions, loop signatures, context bloat, and session management problems.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, sessions, troubleshooting]
@@ -86,6 +86,21 @@ hermes  # new session works
 Pass: session health check shows healthy; new sessions work.
 
 Fail: session health check flags runaway — start fresh session and split work.
+
+## Verification
+
+After applying the fix:
+
+```bash
+hermes guide               # session health check passes
+hermes sessions list       # sessions load correctly
+hermes  # new session works
+```
+
+Pass: session health check shows healthy; new sessions work.
+
+Fail: session health check flags runaway — start fresh session and split work.
+
 
 ## 4. Related
 
