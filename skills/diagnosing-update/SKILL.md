@@ -1,7 +1,7 @@
 ---
 name: diagnosing-update
 description: Diagnose Hermes update issues — stale update lock, dead owner PID, wedged checkout, and update failures.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, update, troubleshooting]

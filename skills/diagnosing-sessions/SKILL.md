@@ -1,7 +1,7 @@
 ---
 name: diagnosing-sessions
 description: Diagnose Hermes session issues — runaway sessions, loop signatures, context bloat, and session management problems.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, sessions, troubleshooting]

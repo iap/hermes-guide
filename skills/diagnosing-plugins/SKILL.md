@@ -1,7 +1,7 @@
 ---
 name: diagnosing-plugins
 description: Diagnose Hermes plugins that do not load or run — the plugins.enabled opt-in gate, capability consent, discovery locations, and sub-category selection keys.
-version: 1.2.21
+version: 1.2.22
 metadata:
   hermes:
     tags: [hermes, plugins, troubleshooting]

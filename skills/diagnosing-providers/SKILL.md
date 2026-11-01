@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, provider/auth failures, and credential pool exhaustion.
-version: 1.3.2
+version: 1.3.3
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]

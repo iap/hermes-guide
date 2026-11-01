@@ -1,7 +1,7 @@
 ---
 name: diagnosing-config
 description: Diagnose Hermes configuration issues — config.yaml not parsing, missing file, wrong path, orphaned settings, and legacy key migration.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, config, troubleshooting]

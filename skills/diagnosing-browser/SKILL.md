@@ -1,7 +1,7 @@
 ---
 name: diagnosing-browser
 description: Diagnose Hermes browser automation issues — CDP connection failures, attach problems, agent-browser/build-gate history, and browser tool errors across the pre-v52 built-in tools and the v52 browser_exec surface.
-version: 1.1.1
+version: 1.1.2
 metadata:
   hermes:
     tags: [hermes, browser, cdp, playwright, troubleshooting]

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cron
 description: Diagnose Hermes cron job issues — jobs not firing, scheduler dead, wedged fire-claim, timezone issues, and delivery failures.
-version: 1.0.3
+version: 1.0.4
 metadata:
   hermes:
     tags: [hermes, cron, scheduling, troubleshooting]

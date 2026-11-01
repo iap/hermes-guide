@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths, including the PM-era no-in-tree-venv case."
-version: 1.5.13
+version: 1.5.14
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]

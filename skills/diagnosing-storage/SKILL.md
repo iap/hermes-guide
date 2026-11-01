@@ -1,7 +1,7 @@
 ---
 name: diagnosing-storage
 description: Diagnose Hermes storage issues — state.db size, disk pressure, session database bloat, and cleanup opportunities.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, storage, disk, troubleshooting]

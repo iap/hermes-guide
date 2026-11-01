@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memories
 description: Diagnose Hermes memory store issues — MEMORY.md/USER.md over-limit, duplicates, mis-targeted entries, and undated dynamic stores.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, memory, troubleshooting]
