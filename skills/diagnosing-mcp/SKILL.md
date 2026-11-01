@@ -1,7 +1,7 @@
 ---
 name: diagnosing-mcp
 description: Diagnose Hermes MCP servers that will not connect, expose no tools, fail OAuth, or ignore config — with the exact config.yaml fields and hermes mcp commands to fix each.
-version: 1.1.17
+version: 1.1.18
 metadata:
   hermes:
     tags: [hermes, mcp, troubleshooting]
@@ -47,7 +47,12 @@ Per-server tool filtering: `tools.include` (whitelist) / `tools.exclude` (blackl
 5. **OAuth login "works" but tool calls time out** — the provider rejects dynamic client registration (Google Drive, Atlassian): `tools/list` succeeds unauthenticated, so login looks fine but no token lands. → Create an OAuth client in the provider console and set `oauth.client_id` / `oauth.client_secret`, then `hermes mcp login <name>`.
 6. **Tool call times out** — slow server startup. → Raise `timeout` / `connect_timeout` on that entry.
 7. **Catalog entry stale after Hermes update** — catalog MCPs never auto-update. → Re-run `hermes mcp install <name>`.
-8. **Claude-Code-style config pasted in** — `mcpServers` JSON or nested `mcp.servers` is not read. → Use top-level `mcp_servers:` in YAML (or install the agent-importers plugin, then run: hermes import-agent claude-code).
+8. **Claude-Code-style config pasted in** — `mcpServers` JSON or nested `mcp.servers` is not read. → Use top-level `mcp_servers:` in YAML (or install the plugin and run the import):
+
+   ```bash
+   hermes plugins install agent-importers
+   hermes import-agent claude-code
+   ```
 9. **Server works without a key but you want identified/limited use** — some servers (e.g. context7) run free anonymously and also accept an API key. → Set the key in the active `.env` (resolve it first: `hermes config path` prints the config file, `.env` sits beside it — never assume `~/.hermes`) as `CONTEXT7_API_KEY`. For catalog-installed entries, which use HTTP transport (`optional-mcps/context7/manifest.yaml` declares `transport.type: http`), add it as a Bearer header via `mcp_servers.context7.headers` — `env:` only reaches spawned subprocesses and never authenticates HTTP requests. For stdio servers, reference it as `${CONTEXT7_API_KEY}` in the entry's `env:`. `hermes mcp test <name>` reports OAuth and HTTP-header auth modes (stdio `env:` keys show as `Auth: none` even when set — verify those from the entry instead).
 
 ## 4. Localization workflow
