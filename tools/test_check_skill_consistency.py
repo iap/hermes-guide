@@ -61,6 +61,7 @@ def case_numbers_near_filename_window_bound():
     # but 5 should attach to b.py
     b_results = [r for r in result if r[1] == "b.py"]
     assert any(r[2] == "5" for r in b_results)
+    assert not any(r[2] == "5" for r in a_results)
 
 
 def case_numbers_near_filename_dir_key():
