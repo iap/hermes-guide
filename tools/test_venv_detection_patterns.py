@@ -131,9 +131,24 @@ def case_resolve_venv_none():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def case_resolve_venv_dotvenv_only():
+def case_resolve_venv_virtual_env_wins():
     import shutil
     import tempfile
+
+    root = Path(tempfile.mkdtemp())
+    (root / "venv").mkdir()
+    venv = Path(tempfile.mkdtemp())
+    (venv / "pyvenv.cfg").write_text("home = x\n")
+    try:
+        with mock.patch.dict(os.environ, {"VIRTUAL_ENV": str(venv)}, clear=False):
+            with mock.patch.object(sys, "base_prefix", sys.prefix):
+                if hasattr(sys, "real_prefix"):
+                    delattr(sys, "real_prefix")
+                result = resolve_venv(root)
+                assert result == venv
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.rmtree(venv, ignore_errors=True)
 
     root = Path(tempfile.mkdtemp())
     (root / ".venv").mkdir()
