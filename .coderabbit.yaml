@@ -1,8 +1,10 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 # Repository policy: Qodo reviews automatically; request CodeRabbit after Qodo
-# with `@coderabbitai full review`, then `@coderabbitai review` after fixes.
-# This file carries the UI policy explicitly; ordinary UI settings are not
-# inherited. Organization/workspace global overrides can still take precedence.
+# with `@coderabbitai full review` ONCE, then `@coderabbitai review` after fixes.
+# Never re-post `@coderabbitai full review` — it re-reviews the entire PR and
+# creates duplicate findings. This file carries the UI policy explicitly;
+# ordinary UI settings are not inherited. Organization/workspace global
+# overrides can still take precedence.
 # Rationale and verification: docs/agent/ops.md#coderabbit-configuration
 inheritance: false
 tone_instructions: >-

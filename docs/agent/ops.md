@@ -209,10 +209,11 @@ the observed behavior differs. See CodeRabbit's
 
 Qodo remains the automatic primary reviewer. After its findings are addressed,
 request `@coderabbitai full review` for a complete CodeRabbit pass. After fixes,
-use `@coderabbitai review` for new changes only. Automatic and automatic
-incremental reviews are disabled, so a push alone does not request another
-pass. Mention `@coderabbitai` for follow-up chat. See the
-[command reference](https://docs.coderabbit.ai/reference/review-commands).
+use `@coderabbitai review` for new changes only — never re-post
+`@coderabbitai full review`, which re-reviews the entire PR and creates
+duplicate findings. Automatic and automatic incremental reviews are disabled,
+so a push alone does not request another pass. Mention `@coderabbitai` for
+follow-up chat. See the [command reference](https://docs.coderabbit.ai/reference/review-commands).
 
 The assertive profile is intentional: use CodeRabbit for a thorough second
 opinion, with concrete evidence for parser/fallback findings. Keep review
@@ -428,7 +429,8 @@ around. When a check fails:
 
 **Two-bot review sequence (Qodo first, CodeRabbit second).** Qodo reviews
 automatically on every PR; CodeRabbit does not (`auto_review.enabled: false`),
-so it only runs when someone posts `@coderabbitai full review`. The sequence:
+so it only runs when someone posts `@coderabbitai full review` or
+`@coderabbitai review`. The sequence:
 
 1. **Qodo (first reviewer).** Wait for Qodo's comment. For each finding:
    cross-check against the live code and upstream source — confirm it is a
@@ -437,11 +439,16 @@ so it only runs when someone posts `@coderabbitai full review`. The sequence:
    Qodo (it updates its comment on new commits) until it reports clean.
    A silent or missing Qodo comment counts as "not heard", not "clean".
 2. **Trigger CodeRabbit (second reviewer).** Only after Qodo is clean, post
-   `@coderabbitai full review`. Wait for its report. For each finding:
-   cross-check against the live code — confirm it is real, not a false
-   positive, and that the recommended fix is correct for this repo's
-   conventions. Fix confirmed findings; reply to each thread with file:line
-   evidence or a reasoned decline. Re-run CodeRabbit if needed.
+   `@coderabbitai full review` ONCE for the complete initial pass. Wait for
+   its report. For each finding: cross-check against the live code — confirm
+   it is real, not a false positive, and that the recommended fix is correct
+   for this repo's conventions. Fix confirmed findings; reply to each thread
+   with file:line evidence or a reasoned decline. After fixes, use
+   `@coderabbitai review` (incremental, new changes only) — do NOT re-post
+   `@coderabbitai full review`, which re-reviews the entire PR and creates
+   duplicate findings and noise. If CodeRabbit produces no new findings after
+   incremental review, proceed. Do not spam CodeRabbit with repeated full
+   reviews.
 3. **Re-check Qodo.** CodeRabbit fixes may introduce new Qodo findings.
    Re-run Qodo and resolve any new findings before proceeding.
 4. **Merge checks.** Only when both bots are clean: verify all CI checks
