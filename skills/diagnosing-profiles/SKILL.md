@@ -66,8 +66,8 @@ ls -ld "$(dirname "$profile_cfg")"
 
 **Fix:**
 ```bash
-# Check env vars (no values printed):
-python3 -c "import os; print([k for k in os.environ if 'hermes' in k.lower()])"
+# Check env vars (names only, no values):
+compgen -e | grep -i hermes
 which hermes                             # check for wrapper
 hermes -p <name> config path            # verify profile is used
 ```
