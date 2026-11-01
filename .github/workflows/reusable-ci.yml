@@ -276,6 +276,10 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_fast_mode.py
 
+      - name: Skill consistency regression test
+        if: inputs.run-full-gate
+        run: python tools/test_check_skill_consistency.py
+
       - name: CLI surface parsing regression test
         if: inputs.run-full-gate
         run: python tools/test_check_cli_surface.py
