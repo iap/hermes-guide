@@ -48,9 +48,18 @@ def case_tag_key_non_digit():
 
 
 def case_cap_chars_under_limit():
-    entries = ["short entry", "another entry"]
-    result = _cap_chars(entries, 1000, "omitted {omitted}")
-    assert result == "short entry\nanother entry"
+    saved = (os.environ.get("DRIFT_NO_CAP"), os.environ.get("DRIFT_DRY_RUN"))
+    os.environ.pop("DRIFT_NO_CAP", None)
+    os.environ.pop("DRIFT_DRY_RUN", None)
+    try:
+        entries = ["short entry", "another entry"]
+        result = _cap_chars(entries, 1000, "omitted {omitted}")
+        assert result == "short entry\nanother entry"
+    finally:
+        if saved[0] is not None:
+            os.environ["DRIFT_NO_CAP"] = saved[0]
+        if saved[1] is not None:
+            os.environ["DRIFT_DRY_RUN"] = saved[1]
 
 
 def case_cap_chars_over_limit():
@@ -83,6 +92,16 @@ def case_fit_body_basic():
     assert len(result) <= MAX_BODY_CHARS
 
 
+def case_fit_body_preserves_multiline_content():
+    # Multiline content that is below the budget should be preserved
+    sections = "## Heading\n\nLine one.\nLine two.\n" * 5
+    footer = "footer text"
+    result = _fit_body(sections, footer)
+    assert "Heading" in result
+    assert "Line one." in result
+    assert footer in result
+
+
 def case_fit_body_footer_preserved():
     sections = "x" * (MAX_BODY_CHARS + 100)
     footer = "IMPORTANT FOOTER"
@@ -107,14 +126,23 @@ def case_uncapped_default_false():
 
 
 def case_uncapped_requires_both():
-    os.environ["DRIFT_NO_CAP"] = "1"
-    os.environ.pop("DRIFT_DRY_RUN", None)
-    assert _uncapped() is False
-    os.environ["DRIFT_DRY_RUN"] = "1"
-    assert _uncapped() is True
-    # cleanup
-    os.environ.pop("DRIFT_NO_CAP", None)
-    os.environ.pop("DRIFT_DRY_RUN", None)
+    saved_no_cap = os.environ.get("DRIFT_NO_CAP")
+    saved_dry_run = os.environ.get("DRIFT_DRY_RUN")
+    try:
+        os.environ["DRIFT_NO_CAP"] = "1"
+        os.environ.pop("DRIFT_DRY_RUN", None)
+        assert _uncapped() is False
+        os.environ["DRIFT_DRY_RUN"] = "1"
+        assert _uncapped() is True
+    finally:
+        if saved_no_cap is None:
+            os.environ.pop("DRIFT_NO_CAP", None)
+        else:
+            os.environ["DRIFT_NO_CAP"] = saved_no_cap
+        if saved_dry_run is None:
+            os.environ.pop("DRIFT_DRY_RUN", None)
+        else:
+            os.environ["DRIFT_DRY_RUN"] = saved_dry_run
 
 
 def main() -> int:
@@ -126,9 +154,9 @@ def main() -> int:
             print(f"OK: {case.__name__}")
         except Exception as exc:
             failures.append(f"{case.__name__}: {exc}")
-            print(f"FAIL: {case.__name__}: {exc}")
+            print(f"FAIL: {case.__name__}: {exc}", file=sys.stderr)
     if failures:
-        print(f"\n{len(failures)} failure(s)")
+        print(f"\n{len(failures)} failure(s)", file=sys.stderr)
         return 1
     print(f"\nOK: {len(cases)} case(s) passed")
     return 0
