@@ -429,7 +429,8 @@ around. When a check fails:
 
 **Two-bot review sequence (Qodo first, CodeRabbit second).** Qodo reviews
 automatically on every PR; CodeRabbit does not (`auto_review.enabled: false`),
-so it only runs when someone posts `@coderabbitai full review`. The sequence:
+so it only runs when someone posts `@coderabbitai full review` or
+`@coderabbitai review`. The sequence:
 
 1. **Qodo (first reviewer).** Wait for Qodo's comment. For each finding:
    cross-check against the live code and upstream source — confirm it is a
