@@ -490,7 +490,12 @@ included in a PR body). Steps:
 
 Thread reply (fix applied):
 ```
-Fixed: <one-line what changed> (`path:line`).
+Fixed: <one-line what changed> (`path:line`). Fix on: <commit-sha>.
+```
+
+Thread reply (fix applied, needs follow-up PR):
+```
+Follow-up: <one-line what/why> (tracked in #<pr-or-issue>).
 ```
 
 Thread reply (declined):
@@ -511,6 +516,12 @@ CI: <pass | fail>. Threads: <N unresolved>.
 <Ready for merge | Blocked: reason>.
 ```
 
+**Resolve preference.** After pushing a fix, wait for the reviewing bot to
+complete a re-review. If the thread remains open, reply with the re-review
+result and file:line evidence, then resolve it manually. Never resolve before
+the re-review or treat automatic resolution as proof that the fix is complete.
+If a thread is resolved by the bot but the fix is incomplete, unresolve it and
+reply with evidence.
 **False-positive discipline.** Every bot finding must be cross-checked against
 the actual code and upstream source before implementing a fix. A finding that
 contradicts the live contract (e.g. a handler signature that does not match
