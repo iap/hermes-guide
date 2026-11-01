@@ -1,7 +1,7 @@
 ---
 name: diagnosing-profiles
 description: Diagnose Hermes multi-profile issues — profile not found, config not isolated, profile switching failures, and clone/sync-imports problems.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, profiles, troubleshooting, diagnosing]
@@ -17,9 +17,9 @@ Goal: reduce any profile problem to one concrete fix — a profile creation issu
 - `hermes profile list` — list all profiles
 - `hermes profile show <name>` — show profile details
 - `hermes -p <name> config path` — resolve config for a specific profile
+- `hermes config path` — resolve default profile config
 - `hermes profile create <name>` — create a new profile
 - `hermes profile delete <name>` — delete a profile
-- `hermes config path` — resolve default profile config
 
 ## 2. Common failures
 
@@ -27,12 +27,15 @@ Goal: reduce any profile problem to one concrete fix — a profile creation issu
 
 **Symptom:** `hermes -p <name>` fails with "profile not found" or "No such profile".
 
-**Cause:** Profile directory doesn't exist under `~/.hermes/profiles/`, or profile name has a typo.
+**Cause:** Profile directory doesn't exist under the profiles root, or profile name has a typo.
 
 **Fix:**
 ```bash
 hermes profile list                      # list available profiles
-ls ~/.hermes/profiles/                   # check filesystem
+# Resolve the active home:
+cfg=$(hermes config path)
+echo "Active home: $(dirname "$cfg")"
+ls "$(dirname "$cfg")/../profiles/" 2>/dev/null || ls ~/.hermes/profiles/  # check filesystem
 # Create if missing:
 hermes profile create <name>
 ```
@@ -41,28 +44,32 @@ hermes profile create <name>
 
 **Symptom:** Changes in one profile affect another, or config leaks between profiles.
 
-**Cause:** Profile shares `HERMES_HOME` with default, or symlinked config directory.
+**Cause:** Profile shares HERMES_HOME with default, or symlinked config directory.
 
 **Fix:**
 ```bash
-hermes -p <name> config path            # should point to profiles/<name>/
-# Verify isolation:
-hermes -p <name> config show | grep -i home
-ls -la ~/.hermes/profiles/<name>/        # should be a real dir, not symlink
+default_cfg=$(hermes config path)
+profile_cfg=$(hermes -p <name> config path)
+echo "Default: $default_cfg"
+echo "Profile: $profile_cfg"
+# They must differ:
+test "$default_cfg" != "$profile_cfg" && echo "Isolated: OK" || echo "LEAK: same config path"
+# Verify profile dir is real, not symlink:
+ls -ld "$(dirname "$profile_cfg")"
 ```
 
 ### Profile switching fails
 
 **Symptom:** `hermes -p <name>` starts but uses wrong config or default profile.
 
-**Cause:** Shell alias or wrapper script overrides `-p` flag, or `HERMES_PROFILE` env var set.
+**Cause:** Shell alias or wrapper script overrides `-p` flag, or HERMES_HOME env var set incorrectly.
 
 **Fix:**
 ```bash
-# Check env vars (redacts values):
-set | grep -i hermes
+# Check env vars (no values printed):
+python3 -c "import os; print([k for k in os.environ if 'hermes' in k.lower()])"
 which hermes                             # check for wrapper
-hermes -p <name> --version              # verify profile is used
+hermes -p <name> config path            # verify profile is used
 ```
 
 ### Clone with sync-imports fails
@@ -73,10 +80,14 @@ hermes -p <name> --version              # verify profile is used
 
 **Fix:**
 ```bash
-ls ~/.hermes/import-sync.json            # check source has sync manifest
+# Resolve source profile home:
+src_cfg=$(hermes -p <source> config path)
+ls "$(dirname "$src_cfg")/import-sync.json"  # check source has sync manifest
 hermes plugins list                      # verify agent-importers installed
 hermes profile create <name> --clone --sync-imports
 ```
+
+Note: cloning copies `import-sync.json` from the source profile directory. It does not require the import plugin to be installed for the copy to succeed.
 
 ### Profile deletion leaves orphaned data
 
@@ -87,15 +98,17 @@ hermes profile create <name> --clone --sync-imports
 **Fix:**
 ```bash
 hermes profile delete <name>
-ls ~/.hermes/profiles/                   # verify removed
-du -sh ~/.hermes/profiles/<name> 2>/dev/null || echo "cleaned"
+cfg=$(hermes config path)
+ls "$(dirname "$cfg")/profiles/<name>" 2>/dev/null && echo "still exists" || echo "cleaned"
 ```
 
 ## 3. Verification
 
 ```bash
 hermes profile list                      # all profiles listed
-hermes -p <name> config path            # resolves to correct profile dir
+default_cfg=$(hermes config path)
+profile_cfg=$(hermes -p <name> config path)
+test "$default_cfg" != "$profile_cfg" && echo "Isolation: OK"
 hermes -p <name> doctor                 # no errors
 ```
 
@@ -103,10 +116,12 @@ Pass: profile resolves correctly; config is isolated; doctor shows no errors.
 
 Fail: profile not found or config leaks — check profile directory and env vars.
 
+After applying fixes, restart the session to pick up profile changes.
+
 ## 4. Related
 
 - `diagnosing-config` — config parsing issues
 - `diagnosing-path` — path resolution issues
 - `installing-hermes` — installation and profile setup
 
-*Facts re-verified 2026-11-01 against upstream source at commit `40804ce4074c561220c4a766e116e07b4873b1c3` (installed Hermes CLI: `hermes profile --help`, `hermes -p <name> config path`). Re-verify before reuse.*
+*Facts re-verified 2026-11-01 against upstream source at commit `40804ce4074c561220c4a766e116e07b4873b1c3` (hermes_cli/profiles.py, hermes_constants.py). Re-verify before reuse.*
