@@ -516,12 +516,12 @@ CI: <pass | fail>. Threads: <N unresolved>.
 <Ready for merge | Blocked: reason>.
 ```
 
-**Resolve preference.** Prefer letting the reviewing bot auto-resolve the thread
-when it detects the fix (CodeRabbit and Qodo both do this on re-review). Only
-manually resolve when the bot has not auto-resolved after the fix is pushed —
-never resolve before the bot has had a chance to re-review. If a thread is
-resolved by the bot but the fix is incomplete, unresolve it and reply with
-evidence.
+**Resolve preference.** After pushing a fix, wait for the reviewing bot to
+complete a re-review. If the thread remains open, reply with the re-review
+result and file:line evidence, then resolve it manually. Never resolve before
+the re-review or treat automatic resolution as proof that the fix is complete.
+If a thread is resolved by the bot but the fix is incomplete, unresolve it and
+reply with evidence.
 **False-positive discipline.** Every bot finding must be cross-checked against
 the actual code and upstream source before implementing a fix. A finding that
 contradicts the live contract (e.g. a handler signature that does not match
