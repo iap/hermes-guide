@@ -5,7 +5,7 @@ version: 1.4.5
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
-    related_skills: [installing-hermes, diagnosing-runtime, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, diagnosing-config, diagnosing-storage, diagnosing-sessions, diagnosing-update, diagnosing-memories]
+    related_skills: [installing-hermes, diagnosing-runtime, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, diagnosing-config, diagnosing-storage, diagnosing-sessions, diagnosing-update, diagnosing-memories, diagnosing-backup, diagnosing-profiles, diagnosing-secrets]
 ---
 
 # Hermes Configuration Guide
@@ -121,6 +121,9 @@ Notes:
 - Session runaway, loop signature, or context bloat → **`diagnosing-sessions`**
 - Update lock stale, dead owner, or update failures → **`diagnosing-update`**
 - Memory store over-limit, duplicates, or mis-targeted entries → **`diagnosing-memories`**
+- Backup creation failures, restore errors, checkpoint corruption, or import/export problems → **`diagnosing-backup`**
+- Multi-profile issues — profile not found, config not isolated, profile switching failures, clone/sync-imports problems → **`diagnosing-profiles`**
+- Secret and credential management issues — secret sources not resolving, vault locked, egress firewall blocking, credential pool failures → **`diagnosing-secrets`**
 - Auth/API failures on hub installs (`Could not fetch from any source`, GitHub 401, rate-limit 403) → **`diagnosing-auth`**; model-provider credential pool issues (OpenAI/Anthropic/OpenRouter key failures, exhaustion, cooldown) → **`diagnosing-providers`** Step 5
 - Memory not persisting ("it forgot"), an external memory provider silently unavailable, or `MEMORY.md`/`USER.md` errors → **`diagnosing-memory`**
 - Desktop app build/launch failures, wrong backend, or blank window → **`diagnosing-desktop`**; terminal/TUI rendering issues are `diagnosing-cli-tui`, not desktop
