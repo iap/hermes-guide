@@ -97,8 +97,8 @@ def case_fit_body_preserves_multiline_content():
     sections = "## Heading\n\nLine one.\nLine two.\n" * 5
     footer = "footer text"
     result = _fit_body(sections, footer)
-    assert "Heading" in result
-    assert "Line one." in result
+    # All content should survive since it's below budget
+    assert sections in result
     assert footer in result
 
 
