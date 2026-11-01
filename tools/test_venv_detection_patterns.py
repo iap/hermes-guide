@@ -258,6 +258,23 @@ def case_probe_shell_none():
             os.environ["VIRTUAL_ENV"] = saved
 
 
+def case_probe_shell_invalid():
+    import shutil
+    import tempfile
+
+    venv = Path(tempfile.mkdtemp())
+    saved = os.environ.get("VIRTUAL_ENV")
+    try:
+        os.environ["VIRTUAL_ENV"] = str(venv)
+        assert probe_shell() is None
+    finally:
+        if saved is None:
+            os.environ.pop("VIRTUAL_ENV", None)
+        else:
+            os.environ["VIRTUAL_ENV"] = saved
+        shutil.rmtree(venv, ignore_errors=True)
+
+
 def case_probe_shell_valid():
     import shutil
     import tempfile
