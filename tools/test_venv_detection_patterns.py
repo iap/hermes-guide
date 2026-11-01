@@ -157,7 +157,8 @@ def case_resolve_venv_active_prefix_wins():
     venv = Path(tempfile.mkdtemp())
     (venv / "pyvenv.cfg").write_text("home = x\n")
     try:
-        with mock.patch.dict(os.environ, {"VIRTUAL_ENV": str(venv)}, clear=False):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("VIRTUAL_ENV", None)
             with mock.patch.object(sys, "base_prefix", "/nonexistent-base"):
                 with mock.patch.object(sys, "prefix", str(venv)):
                     if hasattr(sys, "real_prefix"):
