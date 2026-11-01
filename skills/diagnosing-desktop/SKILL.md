@@ -84,7 +84,7 @@ Precedence throughout: **explicit env var > `config.yaml` > auto-detection**.
 
 Hermes configuration is **YAML** — edit `config.yaml`, never JSON syntax.
 
-## 6. Apply and verify
+## Apply and verify
 
 After fixing: close any running desktop app, then `hermes desktop` (a source change triggers the stamp rebuild automatically; use `--force-build` after upstream updates or when in doubt, `--build-only` to validate a build without launching). Confirm via `hermes logs gui -f` that the backend announces its port and the window renders. There is no `/reload-desktop` — a running app must be closed and relaunched.
 

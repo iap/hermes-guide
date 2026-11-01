@@ -152,7 +152,7 @@ the version that carries the fix.
 - Terminal persistence (`persistent_shell`, `TERMINAL_*` env carry) means shell state survives across commands — a "clean shell" repro must start a fresh non-persistent session or the old env leaks in. Local backend: exported-variable carry follows `TERMINAL_LOCAL_PERSISTENT` (default true, `tools/terminal_tool.py`); set it `false` before creating the terminal environment. `persistent_shell` is the config key, not the local switch.
 - Dashboard browser-open (`hermes_cli/web_server_lifecycle.py::_maybe_open_browser`) fires `webbrowser.open` (the macOS `open` helper) in a daemon thread 1s after serve, mapping `0.0.0.0`/`::` to `127.0.0.1` and appending `?profile=` when set — open failures are swallowed, so "dashboard served but no browser, no error" means retry the printed URL manually and pass `--no-open` to silence it. The headless-Linux skip (no `DISPLAY`/`WAYLAND_DISPLAY`) never triggers on macOS.
 
-## 7. Verification checklist
+## Verification
 
 ```powershell
 hermes --version; hermes doctor      # PM-managed Node, bash, deps

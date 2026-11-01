@@ -72,7 +72,7 @@ When probing the `.env` token, use Hermes's own loader — `agent.secret_scope.g
 
 **Automate it:** the §1–§2 probes are cron-able — a monthly health check that reports the method and the env-token probe status catches a dying token before installs break.
 
-## 5. Apply and verify
+## Apply and verify
 
 After applying fixes:
 
