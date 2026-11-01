@@ -56,9 +56,13 @@ def case_cap_chars_under_limit():
 def case_cap_chars_over_limit():
     entries = ["a" * 50, "b" * 50, "c" * 50]
     result = _cap_chars(entries, 60, "omitted {omitted}")
-    # Should keep first entry and note about omitted
+    # Should keep first entry only
     assert "a" * 50 in result
-    assert "omitted" in result
+    # Should NOT include second or third entry
+    assert "b" * 50 not in result
+    assert "c" * 50 not in result
+    # Should report correct omission count (2 omitted)
+    assert "omitted 2" in result
 
 
 def case_cap_chars_empty():
@@ -91,6 +95,8 @@ def case_fit_body_truncation_note():
     footer = "footer"
     result = _fit_body(sections, footer)
     assert "truncated" in result.lower() or "Body truncated" in result
+    # Hard guarantee: result must not exceed MAX_BODY_CHARS
+    assert len(result) <= MAX_BODY_CHARS
 
 
 def case_uncapped_default_false():
