@@ -83,6 +83,9 @@ _WORDS = [
     "twenty-six",
     "twenty-seven",
     "twenty-eight",
+    "twenty-nine",
+    "thirty",
+    "thirty-one",
 ]
 
 
@@ -621,7 +624,8 @@ def _selftest() -> int:
                   (22, "twenty-two"), (23, "twenty-three"),
                   (24, "twenty-four"), (25, "twenty-five"),
                   (26, "twenty-six"), (27, "twenty-seven"),
-                  (28, "twenty-eight"))
+                  (28, "twenty-eight"), (29, "twenty-nine"),
+                  (30, "thirty"), (31, "thirty-one"))
     for n, word in word_cases:
         if _word_num(n) != word:
             print(
