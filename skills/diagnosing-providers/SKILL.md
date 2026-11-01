@@ -1,7 +1,7 @@
 ---
 name: diagnosing-providers
 description: Diagnose model provider issues — custom endpoints flooding the picker with hundreds of models, discover_models misbehaving, persisted catalogs bloating config, provider/auth failures, and credential pool exhaustion.
-version: 1.3.3
+version: 1.3.4
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -175,10 +175,11 @@ After applying the fix:
 
 ```bash
 hermes model                  # provider resolves correctly
+hermes  # then send a test prompt to confirm the model responds
 hermes guide                  # provider check healthy
 ```
 
-Pass: model command works; no provider errors in logs.
+Pass: model command works; test prompt gets a response; no provider errors in logs.
 
 Fail: re-check the pitfall matched and re-apply the fix.
 
