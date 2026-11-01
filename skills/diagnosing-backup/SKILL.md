@@ -1,7 +1,7 @@
 ---
 name: diagnosing-backup
 description: Diagnose Hermes backup and restore issues — backup creation failures, restore errors, checkpoint corruption, and import/export problems.
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, backup, restore, checkpoints, troubleshooting, diagnosing]
@@ -19,7 +19,7 @@ Goal: reduce any backup/restore problem to one concrete fix — a backup creatio
 - `hermes checkpoints status` — show checkpoint store size and breakdown
 - `hermes checkpoints list` — alias for status
 - `hermes checkpoints prune` — delete orphan/stale checkpoints
-- `hermes checkpoints clear` — wipe all checkpoints
+- `hermes checkpoints clear` — wipe all checkpoints (irreversible)
 - `hermes doctor` — flags backup/restore issues
 
 ## 2. Common failures
@@ -32,12 +32,13 @@ Goal: reduce any backup/restore problem to one concrete fix — a backup creatio
 
 **Fix:**
 ```bash
+cfg=$(hermes config path)
 hermes backup --output /tmp/hermes-backup.zip
 ls -lh /tmp/hermes-backup.zip
 # Check disk space:
-df -h ~/.hermes
+df -h "$(dirname "$cfg")"
 # Check permissions:
-ls -la ~/.hermes/
+ls -la "$(dirname "$cfg")"
 ```
 
 ### Restore fails
@@ -50,11 +51,14 @@ ls -la ~/.hermes/
 ```bash
 # Verify zip integrity:
 unzip -t /path/to/backup.zip
-# Check Hermes version compatibility:
+# Check Hermes version:
 hermes --version
-# Restore with force if version mismatch is acceptable:
-hermes import /path/to/backup.zip --force
+# Restore (overwrites existing files; back up current state first):
+hermes backup --output /tmp/pre-restore.zip
+hermes import /path/to/backup.zip
 ```
+
+Note: `hermes import` overwrites existing files in Hermes home. There is no `--merge` option. Back up current state before restoring.
 
 ### Checkpoint corruption
 
@@ -64,11 +68,11 @@ hermes import /path/to/backup.zip --force
 
 **Fix:**
 ```bash
-hermes checkpoints list                  # list checkpoints
-hermes checkpoints show <id>            # inspect details
-# Clear corrupted checkpoints:
-hermes checkpoints clear
-# Re-create by running a checkpointed operation
+hermes checkpoints status                # show store size and breakdown
+hermes checkpoints list                  # alias for status
+hermes checkpoints prune                 # delete orphan/stale checkpoints
+# Only if prune is insufficient and you accept full loss:
+# hermes checkpoints clear              # IRREVERSIBLE — deletes entire store
 ```
 
 ### Backup too large
@@ -79,42 +83,49 @@ hermes checkpoints clear
 
 **Fix:**
 ```bash
-du -sh ~/.hermes/*                      # find large directories
-# Exclude large dirs:
-hermes backup --exclude logs,cache,venv
-# Or manually prune first:
+cfg=$(hermes config path)
+du -sh "$(dirname "$cfg")"/*            # find large directories
+# Use --quick for a smaller backup:
+hermes backup --quick --output /tmp/hermes-backup.zip
+# Or prune sessions first:
 hermes sessions prune --older-than 30d
+hermes backup --output /tmp/hermes-backup.zip
 ```
+
+Note: `hermes backup` has built-in exclusions. There is no `--exclude` option.
 
 ### Import path conflicts
 
 **Symptom:** Restore overwrites existing config or creates duplicate entries.
 
-**Cause:** Restoring to a non-empty Hermes home without merge handling.
+**Cause:** Restoring to a non-empty Hermes home. Import overwrites existing files.
 
 **Fix:**
 ```bash
 # Back up current state first:
 hermes backup --output /tmp/pre-restore.zip
-# Restore with merge:
-hermes import /path/to/backup.zip --merge
-# Or restore to a fresh profile:
-hermes profile create restored --clone
+# Inspect archive contents before restoring:
+unzip -l /path/to/backup.zip
+# Restore to a fresh profile to avoid overwriting:
+hermes profile create restored
 hermes -p restored import /path/to/backup.zip
 ```
 
 ## 3. Verification
 
 ```bash
+cfg=$(hermes config path)
 hermes backup --output /tmp/test-backup.zip
 unzip -t /tmp/test-backup.zip           # verify integrity
-hermes checkpoints list                  # checkpoints healthy
+hermes checkpoints status                # checkpoints healthy
 hermes doctor                            # no backup/restore errors
 ```
 
-Pass: backup creates valid zip; checkpoints list cleanly; doctor shows no errors.
+Pass: backup creates valid zip; checkpoints healthy; doctor shows no errors.
 
-Fail: backup corrupt — check disk space and permissions; restore fails — verify version compatibility.
+Fail: backup corrupt — check disk space and permissions; restore fails — verify archive integrity and Hermes version.
+
+After applying fixes, restart the session to pick up restored configuration.
 
 ## 4. Related
 
@@ -122,4 +133,4 @@ Fail: backup corrupt — check disk space and permissions; restore fails — ver
 - `diagnosing-sessions` — session data and pruning
 - `installing-hermes` — installation and setup
 
-*Facts re-verified 2026-11-01 against upstream source at commit `40804ce4074c561220c4a766e116e07b4873b1c3` (installed Hermes CLI: `hermes backup --help`, `hermes import --help`, `hermes checkpoints --help`). Re-verify before reuse.*
+*Facts re-verified 2026-11-01 against upstream source at commit `40804ce4074c561220c4a766e116e07b4873b1c3` (hermes_cli/subcommands/backup.py, hermes_cli/subcommands/import_cmd.py, hermes_cli/checkpoints.py). Re-verify before reuse.*
