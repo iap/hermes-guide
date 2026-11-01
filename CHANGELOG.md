@@ -2,15 +2,150 @@
 
 All notable changes to hermes-guide are documented here.
 
-## v0.8.13 (next release)
+## v0.9.0 (2026-11-01)
 
 ### Features
 
-- **storage**: add read-only `hermes guide storage` check — reports `$HERMES_HOME/state.db` size; >=512 MiB informational, >=1 GiB broken with `hermes sessions optimize-storage` guidance (no `--force` while holders are live) ([#371](https://github.com/iap/hermes-guide/pull/371))
+- **skills**: add diagnosing-backup, diagnosing-profiles, diagnosing-secrets
+- **skills**: update routing, docs, and render_docs for coverage matrix
+- **skills**: complete diagnostic coverage matrix (5 new skills)
+- **tools**: add verify_plugin.py — validates plugin against official Hermes standards
+- **skills**: add plugin structure verification checklist (26 items)
+- **skills**: add plugin-authoring skill (plugins + skills creation guide)
+- **storage**: add state.db storage check
+
+### Bug Fixes
+
+- **skills**: address remaining Qodo findings on backup and secrets skills
+- **skills**: remove os.environ scanner trigger from diagnosing-profiles
+- **skills**: address Qodo findings on 3 new diagnostic skills
+- **skills**: update import-agent command (moved to plugin) + bump upstream drift baseline
+- **skills**: update import-agent command (moved to plugin) + bump upstream drift baseline
+- **skills**: bump versions for verification heading standardization
+- **skills**: add model request to providers verification (CodeRabbit)
+- **skills**: bump versions for Verification section additions
+- bump plugin-authoring version + add evidence to outdated-anchor template (Qodo Medium)
+- **skills**: remove backticks from non-existent command example
+- **skills**: address CodeRabbit review findings (portability, safety, quoting)
+- **skills**: align provenance footer format with Qodo review
+- **skills**: include dependency reinstall in manual update fallback (Qodo Medium)
+- **skills**: use chmod 600 for state.db (Qodo High finding)
+- **skills**: replace unknown 'hermes sessions show' command
+- **tools**: handle nested mappings in minimal YAML fallback parser
+- **tools**: add minimal YAML fallback for verify_plugin.py
+- **skills**: qualify handler contract by Hermes version (CodeRabbit thread 10)
+- **skills**: add repository-only checks pitfall (CodeRabbit thread 7)
+- **skills**: address CodeRabbit major/minor findings on plugin-authoring
+- **skills**: add handler-signature-drift pitfall from Qodo review
+- **skills**: correct slash command handler signature per Qodo review
+- **render_docs**: extend word list to twenty-three (deliberate edit)
+- **skills**: add plugin-authoring to README table and issue template
+- **skills**: avoid python_os_environ scanner block in host-pressure skill
+- **skills**: address CodeRabbit review findings on verification
+- **skills**: address Qodo review findings on verification commands
+- **checks**: improve session diagnostics ([#378](https://github.com/iap/hermes-guide/pull/378))
+- **skills**: address CodeRabbit review findings
+- **skills**: address Qodo review findings
+- **skills**: qualify citation paths with hermes_cli/ prefix
+- **skills**: triage CodeRabbit review findings
+- revert unsupported --force on plugins update to match CLI surface
+- address review findings
+- **skills**: add verification sections and complete diagnosing-runtime report
+- address second CodeRabbit review batch on PR #374
+- remove non-existent --force flag from hermes plugins update citation
+- address CodeRabbit review findings on PR #374
+- **storage**: distinct STORAGE_NOT_REGULAR id; document missing-db choice
+- **disk-hygiene**: address reviewer findings on PR #373
+- **storage**: handle permission and non-file errors; drop informational id
+- **storage**: add 'storage' to the PLUGIN_COMMANDS mirror in check_cli_surface
+- **storage**: bump start/SKILL.md version for the nine->ten edit
+- **storage**: complete the check and repair the contract
+- **storage**: treat missing state.db as unknown not healthy
 
 ### Documentation
 
-- **disk-hygiene**: add `5b. Disk full` branch to `diagnosing-host-pressure`; cross-reference `/disk-cleanup` and `hermes-disk-housekeeping` from the storage check and `diagnosing-memory` ([#373](https://github.com/iap/hermes-guide/pull/373))
+- **ops**: fix CodeRabbit trigger command reference per review
+- **ops**: avoid CodeRabbit spamming — use full review once, then incremental
+- **ops**: correct resolve preference per CodeRabbit finding (Qodo auto-resolve is off by default)
+- **ops**: improve comment templates with commit linking and resolve preference
+- **skills**: standardize verification section headings (4 skills)
+- **ops**: add draft-before-publishing discipline for PR comments
+- **skills**: add Verification sections to 10 skills
+- **ops**: update wip label instruction — label now exists
+- **ops**: clarify wip label — no such label exists on this repo
+- **ops**: add comment discipline and templates for pre-merge review
+- **plugin-authoring**: add CLI validation, security, and update pits from review
+- **ops**: rewrite pre-merge review sequence — two-bot, no draft conversion
+- **skills**: add kind: field and plugin.json format to plugin-authoring reference
+- **skills**: add bot review thread pitfall + bump to 1.3.0
+- **agents**: slim always-on contract and tighten docs routing
+- **plugin-authoring**: add render_docs ceiling + parity pitfalls
+- **ops**: add CI failure triage steps to pre-merge cross-check
+- **skills**: add standardized Verification sections + template
+- **ops**: note graphql reviewThreads for thread enumeration ([#379](https://github.com/iap/hermes-guide/pull/379))
+- **ops**: require CodeRabbit findings triage via Draft PR before merge ([#376](https://github.com/iap/hermes-guide/pull/376))
+- **skills**: add CLI surface check pitfall to diagnosing-plugins
+- **installing-hermes, diagnosing-plugins**: add NixOS WSL plugin verification reference and security-scan pitfall
+- add Stacked PRs guide to AGENTS.md and prep CHANGELOG for v0.8.13
+- cross-reference disk-cleanup surfaces
+- sync scope lists for storage check
+- sync scope lists for storage check
+- **ops**: make CodeRabbit a required pre-merge step after Qodo ([#372](https://github.com/iap/hermes-guide/pull/372))
+
+### CI
+
+- wire venv detection patterns test into CI
+
+### Chores
+
+- Merge pull request #397 from iap/docs/coderabbit-no-spam
+- Merge pull request #396 from iap/test/venv-detection-patterns
+- Merge pull request #395 from iap/test/upstream-drift-helpers
+- Merge pull request #394 from iap/test/cli-surface-regression
+- Merge pull request #393 from iap/feat/add-three-diagnostic-skills
+- Merge pull request #392 from iap/fix/mcp-import-agent-cli-surface
+- Merge pull request #391 from iap/docs/improve-comment-discipline
+- Merge pull request #390 from iap/fix/standardize-verification-headings
+- Merge pull request #389 from iap/docs/draft-before-publishing
+- Merge pull request #388 from iap/feat/add-verification-sections
+- Merge pull request #387 from iap/feat/complete-diagnostic-coverage
+- Merge pull request #386 from iap/docs/pre-merge-review-instructions
+- Merge pull request #385 from iap/feat/verify-plugin-tool
+- Merge pull request #384 from iap/fix/plugin-authoring-missing-fields
+- Merge pull request #383 from iap/feat/plugin-verification-checklist
+- Merge pull request #382 from iap/feat/plugin-authoring-skill
+- Merge pull request #381 from iap/feat/skill-verification-sections
+- **drift**: re-baseline to upstream daec3cd ([#380](https://github.com/iap/hermes-guide/pull/380))
+- Merge pull request #377 from iap/fix/skill-review-findings
+- Merge pull request #375 from iap/fix/skill-verification-templates
+- Merge pull request #374 from iap/docs/nixos-wsl-plugin-verification
+- Merge pull request #373 from iap/docs/disk-hygiene-crossref
+- Merge pull request #371 from iap/feat/storage-check
+- **drift**: bump upstream baseline to edfa1c2a13 (closes #369) ([#370](https://github.com/iap/hermes-guide/pull/370))
+- **deps**: bump actions/setup-python ([#360](https://github.com/iap/hermes-guide/pull/360))
+
+### Refactoring
+
+- **skills**: split plugin-authoring into SKILL.md + references/
+
+### Tests
+
+- **ci**: add probe_shell invalid override case per CodeRabbit
+- **ci**: add dotvenv-only resolution case per CodeRabbit
+- **ci**: address CodeRabbit findings (dotvenv case, assert guard)
+- **ci**: fix active-prefix test to actually exercise sys.prefix fallback
+- **ci**: address CodeRabbit findings (prefix precedence, assert guard)
+- **ci**: strengthen activate quoting assertion per CodeRabbit
+- **ci**: address Qodo findings (env restore, path quoting, Windows coverage)
+- **ci**: add behavioral tests for venv detection patterns
+- **ci**: verify full multiline content survives in fit_body
+- **ci**: address CodeRabbit findings (env isolation, stderr, multiline)
+- **ci**: strengthen cap and fit_body assertions per Qodo findings
+- **ci**: add behavioral regression tests for upstream drift helpers
+- **ci**: strengthen window-boundary assertion per Qodo finding
+- **ci**: add behavioral regression tests for skill consistency parsing
+- **ci**: add behavioral regression tests for CLI surface parsing
+- **storage**: update the three hardcoded check counts to ten
 
 ## v0.8.12 (2026-10-26)
 
