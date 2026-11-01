@@ -182,8 +182,8 @@ def case_activate_venv_command_posix():
         venv = Path("/tmp/test venv")
         cmd = activate_venv_command(venv)
         assert "source" in cmd
-        assert "activate" in cmd
-        assert "'" in cmd or '"' in cmd
+        assert "/tmp/test venv/bin/activate" in cmd
+        assert "'" in cmd
 
 
 def case_venv_bin_dir_windows():
