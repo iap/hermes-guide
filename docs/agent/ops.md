@@ -470,6 +470,22 @@ CodeRabbit: clean (15 findings fixed: portability, safety, quoting).
 CI: 13/13 gates pass. 0 unresolved threads. Ready for merge.
 ```
 
+**Draft before publishing.** Write the comment body to a local file or scratch
+buffer first, then review it before posting. This prevents terminal output,
+stack traces, or unrelated context from leaking into the public comment (as
+happened when a 13,954-character Hermes startup banner was accidentally
+included in a PR body). Steps:
+
+1. Draft the comment in a file (`/tmp/comment.md` or a scratch buffer).
+2. Read it back and verify: Is it short? On-topic? Free of terminal output,
+   stack traces, or unrelated context? Would a human reviewer understand it
+   in under 10 seconds?
+3. Cross-check against the live state: Do the claims match the actual code
+   and CI results? No false positives (claiming a fix that isn't there) or
+   false negatives (omitting a real finding).
+4. Post only after the draft passes review. Use `--input` with a payload file
+   for multi-line bodies (see "Body plumbing" above).
+
 **Comment templates.** Use these exact shapes; do not improvise longer forms.
 
 Thread reply (fix applied):
