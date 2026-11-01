@@ -284,6 +284,10 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_check_cli_surface.py
 
+      - name: Venv detection patterns regression test
+        if: inputs.run-full-gate
+        run: python tools/test_venv_detection_patterns.py
+
       - name: Upstream drift helper regression test
         if: inputs.run-full-gate
         run: python tools/test_upstream_drift.py
