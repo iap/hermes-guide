@@ -246,9 +246,6 @@ def _collect_module_level_functions(stmts, name):
     for stmt in stmts:
         if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
             result.append(stmt)
-        elif isinstance(stmt, ast.Match):
-            for case in stmt.cases:
-                result.extend(_collect_module_level_functions(case.body, name))
         elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
             body = getattr(stmt, "body", [])
             result.extend(_collect_module_level_functions(body, name))

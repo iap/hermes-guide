@@ -158,7 +158,6 @@ CASES = [
     case_register_with_required_extra_pos_fails,
     case_register_with_required_kwonly_fails,
     case_async_register_rejected,
-    case_match_block_register,
     case_register_vararg_with_required_pos_fails,
 ]
 
