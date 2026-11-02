@@ -145,6 +145,14 @@ def case_register_vararg_with_required_pos_fails():
     assert checks.get("register accepts ctx param") is False, "vararg with required extra pos should fail"
 
 
+
+def case_register_none_rejected():
+    pd = _make_plugin('__version__ = "1.0.0"\nregister = None\n')
+    results = _check_registration(pd)
+    checks = {r[0]: r[1] for r in results}
+    assert checks.get("register(ctx) defined") is False, "register = None should be rejected"
+
+
 CASES = [
     case_register_with_ctx_passes,
     case_register_no_params_fails,
@@ -159,6 +167,7 @@ CASES = [
     case_register_with_required_kwonly_fails,
     case_async_register_rejected,
     case_register_vararg_with_required_pos_fails,
+    case_register_none_rejected,
 ]
 
 

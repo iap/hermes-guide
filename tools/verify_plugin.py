@@ -254,12 +254,14 @@ def _collect_module_level_functions(stmts, name):
             result.extend(_collect_module_level_functions(getattr(stmt, "orelse", []), name))
             result.extend(_collect_module_level_functions(getattr(stmt, "finalbody", []), name))
         elif isinstance(stmt, ast.Assign):
-            # Recognize bound methods exported as register (e.g. register = obj.register).
-            # We cannot statically verify the bound method's signature, so we accept
-            # the assignment as a potential registration entry point.
+            # Recognize bound methods or function references exported as
+            # register (e.g. register = obj.register or register = some_func).
+            # Only accept attribute access or name references (callable values);
+            # reject literals and other non-callable expressions.
             for target in stmt.targets:
                 if isinstance(target, ast.Name) and target.id == name:
-                    result.append(None)
+                    if isinstance(stmt.value, (ast.Attribute, ast.Name)):
+                        result.append(None)
         elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
             body = getattr(stmt, "body", [])
             result.extend(_collect_module_level_functions(body, name))
