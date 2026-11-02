@@ -11,7 +11,7 @@ with file:line evidence, not implemented.
 
 | Step | State | Action |
 |---|---|---|
-| 1. Primary reviewer | Finding bot (Qodo) has open findings | Reproduce and cross-check each finding. Fix confirmed defects; reply with evidence and resolve only after the reply. Re-run until clean. |
+| 1. Primary reviewer | Finding bot (Qodo) has open findings | Reproduce and cross-check each finding. Fix confirmed defects; reply with evidence and wait for the bot to accept or decline. Never click Resolve yourself. Re-run until clean. |
 | 2. Second reviewer | Primary is clean on the current head | Post `@coderabbitai full review` **once** for this PR. Wait for the review record; a trigger comment is not a review. |
 | 3. Second findings | CodeRabbit reports findings | Verify each against the code. Fix real findings; decline false positives/negatives with evidence. After new commits, use `@coderabbitai review` (incremental), never a second full review. |
 | 4. Re-check primary | Any second-review fix created a new head | A clean review is bound to its commit. Do not carry the previous Qodo result forward: wait for Qodo to complete a review of the new head, or treat it as "not heard" and do not merge. Resolve new findings, then request CodeRabbit's incremental review of the same head. Repeat steps 2–4 until both reviewers are clean on that head. |
@@ -89,10 +89,10 @@ Verify on a PR after the configuration is available to CodeRabbit:
 
 ## Reviewer-bot threads
 
-A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. Triage each thread before replying: reproduce it against the repo guards and cited code, then fix or decline with file:line evidence. Never auto-resolve a thread to unblock a merge.
+A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. Triage each thread before replying: reproduce it against the repo guards and cited code, then fix or decline with file:line evidence. Never resolve a thread to unblock a merge; only the reviewer bot's accept/decline can close it.
 
-The REST comments view lists findings but not resolution state, and
-`resolveReviewThread` is GraphQL-only. Read the authoritative inventory first:
+The REST comments view lists findings but not resolution state, and that
+state is GraphQL-only. Read the authoritative inventory first:
 
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
@@ -113,14 +113,12 @@ clear (report `OK: 0 unresolved review threads`); any row is a thread to triage
 before replying. `isOutdated: true` only means the anchor moved to a newer
 commit — it is not evidence the finding was fixed.
 Each row carries both ids: `thread=PRRT_…` feeds
-`addPullRequestReviewThreadReply` and `resolveReviewThread`; `comment=<numeric>`
-feeds the REST `in_reply_to` reply below. Ids carried in a review body are not
-thread nodes. Resolve only after the reply is posted:
-
-```bash
-gh api graphql -f query='
-mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -F id=PRRT_…
-```
+`addPullRequestReviewThreadReply`; `comment=<numeric>` feeds the REST
+`in_reply_to` reply below. Ids carried in a review body are not thread nodes.
+`resolveReviewThread` and GitHub's "Resolve conversation" button are not
+substitutes for bot acceptance: leave the thread open until the bot accepts or
+declines. If a bot closes an incomplete fix, reply and ask it to reopen; do not
+merge on that thread.
 
 - Reply inline so the reason sits next to the finding. Derive the repo —
   never hardcode `iap/hermes-guide`, or a fork checkout posts the verdict
@@ -197,7 +195,8 @@ gh api "repos/$REPO/rulesets/<id>" --jq '.rules[] | {type}'
   this lens; the bisect on #291 showed the real cause was the absent `gate`
   **status**, not a thread. Read `mergeStateStatus` and name the failing
   requirement before blaming a thread — and never clear a block by resolving a
-  thread nobody answered; reply with evidence, then resolve.
+  thread nobody answered; reply with evidence and wait for the bot's
+  accept/decline. Never manually resolve it.
 - **The maintainer holds a scoped bypass.** A single `User` bypass actor with
   `bypass_mode: pull_request` lets the maintainer merge a PR past an unresolved
   thread. It is pull-request-scoped on purpose: it does not open a path around
@@ -240,9 +239,10 @@ slower same-model output.
 ## Pre-merge cross-check
 
 Never merge on green CI alone. Immediately before merging a PR, verify: all
-checks pass (not pending), every review thread resolved (fixed or declined with
-file:line evidence — never auto-resolved to unblock), both reviewers clean on
-the current head (a silent bot is not a clean reviewer), `mergeStateStatus` is
+checks pass (not pending), every review thread resolved by the bot after a
+reply that fixes or declines the finding with evidence (never human-resolved
+to unblock), both reviewers clean on the current head (a silent bot is not a
+clean reviewer), `mergeStateStatus` is
 `CLEAN`, and the merge is explicitly authorized. When enumerating threads, use `gh api graphql`
 reviewThreads for resolution state and full bodies; REST `pulls/<n>/comments`
 only for quick inline enumeration (Greptile bodies live there, not in
@@ -272,7 +272,8 @@ around. When a check fails:
 ## No draft conversion
 
 Do not convert the PR to draft to block merging.
-Resolve threads by replying with file:line evidence or a reasoned decline.
+Reply to threads with file:line evidence or a reasoned decline; wait for the
+bot to accept or decline, and never resolve the thread yourself.
 A `wip` label exists in the repo and is optional and cosmetic only.
 
 ## Comment discipline
@@ -336,12 +337,26 @@ CI: <pass | fail>. Threads: <N unresolved>.
 <Ready for merge | Blocked: reason>.
 ```
 
-**Resolve preference.** After pushing a fix, wait for the reviewing bot to
-complete a re-review. If the thread remains open, reply with the re-review
-result and file:line evidence, then resolve it manually. Never resolve before
-the re-review or treat automatic resolution as proof that the fix is complete.
-If a thread is resolved by the bot but the fix is incomplete, unresolve it and
-reply with evidence.
+**Bot-owned resolution.** Reply with evidence first; the reviewer bot owns the
+accept/decline decision and the thread state:
+
+- **Qodo:** a re-review updates each finding's status. Wait for the finding to
+  be marked resolved; a reply alone is not acceptance.
+- **CodeRabbit:** when its re-review no longer reports the finding, post
+  `@coderabbitai resolve` as a separate reply in the thread (the whole comment
+  must be the command). It resolves only that thread. A top-level
+  `@coderabbitai resolve` resolves every CodeRabbit thread, so use it only after
+  every thread is accepted.
+- **No bot confirmation:** leave the thread unresolved and stop. A stalled or
+  silent bot is not an approval. Escalate to the maintainer; never click
+  "Resolve conversation" or call `resolveReviewThread` to fill the gap. A
+  maintainer-authorized bypass is recorded in the PR summary; it does not turn
+  an unresolved thread into an accepted one.
+
+Bot resolution is not proof the fix is complete: if the bot closes a thread
+while the fix is incomplete, reply and ask it to reopen; do not merge on that
+thread. Never resolve before posting evidence, and never close an unaddressed
+thread to clear the gate.
 **False-positive discipline.** Every bot finding must be cross-checked against
 the actual code and upstream source before implementing a fix. A finding that
 contradicts the live contract (e.g. a handler signature that does not match
