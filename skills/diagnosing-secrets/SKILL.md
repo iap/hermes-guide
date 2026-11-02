@@ -107,7 +107,7 @@ grep -rl "api_key\|token\|secret" ~/.hermes/logs/ 2>/dev/null | head
 hermes vault list
 ```
 **Pass:** exits 0 and lists vault items (or prints empty list); no crash or auth error.
-**Fail:** error or "vault locked" — run `hermes vault key` to confirm key storage, then re-add credentials with `hermes vault add <name>`.
+**Fail:** error or "vault locked" — run `hermes vault sources` to check detected password managers; for key storage issues, check `vault.key_storage` in `$HERMES_HOME/config.yaml` or run `hermes doctor`.
 
 ```
 hermes egress status
