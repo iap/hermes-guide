@@ -238,40 +238,48 @@ def _check_manifest(data: dict, plugin_dir: Path) -> list[tuple[str, bool, str]]
     return results
 
 
-def _find_module_level_function(stmts, name):
-    """Find a module-level FunctionDef by name, including in if/try/with/for blocks."""
-    for stmt in stmts:
+def _find_module_level_function(stmts, name, before_index=None):
+    """Find the last module-level FunctionDef by name before *before_index*,
+    including definitions inside if/try/with/for blocks. Returns None if
+    no matching definition exists or if the definition is decorated (in which
+    case the signature cannot be verified statically)."""
+    best = None
+    best_idx = -1
+    for idx, stmt in enumerate(stmts):
+        if before_index is not None and idx >= before_index:
+            break
         if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
-            return stmt
+            if not stmt.decorator_list:
+                best = stmt
+                best_idx = idx
         elif isinstance(stmt, ast.TryStar):
             r = _find_module_level_function(getattr(stmt, "body", []), name)
-            if r is not None:
-                return r
+            if r is not None and (best is None or best_idx < idx):
+                best = r
+                best_idx = idx
             for handler in getattr(stmt, "handlers", []):
                 r = _find_module_level_function(handler.body, name)
-                if r is not None:
-                    return r
-            r = _find_module_level_function(getattr(stmt, "orelse", []), name)
-            if r is not None:
-                return r
-            r = _find_module_level_function(getattr(stmt, "finalbody", []), name)
-            if r is not None:
-                return r
+                if r is not None and (best is None or best_idx < idx):
+                    best = r
+                    best_idx = idx
         elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
             r = _find_module_level_function(getattr(stmt, "body", []), name)
-            if r is not None:
-                return r
+            if r is not None and (best is None or best_idx < idx):
+                best = r
+                best_idx = idx
             for handler in getattr(stmt, "handlers", []):
                 r = _find_module_level_function(handler.body, name)
-                if r is not None:
-                    return r
+                if r is not None and (best is None or best_idx < idx):
+                    best = r
+                    best_idx = idx
             r = _find_module_level_function(getattr(stmt, "orelse", []), name)
-            if r is not None:
-                return r
-            r = _find_module_level_function(getattr(stmt, "finalbody", []), name)
-            if r is not None:
-                return r
-    return None
+            if r is not None and (best is None or best_idx < idx):
+                best = r
+                best_idx = idx
+    # If the found function is decorated, treat as indeterminate
+    if best is not None and best.decorator_list:
+        return None
+    return best
 
 
 def _collect_module_level_functions(stmts, name):
@@ -302,7 +310,8 @@ def _collect_module_level_functions(stmts, name):
                     elif isinstance(stmt.value, ast.Name):
                         # Local or external function reference — try to resolve
                         ref_name = stmt.value.id
-                        ref_func = _find_module_level_function(stmts, ref_name)
+                        stmt_index = stmts.index(stmt) if stmt in stmts else None
+                        ref_func = _find_module_level_function(stmts, ref_name, before_index=stmt_index)
                         if ref_func is not None:
                             result.append(ref_func)
                         else:
