@@ -238,12 +238,14 @@ slower same-model output.
 
 ## Pre-merge cross-check
 
-Never merge on green CI alone. Immediately before merging a PR, verify: all
-checks pass (not pending), every review thread resolved by the bot after a
-reply that fixes or declines the finding with evidence (never human-resolved
-to unblock), both reviewers clean on the current head (a silent bot is not a
-clean reviewer), `mergeStateStatus` is
-`CLEAN`, and the merge is explicitly authorized. When enumerating threads, use `gh api graphql`
+Never merge on green CI alone. For the normal merge path, immediately before
+merging a PR, verify: all checks pass (not pending), every review thread
+resolved by the bot after a reply that fixes or declines the finding with
+evidence (never human-resolved to unblock), both reviewers clean on the current
+head (a silent bot is not a clean reviewer), `mergeStateStatus` is `CLEAN`, and
+the merge is explicitly authorized. A recorded maintainer-authorized bypass is
+the exception to the unresolved-thread check; it does not mark the thread as
+accepted. When enumerating threads, use `gh api graphql`
 reviewThreads for resolution state and full bodies; REST `pulls/<n>/comments`
 only for quick inline enumeration (Greptile bodies live there, not in
 `reviews`). Report the checklist result, then merge.
