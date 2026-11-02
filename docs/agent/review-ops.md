@@ -35,9 +35,9 @@ with file:line evidence, not implemented.
   Re-request/await the primary reviewer's review of the new head; use the
   second reviewer's incremental mode for the same head. Never merge on a
   mixture of reviews from different commits. If Qodo does not pick up the new
-  head automatically, comment `/review` and wait; if this installation does not
-  accept that trigger, treat the head as unreviewed and require explicit
-  authorization before merging.
+  head automatically, use its documented manual trigger (`/agentic_review` for
+  this installation) and wait; if no trigger is accepted, treat the head as
+  unreviewed and require explicit authorization before merging.
 
 ## CodeRabbit configuration
 
@@ -348,9 +348,10 @@ contradicts the live contract (e.g. a handler signature that does not match
 the dispatch module) is declined with evidence, not blindly fixed. A fix that
 introduces a new finding is re-verified before merge.
 
-If Qodo never ran (no Qodo comment on the PR), comment `/review` on the PR and
-wait for that review. If this installation does not accept `/review`, treat the
-head as unreviewed: say so and obtain explicit authorization before merging.
+If Qodo never ran (no Qodo comment on the PR), use its documented manual trigger
+(`/agentic_review` for this installation) and wait for that review. If no
+trigger is accepted, treat the head as unreviewed: say so and obtain explicit
+authorization before merging.
 On a merged PR CodeRabbit can still review the diff, but that is a second
 pass, not a gate — label it as such in the result.
 
