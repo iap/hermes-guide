@@ -153,6 +153,25 @@ def case_register_none_rejected():
     assert checks.get("register(ctx) defined") is False, "register = None should be rejected"
 
 
+
+def case_register_local_func_no_params_fails():
+    src = "__version__ = \"1.0.0\"\ndef helper():\n    pass\nregister = helper\n"
+    pd = _make_plugin(src)
+    results = _check_registration(pd)
+    checks = {r[0]: r[1] for r in results}
+    assert checks.get("register(ctx) defined") is True
+    assert checks.get("register accepts ctx param") is False, "local func without params should fail"
+
+
+def case_register_local_func_with_ctx_passes():
+    src = "__version__ = \"1.0.0\"\ndef helper(ctx):\n    pass\nregister = helper\n"
+    pd = _make_plugin(src)
+    results = _check_registration(pd)
+    checks = {r[0]: r[1] for r in results}
+    assert checks.get("register(ctx) defined") is True
+    assert checks.get("register accepts ctx param") is True, "local func with ctx should pass"
+
+
 CASES = [
     case_register_with_ctx_passes,
     case_register_no_params_fails,
@@ -168,6 +187,8 @@ CASES = [
     case_async_register_rejected,
     case_register_vararg_with_required_pos_fails,
     case_register_none_rejected,
+    case_register_local_func_no_params_fails,
+    case_register_local_func_with_ctx_passes,
 ]
 
 

@@ -238,6 +238,42 @@ def _check_manifest(data: dict, plugin_dir: Path) -> list[tuple[str, bool, str]]
     return results
 
 
+def _find_module_level_function(stmts, name):
+    """Find a module-level FunctionDef by name, including in if/try/with/for blocks."""
+    for stmt in stmts:
+        if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
+            return stmt
+        elif isinstance(stmt, ast.TryStar):
+            r = _find_module_level_function(getattr(stmt, "body", []), name)
+            if r is not None:
+                return r
+            for handler in getattr(stmt, "handlers", []):
+                r = _find_module_level_function(handler.body, name)
+                if r is not None:
+                    return r
+            r = _find_module_level_function(getattr(stmt, "orelse", []), name)
+            if r is not None:
+                return r
+            r = _find_module_level_function(getattr(stmt, "finalbody", []), name)
+            if r is not None:
+                return r
+        elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
+            r = _find_module_level_function(getattr(stmt, "body", []), name)
+            if r is not None:
+                return r
+            for handler in getattr(stmt, "handlers", []):
+                r = _find_module_level_function(handler.body, name)
+                if r is not None:
+                    return r
+            r = _find_module_level_function(getattr(stmt, "orelse", []), name)
+            if r is not None:
+                return r
+            r = _find_module_level_function(getattr(stmt, "finalbody", []), name)
+            if r is not None:
+                return r
+    return None
+
+
 def _collect_module_level_functions(stmts, name):
     """Collect FunctionDef nodes at module level, including those inside
     top-level if/try/with/for blocks. Does not descend into function or
@@ -260,8 +296,18 @@ def _collect_module_level_functions(stmts, name):
             # reject literals and other non-callable expressions.
             for target in stmt.targets:
                 if isinstance(target, ast.Name) and target.id == name:
-                    if isinstance(stmt.value, (ast.Attribute, ast.Name)):
+                    if isinstance(stmt.value, ast.Attribute):
+                        # Bound method reference — cannot verify signature statically
                         result.append(None)
+                    elif isinstance(stmt.value, ast.Name):
+                        # Local or external function reference — try to resolve
+                        ref_name = stmt.value.id
+                        ref_func = _find_module_level_function(stmts, ref_name)
+                        if ref_func is not None:
+                            result.append(ref_func)
+                        else:
+                            # External/unresolvable reference — indeterminate, accept
+                            result.append(None)
         elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
             body = getattr(stmt, "body", [])
             result.extend(_collect_module_level_functions(body, name))
