@@ -119,6 +119,14 @@ def case_register_with_required_kwonly_fails():
     assert checks.get("register accepts ctx param") is False, "register with required kwonly should fail"
 
 
+
+def case_async_register_rejected():
+    pd = _make_plugin("__version__ = \"1.0.0\"\nasync def register(ctx):\n    pass\n")
+    results = _check_registration(pd)
+    checks = {r[0]: r[1] for r in results}
+    assert checks.get("register(ctx) defined") is False, "async register should not be accepted"
+
+
 CASES = [
     case_register_with_ctx_passes,
     case_register_no_params_fails,
@@ -131,6 +139,7 @@ CASES = [
     case_conditional_register_in_if_block,
     case_register_with_required_extra_pos_fails,
     case_register_with_required_kwonly_fails,
+    case_async_register_rejected,
 ]
 
 

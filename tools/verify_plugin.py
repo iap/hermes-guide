@@ -244,7 +244,7 @@ def _collect_module_level_functions(stmts, name):
     class definitions."""
     result = []
     for stmt in stmts:
-        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name == name:
+        if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
             result.append(stmt)
         elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
             body = getattr(stmt, "body", [])
