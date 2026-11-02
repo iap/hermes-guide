@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, Node/npm resolution errors, 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.9
+version: 1.1.10
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -90,6 +90,35 @@ After fixing: close any running desktop app, then `hermes desktop` (a source cha
 
 > [!CAUTION]
 > `hermes uninstall --gui` removes build artifacts, desktop `node_modules`, the build stamp, and the electron user-data dir (`%APPDATA%\Hermes` — connection settings, `connection.json`, Chromium cache). It never touches agent config or memory — but connection setup is not recoverable from the uninstall, so re-pairing is required afterwards.
+
+## Verification
+
+After applying a fix, confirm the desktop is healthy:
+
+```bash
+hermes desktop --build-only
+```
+
+**Pass:** Build completes with no error; `$HERMES_HOME/desktop-build-stamp.json` is updated.
+**Fail:** Build exits non-zero or logs an `ERR_ELECTRON_BUILDER_CANNOT_EXECUTE` / `Access is denied` error — a running `Hermes.exe` is still locking the output directory.
+
+---
+
+```bash
+hermes logs gui -f
+```
+
+**Pass:** Log shows the backend announcing its port (e.g. `Listening on port <N>`) within 90 s; window renders.
+**Fail:** Log shows `backend never announced its port` or a crash before the port line — raise `HERMES_DESKTOP_PORT_ANNOUNCE_TIMEOUT_MS` or check AV exclusions.
+
+---
+
+```bash
+hermes --version && hermes desktop --version
+```
+
+**Pass:** Both commands print a version string and the values match.
+**Fail:** Either command errors, or versions differ — run `hermes desktop` to rebuild.
 
 ## Report
 

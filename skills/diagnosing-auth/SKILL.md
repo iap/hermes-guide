@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source') — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.14
+version: 1.2.15
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -81,6 +81,35 @@ After applying fixes:
 3. Test the failing operation (e.g., `hermes skills tap add ...` or the install that failed) — it should succeed or fail for a different reason.
 4. If using a token in `.env`, confirm it was removed/refreshed and no longer causes 401s.
 5. For rate limits, confirm method changed (anonymous → gh-cli/pat) gives expected behavior.
+
+## Verification
+
+After applying a fix, confirm auth is healthy:
+
+```bash
+hermes auth status
+```
+
+**Pass:** The relevant hub shows `authenticated` with the expected auth method (`pat`, `gh-cli`, or `github-app`).
+**Fail:** Hub still shows `unauthenticated` — re-run `hermes auth add` or check the `.env` token.
+
+---
+
+```bash
+hermes skills install <name>
+```
+
+**Pass:** Skill installs without a `No skill named … found in any source` or `Could not find … in any source` error.
+**Fail:** Same error recurs — run the `GitHubAuth().auth_method()` probe (§2) and confirm the active method; if `pat`, probe the token against `GET https://api.github.com/rate_limit` for a 401.
+
+---
+
+```bash
+hermes skills tap list
+```
+
+**Pass:** The target registry appears in the list.
+**Fail:** Registry is absent — run `hermes skills tap add <name> <url>` and retry.
 
 ## Report
 
