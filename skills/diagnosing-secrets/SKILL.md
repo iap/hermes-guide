@@ -1,7 +1,7 @@
 ---
 name: diagnosing-secrets
 description: Diagnose Hermes secret and credential management issues — secret sources not resolving, vault locked, egress firewall blocking, and credential pool failures.
-version: 1.0.2
+version: 1.0.4
 metadata:
   hermes:
     tags: [hermes, secrets, credentials, vault, egress, troubleshooting, diagnosing]
@@ -107,13 +107,13 @@ grep -rl "api_key\|token\|secret" ~/.hermes/logs/ 2>/dev/null | head
 hermes vault list
 ```
 **Pass:** exits 0 and lists vault items (or prints empty list); no crash or auth error.
-**Fail:** error or "vault locked" — run `hermes vault sources` to confirm key storage, then re-add credentials with `hermes vault add <name>`.
+**Fail:** error or "vault locked" — run `hermes vault sources` to check detected password managers; for key storage issues, check `vault.key_storage` in `$HERMES_HOME/config.yaml` or run `hermes doctor`.
 
 ```
 hermes egress status
 ```
 **Pass:** reports egress state (active or inactive) without error; if active, rules are listed.
-**Fail:** command not found or error — confirm egress is installed; if not needed, verify it is not blocking requests by checking `hermes doctor`.
+**Fail:** egress is enabled but requests are still blocked — check `hermes doctor` for egress errors; if the binary is missing, run `hermes egress install` to install it.
 
 ```
 hermes doctor

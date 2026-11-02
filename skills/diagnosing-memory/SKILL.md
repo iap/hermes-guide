@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.10
+version: 1.2.12
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -130,8 +130,8 @@ Fail: `ImportError` or API key error — run `hermes memory setup <provider>` to
 ```
 hermes guide memories
 ```
-Pass: check exits with no FAIL lines (notes are acceptable).
-Fail: FAIL lines present — address the flagged over-limit or duplicate entries per §3.
+Pass: check exits with no `~` or `✗` markers (notes/warnings with `~` are acceptable only if they describe non-critical items like approaching limits).
+Fail: `~` or `✗` markers present — address the flagged over-limit, duplicate, or unreadable entries per §3; for unreadable files, check file permissions (POSIX: `chmod 600 $HERMES_HOME/memories/*.md`; Windows: `icacls $HERMES_HOME\memories\*.md /grant:r %USERNAME%:F`) and verify the file is valid UTF-8 — permission fixes do not resolve encoding errors.
 
 ## Report
 

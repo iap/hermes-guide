@@ -1,7 +1,7 @@
 ---
 name: diagnosing-profiles
 description: Diagnose Hermes multi-profile issues — profile not found, config not isolated, profile switching failures, and clone/sync-imports problems.
-version: 1.0.2
+version: 1.0.4
 metadata:
   hermes:
     tags: [hermes, profiles, troubleshooting, diagnosing]
@@ -114,7 +114,7 @@ Fail: error or empty output — confirm Hermes version supports profiles with `h
 hermes -p <name> config path
 ```
 Pass: prints a path that differs from `hermes config path` (default profile), confirming isolation.
-Fail: same path as default — the profile directory may be a symlink or `HERMES_HOME` is overriding `-p`; check with `compgen -e | grep -i hermes`.
+Fail: same path as default — the profile directory may be a symlink or `HERMES_HOME` is overriding `-p`; check with `hermes config path`.
 
 ```
 hermes -p <name> doctor

@@ -1,7 +1,7 @@
 ---
 name: diagnosing-backup
 description: Diagnose Hermes backup and restore issues — backup creation failures, restore errors, checkpoint corruption, and import/export problems.
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, backup, restore, checkpoints, troubleshooting, diagnosing]
@@ -121,9 +121,9 @@ hermes checkpoints status                # checkpoints healthy
 hermes doctor                            # no backup/restore errors
 ```
 
-Pass: backup creates valid zip; checkpoints healthy; doctor shows no errors.
+**Pass:** backup creates valid zip; checkpoints healthy; doctor shows no errors.
 
-Fail: backup corrupt — check disk space and permissions; restore fails — verify archive integrity and Hermes version.
+**Fail:** backup corrupt — check disk space and permissions; restore fails — verify archive integrity and Hermes version.
 
 After applying fixes, restart the session to pick up restored configuration.
 

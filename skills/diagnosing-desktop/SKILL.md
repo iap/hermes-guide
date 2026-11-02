@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, Node/npm resolution errors, 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.10
+version: 1.1.12
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -105,20 +105,20 @@ hermes desktop --build-only
 ---
 
 ```bash
-hermes logs gui -f
+hermes desktop
 ```
 
-**Pass:** Log shows the backend announcing its port (e.g. `Listening on port <N>`) within 90 s; window renders.
-**Fail:** Log shows `backend never announced its port` or a crash before the port line — raise `HERMES_DESKTOP_PORT_ANNOUNCE_TIMEOUT_MS` or check AV exclusions.
+**Pass:** Desktop launches and the window renders within 90 s; backend announces its port.
+**Fail:** Window does not render or backend never announces its port — check `$HERMES_HOME/logs/desktop.log` for crash details.
 
 ---
 
 ```bash
-hermes --version && hermes desktop --version
+hermes logs desktop -n 50
 ```
 
-**Pass:** Both commands print a version string and the values match.
-**Fail:** Either command errors, or versions differ — run `hermes desktop` to rebuild.
+**Pass:** Log shows the backend announcing its port (e.g. `Listening on port <N>`) and no crash before the port line.
+**Fail:** Log shows `backend never announced its port` or a crash before the port line — raise `HERMES_DESKTOP_PORT_ANNOUNCE_TIMEOUT_MS` or check AV exclusions.
 
 ## Report
 
