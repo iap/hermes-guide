@@ -1,7 +1,7 @@
 ---
 name: diagnosing-secrets
 description: Diagnose Hermes secret and credential management issues — secret sources not resolving, vault locked, egress firewall blocking, and credential pool failures.
-version: 1.0.3
+version: 1.0.4
 metadata:
   hermes:
     tags: [hermes, secrets, credentials, vault, egress, troubleshooting, diagnosing]
@@ -113,7 +113,7 @@ hermes vault list
 hermes egress status
 ```
 **Pass:** reports egress state (active or inactive) without error; if active, rules are listed.
-**Fail:** egress is enabled but requests are still blocked — check `hermes doctor` for egress errors; if the binary is missing, run `hermes egress setup` to install it.
+**Fail:** egress is enabled but requests are still blocked — check `hermes doctor` for egress errors; if the binary is missing, run `hermes egress install` to install it.
 
 ```
 hermes doctor
