@@ -1,7 +1,7 @@
 ---
 name: diagnosing-auth
 description: "Diagnose hub-install failures that end in '… found in any source' / 'Could not find … in any source' on public repos with gh logged in (historic phrasing: 'Could not fetch from any source') — a dead or shadowing GITHUB_TOKEN in the profile .env, the gh-cli fallback, 401-vs-anonymous probes, and rate-limit verdicts."
-version: 1.2.15
+version: 1.2.16
 metadata:
   hermes:
     tags: [hermes, auth, github, token, rate-limit, troubleshooting, diagnosing]
@@ -87,11 +87,11 @@ After applying fixes:
 After applying a fix, confirm auth is healthy:
 
 ```bash
-hermes auth status
+hermes auth status <provider>
 ```
 
-**Pass:** The relevant hub shows `authenticated` with the expected auth method (`pat`, `gh-cli`, or `github-app`).
-**Fail:** Hub still shows `unauthenticated` — re-run `hermes auth add` or check the `.env` token.
+**Pass:** The specified provider shows `authenticated` with the expected auth method (`pat`, `gh-cli`, or `github-app`).
+**Fail:** Provider shows `unauthenticated` — re-run `hermes auth add <provider>` or check the `.env` token.
 
 ---
 
@@ -109,7 +109,7 @@ hermes skills tap list
 ```
 
 **Pass:** The target registry appears in the list.
-**Fail:** Registry is absent — run `hermes skills tap add <name> <url>` and retry.
+**Fail:** Registry is absent — run `hermes skills tap add <repo>` (e.g. `hermes skills tap add iap/hermes-guide`) and retry.
 
 ## Report
 

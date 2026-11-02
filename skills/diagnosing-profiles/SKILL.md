@@ -1,7 +1,7 @@
 ---
 name: diagnosing-profiles
 description: Diagnose Hermes multi-profile issues — profile not found, config not isolated, profile switching failures, and clone/sync-imports problems.
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, profiles, troubleshooting, diagnosing]
@@ -108,13 +108,13 @@ ls "$(dirname "$cfg")/profiles/<name>" 2>/dev/null && echo "still exists" || ech
 hermes profile list
 ```
 Pass: command exits 0 and lists at least one profile; the active profile is marked.
-Fail: error or empty output — confirm Hermes version supports profiles with `hermes --version`.
+Fail: error or empty output — confirm Hermes version supports profiles with `hermes --version` (note: on native Windows, use `hermes profile list` instead of `-p` flag).
 
 ```
 hermes -p <name> config path
 ```
 Pass: prints a path that differs from `hermes config path` (default profile), confirming isolation.
-Fail: same path as default — the profile directory may be a symlink or `HERMES_HOME` is overriding `-p`; check with `compgen -e | grep -i hermes`.
+Fail: same path as default — the profile directory may be a symlink or `HERMES_HOME` is overriding `-p`; check with `python -c "import os; print(os.environ.get('HERMES_HOME'))"`.
 
 ```
 hermes -p <name> doctor
