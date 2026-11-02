@@ -246,6 +246,9 @@ def _collect_module_level_functions(stmts, name):
     for stmt in stmts:
         if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
             result.append(stmt)
+        elif isinstance(stmt, ast.Match):
+            for case in stmt.cases:
+                result.extend(_collect_module_level_functions(case.body, name))
         elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
             body = getattr(stmt, "body", [])
             result.extend(_collect_module_level_functions(body, name))
@@ -270,6 +273,8 @@ def _can_accept_one_positional(func):
     n_defaults = len(args.defaults)
     required_pos = pos_count - n_defaults
     if has_vararg:
+        if required_pos > 1:
+            return False
         kw_required = sum(1 for d in args.kw_defaults if d is None)
         return kw_required == 0
     if required_pos > 1:

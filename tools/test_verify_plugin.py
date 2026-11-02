@@ -127,6 +127,24 @@ def case_async_register_rejected():
     assert checks.get("register(ctx) defined") is False, "async register should not be accepted"
 
 
+
+def case_match_block_register():
+    src = "__version__ = \"1.0.0\"\nmatch True:\n    case True:\n        def register(ctx):\n            pass\n"
+    pd = _make_plugin(src)
+    results = _check_registration(pd)
+    checks = {r[0]: r[1] for r in results}
+    assert checks.get("register(ctx) defined") is True, "match-block register should be found"
+    assert checks.get("register accepts ctx param") is True
+
+
+def case_register_vararg_with_required_pos_fails():
+    pd = _make_plugin("__version__ = \"1.0.0\"\ndef register(ctx, required, /, *args):\n    pass\n")
+    results = _check_registration(pd)
+    checks = {r[0]: r[1] for r in results}
+    assert checks.get("register(ctx) defined") is True
+    assert checks.get("register accepts ctx param") is False, "vararg with required extra pos should fail"
+
+
 CASES = [
     case_register_with_ctx_passes,
     case_register_no_params_fails,
@@ -140,6 +158,8 @@ CASES = [
     case_register_with_required_extra_pos_fails,
     case_register_with_required_kwonly_fails,
     case_async_register_rejected,
+    case_match_block_register,
+    case_register_vararg_with_required_pos_fails,
 ]
 
 
