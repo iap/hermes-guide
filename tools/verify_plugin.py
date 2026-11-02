@@ -246,6 +246,20 @@ def _collect_module_level_functions(stmts, name):
     for stmt in stmts:
         if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
             result.append(stmt)
+        elif isinstance(stmt, ast.TryStar):
+            body = getattr(stmt, "body", [])
+            result.extend(_collect_module_level_functions(body, name))
+            for handler in getattr(stmt, "handlers", []):
+                result.extend(_collect_module_level_functions(handler.body, name))
+            result.extend(_collect_module_level_functions(getattr(stmt, "orelse", []), name))
+            result.extend(_collect_module_level_functions(getattr(stmt, "finalbody", []), name))
+        elif isinstance(stmt, ast.Assign):
+            # Recognize bound methods exported as register (e.g. register = obj.register).
+            # We cannot statically verify the bound method's signature, so we accept
+            # the assignment as a potential registration entry point.
+            for target in stmt.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    result.append(None)
         elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
             body = getattr(stmt, "body", [])
             result.extend(_collect_module_level_functions(body, name))
@@ -301,11 +315,14 @@ def _check_registration(plugin_dir: Path) -> list[tuple[str, bool, str]]:
     # commit 40804ce4074c561220c4a766e116e07b4873b1c3).
     register_funcs = _collect_module_level_functions(tree.body, "register")
 
+    # Filter out None sentinels (bound method assignments) for signature checks
+    func_nodes = [n for n in register_funcs if n is not None]
     has_register = len(register_funcs) > 0
+    # For bound method assignments, we cannot verify the signature statically,
+    # so we accept them as valid (Hermes will validate at runtime).
+    has_bound_method = any(n is None for n in register_funcs)
     # Verify register can be called with exactly one positional argument (ctx).
-    # Account for positional-only (posonlyargs), ordinary (args), *args (vararg),
-    # and required keyword-only / extra positional parameters.
-    has_ctx_param = any(_can_accept_one_positional(node) for node in register_funcs)
+    has_ctx_param = has_bound_method or any(_can_accept_one_positional(node) for node in func_nodes)
     results.append(("register(ctx) defined", has_register, "missing" if not has_register else "ok"))
     if has_register and not has_ctx_param:
         results.append(("register accepts ctx param", False, "register() must accept ctx (Hermes calls register(ctx))"))
