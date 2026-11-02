@@ -103,8 +103,9 @@ sub-categories — so audit the list by hand before each release (CONTRIBUTING.m
   non-empty line (`check_skill_provenance.py`). Refresh the date when you
   re-check the facts — do not touch it when you only reworded prose, or the
   footer starts claiming verification that did not happen.
-- File/symbol citations (`path.py::symbol`, `path.py:123`) must resolve against
-  the revision in `.github/upstream-drift.baseline`
+- File/symbol citations (a repository path followed by `::` and a symbol, or by
+  a line number) must resolve against the revision in
+  `.github/upstream-drift.baseline`
   (`check_citation_integrity.py --src <checkout>`).
 - Every skill must still be *installable* under the upstream scanner at the same
   pinned revision, at community trust (`check_install_scan.py --src <checkout>`).
