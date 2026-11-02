@@ -49,7 +49,7 @@ ls "$(dirname "$cfg")/.env"             # .env should be beside config
 **Fix:**
 ```bash
 hermes vault list                        # lists unlocked items; locked managers skipped
-hermes vault key                          # show where vault key is stored
+hermes vault sources                       # show detected password managers
 # If local vault key is lost, recreate:
 hermes vault rm <name>
 hermes vault add <name>                  # re-add credentials
@@ -106,20 +106,20 @@ grep -rl "api_key\|token\|secret" ~/.hermes/logs/ 2>/dev/null | head
 ```
 hermes vault list
 ```
-Pass: exits 0 and lists vault items (or prints empty list); no crash or auth error.
-Fail: error or "vault locked" — run `hermes vault key` to confirm key storage, then re-add credentials with `hermes vault add <name>`.
+**Pass:** exits 0 and lists vault items (or prints empty list); no crash or auth error.
+**Fail:** error or "vault locked" — run `hermes vault sources` to confirm key storage, then re-add credentials with `hermes vault add <name>`.
 
 ```
 hermes egress status
 ```
-Pass: reports egress state (active or inactive) without error; if active, rules are listed.
-Fail: command not found or error — confirm egress is installed; if not needed, verify it is not blocking requests by checking `hermes doctor`.
+**Pass:** reports egress state (active or inactive) without error; if active, rules are listed.
+**Fail:** command not found or error — confirm egress is installed; if not needed, verify it is not blocking requests by checking `hermes doctor`.
 
 ```
 hermes doctor
 ```
-Pass: no credential or secret-related FAIL lines in output.
-Fail: credential errors present — follow the matching failure section in §2 above.
+**Pass:** no credential or secret-related FAIL lines in output.
+**Fail:** credential errors present — follow the matching failure section in §2 above.
 
 ## 4. Related
 

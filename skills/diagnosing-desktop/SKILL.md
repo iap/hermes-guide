@@ -118,7 +118,7 @@ hermes --version && hermes desktop --version
 ```
 
 **Pass:** Both commands print a version string and the values match.
-**Fail:** Either command errors, or versions differ — run `hermes desktop update`.
+**Fail:** Either command errors, or versions differ — run `hermes desktop` to rebuild.
 
 ## Report
 

@@ -91,7 +91,7 @@ hermes auth status
 ```
 
 **Pass:** The relevant hub shows `authenticated` with the expected auth method (`pat`, `gh-cli`, or `github-app`).
-**Fail:** Hub still shows `unauthenticated` — re-run `hermes auth login` or check the `.env` token.
+**Fail:** Hub still shows `unauthenticated` — re-run `hermes auth add` or check the `.env` token.
 
 ---
 
@@ -105,11 +105,11 @@ hermes skills install <name>
 ---
 
 ```bash
-hermes registry list
+hermes skills tap list
 ```
 
 **Pass:** The target registry appears in the list.
-**Fail:** Registry is absent — run `hermes registry add <name> <url>` and retry.
+**Fail:** Registry is absent — run `hermes skills tap add <name> <url>` and retry.
 
 ## Report
 
