@@ -3,7 +3,7 @@
 Always-on operating contract for AI agents working **in this repository**. Keep
 this file short: every coding turn pays its full cost via `CLAUDE.md` and Cursor
 rules. Deep ops live under [docs/agent/](docs/agent/README.md) — open the row
-that matches the task, not the whole of `ops.md`.
+that matches the task, not the whole of `deep-ops.md` or `review-ops.md`.
 
 It is not a Hermes tutorial. Per-surface knowledge lives in `skills/`; the
 authoring standard lives in [CONTRIBUTING.md](CONTRIBUTING.md). Where those two
@@ -76,7 +76,7 @@ python tools/check_skill_provenance.py
 
 CI adds `tools/test_*.py`, citation integrity, install-scan parity, mypy, and bandit. Skip → say
 `not run` in the PR validation table. Full testing/security/git rules:
-[docs/agent/ops.md](docs/agent/ops.md).
+[docs/agent/deep-ops.md](docs/agent/deep-ops.md).
 
 > [!NOTE]
 > Guards in `tools/` read *text*. Executable scripts in `skills/*/scripts/` need
@@ -87,21 +87,22 @@ CI adds `tools/test_*.py`, citation integrity, install-scan parity, mypy, and ba
 
 | Contract | Guard / owner |
 |---|---|
-| Three output layers never mixed (Hermes CLI / plugin envelopes / harness `OK:`/`FAIL`) | [ops.md](docs/agent/ops.md#three-output-layers-never-mixed) |
+| Three output layers never mixed (Hermes CLI / plugin envelopes / harness `OK:`/`FAIL`) | [deep-ops.md](docs/agent/deep-ops.md#three-output-layers-never-mixed) |
 | Checks return envelopes; plugin formats UX | `__init__.py` / `checks.py` |
 | Read-only plugin; empty `capabilities:` | `check_no_mutation.py` |
 | Drift-prone names live in `constants.py` | `check_upstream_drift.py` |
 | Skill version bumps up; provenance footer dated only when facts re-checked | `check_skill_version_bump.py`, `check_skill_provenance.py` |
 | Citations resolve against `.github/upstream-drift.baseline` | `check_citation_integrity.py` |
 | Finding IDs are public API: add `FINDING_IDS` entries, never rename; `docs/findings.md` is generated | `test_finding_ids.py`, `render_docs.py` |
-| `hermes guide --json` is one stdout document; no update notice; `/hermes-doctor` stays text | [ops.md](docs/agent/ops.md#the-hermes-guide---json-document-phase-4-contract) |
-| Hooks default to in-process `check_hooks_readonly()` (executes nothing); `--deep` runs `hermes hooks doctor`, which executes approved hooks once; `--fast` wins when both are given | [ops.md](docs/agent/ops.md#read-only-always) |
-| Review threads: enumerate `reviewThreads`, reply with evidence, then resolve; `isOutdated` is not a fix | [ops.md](docs/agent/ops.md#reviewer-bot-threads) |
+| `hermes guide --json` is one stdout document; no update notice; `/hermes-doctor` stays text | [deep-ops.md](docs/agent/deep-ops.md#the-hermes-guide---json-document-phase-4-contract) |
+| Hooks default to in-process `check_hooks_readonly()` (executes nothing); `--deep` runs `hermes hooks doctor`, which executes approved hooks once; `--fast` wins when both are given | [deep-ops.md](docs/agent/deep-ops.md#read-only-always) |
+| Review threads: enumerate `reviewThreads`, reply with evidence, then resolve; `isOutdated` is not a fix | [review-ops.md](docs/agent/review-ops.md#reviewer-bot-threads) |
+| Reviewer order: primary finding bot clean → one CodeRabbit full review → both clean before merge | [review-ops.md](docs/agent/review-ops.md#review-sequence) |
 | Tone / no emoji / no filler | [CONTRIBUTING.md#tone](CONTRIBUTING.md#tone), `check_doc_style.py` |
 
 Never `git add -A`. Stage named paths. Platform facts: three claim tiers
 (shared / cross-platform prose / platform-owned); WSL is its own class — see
-[ops.md](docs/agent/ops.md#multi-environment-maintenance). Name the verifying
+[deep-ops.md](docs/agent/deep-ops.md#multi-environment-maintenance). Name the verifying
 host in the PR Environment block.
 
 ## Traps
@@ -148,7 +149,7 @@ host in the PR Environment block.
 > [!WARNING]
 > **On hosts whose macOS < 13, do not let a full `hermes update` re-resolve the
 > node tool.** Handling, pins, and upstream tracking live in
-> [ops.md — Host limitation register](docs/agent/ops.md#host-limitation-register).
+> [deep-ops.md — Host limitation register](docs/agent/deep-ops.md#host-limitation-register).
 
 ## Before you finish
 
@@ -160,4 +161,4 @@ fails the check if your table does not match reality.
 ## Pre-merge cross-check
 
 Never merge on green CI alone — run the checklist in
-[docs/agent/ops.md](docs/agent/ops.md#pre-merge-cross-check) first.
+[docs/agent/review-ops.md](docs/agent/review-ops.md#pre-merge-cross-check) first.

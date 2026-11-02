@@ -5,7 +5,7 @@
 # creates duplicate findings. This file carries the UI policy explicitly;
 # ordinary UI settings are not inherited. Organization/workspace global
 # overrides can still take precedence.
-# Rationale and verification: docs/agent/ops.md#coderabbit-configuration
+# Rationale and verification: docs/agent/review-ops.md#coderabbit-configuration
 inheritance: false
 tone_instructions: >-
   Follow CONTRIBUTING.md#tone. Keep findings concise: describe the impact,
