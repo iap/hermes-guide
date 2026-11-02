@@ -330,10 +330,12 @@ version, your platform (native Windows or POSIX), and the output of
 2. Make the change.
 3. Run the gates. `python tools/check_gates.py` is the fast tier;
    `python tools/render_docs.py --write` refreshes generated blocks; see
-   [AGENTS.md](AGENTS.md) and [docs/agent/ops.md](docs/agent/ops.md) for the
+   [AGENTS.md](AGENTS.md) and [docs/agent/deep-ops.md](docs/agent/deep-ops.md) for the
    full list and what CI adds on top. Which interpreter and dependency setup the
    suite needs is in
-   [docs/agent/ops.md](docs/agent/ops.md#local-interpreter).
+   [docs/agent/deep-ops.md](docs/agent/deep-ops.md#local-interpreter).
+   Review order, bot-thread handling, and the merge gate are in
+   [docs/agent/review-ops.md](docs/agent/review-ops.md).
 4. Fill in the PR template — **Environment** and **Validation Results** are read
    by workflows, not just by reviewers. The validation table is machine-checked:
    `validate-claim.yml` re-runs the hermetic gates against your head and fails the
@@ -388,7 +390,7 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    drift direction the guard cannot see: compare
    `git ls-tree -d --name-only <upstream-head>:plugins/` against
    `PLUGIN_SUBCATEGORY_DIRS`. The guard proves every pinned name is real; only a
-   human notices a *new* upstream sub-category the pin omits (docs/agent/ops.md,
+   human notices a *new* upstream sub-category the pin omits (docs/agent/deep-ops.md,
    "Values that drift go in `constants.py`"). Then push the tag
    `v<plugin.yaml version>` to master; `release.yml` verifies the tag matches
    `plugin.yaml`, that the tagged commit is on master, and that every tag has
