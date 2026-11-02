@@ -238,6 +238,68 @@ def _check_manifest(data: dict, plugin_dir: Path) -> list[tuple[str, bool, str]]
     return results
 
 
+def _collect_module_level_functions(stmts, name):
+    """Collect FunctionDef nodes at module level, including those inside
+    top-level if/try/with/for blocks. Does not descend into function or
+    class definitions."""
+    result = []
+    for stmt in stmts:
+        if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
+            result.append(stmt)
+        elif isinstance(stmt, ast.TryStar):
+            body = getattr(stmt, "body", [])
+            result.extend(_collect_module_level_functions(body, name))
+            for handler in getattr(stmt, "handlers", []):
+                result.extend(_collect_module_level_functions(handler.body, name))
+            result.extend(_collect_module_level_functions(getattr(stmt, "orelse", []), name))
+            result.extend(_collect_module_level_functions(getattr(stmt, "finalbody", []), name))
+        elif isinstance(stmt, ast.Assign):
+            # Recognize bound methods or function references exported as
+            # register (e.g. register = obj.register or register = some_func).
+            # Only accept attribute access or name references (callable values);
+            # reject literals and other non-callable expressions.
+            for target in stmt.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    if isinstance(stmt.value, (ast.Attribute, ast.Name)):
+                        result.append(None)
+        elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
+            body = getattr(stmt, "body", [])
+            result.extend(_collect_module_level_functions(body, name))
+            for handler in getattr(stmt, "handlers", []):
+                result.extend(_collect_module_level_functions(handler.body, name))
+            result.extend(_collect_module_level_functions(getattr(stmt, "orelse", []), name))
+            result.extend(_collect_module_level_functions(getattr(stmt, "finalbody", []), name))
+    return result
+
+
+def _can_accept_one_positional(func):
+    """Return True if *func* can be called with exactly one positional arg.
+
+    Hermes invokes register(ctx) with a single positional argument, so the
+    function must accept one positional parameter without requiring additional
+    ones.  Accounts for positional-only, ordinary, *args, and keyword-only
+    parameters with defaults.
+    """
+    args = func.args
+    pos_count = len(args.posonlyargs) + len(args.args)
+    has_vararg = args.vararg is not None
+    n_defaults = len(args.defaults)
+    required_pos = pos_count - n_defaults
+    if has_vararg:
+        if required_pos > 1:
+            return False
+        kw_required = sum(1 for d in args.kw_defaults if d is None)
+        return kw_required == 0
+    if required_pos > 1:
+        return False
+    if pos_count < 1:
+        return False
+    kw_required = sum(1 for d in args.kw_defaults if d is None)
+    if kw_required > 0:
+        return False
+    return True
+
+
 def _check_registration(plugin_dir: Path) -> list[tuple[str, bool, str]]:
     """Check __init__.py for correct registration patterns."""
     results = []
@@ -249,16 +311,20 @@ def _check_registration(plugin_dir: Path) -> list[tuple[str, bool, str]]:
     source = init_path.read_text()
     tree = ast.parse(source, filename=str(init_path))
 
-    # Check for register function
-    register_funcs = [
-        node for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "register"
-    ]
+    # Collect module-level register functions, including those defined inside
+    # top-level if/try/with blocks (conditional registration at import time).
+    # Hermes source: NousResearch/hermes-agent hermes_cli/plugins.py (baseline
+    # commit 40804ce4074c561220c4a766e116e07b4873b1c3).
+    register_funcs = _collect_module_level_functions(tree.body, "register")
+
+    # Filter out None sentinels (bound method assignments) for signature checks
+    func_nodes = [n for n in register_funcs if n is not None]
     has_register = len(register_funcs) > 0
-    # Verify register accepts at least one parameter (ctx)
-    has_ctx_param = any(
-        len(node.args.args) >= 1 for node in register_funcs
-    )
+    # For bound method assignments, we cannot verify the signature statically,
+    # so we accept them as valid (Hermes will validate at runtime).
+    has_bound_method = any(n is None for n in register_funcs)
+    # Verify register can be called with exactly one positional argument (ctx).
+    has_ctx_param = has_bound_method or any(_can_accept_one_positional(node) for node in func_nodes)
     results.append(("register(ctx) defined", has_register, "missing" if not has_register else "ok"))
     if has_register and not has_ctx_param:
         results.append(("register accepts ctx param", False, "register() must accept ctx (Hermes calls register(ctx))"))
