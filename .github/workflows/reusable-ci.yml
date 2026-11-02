@@ -292,6 +292,10 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_upstream_drift.py
 
+      - name: Verify plugin registration regression test
+        if: inputs.run-full-gate
+        run: python tools/test_verify_plugin.py
+
       - name: Check-envelope regression test
         if: inputs.run-full-gate
         run: python tools/test_check_envelopes.py
