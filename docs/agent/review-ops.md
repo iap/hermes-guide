@@ -12,10 +12,10 @@ with file:line evidence, not implemented.
 | Step | State | Action |
 |---|---|---|
 | 1. Primary reviewer | Finding bot (Qodo) has open findings | Reproduce and cross-check each finding. Fix confirmed defects; reply with evidence and resolve only after the reply. Re-run until clean. |
-| 2. Second reviewer | Primary is clean | Post `@coderabbitai full review` **once** for this PR/head. Wait for the review record; a trigger comment is not a review. |
+| 2. Second reviewer | Primary is clean on the current head | Post `@coderabbitai full review` **once** for this PR. Wait for the review record; a trigger comment is not a review. |
 | 3. Second findings | CodeRabbit reports findings | Verify each against the code. Fix real findings; decline false positives/negatives with evidence. After new commits, use `@coderabbitai review` (incremental), never a second full review. |
-| 4. Re-check primary | Any second-review fix | Qodo may re-review. Resolve new findings and repeat steps 2–4 until both reviewers are clean. |
-| 5. Merge gate | Both reviewers clean | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. |
+| 4. Re-check primary | Any second-review fix created a new head | A clean review is bound to its commit. Do not carry the previous Qodo result forward: wait for Qodo to complete a review of the new head, or treat it as "not heard" and do not merge. Resolve new findings, then request CodeRabbit's incremental review of the same head. Repeat steps 2–4 until both reviewers are clean on that head. |
+| 5. Merge gate | Both reviewers clean on the current head | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. A green review from an earlier commit does not satisfy this gate. |
 
 - **False positives are first-class.** A bot recommendation can be stale,
   miscited, or wrong for this repo. Cite the guard, test, or source that
@@ -31,6 +31,10 @@ with file:line evidence, not implemented.
 - **Both, then merge.** A clean primary reviewer does not replace the second
   review. A clean second reviewer does not erase a new primary finding. Merge
   only after the loop reaches clean on both.
+- **Head binding.** Any push after a clean review invalidates that clean result.
+  Re-request/await the primary reviewer's review of the new head; use the
+  second reviewer's incremental mode for the same head. Never merge on a
+  mixture of reviews from different commits.
 
 ## CodeRabbit configuration
 
@@ -349,4 +353,3 @@ When another session has announced a cross-check of a PR, its author waits for
 that verdict — or an explicit `go` — before merging. Green CI and resolved
 threads do not stand in for it: #298 and #315 both merged mid-verification and
 needed correction PRs (#314, #316) minutes later.
-
