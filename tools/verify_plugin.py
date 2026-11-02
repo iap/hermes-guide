@@ -250,11 +250,20 @@ def _check_registration(plugin_dir: Path) -> list[tuple[str, bool, str]]:
     tree = ast.parse(source, filename=str(init_path))
 
     # Check for register function
-    has_register = any(
-        isinstance(node, ast.FunctionDef) and node.name == "register"
-        for node in ast.walk(tree)
+    register_funcs = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "register"
+    ]
+    has_register = len(register_funcs) > 0
+    # Verify register accepts at least one parameter (ctx)
+    has_ctx_param = any(
+        len(node.args.args) >= 1 for node in register_funcs
     )
     results.append(("register(ctx) defined", has_register, "missing" if not has_register else "ok"))
+    if has_register and not has_ctx_param:
+        results.append(("register accepts ctx param", False, "register() must accept ctx (Hermes calls register(ctx))"))
+    elif has_register:
+        results.append(("register accepts ctx param", True, "ok"))
 
     # Check for __version__
     has_version = "__version__" in source
