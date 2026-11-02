@@ -249,15 +249,19 @@ def _check_registration(plugin_dir: Path) -> list[tuple[str, bool, str]]:
     source = init_path.read_text()
     tree = ast.parse(source, filename=str(init_path))
 
-    # Check for register function
+    # Check for register function at module level only (not nested or class methods).
+    # Hermes calls register(ctx) with a single positional argument — see
+    # NousResearch/hermes-agent plugins.py::register(ctx) and plugins_manifest.py.
     register_funcs = [
-        node for node in ast.walk(tree)
+        node for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "register"
     ]
     has_register = len(register_funcs) > 0
-    # Verify register accepts at least one parameter (ctx)
+    # Verify register can accept at least one positional argument (ctx).
+    # Account for positional-only (posonlyargs), ordinary (args), and *args (vararg).
     has_ctx_param = any(
-        len(node.args.args) >= 1 for node in register_funcs
+        len(node.args.posonlyargs) + len(node.args.args) >= 1 or node.args.vararg is not None
+        for node in register_funcs
     )
     results.append(("register(ctx) defined", has_register, "missing" if not has_register else "ok"))
     if has_register and not has_ctx_param:
