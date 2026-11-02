@@ -1,7 +1,7 @@
 ---
 name: diagnosing-profiles
 description: Diagnose Hermes multi-profile issues — profile not found, config not isolated, profile switching failures, and clone/sync-imports problems.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, profiles, troubleshooting, diagnosing]
@@ -102,21 +102,25 @@ cfg=$(hermes config path)
 ls "$(dirname "$cfg")/profiles/<name>" 2>/dev/null && echo "still exists" || echo "cleaned"
 ```
 
-## 3. Verification
+## Verification
 
-```bash
-hermes profile list                      # all profiles listed
-default_cfg=$(hermes config path)
-profile_cfg=$(hermes -p <name> config path)
-test "$default_cfg" != "$profile_cfg" && echo "Isolation: OK"
-hermes -p <name> doctor                 # no errors
 ```
+hermes profile list
+```
+Pass: command exits 0 and lists at least one profile; the active profile is marked.
+Fail: error or empty output — confirm Hermes version supports profiles with `hermes --version`.
 
-Pass: profile resolves correctly; config is isolated; doctor shows no errors.
+```
+hermes -p <name> config path
+```
+Pass: prints a path that differs from `hermes config path` (default profile), confirming isolation.
+Fail: same path as default — the profile directory may be a symlink or `HERMES_HOME` is overriding `-p`; check with `compgen -e | grep -i hermes`.
 
-Fail: profile not found or config leaks — check profile directory and env vars.
-
-After applying fixes, restart the session to pick up profile changes.
+```
+hermes -p <name> doctor
+```
+Pass: doctor exits with no error lines for the named profile.
+Fail: errors present — follow the matching failure section in §2 above.
 
 ## 4. Related
 

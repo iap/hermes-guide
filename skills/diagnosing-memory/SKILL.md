@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
 description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.9
+version: 1.2.10
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -112,6 +112,26 @@ The session *log* (`$HERMES_HOME/state.db`, SQLite) grows independently of both
 memory stores — a 900+ MB database or a large WAL is not a memory problem. Full
 procedure (table map, compaction canary, integrity queries, prune/archive/
 optimize sequence): `references/state_db.md`.
+
+## Verification
+
+```
+hermes memory status
+```
+Pass: all built-in lines show ✓; if an external provider is configured, `Status: available ✓` with no `Missing:` entries.
+Fail: `Status: not available ✗` or missing env var listed — follow §3 for the matching symptom row.
+
+```
+hermes doctor
+```
+Pass: "Memory Provider" section reports no errors.
+Fail: `ImportError` or API key error — run `hermes memory setup <provider>` to reinstall deps, then add the missing key to `$HERMES_HOME/.env`.
+
+```
+hermes guide memories
+```
+Pass: check exits with no FAIL lines (notes are acceptable).
+Fail: FAIL lines present — address the flagged over-limit or duplicate entries per §3.
 
 ## Report
 

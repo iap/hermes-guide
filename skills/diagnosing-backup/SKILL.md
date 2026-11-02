@@ -1,7 +1,7 @@
 ---
 name: diagnosing-backup
 description: Diagnose Hermes backup and restore issues — backup creation failures, restore errors, checkpoint corruption, and import/export problems.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, backup, restore, checkpoints, troubleshooting, diagnosing]
@@ -111,7 +111,7 @@ hermes profile create restored
 hermes -p restored import /path/to/backup.zip
 ```
 
-## 3. Verification
+## Verification
 
 ```bash
 cfg=$(hermes config path)

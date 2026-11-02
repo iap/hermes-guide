@@ -1,7 +1,7 @@
 ---
 name: diagnosing-secrets
 description: Diagnose Hermes secret and credential management issues — secret sources not resolving, vault locked, egress firewall blocking, and credential pool failures.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, secrets, credentials, vault, egress, troubleshooting, diagnosing]
@@ -101,22 +101,25 @@ grep -rl "api_key\|token\|secret" ~/.hermes/logs/ 2>/dev/null | head
 # Use ${SECRET_NAME} references instead of inline values
 ```
 
-## 3. Verification
+## Verification
 
-```bash
-hermes secrets bitwarden status           # source resolves
-hermes secrets onepassword status         # source resolves
-hermes vault list                        # vault items listed
-hermes egress status                     # firewall state correct
-hermes auth status <provider>            # credential pool healthy
-hermes doctor                            # no credential errors
 ```
+hermes vault list
+```
+Pass: exits 0 and lists vault items (or prints empty list); no crash or auth error.
+Fail: error or "vault locked" — run `hermes vault key` to confirm key storage, then re-add credentials with `hermes vault add <name>`.
 
-Pass: all secret sources resolve; vault lists items; egress rules correct; no leaked credentials.
+```
+hermes egress status
+```
+Pass: reports egress state (active or inactive) without error; if active, rules are listed.
+Fail: command not found or error — confirm egress is installed; if not needed, verify it is not blocking requests by checking `hermes doctor`.
 
-Fail: secret not found — check source config and .env; vault locked — verify key storage.
-
-After applying fixes, restart the session to pick up restored credentials.
+```
+hermes doctor
+```
+Pass: no credential or secret-related FAIL lines in output.
+Fail: credential errors present — follow the matching failure section in §2 above.
 
 ## 4. Related
 
