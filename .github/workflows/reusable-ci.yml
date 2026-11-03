@@ -296,6 +296,14 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_verify_plugin.py
 
+      - name: Check-gates regression test
+        if: inputs.run-full-gate
+        run: python tools/test_check_gates.py
+
+      - name: Render-docs regression test
+        if: inputs.run-full-gate
+        run: python tools/test_render_docs.py
+
       - name: Check-envelope regression test
         if: inputs.run-full-gate
         run: python tools/test_check_envelopes.py
