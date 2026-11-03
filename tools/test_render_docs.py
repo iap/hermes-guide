@@ -47,7 +47,7 @@ def main() -> int:
     # verify --write actually fixes stale content
     target = REPO / "README.md"
     original = target.read_text(encoding="utf-8")
-    drifted = original.replace("thirty-one", "thirty-two", 1)
+    drifted = original.replace("Thirty-one", "Thirty-two", 1)
     if drifted != original:
         target.write_text(drifted, encoding="utf-8")
         # default should now detect drift
