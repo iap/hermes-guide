@@ -46,9 +46,25 @@ def main() -> int:
     if "agrees across" not in (r.stdout + r.stderr):
         failures.append("expected 'agrees across' in output")
 
+    # exercise version drift detection through the CLI
+    import shutil
+    pyproject = REPO / "pyproject.toml"
+    original = pyproject.read_text(encoding="utf-8")
+    drifted = original.replace('version = "0.9.1"', 'version = "0.9.0"', 1)
+    if drifted != original:
+        pyproject.write_text(drifted, encoding="utf-8")
+        r = run([])
+        if r.returncode == 0:
+            failures.append("checker did not detect version drift")
+        pyproject.write_text(original, encoding="utf-8")
+        # verify restored
+        if pyproject.read_text(encoding="utf-8") != original:
+            failures.append("failed to restore pyproject.toml")
+            pyproject.write_text(original, encoding="utf-8")
+
     if failures:
         for f in failures:
-            print(f"FAIL: {f}")
+            print(f"FAIL: {f}", file=sys.stderr)
         return 1
     print("OK: check_version_consistency behavioral tests passed")
     return 0
