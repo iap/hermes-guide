@@ -33,12 +33,15 @@ def run(args: list[str]) -> subprocess.CompletedProcess:
 def main() -> int:
     failures: list[str] = []
 
-    # --list should exit 0 and mention the hermetic tier
+    # --list should exit 0 and list all 13 gates
     r = run(["--list"])
     if r.returncode != 0:
         failures.append(f"--list exited {r.returncode}: {r.stderr[:200]}")
     if "Hermetic tier" not in r.stdout:
         failures.append("--list missing 'Hermetic tier' header")
+    gate_lines = [l for l in r.stdout.splitlines() if l.strip().startswith("tools/")]
+    if len(gate_lines) < 13:
+        failures.append(f"--list shows only {len(gate_lines)} gates, expected 13")
 
     # --quick should exit 0 (counts + provenance only)
     r = run(["--quick"])
@@ -50,8 +53,8 @@ def main() -> int:
     r = run([])
     if r.returncode not in (0, 1):
         failures.append(f"bare exited {r.returncode}: {(r.stdout + r.stderr)[:300]}")
-    if "gate(s) failed" in r.stdout and "gen_changelog" not in r.stdout:
-        failures.append(f"unexpected gate failure: {(r.stdout + r.stderr)[:300]}")
+    if "gate(s) failed" in r.stderr and "gen_changelog" not in r.stderr:
+        failures.append(f"unexpected gate failure: {combined[:300]}")
 
     if failures:
         for f in failures:

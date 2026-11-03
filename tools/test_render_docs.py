@@ -39,7 +39,7 @@ def main() -> int:
     if r.returncode != 0:
         failures.append(f"default exited {r.returncode}: {(r.stdout + r.stderr)[:300]}")
 
-    # --write should exit 0
+    # --write should exit 0 and be idempotent (no file changes)
     r = run(["--write"])
     if r.returncode != 0:
         failures.append(f"--write exited {r.returncode}: {(r.stdout + r.stderr)[:300]}")
