@@ -47,20 +47,26 @@ def main() -> int:
         failures.append("expected 'agrees across' in output")
 
     # exercise version drift detection through the CLI
-    import shutil
+    import re
     pyproject = REPO / "pyproject.toml"
     original = pyproject.read_text(encoding="utf-8")
-    drifted = original.replace('version = "0.9.1"', 'version = "0.9.0"', 1)
-    if drifted != original:
+    m = re.search(r'^version\s*=\s*"([^"]+)"', original, re.MULTILINE)
+    assert m, "could not parse version from pyproject.toml"
+    current_ver = m.group(1)
+    drifted_ver = "0.0.0" if current_ver != "0.0.0" else "0.0.1"
+    drifted = original.replace(f'version = "{current_ver}"', f'version = "{drifted_ver}"', 1)
+    assert drifted != original
+    try:
         pyproject.write_text(drifted, encoding="utf-8")
         r = run([])
         if r.returncode == 0:
             failures.append("checker did not detect version drift")
+    finally:
         pyproject.write_text(original, encoding="utf-8")
-        # verify restored
-        if pyproject.read_text(encoding="utf-8") != original:
-            failures.append("failed to restore pyproject.toml")
-            pyproject.write_text(original, encoding="utf-8")
+    # verify restored
+    if pyproject.read_text(encoding="utf-8") != original:
+        failures.append("failed to restore pyproject.toml")
+        pyproject.write_text(original, encoding="utf-8")
 
     if failures:
         for f in failures:
