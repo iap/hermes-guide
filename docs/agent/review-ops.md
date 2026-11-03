@@ -24,10 +24,7 @@ with file:line evidence, not implemented.
   `@coderabbitai full review` after every push, and do not post a second trigger
   while one review is pending. If there are no new commits, do not trigger again.
   A silent bot is "not heard", never "clean".
-- **Deep review operations.** Prefer `gh api graphql` with `reviewThreads` for
-  resolution state and full bodies; fall back to REST `pulls/<n>/comments` for
-  inline enumeration or replies. `isOutdated` only means the anchor moved — it
-  is not evidence of a fix. Never resolve a thread before replying with evidence.
+- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (required for resolution state; REST has no equivalent). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` only means the anchor moved — it is not evidence of a fix. Never resolve a thread before replying with evidence.
 - **Both, then merge.** A clean primary reviewer does not replace the second
   review. A clean second reviewer does not erase a new primary finding. Merge
   only after the loop reaches clean on both.
@@ -92,7 +89,7 @@ Verify on a PR after the configuration is available to CodeRabbit:
 A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. Triage each thread before replying: reproduce it against the repo guards and cited code, then fix or decline with file:line evidence. Never resolve a thread to unblock a merge; only the reviewer bot's accept/decline can close it.
 
 The REST comments view lists findings but not resolution state, and that
-state is GraphQL-only. Read the authoritative inventory first:
+state is GraphQL-only. Read the authoritative inventory first: 
 
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
@@ -101,10 +98,10 @@ query($owner:String!,$repo:String!,$pr:Int!,$endCursor:String){
   repository(owner:$owner,name:$repo){pullRequest(number:$pr){
     reviewThreads(first:100,after:$endCursor){
       pageInfo{hasNextPage endCursor}
-      nodes{id isResolved isOutdated path line
-        comments(first:1){nodes{databaseId author{login} body}}}}}}
+      nodes{id isResolved isOutdated path line startLine diffSide subjectType
+        comments(first:100){nodes{databaseId author{login} body createdAt}}}}}}
 }' -F owner="${REPO%/*}" -F repo="${REPO#*/}" -F pr=<PR> \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|"\(.path):\(.line) thread=\(.id) comment=\(.comments.nodes[0].databaseId) \(.comments.nodes[0].author.login)"'
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|{path,line,startLine,diffSide,thread:.id,firstCommentId:.comments.nodes[0].databaseId,author:.comments.nodes[0].author.login,body:.comments.nodes[0].body}'
 ```
 
 `--paginate` follows `endCursor` until `hasNextPage` is false; never declare a
@@ -113,7 +110,7 @@ clear (report `OK: 0 unresolved review threads`); any row is a thread to triage
 before replying. `isOutdated: true` only means the anchor moved to a newer
 commit — it is not evidence the finding was fixed.
 Each row carries both ids: `thread=PRRT_…` feeds
-`addPullRequestReviewThreadReply`; `comment=<numeric>` feeds the REST
+`addPullRequestReviewThreadReply`; `firstCommentId=<numeric>` feeds the REST
 `in_reply_to` reply below. Ids carried in a review body are not thread nodes.
 `resolveReviewThread` and GitHub's "Resolve conversation" button are not
 substitutes for bot acceptance: leave the thread open until the bot accepts or
@@ -224,17 +221,65 @@ unexecutable on the current host (Windows-only code from macOS, long probes).
 Do not delegate trivially serial work — overhead without independence is just
 slower same-model output.
 
-- **Vehicle matters more than headcount.** Built-in subagents share the
-  delegating model's engine: good for parallelism, weak for judgment
-  independence. For genuine engine diversity, route through the local Hermes
-  CLI on another model or through the review bots — and record which vehicle
-  was used, so "independently verified" never silently means self-agreement.
-- **Briefs are precise and bounded.** State the exact task, the evidence to
-  return, and explicit no-go constraints (no file edits, no push, no merge,
-  no restarts unless asked). Save transcripts for long probes.
-- **Worker output is evidence, not verdict.** Cross-check it against source
-  before acting — including second-model reviews, which share no context but
-  may share failure modes on judgment calls.
+### Vehicles and independence
+
+| Vehicle | Independence | Notes |
+|---|---|---|
+| Parallel tool calls (single message) | Shared model/context | Independent reads/searches only; no isolation. |
+| Built-in subagents (`task`) | Fresh context, same engine | Good for parallelism; weak for judgment independence. Share failure modes. |
+| `agent_manager` (worktree/local) | Separate process/session; can use different config/model | Isolated FS; use `versions: true` only to compare alternatives. |
+| Hermes CLI on another model/host | Different engine + env | Strongest for verification/diversity. Record model/host used. |
+
+"Independently verified" must name the vehicle. Same model = corroboration,
+not independence.
+
+### Decomposition and ownership
+
+- **Map dependencies.** Only parallelize disjoint work. Shared files/contracts
+  (e.g. `constants.py`, `AGENTS.md`, lockfiles, CI) get a single owner.
+- **Assign strict ownership.** Give each agent an allowlist of files/dirs; no-go
+  shared files. Cross-agent calls are impossible — coordinate via the integrator.
+- **Plan integration.** Decide order (types → impl → tests) and have one
+  integrator apply changes sequentially with gates between steps.
+- **Serialize on conflicts.** If ownership is unclear, serialize. Read-mostly
+  parallelism is safest.
+
+### Briefing requirements
+
+Every delegated run must include:
+- **Goal:** Exact task, not "investigate".
+- **Scope:** Allowlist + explicit no-go.
+- **Evidence required:** Concrete artifacts (file:line, command output, test
+  names) — not opinions.
+- **Constraints:** No file edits/push/merge/restart unless asked; respect
+  read-only rules.
+- **Verification hints:** Relevant guards/tests to run/cite.
+- **Context:** Minimal pointers needed.
+
+Save transcripts for long probes.
+
+### Execution discipline
+
+- **Start serial.** Discover constraints/dependencies first if ambiguous.
+- **Cross-check before acting.** Treat worker output as evidence, not verdict.
+  Reproduce claims against source; run relevant gates.
+- **One owner per branch/PR.** Follow multi-environment coordination (announce
+  claims, don't force-push others' branches, batch bot reviews per settled head).
+- **Integrate deliberately.** Apply one agent's verified changes at a time,
+  run affected gates/tests, resolve conflicts. Never bulk-apply unverified diffs.
+- **Track work.** Use `todowrite` for multi-step parallel work; keep ownership
+  explicit.
+- **Respect norms.** Never `git add -A`; follow signing, security, and review
+  gates.
+
+### Anti-patterns
+
+- **Parallelizing serial dependencies** — overhead, not speed.
+- **Shared mutable files** — assign single owner or serialize.
+- **Vague briefs** — leads to unfocused output.
+- **Same-model "independent" verification** — call it corroboration.
+- **Merging swarm output unverified** — cross-check first.
+- **Parallel pushes/merges/triggers** — one integrator, batch reviews.
 
 ## Pre-merge cross-check
 
