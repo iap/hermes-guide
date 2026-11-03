@@ -238,6 +238,45 @@ Upstream's `project_venv_dir()` resolves `venv/` first, so scripts mirroring Her
 
 Symptom: an update/protection/preflight step reports success but never ran. Cause: a **venv-only** check on a **`.venv`-only** checkout — the class tracked by **#79542**; its canonical instances (`_venv_scripts_dir`, the service-PATH builder) were fixed or retired upstream during 2026-09. Confirm the layout first (`ls -d venv .venv`), then treat any venv-name-specific check as suspect and resolve through `project_venv_dir()`.
 
+### `hermes: command not found`
+
+Symptom: running `hermes` fails with "command not found" even though Hermes is installed (shims may exist in `~/.local/bin`).
+
+Causes:
+1. **PATH missing `~/.local/bin`** — the standard installer places shims there but doesn't add it to PATH in all shells/configs.
+2. **Shell not reloaded** — PATH changes won't affect the current shell until sourced or restarted.
+3. **Shim points to missing target** — the shim exists but the launcher is broken.
+
+Diagnosis:
+
+```bash
+# Check if shim exists and what's in PATH
+ls -la ~/.local/bin/hermes 2>&1
+echo $PATH | grep -q '.local/bin' && echo "in PATH" || echo "NOT in PATH"
+
+# Check shim target
+readlink -f ~/.local/bin/hermes 2>&1
+cat ~/.local/bin/hermes 2>&1 | head -3
+
+# Try running directly
+~/.local/bin/hermes --version 2>&1 | head -3
+```
+
+Fix:
+
+```bash
+# Add to PATH for current shell
+export PATH="$HOME/.local/bin:$PATH"
+
+# Make permanent (zsh)
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+
+# Make permanent (bash)
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
+If the direct path works but `hermes` doesn't, it's purely a PATH issue. On some systems `~/bin` is used instead — check both locations.
+
 ### Windows: "python" not found
 
 Windows venvs use `Scripts\python.exe`, not `bin/python`. Use `venv_bin_dir()` or `sys.executable`.

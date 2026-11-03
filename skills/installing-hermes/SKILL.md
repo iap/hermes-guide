@@ -182,6 +182,8 @@ hermes config path
 
 **Fail:** Version unchanged or doctor errors — re-run the install; check `$HERMES_HOME/logs/` for details.
 
+**`hermes: command not found`** — if the shim exists at `~/.local/bin/hermes` but isn't found, `~/.local/bin` isn't in PATH. Add it (current shell): `export PATH="$HOME/.local/bin:$PATH"`, and make permanent in `~/.zshrc` or `~/.bashrc`. See `diagnosing-path` for details.
+
 This skill diagnoses installation and upgrade failures — broken installs, wrong venv layout, missing prerequisites, and config bootstrap issues. When you run the diagnostic workflow, present findings in the standard format below.
 
 ### Summary
