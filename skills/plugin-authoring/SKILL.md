@@ -1,7 +1,7 @@
 ---
 name: plugin-authoring
 description: "Author Hermes plugins (plugin.yaml + register(ctx)) and skills (SKILL.md) — scaffolding, registration, hooks, commands, capabilities, versioning, provenance, and the read-only contract."
-version: 1.5.2
+version: 1.5.3
 metadata:
   hermes:
     tags: [hermes, plugin, skill, authoring, guide]
@@ -108,11 +108,24 @@ Key points:
   (commands come from built-ins, skills-as-slash, bundles, and plugins); hooks
   span four separate systems; plugins are `plugin.yaml` + `register(ctx)`, not
   `plugin.json`.
-- **Confusing hermes-guide with hermes-agent.** hermes-guide is a diagnostics
   plugin + skills tap that only inspects Hermes. Never edit Hermes source to
   fix a guide finding.
 - **Hermes config is YAML, never JSON.**
 - **Every diagnosis should end in a concrete action** followed by a `/reload-*`
   or restart.
+
+## Verification
+
+After authoring a plugin or skill, confirm it is valid:
+
+```bash
+python tools/verify_plugin.py .
+hermes plugins list
+hermes skills list
+```
+
+**Pass:** `verify_plugin.py` reports 0 failures; plugin appears in `hermes plugins list`; skill appears in `hermes skills list`.
+
+**Fail:** Verification errors — fix the reported issues and re-run; plugin missing — check `plugin.yaml` manifest and `register(ctx)` signature; skill missing — check `SKILL.md` frontmatter and directory name.
 
 *Facts verified 2026-10-31 against upstream source: `hermes_cli/plugins.py` at `cedf4a3d` (VALID_HOOKS, register_hook, register_command — documents `fn(raw_args: str)` only); `hermes_cli/plugin_command_dispatch.py` introduced in `06e8c5bc` (context-keyword contract); `hermes_cli/plugins_manifest.py` at `cedf4a3d` (requires_hermes, python_dependencies, config_schema); `hermes_cli/skills_hub.py` at `cedf4a3d` (tap install); `tools/render_docs.py` (_word_num ceiling, selftest guard); `tools/test_skill_counts.py` (README table + issue template parity); and the official docs (hermes-agent.nousresearch.com/docs). Plugin manifest fields and skill frontmatter verified against this repo's own `plugin.yaml` and `skills/*/SKILL.md`. Re-verify before reuse.*

@@ -1,7 +1,7 @@
 ﻿---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, plugins, and credential pools live on disk. For breakage routing ("something is wrong"), prefer diagnosing-triage.
-version: 1.4.5
+version: 1.4.6
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
@@ -156,7 +156,19 @@ matched first.
 - **Launch/UI failure vs command surface vs app build**: if the desktop app fails to launch or shows a blank window, see `diagnosing-desktop`; if the TUI misrenders or shows unreadable indicators on native Windows, see `diagnosing-cli-tui`; if a `/command` is missing or overridden, see `diagnosing-commands`.
 - **Which venv/home applies where**: if the wrong Python interpreter is active or the dual-venv layout is confusing, see `diagnosing-path`; if the desktop app's backend resolution is wrong, see `diagnosing-desktop`; if the install itself is broken, see `installing-hermes`.
 
-## Standard report format
+## Verification
+
+After resolving a configuration issue, confirm the fix landed:
+
+```bash
+hermes config path
+hermes doctor
+hermes plugins list
+```
+
+**Pass:** `hermes config path` points to the expected `$HERMES_HOME/config.yaml`; `hermes doctor` reports no errors; plugins list shows expected plugins.
+
+**Fail:** Config path unexpected — check `HERMES_HOME` env var and profile selection; doctor errors — follow the matching `diagnosing-*` skill from the routing table above.
 
 Every diagnostic skill reports findings in this format. The model uses this structure when presenting results to the user.
 
