@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.1.4
+version: 1.1.5
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -168,7 +168,19 @@ from fighting:
 - **Rollback:** back up `$HERMES_HOME` before upgrades; the code directory is
   disposable, the data directory is not.
 
-## Report
+## Verification
+
+After installing or updating, confirm the install is healthy:
+
+```bash
+hermes --version
+hermes doctor
+hermes config path
+```
+
+**Pass:** Version shows the expected release; `hermes doctor` reports no errors; config path resolves to the correct `$HERMES_HOME`.
+
+**Fail:** Version unchanged or doctor errors — re-run the install; check `$HERMES_HOME/logs/` for details.
 
 This skill diagnoses installation and upgrade failures — broken installs, wrong venv layout, missing prerequisites, and config bootstrap issues. When you run the diagnostic workflow, present findings in the standard format below.
 

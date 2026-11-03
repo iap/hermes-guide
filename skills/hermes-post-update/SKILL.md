@@ -1,7 +1,7 @@
 ---
 name: hermes-post-update
 description: Verify and clean up after a Hermes update — confirm the gateway restarted on new code, check plugin migrations, review config changes, run health checks, and surface cleanup opportunities.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, update, verification, maintenance]
@@ -246,10 +246,24 @@ migrations applied (honcho, homeassistant). Three items need attention.
 2. Review user-modified skills: `hermes skills list-modified`
 3. Drop stale autoshash entries (optional, cosmetic)
 
-#### References
-- `$HERMES_HOME/logs/update.log` — full update output
+## Verification
+
+After an update, confirm it landed correctly:
+
+```bash
+hermes --version
+hermes doctor
+hermes plugins list
+```
+
+**Pass:** Version reflects the new release; `hermes doctor` reports no errors; all expected plugins are listed.
+
+**Fail:** Version unchanged — re-run `hermes update`; doctor errors — follow the matching `diagnosing-*` skill; missing plugins — run `hermes plugins install <name>`.
 - `$HERMES_HOME/logs/gateway.log` — gateway restart confirmation
 - `hermes doctor` — health check results
+
+#### References
+- `$HERMES_HOME/logs/update.log` — full update output
 
 ---
 
