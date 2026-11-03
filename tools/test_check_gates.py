@@ -42,11 +42,17 @@ def main() -> int:
     gate_lines = [l for l in r.stdout.splitlines() if l.strip().startswith("tools/")]
     if len(gate_lines) < 13:
         failures.append(f"--list shows only {len(gate_lines)} gates, expected 13")
-    # verify key gates are present
-    gate_text = r.stdout
-    for expected in ("render_docs.py", "check_skill_provenance.py", "check_no_mutation.py", "verify_plugin.py"):
-        if expected not in gate_text:
-            failures.append(f"--list missing expected gate: {expected}")
+    # verify all 13 expected gates are present
+    expected_gates = [
+        "test_skill_counts.py", "render_docs.py", "check_skill_provenance.py",
+        "check_self_claim.py", "check_doc_style.py", "check_version_consistency.py",
+        "gen_changelog.py", "check_issue_templates.py", "check_scope_enumeration.py",
+        "check_no_mutation.py", "check_scanner_hygiene.py", "check_eol_contract.py",
+        "verify_plugin.py",
+    ]
+    for g in expected_gates:
+        if g not in r.stdout:
+            failures.append(f"--list missing expected gate: {g}")
 
     # --quick should exit 0 (counts + provenance only)
     r = run(["--quick"])
