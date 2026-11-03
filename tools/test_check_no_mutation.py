@@ -33,6 +33,13 @@ def run(args: list[str]) -> subprocess.CompletedProcess:
 def main() -> int:
     failures: list[str] = []
 
+    # --selftest should exit 0 (exercises mutation detection fixtures)
+    r = run(["--selftest"])
+    if r.returncode != 0:
+        failures.append(f"--selftest exited {r.returncode}: {(r.stdout + r.stderr)[:300]}")
+    if "selftest OK" not in (r.stdout + r.stderr):
+        failures.append("expected 'selftest OK' in output")
+
     # bare invocation should exit 0 (no mutation in current tree)
     r = run([])
     if r.returncode != 0:
