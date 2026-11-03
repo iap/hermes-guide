@@ -6,19 +6,19 @@ All notable changes to hermes-guide are documented here.
 
 ### Features
 
-- **skills**: add standardized `## Verification` sections to all 31 skills
-- **docs**: split `docs/agent/ops.md` into `deep-ops.md` + `review-ops.md`
+- **skills**: add standardized `## Verification` sections to all 31 skills (#400, #402, #404)
+- **docs**: split `docs/agent/ops.md` into `deep-ops.md` + `review-ops.md` (#403)
 
 ### Bug Fixes
 
-- **skills**: address 22 Qodo findings on Verification sections (CLI commands, Windows compat, egress, vault)
-- **skills**: correct 4 invalid CLI commands in Verification sections (auth, desktop, registry, vault)
-- **tools**: fix verify_plugin registration check (module-level only, posonly/vararg, async rejection)
+- **skills**: address 22 Qodo findings on Verification sections (CLI commands, Windows compat, egress, vault) (#402)
+- **skills**: correct 4 invalid CLI commands in Verification sections (auth, desktop, registry, vault) (#400)
+- **tools**: fix verify_plugin registration check (module-level only, posonly/vararg, async rejection) (#399)
 
 ### Documentation
 
-- **skills**: add `## Verification` to 4 meta skills (configuration-guide, post-update, installing-hermes, plugin-authoring)
-- **docs**: add comment discipline templates, wip label, draft-before-publishing instructions
+- **skills**: add `## Verification` to 4 meta skills (configuration-guide, post-update, installing-hermes, plugin-authoring) (#404)
+- **docs**: add comment discipline templates, wip label, draft-before-publishing instructions (#391, #389)
 
 ## v0.9.0 (2026-11-01)
 
