@@ -39,10 +39,29 @@ def main() -> int:
     if r.returncode != 0:
         failures.append(f"default exited {r.returncode}: {(r.stdout + r.stderr)[:300]}")
 
-    # --write should exit 0 and be idempotent (no file changes)
+    # --write should exit 0
     r = run(["--write"])
     if r.returncode != 0:
         failures.append(f"--write exited {r.returncode}: {(r.stdout + r.stderr)[:300]}")
+
+    # verify --write actually fixes stale content
+    target = REPO / "README.md"
+    original = target.read_text(encoding="utf-8")
+    drifted = original.replace("thirty-one", "thirty-two", 1)
+    if drifted != original:
+        target.write_text(drifted, encoding="utf-8")
+        # default should now detect drift
+        r = run([])
+        if r.returncode == 0:
+            failures.append("default did not detect introduced drift")
+        # --write should fix it
+        r = run(["--write"])
+        if r.returncode != 0:
+            failures.append(f"--write failed to fix drift: {(r.stdout + r.stderr)[:300]}")
+        restored = target.read_text(encoding="utf-8")
+        if restored != original:
+            failures.append("--write did not restore original content")
+            target.write_text(original, encoding="utf-8")
 
     if failures:
         for f in failures:
