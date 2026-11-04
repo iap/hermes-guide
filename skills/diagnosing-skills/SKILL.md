@@ -1,7 +1,7 @@
 ---
 name: diagnosing-skills
 description: Diagnose Hermes skills that are not discovered, not loading, shadowed, hidden by platform or toolset conditions, or stuck as user-modified after edits.
-version: 1.1.11
+version: 1.1.12
 metadata:
   hermes:
     tags: [hermes, skills, troubleshooting]
@@ -56,7 +56,6 @@ For in-repo authoring conventions (frontmatter standards, tier selection, descri
 9. **New bundled skills never appear** — profile has a `.no-bundled-skills` marker. → `hermes skills opt-in --sync`.
 10. **Plugin skill gone** — the providing plugin was disabled. → `hermes plugins enable <name>`.
 11. **`hermes-agent` cannot be disabled** — it is in `ESSENTIAL_SKILLS` (`agent/skill_utils.py`): disable requests for it are ignored everywhere the disabled list is consulted, by design (it is the agent's operating manual and the system prompt points at it unconditionally). → Not a bug.
-12. **Skill sits in a directory the loader prunes** — the discovery walk skips these names anywhere in the path: `.git`, `.github`, `.hub`, `.archive`, `.curator_backups`, `.locks`, `.hermes-dist`, `.venv`, `venv`, `node_modules`, `site-packages`, `__pycache__`, `.tox`, `.nox`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache` (`agent/skill_utils.py::EXCLUDED_SKILL_DIRS`), plus `references`/`templates`/`assets`/`scripts` when they sit directly inside another skill's root (`agent/skill_utils.py::SKILL_SUPPORT_DIRS`). The prune is by name, not "any dotted dir": a directory like `.myskills/` that is not on the list is still loaded. → Move the skill to `$HERMES_HOME/skills/<category>/<name>/`, then `/reload-skills`.
 
 ## 5. Duplicates & consolidation
 
@@ -123,4 +122,4 @@ Edit the local copy at `$HERMES_HOME/skills/<category>/<name>/SKILL.md` directly
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: all eight hub source names (`tools/skills_hub_*.py`), `_CONDITION_KEYS` and `ESSENTIAL_SKILLS` (`agent/skill_utils.py`), external-dir ownership (`agent/prompt_builder.py`), `skills/.hub/lock.json` (`tools/skills_hub.py`), the bundled marker and `skills opt-in --sync` / `skills reset --restore` paths (`hermes_cli/`), `required_environment_variables` (`tools/skills_tool.py`), the skills-scoped `write_approval` and `$HERMES_HOME/pending/skills/`, and `plugin:skill` qualified dispatch (`tools/skills_tool.py`). Creation flows table and duplicates & consolidation section added 2026-10-06, verified against upstream `skills/software-development/hermes-agent-skill-authoring/SKILL.md` (v2.0.0) at pinned baseline `5000e29936df69d5209f7cf2eea8e5776cb4cbb1`. Discovery prune rules re-verified 2026-11-04 at `07274ac65438a0b62bb9fd64bf284e58b2fd8fc6`: the loader prunes `EXCLUDED_SKILL_DIRS` by name (now including the `.hermes-dist` profile-swap dir) plus the `SKILL_SUPPORT_DIRS` of a skill root, and its walk follows symlinked directories — a dotted directory not on that list is still loaded. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: all eight hub source names (`tools/skills_hub_*.py`), `_CONDITION_KEYS` and `ESSENTIAL_SKILLS` (`agent/skill_utils.py`), external-dir ownership (`agent/prompt_builder.py`), `skills/.hub/lock.json` (`tools/skills_hub.py`), the bundled marker and `skills opt-in --sync` / `skills reset --restore` paths (`hermes_cli/`), `required_environment_variables` (`tools/skills_tool.py`), the skills-scoped `write_approval` and `$HERMES_HOME/pending/skills/`, and `plugin:skill` qualified dispatch (`tools/skills_tool.py`). Creation flows table and duplicates & consolidation section added 2026-10-06, verified against upstream `skills/software-development/hermes-agent-skill-authoring/SKILL.md` (v2.0.0) at pinned baseline `5000e29936df69d5209f7cf2eea8e5776cb4cbb1`. Re-verify before reuse.*
