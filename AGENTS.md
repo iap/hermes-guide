@@ -194,7 +194,22 @@ table with honest `not run` entries is accepted; a claim that outruns the eviden
 is not — `validate-claim.yml` re-runs the hermetic gates against your PR head and
 fails the check if your table does not match reality.
 
-## Pre-merge cross-check
+## Pre-merge cross-check (MANDATORY)
 
-Never merge on green CI alone — run the checklist in
-[docs/agent/review-ops.md](docs/agent/review-ops.md#pre-merge-cross-check) first.
+**NEVER merge on green CI alone.** Before merging ANY PR:
+
+**Required checks (in order):**
+1. **CI & status** - All required checks pass (not pending), `mergeStateStatus: CLEAN`
+2. **Qodo first** - Qodo reviewed current head. If no automatic review, comment `/agentic_review` and wait. No `CHANGES_REQUESTED`. All Qodo threads resolved by bot (never human-resolved)
+3. **CodeRabbit after Qodo clean** - After Qodo is clean on current head, post `@coderabbitai full review` once. Wait for CodeRabbit on same head
+4. **Both clean on same head** - CodeRabbit clean on current head. Any new push invalidates reviews - restart from step 2
+5. **Final verification** - Use `gh api graphql` to enumerate `reviewThreads` (REST not enough). Zero unresolved threads. Bot acceptance only
+
+**Hard rules:**
+- A silent bot = not clean. Must have reviews on current head commit
+- Never resolve threads manually to unblock
+- Never use `--admin` to bypass unresolved threads/failed checks
+- A clean review on old commit doesn't count after new push
+- If Qodo never runs and trigger doesn't work, get explicit authorization
+
+Full details: [docs/agent/review-ops.md](docs/agent/review-ops.md#pre-merge-cross-check)
