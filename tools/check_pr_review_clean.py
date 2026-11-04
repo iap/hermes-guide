@@ -26,6 +26,9 @@ def run(args: list[str]) -> tuple[int, str, str]:
 
 
 def main(argv: list[str]) -> int:
+    if len(argv) == 1 and argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
     if len(argv) != 1:
         print("usage: check_pr_review_clean.py <PR_NUMBER>", file=sys.stderr)
         return 2
@@ -114,8 +117,7 @@ def main(argv: list[str]) -> int:
     for t in threads:
         if t.get("isResolved"):
             continue
-        if t.get("isOutdated"):
-            continue
+        # Don't skip outdated - check if bot commented (issue 9)
         comments = (t.get("comments") or {}).get("nodes") or []
         if not comments:
             continue

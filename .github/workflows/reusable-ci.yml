@@ -214,6 +214,7 @@ jobs:
         run: |
           python tools/check_tool_coverage.py --selftest
           python tools/check_tool_coverage.py
+          python tools/check_pr_review_clean.py --help >/dev/null 2>&1 || true
 
       - name: Host-pressure probe behavioral test
         # Linux legs only: the probe is a bash script reading /proc, and the
