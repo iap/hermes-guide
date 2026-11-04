@@ -45,6 +45,26 @@ body:
     validations:
       required: false
   - type: input
+    id: profile
+    attributes:
+      label: Hermes profile
+      description: Active profile if not default (`hermes profile list`); leave blank for default.
+      placeholder: "default"
+    validations:
+      required: false
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      description: How Hermes is installed; diagnostics differ by layout.
+      options:
+        - git checkout
+        - package manager (PM)
+        - zip / standalone
+        - other / unknown
+    validations:
+      required: false
+  - type: input
     id: modified
     attributes:
       label: What was modified during diagnosis

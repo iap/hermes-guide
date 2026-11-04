@@ -50,6 +50,14 @@ body:
       placeholder: "v2026.9.24"
     validations:
       required: true
+  - type: input
+    id: profile
+    attributes:
+      label: Hermes profile
+      description: Active profile if not default; leave blank for default.
+      placeholder: "default"
+    validations:
+      required: false
   - type: textarea
     id: evidence
     attributes:

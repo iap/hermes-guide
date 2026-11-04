@@ -25,6 +25,7 @@ real install and does not require the ``hermes`` CLI.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
@@ -347,11 +348,103 @@ def main(argv: list[str]) -> int:
                     "normalize to" in d for d in (cr6.get("detail") or [])):
                 failures.append(f"Unicode skill names reported a false collision: {cr6}")
 
+        # (9) the discovery walk mirrors the loader's prune rules, not "any
+        # dotted dir". Two divergences this pins: a skill under a dotted dir the
+        # loader does not list IS loaded (previously missed), and a stray
+        # SKILL.md under a vendored venv/node_modules/site-packages tree or under
+        # a skill's support dir is NOT a skill (previously invented). The
+        # upstream import is blocked so the hermetic mirror runs even on a host
+        # where Hermes is installed.
+        disc_home = Path(td) / "discovery-home"
+        discovered = ("plain-skill", ".dotdir/dotskill", "toolsy/toolskill")
+        pruned = (
+            "toolsy/toolskill/venv/lib/dep",
+            "toolsy/toolskill/references/refskill",
+            "vendored/node_modules/dep",
+            "vendored/localsite/site-packages/dep",
+            ".hub/hubskill",
+            ".archive/oldskill",
+            ".hermes-dist/staged",
+        )
+        for rel in discovered + pruned:
+            if rel == "danglingskill":
+                continue
+            _write(disc_home / f"skills/{rel}/SKILL.md",
+                   f"---\nname: {rel.split('/')[-1]}\ndescription: fixture\n---\nbody\n")
+        expect = {rel.split("/")[-1] for rel in discovered}
+        linked = None
+        try:
+            external = Path(td) / "external-lib/linkedskill"
+            _write(external / "SKILL.md",
+                   "---\nname: linkedskill\ndescription: linked\n---\nbody\n")
+            os.symlink(str(external), str(disc_home / "skills/linkedskill"))
+            linked = "linkedskill"
+            expect.add(linked)
+        except (OSError, NotImplementedError):
+            # Windows CI without developer mode cannot create symlinks; the
+            # remaining cases still bind the prune rules.
+            pass
+        # Cycle guard: two symlinks pointing back at their parent must not
+        # stall the walk or duplicate the skill.
+        _write(disc_home / "skills/cycleskill/SKILL.md",
+               "---\nname: cycleskill\ndescription: fixture\n---\nbody\n")
+        expect.add("cycleskill")
+        cycle_created = False
+        try:
+            os.symlink(str(disc_home / "skills/cycleskill"),
+                       str(disc_home / "skills/cycleskill/self1"))
+            os.symlink(str(disc_home / "skills/cycleskill"),
+                       str(disc_home / "skills/cycleskill/self2"))
+            cycle_created = True
+        except (OSError, NotImplementedError):
+            pass
+        # Dangling SKILL.md symlink is still a file entry in Hermes' walk.
+        dangling_created = False
+        try:
+            dangling_dir = disc_home / "skills" / "danglingskill"
+            dangling_dir.mkdir(parents=True, exist_ok=True)
+            os.symlink(str(dangling_dir / "missing-target"),
+                       str(dangling_dir / "SKILL.md"))
+            dangling_created = True
+            expect.add("danglingskill")
+        except (OSError, NotImplementedError):
+            pass
+        with mock.patch.dict(sys.modules, {"agent": None, "agent.skill_utils": None}):
+            checks._store().clear()
+            checks._hermes_home_from_library = lambda: str(disc_home)
+            walked = {Path(d).name for d, _ in checks._iter_skills()}
+        if walked != expect:
+            failures.append(
+                "skill discovery diverged from the loader: missing "
+                f"{sorted(expect - walked)}, invented {sorted(walked - expect)}")
+        if linked is not None and linked not in walked:
+            failures.append("symlinked skill dir was not followed (the loader follows it)")
+        if cycle_created and not checks._has_symlink_cycle(disc_home / "skills"):
+            failures.append("symlink cycle was not detected")
+        if not cycle_created and checks._has_symlink_cycle(disc_home / "skills"):
+            failures.append("false positive symlink-cycle detection")
+
+        # A directory named SKILL.md is not a skill file, so the support dir
+        # under it must still be traversed for cycles. Use a fresh root so the
+        # earlier cycleskill links cannot make this assertion pass.
+        bad_home = Path(td) / "bad-home"
+        bad = bad_home / "skills" / "badskill"
+        (bad / "SKILL.md").mkdir(parents=True, exist_ok=True)
+        (bad / "references").mkdir(parents=True, exist_ok=True)
+        bad_cycle_created = False
+        try:
+            os.symlink(str(bad), str(bad / "references" / "back"))
+            bad_cycle_created = True
+        except (OSError, NotImplementedError):
+            pass
+        if bad_cycle_created and not checks._has_symlink_cycle(bad_home / "skills"):
+            failures.append("cycle behind a SKILL.md directory was not detected")
+
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
         return 1
-    print("OK: skill-library checks behave as expected (catalog validity, Unicode slugs, bundled label, hidden-dir skip, versioned collisions)")
+    print("OK: skill-library checks behave as expected (catalog validity, Unicode slugs, bundled label, hidden-dir skip, loader-mirror prune rules, versioned collisions)")
     return 0
 
 

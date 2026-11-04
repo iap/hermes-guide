@@ -29,6 +29,7 @@ import importlib
 import io
 import json
 import os
+import pathlib
 import stat
 import re
 import shlex
@@ -143,7 +144,7 @@ def _path_hermes_executables():
     install even though a working `hermes` sits further down `PATH`. Walking
     the whole `PATH` is what makes the fall-through contract meaningful.
     """
-    found = []
+    found: list[str] = []
     seen = set()
     # An UNSET PATH and an explicitly EMPTY one are different states. Unset
     # means "use the system default", so search os.defpath -- which is what
@@ -394,13 +395,115 @@ def _plugin_skill_names():
     return names
 
 
+def _has_symlink_cycle(skills_root):
+    """True when ``skills_root`` contains a symlink that points back at an
+    ancestor. Hermes' own walker follows symlinks without cycle detection, so
+    a cycle there would stall diagnostics; detect it first and use the
+    cycle-safe mirror instead. Iterative to avoid RecursionError on deep trees.
+    """
+    root_real = os.path.realpath(skills_root)
+    try:
+        with os.scandir(skills_root) as entries:
+            root_names = [entry.name for entry in entries]
+    except OSError:
+        return False
+    root_has = "SKILL.md" in root_names and not os.path.isdir(os.path.join(skills_root, "SKILL.md"))
+    stack = [[skills_root, frozenset({root_real}), root_names, 0, root_has]]
+    while stack:
+        dirpath, ancestors, names, idx, has_skill_md = stack[-1]
+        if idx >= len(names):
+            stack.pop()
+            continue
+        stack[-1][3] = idx + 1
+        name = names[idx]
+        if name in constants.SKILL_EXCLUDED_DIRS:
+            continue
+        if has_skill_md and name in constants.SKILL_SUPPORT_DIRS:
+            continue
+        child = os.path.join(dirpath, name)
+        if not os.path.isdir(child):
+            continue
+        real = os.path.realpath(child)
+        if real in ancestors:
+            return True
+        try:
+            with os.scandir(child) as entries:
+                child_names = [entry.name for entry in entries]
+        except OSError:
+            continue
+        child_has = "SKILL.md" in child_names and not os.path.isdir(os.path.join(child, "SKILL.md"))
+        stack.append([child, ancestors | {real}, child_names, 0, child_has])
+    return False
+
+
+def _skill_index_paths(skills_root):
+    """SKILL.md paths under ``skills_root`` that Hermes would discover.
+
+    Prefers Hermes' own walker (the normal in-session case), so the plugin sees
+    exactly the set the loader sees. The local mirror exists for the hermetic
+    tier and must prune by NAME — ``constants.SKILL_EXCLUDED_DIRS`` — never by
+    "any dotted directory": Hermes loads a skill that sits under a dotted dir it
+    does not list, and its walk follows symlinked directories.
+    """
+    # Hermes' walker follows symlinks without cycle detection, so only use
+    # it when the tree is cycle-free; otherwise fall through to the mirror.
+    if not _has_symlink_cycle(skills_root):
+        try:
+            from agent.skill_utils import iter_skill_index_files  # type: ignore
+
+            return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
+        except Exception:
+            pass  # nosec B110 - fall through to the local mirror
+    found: list[str] = []
+    root_real = os.path.realpath(skills_root)
+    try:
+        with os.scandir(skills_root) as entries:
+            root_names = [entry.name for entry in entries]
+    except OSError:
+        return sorted(found)
+    root_has = "SKILL.md" in root_names and not os.path.isdir(os.path.join(skills_root, "SKILL.md"))
+    if root_has:
+        found.append(os.path.join(skills_root, "SKILL.md"))
+    stack = [[skills_root, frozenset({root_real}), root_names, 0, root_has]]
+    while stack:
+        dirpath, ancestors, names, idx, has_skill_md = stack[-1]
+        if idx >= len(names):
+            stack.pop()
+            continue
+        stack[-1][3] = idx + 1
+        name = names[idx]
+        if name in constants.SKILL_EXCLUDED_DIRS:
+            continue
+        if has_skill_md and name in constants.SKILL_SUPPORT_DIRS:
+            continue
+        child = os.path.join(dirpath, name)
+        if not os.path.isdir(child):
+            continue
+        real = os.path.realpath(child)
+        if real in ancestors:
+            continue
+        try:
+            with os.scandir(child) as entries:
+                child_names = [entry.name for entry in entries]
+        except OSError:
+            continue
+        child_has = "SKILL.md" in child_names and not os.path.isdir(os.path.join(child, "SKILL.md"))
+        if child_has:
+            found.append(os.path.join(child, "SKILL.md"))
+        stack.append([child, ancestors | {real}, child_names, 0, child_has])
+    return sorted(found)
+
+
 def _iter_skills():
     """Yield (skill_dir_path, frontmatter_or_None) for every SKILL.md, cached.
 
-    Skips hidden/archive directories (``.archive``, ``.curator_backups``,
-    ``.hub``) that Hermes uses for internal bookkeeping but does not load as
-    skills — mirroring the loader so archived/backup copies never produce
-    false positives.
+    Only skills Hermes itself would discover are yielded. The walk prunes the
+    loader's excluded dir names (``.archive``, ``.hub``, ``venv``,
+    ``node_modules``, ``site-packages``, the ``.hermes-dist`` swap dir, ...) and
+    the support dirs of a skill root, and it follows symlinked directories as
+    the loader does. A skill under a dotted directory the loader does not list
+    is therefore still reported, and a stray ``SKILL.md`` under a vendored
+    ``venv``/``node_modules``/``references`` tree is not.
     """
     if "skills" not in _store():
         home = _hermes_home()
@@ -408,10 +511,10 @@ def _iter_skills():
         if home:
             skills_root = os.path.join(home, "skills")
             if os.path.isdir(skills_root):
-                for dirpath, dirnames, filenames in os.walk(skills_root):
-                    dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-                    if "SKILL.md" in filenames:
-                        out.append((dirpath, frontmatter(os.path.join(dirpath, "SKILL.md"))))
+                out = [
+                    (os.path.dirname(path), frontmatter(path))
+                    for path in _skill_index_paths(skills_root)
+                ]
         _store()["skills"] = out
     return _store()["skills"]
 
@@ -739,7 +842,7 @@ def _skill_matches_platform(fm):
     if not isinstance(fm, dict):
         return True
     try:
-        from agent.skill_utils import skill_matches_platform  # type: ignore[import-not-found]
+        from agent.skill_utils import skill_matches_platform
 
         return bool(skill_matches_platform(fm))
     except Exception:
@@ -1348,7 +1451,7 @@ def _load_shell_hooks():
     to ``unknown`` instead of crashing.
     """
     try:
-        from agent import shell_hooks  # type: ignore[import-not-found]
+        from agent import shell_hooks  # type: ignore
 
         return shell_hooks
     except Exception:
