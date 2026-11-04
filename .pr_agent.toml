@@ -7,7 +7,10 @@
 # for extra_instructions that are clear and concise, not a handbook.
 
 [pr_reviewer]
-extra_instructions = """This repo is a READ-ONLY diagnostics plugin for Hermes agent (plugin + skills tap). Plugin Python must never write config or filesystem (enforced by tools/check_no_mutation.py) — flag any write-mode open, dump, or mutating subprocess in plugin sources.
+require_tests_review = true
+
+[review_agent]
+issues_user_guidelines = """This repo is a READ-ONLY diagnostics plugin for Hermes agent (plugin + skills tap). Plugin Python must never write config or filesystem (enforced by tools/check_no_mutation.py) — flag any write-mode open, dump, or mutating subprocess in plugin sources.
 
 check scopes: checks.py _CHECKS labels must mirror tools/check_cli_surface.py PLUGIN_COMMANDS guide scopes — flag any scope present in one but not the other.
 
@@ -23,9 +26,11 @@ Behavioral changes under tools/ need tools/test_*.py coverage wired into .github
 
 Ground factual claims in this repo's source or the installed Hermes agent; say explicitly when a claim needs live verification instead of asserting it.
 
-For regex, parser, and fallback-path findings: name the exact line in the reviewed revision and a concrete input that triggers the claimed failure. Check `constants.py` and `tools/test_*.py` for an existing guard before reporting. If the triggering code is not in the current diff, say the finding is cross-file rather than asserting a regression; if no triggering input can be named, report it as a question, not a bug."""
+For regex, parser, and fallback-path findings: name the exact line in the reviewed revision and a concrete input that triggers the claimed failure. Check `constants.py` and `tools/test_*.py` for an existing guard before reporting. If the triggering code is not in the current diff, say the finding is cross-file rather than asserting a regression; if no triggering input can be named, report it as a question, not a bug.
 
-# Ask Qodo to surface coverage gaps in review. This is advisory only — it
-# does not block merges; enforcement stays with CI's tool-coverage guard
-# (tools/check_tool_coverage.py), which fails closed on unwired tests.
-require_tests_review = true
+Testability: Before reporting missing coverage, inspect the complete test module and the target tool's self-test and fixture paths. Identify the exact behavior not exercised; do not report an existing test path as missing.
+
+Static verification: Assess false acceptance and false rejection separately. Never import or execute untrusted plugin code. Treat dynamic behavior as indeterminate when static evidence is insufficient.
+
+GitHub Actions: Check event-specific token permissions, fork pull-request restrictions, untrusted-code execution, job conditions, and the current required status contexts."""
+

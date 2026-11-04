@@ -54,6 +54,7 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | Memory provider down | diagnosing-memory |
 | MEMORY.md errors | diagnosing-memory |
 | USER.md errors | diagnosing-memory |
+| "hermes: command not found" | diagnosing-path |
 | Path / venv confusion | diagnosing-path |
 | Dual-venv layout issues | diagnosing-path |
 | Wrong Python interpreter | diagnosing-path |

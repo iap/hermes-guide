@@ -1,7 +1,7 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.1.5
+version: 1.1.6
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
@@ -181,6 +181,8 @@ hermes config path
 **Pass:** Version shows the expected release; `hermes doctor` reports no errors; config path resolves to the correct `$HERMES_HOME`.
 
 **Fail:** Version unchanged or doctor errors — re-run the install; check `$HERMES_HOME/logs/` for details.
+
+**`hermes: command not found`** — if the shim exists at `~/.local/bin/hermes` but isn't found, `~/.local/bin` isn't in PATH. Add it (current shell): `export PATH="$HOME/.local/bin:$PATH"`, and make permanent in `~/.zshrc` or `~/.bashrc`. See `diagnosing-path` for details.
 
 This skill diagnoses installation and upgrade failures — broken installs, wrong venv layout, missing prerequisites, and config bootstrap issues. When you run the diagnostic workflow, present findings in the standard format below.
 

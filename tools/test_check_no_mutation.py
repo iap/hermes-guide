@@ -49,7 +49,7 @@ def main() -> int:
 
     if failures:
         for f in failures:
-            print(f"FAIL: {f}")
+            print(f"FAIL: {f}", file=sys.stderr)
         return 1
     print("OK: check_no_mutation behavioral tests passed")
     return 0

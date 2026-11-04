@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths, including the PM-era no-in-tree-venv case."
-version: 1.5.14
+version: 1.5.17
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -237,6 +237,89 @@ Upstream's `project_venv_dir()` resolves `venv/` first, so scripts mirroring Her
 ### A protection or PATH feature silently does nothing
 
 Symptom: an update/protection/preflight step reports success but never ran. Cause: a **venv-only** check on a **`.venv`-only** checkout — the class tracked by **#79542**; its canonical instances (`_venv_scripts_dir`, the service-PATH builder) were fixed or retired upstream during 2026-09. Confirm the layout first (`ls -d venv .venv`), then treat any venv-name-specific check as suspect and resolve through `project_venv_dir()`.
+
+### `hermes: command not found`
+
+Symptom: running `hermes` fails with "command not found" even though Hermes is installed (shims may exist in `~/.local/bin`).
+
+Causes:
+1. **PATH missing `~/.local/bin`** — the standard installer places shims there but doesn't add it to PATH in all shells/configs.
+2. **Shell not reloaded** — PATH changes won't affect the current shell until sourced or restarted.
+3. **Shim points to missing target** — the shim exists but the launcher is broken.
+
+Diagnosis:
+
+```bash
+# Resolve the hermes binary the shell actually finds (works for Nix, Homebrew, MacPorts, etc.)
+HERMES_BIN=$(command -v hermes 2>/dev/null || type -P hermes 2>/dev/null)
+echo "Resolved: ${HERMES_BIN:-<not found>}"
+
+# Fall back to standard installer shim if no command found
+: "${HERMES_BIN:=$HOME/.local/bin/hermes}"
+
+# Check if shim exists and what's in PATH
+ls -la "$HERMES_BIN" 2>&1
+echo $PATH | grep -q '.local/bin' && echo "in PATH" || echo "NOT in PATH"
+
+# Check shim target (portable: works on macOS BSD readlink and GNU readlink)
+python3 -c "import os; print(os.path.realpath('$HERMES_BIN'))" 2>&1
+cat "$HERMES_BIN" 2>&1 | head -3
+
+# Try running directly
+"$HERMES_BIN" --version 2>&1 | head -3
+```
+
+Fix:
+
+```bash
+# Add to PATH for current shell
+export PATH="$HOME/.local/bin:$PATH"
+
+# Make permanent (zsh)
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+
+# Make permanent (bash)
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
+If the direct path works but `hermes` doesn't, it's purely a PATH issue. On some systems `~/bin` is used instead — check both locations.
+
+### Windows: "hermes" not found
+
+Native Windows installs (Desktop app, Nix flake) use app-managed launchers and do not use `~/.local/bin` shims. The POSIX steps above do not apply.
+
+Diagnosis:
+
+```powershell
+# Find the hermes executable the shell resolves
+Get-Command hermes -ErrorAction SilentlyContinue
+
+# Check common app-managed locations
+$hermesHome = (hermes config path 2>$null)  # canonical source of truth
+if ($hermesHome) { Write-Host "HERMES_HOME: $hermesHome" }
+Test-Path "$env:LOCALAPPDATA\hermes"
+Test-Path "$env:LOCALAPPDATA\Programs\hermes"
+
+# Check PATH for hermes-related entries
+$env:PATH -split ';' | Where-Object { $_ -match 'hermes|localappdata' }
+
+# Try running directly from the install location
+$directPath = "$env:LOCALAPPDATA\hermes\hermes.exe"
+if (Test-Path $directPath) { & $directPath --version 2>&1 | Select-Object -First 3 }
+```
+
+Fix:
+
+```powershell
+# Add the Hermes directory to PATH for the current session
+$hermesDir = "$env:LOCALAPPDATA\hermes"
+if (Test-Path $hermesDir) { $env:PATH = "$hermesDir;$env:PATH" }
+
+# Make permanent (user-level)
+[Environment]::SetEnvironmentVariable("PATH", "$hermesDir;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
+```
+
+If the direct path works but `hermes` doesn't, it's a PATH issue — restart the terminal after making PATH changes permanent. For Desktop app installs, use `hermes config path` to locate the canonical data directory.
 
 ### Windows: "python" not found
 
