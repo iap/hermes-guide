@@ -236,7 +236,7 @@ average as "the CPU is maxed out" when idle CPU says otherwise.
   date-like substring of a filesystem path; inspect the real name (`ls | cat -v`)
   before grepping for it.
 - **Slowness of ordinary commands is data.** Treat it as a measurement.
-- **"Gateway did not answer session.create" in the TUI/agent** can be a gateway RPC that exceeded its budget while other Hermes surfaces also fail because the host is stalled. Run `host_pressure_probe.sh` first. If it exits 1, relieve host pressure before restarting the gateway. If other surfaces are not failing, or the probe does not exit 1, use the surface-specific diagnosing skill rather than this skill. (Added 2026-11-04 from a live host finding; not an upstream source recheck.)
+- **"Gateway did not answer session.create" in the TUI/agent** can be a gateway RPC that exceeded its budget while other Hermes surfaces also fail because the host is stalled. Run `host_pressure_probe.sh` first. If it exits 1, relieve host pressure before restarting the gateway. If it exits 2, read the partial output; an unavailable signal is not a healthy host. If it exits 0 and Hermes still fails, or other surfaces are not failing, use the surface-specific diagnosing skill rather than this skill. (Added 2026-11-04 from a live host finding; not an upstream source recheck.)
 
 ## Reference
 
