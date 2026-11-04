@@ -60,7 +60,7 @@ Repo layout encyclopedia: [docs/agent/layout.md](docs/agent/layout.md).
 ## Run this before you claim done
 
 ```bash
-python tools/check_gates.py          # hermetic tier — no network/Hermes; count via --list (four read the git index)
+python tools/check_gates.py          # hermetic tier — no network/Hermes; count via --list (four gates read the git index: test_skill_counts, check_doc_style, check_eol_contract, check_scope_enumeration)
 python -m py_compile __init__.py checks.py constants.py
 hermes plugins doctor . --ci         # needs a local Hermes; if it times out on a degraded host, record `not run` with cause
 ```
