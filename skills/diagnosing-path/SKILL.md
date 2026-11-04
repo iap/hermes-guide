@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths, including the PM-era no-in-tree-venv case."
-version: 1.5.15
+version: 1.5.16
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -254,8 +254,8 @@ Diagnosis:
 ls -la ~/.local/bin/hermes 2>&1
 echo $PATH | grep -q '.local/bin' && echo "in PATH" || echo "NOT in PATH"
 
-# Check shim target
-readlink -f ~/.local/bin/hermes 2>&1
+# Check shim target (portable: works on macOS BSD readlink and GNU readlink)
+python3 -c "import os; print(os.path.realpath('$HOME/.local/bin/hermes'))" 2>&1
 cat ~/.local/bin/hermes 2>&1 | head -3
 
 # Try running directly
@@ -276,6 +276,37 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 ```
 
 If the direct path works but `hermes` doesn't, it's purely a PATH issue. On some systems `~/bin` is used instead — check both locations.
+
+### Windows: "hermes" not found
+
+Native Windows installs use app-managed launchers under `%LOCALAPPDATA%\hermes` and `%LOCALAPPDATA%\Programs\hermes`, not `~/.local/bin` shims. The POSIX steps above do not apply.
+
+Diagnosis:
+
+```powershell
+# Check if the hermes launcher exists
+Get-Command hermes -ErrorAction SilentlyContinue
+Test-Path "$env:LOCALAPPDATA\hermes\hermes.exe"
+Test-Path "$env:LOCALAPPDATA\Programs\hermes\hermes.exe"
+
+# Check PATH
+$env:PATH -split ';' | Select-String -Pattern 'hermes|localappdata'
+
+# Try running directly
+& "$env:LOCALAPPDATA\hermes\hermes.exe" --version 2>&1 | Select-Object -First 3
+```
+
+Fix:
+
+```powershell
+# Add Hermes to PATH for current session
+$env:PATH = "$env:LOCALAPPDATA\hermes;$env:PATH"
+
+# Make permanent (user-level)
+[Environment]::SetEnvironmentVariable("PATH", "$env:LOCALAPPDATA\hermes;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
+```
+
+If the direct path works but `hermes` doesn't, it's a PATH issue — restart the terminal after making PATH changes permanent.
 
 ### Windows: "python" not found
 
