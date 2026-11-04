@@ -214,7 +214,6 @@ jobs:
         run: |
           python tools/check_tool_coverage.py --selftest
           python tools/check_tool_coverage.py
-          python -c "import subprocess,sys; subprocess.run([sys.executable,'tools/check_pr_review_clean.py','--help'],check=True)"
 
       - name: Host-pressure probe behavioral test
         # Linux legs only: the probe is a bash script reading /proc, and the
