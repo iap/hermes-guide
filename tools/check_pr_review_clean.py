@@ -42,15 +42,16 @@ def main(argv: list[str]) -> int:
     q = """query($owner:String!,$repo:String!,$pr:Int!){
       repository(owner:$owner,name:$repo){
         pullRequest(number:$pr){
+          headRefOid
           reviews(first:100){
-            nodes{state author{login} submittedAt}
+            nodes{state author{login} submittedAt commit{oid}}
           }
           reviewThreads(first:100){
             nodes{
               isResolved
               isOutdated
-              comments(first:5){
-                nodes{author{login}}
+              comments(first:100){
+                nodes{author{login} body}
               }
             }
           }
@@ -80,6 +81,8 @@ def main(argv: list[str]) -> int:
         print("FAIL: pull request not found", file=sys.stderr)
         return 2
 
+    head_sha = pr_node.get("headRefOid") or ""
+
     reviews = pr_node.get("reviews", {}).get("nodes", []) or []
     threads = pr_node.get("reviewThreads", {}).get("nodes", []) or []
 
@@ -88,16 +91,22 @@ def main(argv: list[str]) -> int:
     for rv in reviews:
         author = (rv.get("author") or {}).get("login") or ""
         if author in BOT_LOGINS:
-            bot_reviews.append((rv.get("submittedAt"), author, rv.get("state")))
+            commit_sha = ((rv.get("commit") or {}).get("oid")) or ""
+            bot_reviews.append((rv.get("submittedAt"), author, rv.get("state"), commit_sha))
     bot_reviews.sort(key=lambda x: x[0] or "")
 
     # If any bot has CHANGES_REQUESTED as latest state
     latest_by_bot = {}
-    for ts, author, state in bot_reviews:
+    latest_commit_by_bot = {}
+    for ts, author, state, csha in bot_reviews:
         latest_by_bot[author] = state
+        latest_commit_by_bot[author] = csha
     for author, state in latest_by_bot.items():
         if state == "CHANGES_REQUESTED":
             print(f"BLOCK: {author} has CHANGES_REQUESTED and has not been superseded by APPROVED", file=sys.stderr)
+            return 1
+        if head_sha and latest_commit_by_bot.get(author) and latest_commit_by_bot[author] != head_sha:
+            print(f"BLOCK: {author} review is on different commit (stale). Push new head and wait for re-review.", file=sys.stderr)
             return 1
 
     # Check unresolved threads from bots
@@ -105,11 +114,19 @@ def main(argv: list[str]) -> int:
     for t in threads:
         if t.get("isResolved"):
             continue
+        if t.get("isOutdated"):
+            continue
         comments = (t.get("comments") or {}).get("nodes") or []
         if not comments:
             continue
-        first_author = (comments[0].get("author") or {}).get("login") or ""
-        if first_author in BOT_LOGINS:
+        # Check any comment in thread by bot
+        thread_has_bot = False
+        for c in comments:
+            first_author = (c.get("author") or {}).get("login") or ""
+            if first_author in BOT_LOGINS:
+                thread_has_bot = True
+                break
+        if thread_has_bot:
             unresolved.append(t)
 
     if unresolved:
@@ -117,13 +134,17 @@ def main(argv: list[str]) -> int:
         print("Action: address each thread or get bot acceptance. Do NOT merge. Do NOT resolve manually.", file=sys.stderr)
         return 1
 
-    # If bots never reviewed
-    if not bot_reviews:
-        print("BLOCK: no reviews found from coderabbitai or qodo-code-review yet", file=sys.stderr)
-        print("Action: wait for bot reviews to complete. 'skipping'/pending is NOT clean.", file=sys.stderr)
+    # Require both bots to have reviewed the current head
+    if "coderabbitai" not in latest_by_bot or "qodo-code-review" not in latest_by_bot:
+        print("BLOCK: both coderabbitai and qodo-code-review must have posted reviews on current head", file=sys.stderr)
+        print("Action: wait for both bots to complete. 'skipping'/pending is NOT clean.", file=sys.stderr)
         return 1
+    if head_sha:
+        if latest_commit_by_bot.get("coderabbitai") != head_sha or latest_commit_by_bot.get("qodo-code-review") != head_sha:
+            print("BLOCK: bot reviews are not on current head commit. Push and wait for re-review.", file=sys.stderr)
+            return 1
 
-    print("OK: no unresolved bot findings (coderabbitai/qodo-code-review). Safe to merge only if other gates pass.")
+    print("OK: no unresolved bot findings (coderabbitai/qodo-code-review) on current head. Safe to merge only if other gates pass.")
     return 0
 
 
