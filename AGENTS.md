@@ -167,10 +167,12 @@ release-related change (the authoritative, always-current source is
    --upcoming`. Requires `git fetch --tags` — the tag half of the check is
    invisible without tags.
 4. **Commit the bump and the section together**, then run `python
-   tools/check_gates.py` — every gate in `--list` must pass.
+   tools/check_gates.py` — all hermetic gates in `--list` must pass locally;
+   the gates it leaves to CI must pass in CI before merge.
 5. **Merge the PR, then check readiness on the merged master**:
-   `python tools/check_release_readiness.py`. It fails unless the tree is clean,
-   the branch is `master`, and HEAD == origin/master.
+   `python tools/check_release_readiness.py`. It fails a dirty tree or a
+   non-`master` branch; when the `origin/master` fetch fails it reports sync as
+   an advisory, so confirm `HEAD == origin/master` by hand before tagging.
 6. **Audit the one drift direction the guard cannot see** (docs/agent/deep-ops.md,
    "Values that drift go in `constants.py`"):
    `git ls-tree -d --name-only <upstream-head>:plugins/` vs PLUGIN_SUBCATEGORY_DIRS.
