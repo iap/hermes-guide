@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.21
+version: 1.1.22
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -142,6 +142,19 @@ permanent fixes are **outside Hermes entirely** — do not report those as Herme
 
 When a workaround is temporary, say what "done" looks like: the upstream issue to watch, or
 the version that carries the fix.
+
+## 5c. Gateway session creation timeout
+
+If `hermes` (TUI/agent) reports `Error: Gateway did not answer session.create`,
+the gateway RPC exceeded its budget. On a loaded host this is usually host
+pressure, not a Hermes defect. On POSIX or WSL, run the `diagnosing-host-pressure`
+probe first. If it exits `1`, relieve pressure, re-run the probe, and restart the
+gateway only after it exits `0`, then retry. If it exits `0` and Hermes still
+fails, the cause is Hermes-side: follow `diagnosing-plugins` or
+`diagnosing-gateway`. If it exits `2`, read the partial output; an unavailable
+signal does not show a healthy host. On native Windows, the probe does not run;
+do not use it. Do not restart the gateway blindly. (Added 2026-11-04 from a live
+host finding; not an upstream source recheck.)
 
 ## 6. Cross-platform guardrails
 
