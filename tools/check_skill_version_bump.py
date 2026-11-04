@@ -90,6 +90,9 @@ def _frontmatter_at(path: str, ref: str) -> dict | None:
         blob = _git(["show", f"{ref}:{path}"])
     except Exception:
         return None
+    # Strip BOM if present (matches _frontmatter_here which uses utf-8-sig)
+    if blob.startswith("\ufeff"):
+        blob = blob[1:]
     return _version_of(_frontmatter_block(blob))
 
 
