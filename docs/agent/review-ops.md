@@ -51,8 +51,21 @@ request `@coderabbitai full review` for a complete CodeRabbit pass. After fixes,
 use `@coderabbitai review` for new changes only — never re-post
 `@coderabbitai full review`, which re-reviews the entire PR and creates
 duplicate findings. Automatic and automatic incremental reviews are disabled,
-so a push alone does not request another pass. Mention `@coderabbitai` for
-follow-up chat. See the [command reference](https://docs.coderabbit.ai/reference/review-commands).
+so a push alone does not request another pass. The reason is reviewer hygiene,
+not a broken integration: Qodo already reports on this head, so an automatic
+CodeRabbit pass would re-report the same findings (duplicate comments) and can
+contradict Qodo with a different verdict on the same diff (bot-vs-bot conflict).
+One reviewer runs automatically; the second runs on request, once the first is
+clean, and reviews only the diff since. Mention `@coderabbitai` for follow-up
+chat. See the [command reference](https://docs.coderabbit.ai/reference/review-commands).
+
+A `CodeRabbit` check reporting `skipping` on a PR is the expected state with
+automatic review off, and it is a common misread. It records that no pass was
+queued — the review waits for the explicit request above. It is not a clean
+verdict, not a decline, and not evidence that the PR had nothing to review.
+Read `skipping` as "not queued"; never as "reviewed" or "clean".
+`review_status: false` separately suppresses CodeRabbit's per-push "Review
+skipped" comment, which was the same noise on a different surface (#229).
 
 The assertive profile is intentional: use CodeRabbit for a thorough second
 opinion, with concrete evidence for parser/fallback findings. Keep review

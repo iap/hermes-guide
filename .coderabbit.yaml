@@ -1,10 +1,22 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# Repository policy: Qodo reviews automatically; request CodeRabbit after Qodo
-# with `@coderabbitai full review` ONCE, then `@coderabbitai review` after fixes.
-# Never re-post `@coderabbitai full review` — it re-reviews the entire PR and
-# creates duplicate findings. This file carries the UI policy explicitly;
-# ordinary UI settings are not inherited. Organization/workspace global
-# overrides can still take precedence.
+# Repository policy: Qodo is the automatic primary reviewer. CodeRabbit runs on
+# request only — `@coderabbitai full review` ONCE after Qodo is clean, then
+# `@coderabbitai review` (incremental) after fixes. Never re-post a full review:
+# it re-reviews the entire PR and duplicates findings.
+#
+# With `reviews.auto_review` off, CodeRabbit's PR check reports `skipping`. That
+# records "no automatic pass was queued"; it does not mean the PR was skipped,
+# refused, or left unreviewed. The explicit request above is the trigger. Auto
+# review stays off so CodeRabbit does not re-report Qodo's findings on the same
+# head (duplicate comments) or contradict Qodo with a second verdict (bot-vs-bot
+# conflict). One reviewer runs automatically; the second runs on request once the
+# first is clean.
+#
+# `reviews.review_status: false` separately suppresses the per-push "Review
+# skipped" comment (#229).
+#
+# This file carries the UI policy explicitly; ordinary UI settings are not
+# inherited. Organization/workspace global overrides can still take precedence.
 # Rationale and verification: docs/agent/review-ops.md#coderabbit-configuration
 inheritance: false
 tone_instructions: >-
