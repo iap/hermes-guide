@@ -45,7 +45,7 @@ def main(argv: list[str]) -> int:
           reviews(first:100){
             nodes{state author{login} submittedAt}
           }
-          reviewThreads(first:250){
+          reviewThreads(first:100){
             nodes{
               isResolved
               isOutdated
