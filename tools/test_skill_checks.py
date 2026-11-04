@@ -387,11 +387,13 @@ def main(argv: list[str]) -> int:
         _write(disc_home / "skills/cycleskill/SKILL.md",
                "---\nname: cycleskill\ndescription: fixture\n---\nbody\n")
         expect.add("cycleskill")
+        cycle_created = False
         try:
             os.symlink(str(disc_home / "skills/cycleskill"),
                        str(disc_home / "skills/cycleskill/self1"))
             os.symlink(str(disc_home / "skills/cycleskill"),
                        str(disc_home / "skills/cycleskill/self2"))
+            cycle_created = True
         except (OSError, NotImplementedError):
             pass
         with mock.patch.dict(sys.modules, {"agent": None, "agent.skill_utils": None}):
@@ -404,6 +406,24 @@ def main(argv: list[str]) -> int:
                 f"{sorted(expect - walked)}, invented {sorted(walked - expect)}")
         if linked is not None and linked not in walked:
             failures.append("symlinked skill dir was not followed (the loader follows it)")
+        if cycle_created and not checks._has_symlink_cycle(disc_home / "skills"):
+            failures.append("symlink cycle was not detected")
+        if not cycle_created and checks._has_symlink_cycle(disc_home / "skills"):
+            failures.append("false positive symlink-cycle detection")
+
+        # A directory named SKILL.md is not a skill file, so the support dir
+        # under it must still be traversed for cycles.
+        bad = disc_home / "skills/badskill"
+        (bad / "SKILL.md").mkdir(parents=True, exist_ok=True)
+        (bad / "references").mkdir(parents=True, exist_ok=True)
+        bad_cycle_created = False
+        try:
+            os.symlink(str(bad), str(bad / "references" / "back"))
+            bad_cycle_created = True
+        except (OSError, NotImplementedError):
+            pass
+        if bad_cycle_created and not checks._has_symlink_cycle(disc_home / "skills"):
+            failures.append("cycle behind a SKILL.md directory was not detected")
 
     if failures:
         for f in failures:

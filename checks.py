@@ -408,7 +408,7 @@ def _has_symlink_cycle(skills_root):
                 names = [entry.name for entry in entries]
         except OSError:
             return False
-        has_skill_md = "SKILL.md" in names
+        has_skill_md = "SKILL.md" in names and os.path.isfile(os.path.join(dirpath, "SKILL.md"))
         for name in names:
             if name in constants.SKILL_EXCLUDED_DIRS:
                 continue
@@ -454,7 +454,7 @@ def _skill_index_paths(skills_root):
                 names = [entry.name for entry in entries]
         except OSError:
             return
-        has_skill_md = "SKILL.md" in names
+        has_skill_md = "SKILL.md" in names and os.path.isfile(os.path.join(dirpath, "SKILL.md"))
         child_names = [n for n in names if n not in constants.SKILL_EXCLUDED_DIRS
                        and not (has_skill_md and n in constants.SKILL_SUPPORT_DIRS)]
         if has_skill_md:
