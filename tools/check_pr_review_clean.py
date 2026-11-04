@@ -136,17 +136,31 @@ def main(argv: list[str]) -> int:
         print("Action: address each thread or get bot acceptance. Do NOT merge. Do NOT resolve manually.", file=sys.stderr)
         return 1
 
-    # Require both bots to have reviewed the current head
-    if "coderabbitai" not in latest_by_bot or "qodo-code-review" not in latest_by_bot:
-        print("BLOCK: both coderabbitai and qodo-code-review must have posted reviews on current head", file=sys.stderr)
-        print("Action: wait for both bots to complete. 'skipping'/pending is NOT clean.", file=sys.stderr)
+    # Require both bots to have reviewed the current head in proper order
+    if "qodo-code-review" not in latest_by_bot:
+        print("BLOCK: waiting for qodo-code-review to review current head first", file=sys.stderr)
+        print("Action: Qodo reviews first per workflow. CodeRabbit triggers after Qodo is clean.", file=sys.stderr)
         return 1
-    if head_sha:
-        if latest_commit_by_bot.get("coderabbitai") != head_sha or latest_commit_by_bot.get("qodo-code-review") != head_sha:
-            print("BLOCK: bot reviews are not on current head commit. Push and wait for re-review.", file=sys.stderr)
-            return 1
+    if latest_commit_by_bot.get("qodo-code-review") != head_sha:
+        print("BLOCK: qodo-code-review review is not on current head commit. Wait for re-review.", file=sys.stderr)
+        return 1
+    # Check if Qodo has CHANGES_REQUESTED
+    if latest_by_bot.get("qodo-code-review") == "CHANGES_REQUESTED":
+        print("BLOCK: qodo-code-review has CHANGES_REQUESTED. Resolve before CodeRabbit/full review.", file=sys.stderr)
+        return 1
+    # Only require CodeRabbit if Qodo is clean/commented without blocking
+    if "coderabbitai" not in latest_by_bot:
+        print("BLOCK: waiting for coderabbitai to review after qodo-code-review", file=sys.stderr)
+        print("Action: CodeRabbit triggers after Qodo is clean. Wait for full review.", file=sys.stderr)
+        return 1
+    if latest_commit_by_bot.get("coderabbitai") != head_sha:
+        print("BLOCK: coderabbitai review is not on current head commit. Wait for re-review.", file=sys.stderr)
+        return 1
+    if latest_by_bot.get("coderabbitai") == "CHANGES_REQUESTED":
+        print("BLOCK: coderabbitai has CHANGES_REQUESTED. Resolve findings.", file=sys.stderr)
+        return 1
 
-    print("OK: no unresolved bot findings (coderabbitai/qodo-code-review) on current head. Safe to merge only if other gates pass.")
+    print("OK: no unresolved bot findings (qodo-code-review + coderabbitai) on current head. Safe to merge only if other gates pass.")
     return 0
 
 
