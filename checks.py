@@ -395,6 +395,38 @@ def _plugin_skill_names():
     return names
 
 
+def _has_symlink_cycle(skills_root):
+    """True when ``skills_root`` contains a symlink that points back at an
+    ancestor. Hermes' own walker follows symlinks without cycle detection, so
+    a cycle there would stall diagnostics; detect it first and use the
+    cycle-safe mirror instead."""
+    root_real = os.path.realpath(skills_root)
+
+    def _visit(dirpath, ancestors):
+        try:
+            with os.scandir(dirpath) as entries:
+                names = [entry.name for entry in entries]
+        except OSError:
+            return False
+        has_skill_md = "SKILL.md" in names
+        for name in names:
+            if name in constants.SKILL_EXCLUDED_DIRS:
+                continue
+            if has_skill_md and name in constants.SKILL_SUPPORT_DIRS:
+                continue
+            child = os.path.join(dirpath, name)
+            if not os.path.isdir(child):
+                continue
+            real = os.path.realpath(child)
+            if real in ancestors:
+                return True
+            if _visit(child, ancestors | {real}):
+                return True
+        return False
+
+    return _visit(skills_root, {root_real})
+
+
 def _skill_index_paths(skills_root):
     """SKILL.md paths under ``skills_root`` that Hermes would discover.
 
@@ -404,12 +436,15 @@ def _skill_index_paths(skills_root):
     "any dotted directory": Hermes loads a skill that sits under a dotted dir it
     does not list, and its walk follows symlinked directories.
     """
-    try:
-        from agent.skill_utils import iter_skill_index_files  # type: ignore
+    # Hermes' walker follows symlinks without cycle detection, so only use
+    # it when the tree is cycle-free; otherwise fall through to the mirror.
+    if not _has_symlink_cycle(skills_root):
+        try:
+            from agent.skill_utils import iter_skill_index_files  # type: ignore
 
-        return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
-    except Exception:
-        pass  # nosec B110 - fall through to the local mirror
+            return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
+        except Exception:
+            pass  # nosec B110 - fall through to the local mirror
     found = []
     root_real = os.path.realpath(skills_root)
 
