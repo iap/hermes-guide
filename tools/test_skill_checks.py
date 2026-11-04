@@ -382,6 +382,18 @@ def main(argv: list[str]) -> int:
             # Windows CI without developer mode cannot create symlinks; the
             # remaining cases still bind the prune rules.
             pass
+        # Cycle guard: two symlinks pointing back at their parent must not
+        # stall the walk or duplicate the skill.
+        _write(disc_home / "skills/cycleskill/SKILL.md",
+               "---\nname: cycleskill\ndescription: fixture\n---\nbody\n")
+        expect.add("cycleskill")
+        try:
+            os.symlink(str(disc_home / "skills/cycleskill"),
+                       str(disc_home / "skills/cycleskill/self1"))
+            os.symlink(str(disc_home / "skills/cycleskill"),
+                       str(disc_home / "skills/cycleskill/self2"))
+        except (OSError, NotImplementedError):
+            pass
         with mock.patch.dict(sys.modules, {"agent": None, "agent.skill_utils": None}):
             checks._store().clear()
             checks._hermes_home_from_library = lambda: str(disc_home)

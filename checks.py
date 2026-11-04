@@ -411,16 +411,31 @@ def _skill_index_paths(skills_root):
     except Exception:
         pass  # nosec B110 - fall through to the local mirror
     found = []
-    for dirpath, dirnames, filenames in os.walk(skills_root, followlinks=True):
-        has_skill_md = "SKILL.md" in filenames
-        dirnames[:] = [
-            d
-            for d in dirnames
-            if d not in constants.SKILL_EXCLUDED_DIRS
-            and not (has_skill_md and d in constants.SKILL_SUPPORT_DIRS)
-        ]
+    root_real = os.path.realpath(skills_root)
+
+    def _visit(dirpath, ancestors):
+        try:
+            with os.scandir(dirpath) as entries:
+                names = [entry.name for entry in entries]
+        except OSError:
+            return
+        has_skill_md = "SKILL.md" in names
+        child_names = [n for n in names if n not in constants.SKILL_EXCLUDED_DIRS
+                       and not (has_skill_md and n in constants.SKILL_SUPPORT_DIRS)]
         if has_skill_md:
             found.append(os.path.join(dirpath, "SKILL.md"))
+        for name in child_names:
+            child = os.path.join(dirpath, name)
+            if not os.path.isdir(child):
+                continue
+            real = os.path.realpath(child)
+            # Guard against symlink cycles: a directory already on the current
+            # path is never re-entered, but non-cyclic links are still followed.
+            if real in ancestors:
+                continue
+            _visit(child, ancestors | {real})
+
+    _visit(skills_root, {root_real})
     return sorted(found)
 
 
