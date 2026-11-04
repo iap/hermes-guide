@@ -405,7 +405,7 @@ def _skill_index_paths(skills_root):
     does not list, and its walk follows symlinked directories.
     """
     try:
-        from agent.skill_utils import iter_skill_index_files  # type: ignore[import-not-found]
+        from agent.skill_utils import iter_skill_index_files  # type: ignore
 
         return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
     except Exception:
@@ -787,7 +787,7 @@ def _skill_matches_platform(fm):
     if not isinstance(fm, dict):
         return True
     try:
-        from agent.skill_utils import skill_matches_platform  # type: ignore[import-not-found]
+        from agent.skill_utils import skill_matches_platform
 
         return bool(skill_matches_platform(fm))
     except Exception:
@@ -1396,7 +1396,7 @@ def _load_shell_hooks():
     to ``unknown`` instead of crashing.
     """
     try:
-        from agent import shell_hooks  # type: ignore[import-not-found]
+        from agent import shell_hooks  # type: ignore
 
         return shell_hooks
     except Exception:
