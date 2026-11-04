@@ -390,6 +390,28 @@ jobs:
         # and validate-claim jobs.
         run: python tools/gen_changelog.py --check
 
+      - name: Release guard — refuse bump on active / redundant release
+        # The refusal rule the action bot enforces: a version bump is refused
+        # while an active release exists (latest tag within --window-hours) or
+        # when the proposed version is already tagged / already documented in
+        # CHANGELOG.md (a redundant release). Runs only when plugin.yaml's
+        # version actually changes, so a non-bump PR is a no-op.
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
+        run: |
+          if git diff --quiet "${{ inputs.base-ref }}" -- plugin.yaml; then
+            echo "plugin.yaml unchanged — release guard skipped"
+            exit 0
+          fi
+          proposed="$(grep '^version:' plugin.yaml | awk '{print $2}')"
+          echo "plugin.yaml changed; proposed version: $proposed"
+          python tools/check_no_active_release.py --selftest
+          python tools/check_no_active_release.py --version "$proposed"
+
+      - name: Release-guard regression
+        # Stdlib-only, fixture-driven (monkeypatched git/changelog readers);
+        # fast tier so direct pushes run it too.
+        run: python tools/test_check_no_active_release.py
+
       - name: Changelog guard regression
         # The guard is only worth having if it can fail, so this runs its
         # behavioral cases (plus --upcoming idempotence) on every PR.
