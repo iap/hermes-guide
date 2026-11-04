@@ -4,13 +4,16 @@
 # `@coderabbitai review` (incremental) after fixes. Never re-post a full review:
 # it re-reviews the entire PR and duplicates findings.
 #
-# With `reviews.auto_review` off, CodeRabbit's PR check reports `skipping`. That
-# records "no automatic pass was queued"; it does not mean the PR was skipped,
-# refused, or left unreviewed. The explicit request above is the trigger. Auto
-# review stays off so CodeRabbit does not re-report Qodo's findings on the same
-# head (duplicate comments) or contradict Qodo with a second verdict (bot-vs-bot
-# conflict). One reviewer runs automatically; the second runs on request once the
-# first is clean.
+# With `reviews.auto_review` off, CodeRabbit's PR check reports `skipping`
+# (observed on PR #427). That records "no automatic pass was queued"; it does not
+# mean the PR was skipped, refused, or left unreviewed. The explicit request above
+# is the trigger. Auto review stays off so two reviewers do not re-report the same
+# findings on one pass (duplicate comments) or contradict each other with
+# different verdicts (bot-vs-bot conflict). One reviewer runs automatically; the
+# second runs on request once the first is clean. This does not assert that Qodo
+# covered every head — docs/agent/review-ops.md Step 4 and the head-binding rule
+# still require a Qodo review of each new head. These are third-party check
+# semantics; confirm them on a live PR.
 #
 # `reviews.review_status: false` separately suppresses the per-push "Review
 # skipped" comment (#229).
