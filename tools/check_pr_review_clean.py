@@ -108,6 +108,9 @@ def main(argv: list[str]) -> int:
         if state == "CHANGES_REQUESTED":
             print(f"BLOCK: {author} has CHANGES_REQUESTED and has not been superseded by APPROVED", file=sys.stderr)
             return 1
+        if state == "DISMISSED":
+            print(f"BLOCK: {author} review is DISMISSED and not a clean approval", file=sys.stderr)
+            return 1
         if head_sha and latest_commit_by_bot.get(author) and latest_commit_by_bot[author] != head_sha:
             print(f"BLOCK: {author} review is on different commit (stale). Push new head and wait for re-review.", file=sys.stderr)
             return 1
