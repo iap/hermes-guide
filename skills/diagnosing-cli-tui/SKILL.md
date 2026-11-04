@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-cli-tui
 description: "Diagnose and fix Hermes Agent CLI/TUI issues on native Windows (PowerShell/conhost, Git Bash backend): rendering artifacts, themes/skins, busy indicators, mouse modes, encoding, and launch/resume."
-version: 1.1.21
+version: 1.1.22
 metadata:
   hermes:
     tags: [hermes, tui, cli, windows, themes, troubleshooting, diagnosing]
@@ -143,6 +143,13 @@ permanent fixes are **outside Hermes entirely** — do not report those as Herme
 When a workaround is temporary, say what "done" looks like: the upstream issue to watch, or
 the version that carries the fix.
 
+## 5c. Gateway session creation timeout
+
+If `hermes` (TUI/agent) reports `Error: Gateway did not answer session.create`,
+the gateway RPC exceeded its budget. On a loaded host this is usually host
+pressure, not a Hermes defect: run the `diagnosing-host-pressure` probe first,
+relieve pressure, then retry. Do not restart the gateway blindly.
+
 ## 6. Cross-platform guardrails
 
 - Prefer config/env fixes (work identically on POSIX); keep path logic runtime-resolved via `HERMES_HOME`
@@ -188,4 +195,4 @@ Run `/indicator ascii` in the TUI for an immediate fix, then persist by adding `
 
 ---
 
-*Facts re-verified 2026-10-09 against upstream source at commit `f97608f178d1ffeca59860195ab7da295f7c8e5f` (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts, ui-tui/src/app/useMainApp.ts, hermes_cli/cli_tui_mixin.py, hermes_cli/update_cmd.py, hermes_cli/doctor_platform.py, hermes_cli/active_sessions.py, hermes_cli/cli_voice_mixin.py), upstream docs (installation.md), the issue tracker (19 citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.12741); Node resolution re-checked 2026-09-29 at `5000e2993` (TUI node resolves through PM; `pm/lock.json` pins Node 26.7.0). Terminal persistence verified 2026-10-15 against the installed source at `9bda154d` (v0.21.7): `persistent_shell` → `TERMINAL_PERSISTENT_SHELL` mapping (`gateway/run.py`), config key set (`hermes_cli/cli_config_load.py`); local-backend carry follows `TERMINAL_LOCAL_PERSISTENT` (`tools/terminal_tool.py`). Dashboard browser-open verified 2026-10-15 against the installed source at `9bda154d`: `_maybe_open_browser` (`hermes_cli/web_server_lifecycle.py`) — `webbrowser.open` in a daemon thread after 1s, failures swallowed, `--no-open` suppresses, headless-Linux skip only. Stale-lock verdicts verified 2026-10-16 against the installed source at `9bda154d` (`hermes_cli/update_lock.py` marker/lock format, incarnation rule, held-holder wording; refusal strings in `hermes_cli/venv_sync.py`) plus a live wedge (dead PID 96771, lock removed, CLI recovered). POSIX liveness variant verified 2026-10-16 (`ps`/`kill -0` probe semantics, EPERM-means-alive nuance). Re-verify before reuse.*
+*Facts re-verified 2026-11-04: session.create timeout guidance added (host pressure first). Facts re-verified 2026-10-09 against upstream source at commit `f97608f178d1ffeca59860195ab7da295f7c8e5f` (skin_engine.py, config_defaults.py, stdio.py, gateway.py, tui_gateway/server.py, ui-tui/src/theme.ts, ui-tui/src/app/useMainApp.ts, hermes_cli/cli_tui_mixin.py, hermes_cli/update_cmd.py, hermes_cli/doctor_platform.py, hermes_cli/active_sessions.py, hermes_cli/cli_voice_mixin.py), upstream docs (installation.md), the issue tracker (19 citations, states noted), and the live Windows 10 desktop install (v0.21.1, `.venv`, Windows Terminal 1.24.12741); Node resolution re-checked 2026-09-29 at `5000e2993` (TUI node resolves through PM; `pm/lock.json` pins Node 26.7.0). Terminal persistence verified 2026-10-15 against the installed source at `9bda154d` (v0.21.7): `persistent_shell` → `TERMINAL_PERSISTENT_SHELL` mapping (`gateway/run.py`), config key set (`hermes_cli/cli_config_load.py`); local-backend carry follows `TERMINAL_LOCAL_PERSISTENT` (`tools/terminal_tool.py`). Dashboard browser-open verified 2026-10-15 against the installed source at `9bda154d`: `_maybe_open_browser` (`hermes_cli/web_server_lifecycle.py`) — `webbrowser.open` in a daemon thread after 1s, failures swallowed, `--no-open` suppresses, headless-Linux skip only. Stale-lock verdicts verified 2026-10-16 against the installed source at `9bda154d` (`hermes_cli/update_lock.py` marker/lock format, incarnation rule, held-holder wording; refusal strings in `hermes_cli/venv_sync.py`) plus a live wedge (dead PID 96771, lock removed, CLI recovered). POSIX liveness variant verified 2026-10-16 (`ps`/`kill -0` probe semantics, EPERM-means-alive nuance). Re-verify before reuse.*

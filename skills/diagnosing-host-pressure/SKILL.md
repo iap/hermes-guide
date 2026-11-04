@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.9
+version: 1.3.10
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -236,6 +236,11 @@ average as "the CPU is maxed out" when idle CPU says otherwise.
   date-like substring of a filesystem path; inspect the real name (`ls | cat -v`)
   before grepping for it.
 - **Slowness of ordinary commands is data.** Treat it as a measurement.
+- **"Gateway did not answer session.create" in the TUI/agent** is usually a
+  gateway RPC that exceeded its budget because the host is stalled — the
+  gateway can still report `gateway_state: running` in `gateway_state.json`.
+  Run `host_pressure_probe.sh` first; if it exits 1, relieve host pressure
+  before restarting the gateway, and do not treat the message as a Hermes defect.
 
 ## Reference
 
@@ -244,4 +249,4 @@ adapter-discard lines, watchdog overrides, the near-miss where absent
 platforms turned out never to have been configured) mapped against each rule
 above.
 
-*Facts re-verified 2026-09-29 against the upstream Hermes install this environment runs (local checkout at commit `962d453d`, macOS 12.7.6 darwin x86_64, 4 cores): host-pressure measurements, the plugin load-budget and late-register discard log lines, and the `gateway_state.json` fields, all read from that live install; the `scripts/host_pressure_probe.sh` exit contract was exercised against live host state. No file/symbol citations are made, so there is nothing to resolve against the upstream-drift baseline. The `/proc` branch runs on the Linux CI legs; its interval-idle delta, cgroup core-count/quota logic, and container guards are covered directly by `tools/test_host_pressure_probe.py`. Not verified on native Windows — the probe does not run there and that platform's pressure signals are owned by its own session. Container detection re-verified 2026-10-17 on a WSL2 Linux host (NixOS 6.18, kernel 6.18.54.1-microsoft-standard-WSL2) after replacing the PID-1 cgroup read with namespace-scoped signals only: the runtime marker file (/run/.containerenv, /.dockerenv), Podman's container=<runtime> matched against runtime names, and systemd-detect-virt matched against its container identifiers (docker, podman, libpod, lxc, lxc-libvirt, rkt, openvz, crio, containerd, systemd-nspawn). Scoping is deliberate: a tree-wide cgroup scan would classify any host that RUNS containers as one, since systemd nests every container under system.slice/. systemd-detect-virt is matched by bare value, never by --container, which exits 0 under WSL2 and would disable the load verdict for every WSL user; cloud ids (amazon, google) and VMs are excluded. Known limit: a container with no marker file and no systemd is not detected. This host still classifies as non-container, matching the previous behaviour, and the scan verdict moved from caution (install blocked on current Hermes) to safe under skills-guard-v10. Re-verify before reuse.*
+*Facts re-verified 2026-09-29 against the upstream Hermes install this environment runs (local checkout at commit `962d453d`, macOS 12.7.6 darwin x86_64, 4 cores): host-pressure measurements, the plugin load-budget and late-register discard log lines, and the `gateway_state.json` fields, all read from that live install; the `scripts/host_pressure_probe.sh` exit contract was exercised against live host state. No file/symbol citations are made, so there is nothing to resolve against the upstream-drift baseline. The `/proc` branch runs on the Linux CI legs; its interval-idle delta, cgroup core-count/quota logic, and container guards are covered directly by `tools/test_host_pressure_probe.py`. Not verified on native Windows — the probe does not run there and that platform's pressure signals are owned by its own session. Container detection re-verified 2026-10-17 on a WSL2 Linux host (NixOS 6.18, kernel 6.18.54.1-microsoft-standard-WSL2) after replacing the PID-1 cgroup read with namespace-scoped signals only: the runtime marker file (/run/.containerenv, /.dockerenv), Podman's container=<runtime> matched against runtime names, and systemd-detect-virt matched against its container identifiers (docker, podman, libpod, lxc, lxc-libvirt, rkt, openvz, crio, containerd, systemd-nspawn). Scoping is deliberate: a tree-wide cgroup scan would classify any host that RUNS containers as one, since systemd nests every container under system.slice/. systemd-detect-virt is matched by bare value, never by --container, which exits 0 under WSL2 and would disable the load verdict for every WSL user; cloud ids (amazon, google) and VMs are excluded. Known limit: a container with no marker file and no systemd is not detected. This host still classifies as non-container, matching the previous behaviour, and the scan verdict moved from caution (install blocked on current Hermes) to safe under skills-guard-v10. Re-verify before reuse.* Session.create timeout mapping added 2026-11-04 against the live host pressure finding (load ~321, swap ~3.8GB).
