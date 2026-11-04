@@ -43,5 +43,6 @@ venv/
 .cluster/
 .verify/
 .openclaw/
+.cursor/
 /tmp*.json
 /q*.json

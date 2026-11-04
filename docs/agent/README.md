@@ -23,6 +23,7 @@ review, bot-thread, CI-triage and merge lifecycle. `layout.md` maps the tree;
 | Merging to master | [review-ops.md — Pre-merge cross-check](review-ops.md#pre-merge-cross-check) and [Branch protection](review-ops.md#branch-protection) |
 | Claiming Windows, macOS, or WSL behavior | [deep-ops.md — Multi-environment maintenance](deep-ops.md#multi-environment-maintenance) (host limitation register included) |
 | Touching secrets, fixtures, or `.env` | [deep-ops.md — Security Guidelines](deep-ops.md#security-guidelines) |
+| Cutting a release, release readiness, or upstream catalog re-pin | [AGENTS.md — Release flow](AGENTS.md#release-flow-agent-checklist) + [CONTRIBUTING.md — Cutting a release](CONTRIBUTING.md#cutting-a-release) |
 | Structuring a non-trivial design or problem answer | [deep-ops.md — Explaining](deep-ops.md#explaining) |
 
 Authoring voice, skill naming, and PR workflow stay in
