@@ -194,7 +194,8 @@ table with honest `not run` entries is accepted; a claim that outruns the eviden
 is not — `validate-claim.yml` re-runs the hermetic gates against your PR head and
 fails the check if your table does not match reality.
 
-## Pre-merge cross-check
+## Pre-merge cross-check (MANDATORY)
 
-Never merge on green CI alone — run the checklist in
-[docs/agent/review-ops.md](docs/agent/review-ops.md#pre-merge-cross-check) first.
+**NEVER merge on green CI alone.** Follow the complete procedure in [docs/agent/review-ops.md#pre-merge-cross-check](docs/agent/review-ops.md#pre-merge-cross-check).
+
+Key points: Qodo first (trigger with `/agentic_review` if silent), CodeRabbit full review once after Qodo clean, use `@coderabbitai review` (incremental) for subsequent pushes on same head, both must be clean on same head commit, never resolve threads manually. All required checks passing (not pending), `mergeStateStatus: CLEAN`, explicit merge authorization recorded, fresh green CI on fixed head.
