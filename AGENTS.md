@@ -160,6 +160,12 @@ release-related change (the authoritative, always-current source is
 1. **Confirm no skill version regressions** before the bump: `python
    tools/check_skill_version_bump.py origin/master` — 0 failures. A downgraded
    `SKILL.md` version is a bug, not a release note.
+   The version-bump PR also runs the release guard
+   (`python tools/check_no_active_release.py --version <proposed>`), which
+   **refuses the bump** while a release is active (latest tag created within
+   `--window-hours`, default 48h) or when the proposed version is already a git
+   tag (a redundant release). A `CHANGELOG.md` section for the new version is
+   required by design and is not a refusal signal.
 2. **Bump the version in all five sites** (`plugin.yaml`, `__init__.py`,
    `SECURITY.md` policy sentence + supported table, `pyproject.toml`), with the
    bump **uncommitted**.

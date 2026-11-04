@@ -37,13 +37,16 @@ jobs:
       event-name: ${{ github.event_name }}
       # Built with the documented `cond && value || fallback` idiom, where BOTH
       # operands are strings, so `||` returns the fallback verbatim rather than a
-      # boolean. On a pull_request the base is master unless the PR targets a
-      # release branch; on push/merge_group there is no pull_request object, so
-      # this must fall back to origin/master. A bare
-      # `github.event.pull_request.base.ref` would interpolate to the empty
-      # string on push and produce the invalid ref `origin/`, failing the
-      # version-bump guard on every direct push to master.
-      base-ref: ${{ github.event.pull_request.base.ref && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/master' }}
+      # boolean. On a pull_request the base is the PR target branch; on a push
+      # `github.event.before` is the previous HEAD of the branch, which is the
+      # only baseline that differs from the checked-out commit (origin/master
+      # already points AT the new commit after a merge, so comparing against it
+      # made every version check a no-op -- Qodo finding 6 on #428). A
+      # merge_group has neither, so use its base_sha. Dispatch falls back to
+      # origin/master; a bare `github.event.pull_request.base.ref` would
+      # interpolate to the empty string on push and produce the invalid ref
+      # `origin/`.
+      base-ref: ${{ github.event.pull_request.base.ref && format('origin/{0}', github.event.pull_request.base.ref) || github.event.before || github.event.merge_group.base_sha || 'origin/master' }}
       # On a direct push to master the branch is already merged, so the tap can
       # only serve what is already on master: the PR-tolerance branch and the
       # network legs are not useful there. Every PR and every merge_group run

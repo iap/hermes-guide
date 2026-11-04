@@ -371,6 +371,12 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    `check_version_consistency.py` guard lists them: `plugin.yaml`,
    `__init__.py`, `SECURITY.md` policy sentence + supported table,
    `pyproject.toml`).
+   The bump PR also runs the release guard
+   (`tools/check_no_active_release.py`): it **refuses the bump** while a
+   release is active (latest tag created within `--window-hours`, default 48h)
+   or when the proposed version is already a git tag — the redundant-release
+   refusal. The new version's `CHANGELOG.md` section is required by design and
+   is deliberately not a refusal signal.
 2. Generate the section for that version:
    `python tools/gen_changelog.py --upcoming`. It reads the commits since the
    newest tag, so the entry covers the work being released and is reviewed and
