@@ -151,6 +151,42 @@ host in the PR Environment block.
 > node tool.** Handling, pins, and upstream tracking live in
 > [deep-ops.md — Host limitation register](docs/agent/deep-ops.md#host-limitation-register).
 
+## Release flow (agent checklist)
+
+Releases ship via stacked PRs and tag-gated releases. As an agent working on
+this repo, follow this order for any release-related changes:
+
+1. **Fix skill version regressions first.** Run
+   `python tools/check_skill_version_bump.py origin/master` and confirm 0 failures.
+   Version downgrades silently break the guard and should be treated as bugs,
+   not accepted.
+2. **Bump version in all 5 sites** in one commit:
+   `plugin.yaml`, `__init__.py`, `SECURITY.md` (policy sentence + supported table),
+   `pyproject.toml`.
+3. **Generate changelog section**: `python tools/gen_changelog.py --upcoming`.
+   Run with the bump uncommitted; the section is validated by CI before the tag
+   exists.
+4. **Run all gates**: `python tools/check_gates.py` — 13/13 must pass.
+5. **Run release readiness**: `python tools/check_release_readiness.py`.
+   It verdicts `READY` / `READY WITH ADVISORIES` / `NOT READY`.
+6. **Tag and re-pin**: Push tag `v<version>`, then re-pin the upstream catalog
+   entry in `NousResearch/hermes-agent` (`plugin-catalog/hermes-guide.yaml`).
+7. **Verify**: `gh pr checks <pr>` and `gh pr view <pr>` — both must be green
+   and `MERGED` before the next step.
+
+## Dual-environment verification
+
+This repo is maintained from Windows + NixOS WSL in parallel. Both targets must
+be verified independently:
+
+- **Windows** — standard installer (`curl | bash`), Tier 1 (supported).
+- **NixOS WSL** — standard installer in WSL, Tier 1 (supported). Nix bundle is
+  Tier 2 (best-effort), immutable, uses `uv2nix` for build-time only.
+
+Verify any cross-platform skill on BOTH environments. Document the verifying
+host in the PR Environment block. NixOS WSL standard install is mutable: the
+plugin is at `~/.hermes/plugins/<name>/` (NOT `/nix/store/`).
+
 ## Before you finish
 
 State plainly what you checked, what passed, and what you skipped. A validation

@@ -2,6 +2,37 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.2 (2026-11-04)
+
+### Features
+
+- mirror Hermes skill discovery prune rules; enrich issue templates ([#418](https://github.com/iap/hermes-guide/pull/418))
+
+### Bug Fixes
+
+- **skills**: install the Honcho plugin before configuring it
+- **constants**: point SKILL_FOR_SCOPE[update] at diagnosing-update
+- **tools**: strip BOM in _frontmatter_at to match _frontmatter_here ([#409](https://github.com/iap/hermes-guide/pull/409))
+- **tests**: address CodeRabbit findings on PR #407 ([#408](https://github.com/iap/hermes-guide/pull/408))
+
+### Documentation
+
+- **skills**: map session.create timeout to host pressure ([#419](https://github.com/iap/hermes-guide/pull/419))
+- add tools/README.md directory map; clarify AGENTS.md --list count comment
+
+### Chores
+
+- agent instructions: add release flow checklist and dual-environment verification guidance
+- agent instructions: add release flow checklist and dual-environment verification guidance
+- Merge pull request #411 from iap/chore/drift-baseline-07274ac
+- **drift**: re-baseline to upstream 07274ac
+- Merge pull request #410 from iap/fix/update-scope-docs
+
+### Tests
+
+- **tools**: add behavioral tests for check_no_mutation and check_version_consistency ([#407](https://github.com/iap/hermes-guide/pull/407))
+- **tools**: add behavioral tests for check_gates and render_docs ([#406](https://github.com/iap/hermes-guide/pull/406))
+
 ## v0.9.1 (2026-11-03)
 
 ### Features
