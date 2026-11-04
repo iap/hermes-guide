@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Shared utilities for release-tag gates (hermetic, stdlib-only)."""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+PLUGIN_YAML = REPO / "plugin.yaml"
+
+
+def plugin_version() -> str:
+    """Read the proposed version verbatim from plugin.yaml."""
+    text = PLUGIN_YAML.read_text(encoding="utf-8")
+    m = re.search(r"^version:\s*(\S+)\s*$", text, re.MULTILINE)
+    if not m:
+        raise ValueError("plugin.yaml has no version: field")
+    return m.group(1)
+
+
+def _run(*args: str) -> tuple[int, str]:
+    """Run a command, returning (returncode, stdout)."""
+    try:
+        proc = subprocess.run(
+            list(args), capture_output=True, text=True, cwd=REPO, timeout=60
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 127, str(exc)
+    return proc.returncode, proc.stdout.strip()
+
+
+def _git_tags() -> list[str]:
+    """All git tags sorted newest-first (semantic version order)."""
+    code, out = _run("git", "tag", "-l", "--sort=-version:refname")
+    if code != 0:
+        return []
+    return [t for t in out.splitlines() if t.strip()] if out else []
+
+
+def _git_tag_date(tag: str) -> int | None:
+    """Return the tagger date (epoch seconds) for an annotated tag, else commit date."""
+    code, out = _run("git", "show", "-s", "--format=%(creatordate:unix)", tag)
+    if code == 0:
+        try:
+            return int(out.strip())
+        except ValueError:
+            pass
+    return None
+
+
+def parse_version(version: str) -> tuple[int, ...] | None:
+    """'0.9.2' or 'v0.9.2' -> (0, 9, 2). None for non-dotted-numeric versions.
+
+    Pre-release suffixes (e.g. '-rc.1', '-beta') are stripped so that
+    '0.10.0-rc.1' -> (0, 10, 0) for ordering purposes.
+    """
+    if version.startswith('v'):
+        version = version[1:]
+    # Strip pre-release suffix for comparison
+    version = re.sub(r'[-+].*$', '', version)
+    if not re.fullmatch(r"\d+(?:\.\d+)*", version):
+        return None
+    return tuple(int(part) for part in version.split("."))
+
+
+def is_prerelease(version: str) -> bool:
+    """Return True if version has a pre-release suffix."""
+    if version.startswith('v'):
+        version = version[1:]
+    return '-' in version or '+' in version
+
+
+def duplicate_version(version: str) -> tuple[bool, str]:
+    """(is_duplicate, detail). True when the tag v<version> already exists."""
+    tag = f"v{version}"
+    code, _ = _run("git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}")
+    if code == 0:
+        return True, f"version {tag!r} is already tagged (duplicate release)"
+    return False, ""
+
+
+def version_gap(version: str, latest_tag: str | None) -> tuple[bool, str]:
+    """True when the proposal is NOT strictly greater than the latest tag."""
+    if latest_tag is None:
+        return False, ""
+    pv = parse_version(version)
+    lt = parse_version(latest_tag)
+    if pv is None or lt is None:
+        return False, f"version {version!r} is not dotted-numeric, cannot compare"
+    if pv <= lt:
+        return True, (
+            f"version {version!r} is not newer than latest tag {latest_tag}, "
+            f"a gap release would drag CHANGELOG out of sync"
+        )
+    return False, ""
+
+
+def active_release(latest_tag: str | None, window_hours: int) -> tuple[bool, str]:
+    """True if latest tag was created within the window."""
+    if latest_tag is None:
+        return False, ""
+    date = _git_tag_date(latest_tag)
+    if date is None:
+        return False, f"cannot determine creation date of tag {latest_tag}"
+    age_hours = (time.time() - date) / 3600.0
+    if age_hours < window_hours:
+        return True, (
+            f"ACTIVE RELEASE: latest tag {latest_tag} was created "
+            f"{age_hours:.1f}h ago (window {window_hours}h)"
+        )
+    return False, ""
+
+
+def get_latest_stable_tag() -> str | None:
+    """Return the latest non-prerelease tag, or None."""
+    for tag in _git_tags():
+        if not is_prerelease(tag):
+            return tag
+    return None
+
+
+def get_latest_tag() -> str | None:
+    """Return the absolute latest tag (including prereleases)."""
+    tags = _git_tags()
+    return tags[0] if tags else None
+
+
+def report_evidence(errors: list[str], label: str = "release-tag-gate") -> None:
+    """Print all evidence lines with consistent formatting."""
+    for line in errors:
+        print(f"[{label}] REFUSE: {line}")
+
+
+def print_ok(version: str, label: str = "release-tag-gate") -> None:
+    print(f"[{label}] OK — v{version} is a fresh, untagged version")
+
+
+def print_latest(latest: str | None, label: str = "release-tag-gate") -> None:
+    if latest:
+        print(f"[{label}] latest tag on origin/master: {latest}")
+
+
+if __name__ == "__main__":
+    # Quick self-test
+    assert parse_version("0.9.2") == (0, 9, 2)
+    assert parse_version("v0.9.2") == (0, 9, 2)
+    assert parse_version("0.9.3-rc.1") == (0, 9, 3)
+    assert parse_version("not.version") is None
+    assert is_prerelease("0.9.3-rc.1") is True
+    assert is_prerelease("0.9.2") is False
+    print("shared utilities self-test PASS")
