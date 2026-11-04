@@ -2,187 +2,31 @@
 
 All notable changes to hermes-guide are documented here.
 
-## v0.9.1 (2026-11-03)
-
-### Features
-
-- **skills**: add standardized `## Verification` sections to all 31 skills (#400, #402, #404)
-- **docs**: split `docs/agent/ops.md` into `deep-ops.md` + `review-ops.md` (#403)
-
-### Bug Fixes
-
-- **skills**: address 22 Qodo findings on Verification sections (CLI commands, Windows compat, egress, vault) (#402)
-- **skills**: correct 4 invalid CLI commands in Verification sections (auth, desktop, registry, vault) (#400)
-- **tools**: fix verify_plugin registration check (module-level only, posonly/vararg, async rejection) (#399)
+## v0.9.1 (2026-11-04)
 
 ### Documentation
 
-- **skills**: add `## Verification` to 4 meta skills (configuration-guide, post-update, installing-hermes, plugin-authoring) (#404)
-- **docs**: add comment discipline templates, wip label, draft-before-publishing instructions (#391, #389)
-
-## v0.9.0 (2026-11-01)
-
-### Features
-
-- **skills**: add diagnosing-backup, diagnosing-profiles, diagnosing-secrets
-- **skills**: update routing, docs, and render_docs for coverage matrix
-- **skills**: complete diagnostic coverage matrix (5 new skills)
-- **tools**: add verify_plugin.py — checks plugin manifest, registration, and read-only patterns
-- **skills**: add plugin structure verification checklist (26 items)
-- **skills**: add plugin-authoring skill (plugins + skills creation guide)
-- **storage**: add state.db storage check
-
-### Bug Fixes
-
-- **skills**: address remaining Qodo findings on backup and secrets skills
-- **skills**: remove os.environ scanner trigger from diagnosing-profiles
-- **skills**: address Qodo findings on 3 new diagnostic skills
-- **skills**: update import-agent command (moved to plugin) + bump upstream drift baseline
-- **skills**: update import-agent command (moved to plugin) + bump upstream drift baseline
-- **skills**: bump versions for verification heading standardization
-- **skills**: add model request to providers verification (CodeRabbit)
-- **skills**: bump versions for Verification section additions
-- bump plugin-authoring version + add evidence to outdated-anchor template (Qodo Medium)
-- **skills**: remove backticks from non-existent command example
-- **skills**: address CodeRabbit review findings (portability, safety, quoting)
-- **skills**: align provenance footer format with Qodo review
-- **skills**: include dependency reinstall in manual update fallback (Qodo Medium)
-- **skills**: use chmod 600 for state.db (Qodo High finding)
-- **skills**: replace unknown 'hermes sessions show' command
-- **tools**: handle nested mappings in minimal YAML fallback parser
-- **tools**: add minimal YAML fallback for verify_plugin.py
-- **skills**: qualify handler contract by Hermes version (CodeRabbit thread 10)
-- **skills**: add repository-only checks pitfall (CodeRabbit thread 7)
-- **skills**: address CodeRabbit major/minor findings on plugin-authoring
-- **skills**: add handler-signature-drift pitfall from Qodo review
-- **skills**: correct slash command handler signature per Qodo review
-- **render_docs**: extend word list to twenty-three (deliberate edit)
-- **skills**: add plugin-authoring to README table and issue template
-- **skills**: avoid python_os_environ scanner block in host-pressure skill
-- **skills**: address CodeRabbit review findings on verification
-- **skills**: address Qodo review findings on verification commands
-- **checks**: improve session diagnostics ([#378](https://github.com/iap/hermes-guide/pull/378))
-- **skills**: address CodeRabbit review findings
-- **skills**: address Qodo review findings
-- **skills**: qualify citation paths with hermes_cli/ prefix
-- **skills**: triage CodeRabbit review findings
-- revert unsupported --force on plugins update to match CLI surface
-- address review findings
-- **skills**: add verification sections and complete diagnosing-runtime report
-- address second CodeRabbit review batch on PR #374
-- remove non-existent --force flag from hermes plugins update citation
-- address CodeRabbit review findings on PR #374
-- **storage**: distinct STORAGE_NOT_REGULAR id; document missing-db choice
-- **disk-hygiene**: address reviewer findings on PR #373
-- **storage**: handle permission and non-file errors; drop informational id
-- **storage**: add 'storage' to the PLUGIN_COMMANDS mirror in check_cli_surface
-- **storage**: bump start/SKILL.md version for the nine->ten edit
-- **storage**: complete the check and repair the contract
-- **storage**: treat missing state.db as unknown not healthy
-
-### Documentation
-
-- **ops**: fix CodeRabbit trigger command reference per review
-- **ops**: avoid CodeRabbit spamming — use full review once, then incremental
-- **ops**: correct resolve preference per CodeRabbit finding (Qodo auto-resolve is off by default)
-- **ops**: improve comment templates with commit linking and resolve preference
-- **skills**: standardize verification section headings (4 skills)
-- **ops**: add draft-before-publishing discipline for PR comments
-- **skills**: add Verification sections to 10 skills
-- **ops**: update wip label instruction — label now exists
-- **ops**: clarify wip label — no such label exists on this repo
-- **ops**: add comment discipline and templates for pre-merge review
-- **plugin-authoring**: add CLI validation, security, and update pits from review
-- **ops**: rewrite pre-merge review sequence — two-bot, no draft conversion
-- **skills**: add kind: field and plugin.json format to plugin-authoring reference
-- **skills**: add bot review thread pitfall + bump to 1.3.0
-- **agents**: slim always-on contract and tighten docs routing
-- **plugin-authoring**: add render_docs ceiling + parity pitfalls
-- **ops**: add CI failure triage steps to pre-merge cross-check
-- **skills**: add standardized Verification sections + template
-- **ops**: note graphql reviewThreads for thread enumeration ([#379](https://github.com/iap/hermes-guide/pull/379))
-- **ops**: require CodeRabbit findings triage via Draft PR before merge ([#376](https://github.com/iap/hermes-guide/pull/376))
-- **skills**: add CLI surface check pitfall to diagnosing-plugins
-- **installing-hermes, diagnosing-plugins**: add NixOS WSL plugin verification reference and security-scan pitfall
-- add Stacked PRs guide to AGENTS.md and prep CHANGELOG for v0.8.13
-- cross-reference disk-cleanup surfaces
-- sync scope lists for storage check
-- sync scope lists for storage check
-- **ops**: make CodeRabbit a required pre-merge step after Qodo ([#372](https://github.com/iap/hermes-guide/pull/372))
-
-### CI
-
-- wire venv detection patterns test into CI
-
-### Chores
-
-- Merge pull request #397 from iap/docs/coderabbit-no-spam
-- Merge pull request #396 from iap/test/venv-detection-patterns
-- Merge pull request #395 from iap/test/upstream-drift-helpers
-- Merge pull request #394 from iap/test/cli-surface-regression
-- Merge pull request #393 from iap/feat/add-three-diagnostic-skills
-- Merge pull request #392 from iap/fix/mcp-import-agent-cli-surface
-- Merge pull request #391 from iap/docs/improve-comment-discipline
-- Merge pull request #390 from iap/fix/standardize-verification-headings
-- Merge pull request #389 from iap/docs/draft-before-publishing
-- Merge pull request #388 from iap/feat/add-verification-sections
-- Merge pull request #387 from iap/feat/complete-diagnostic-coverage
-- Merge pull request #386 from iap/docs/pre-merge-review-instructions
-- Merge pull request #385 from iap/feat/verify-plugin-tool
-- Merge pull request #384 from iap/fix/plugin-authoring-missing-fields
-- Merge pull request #383 from iap/feat/plugin-verification-checklist
-- Merge pull request #382 from iap/feat/plugin-authoring-skill
-- Merge pull request #381 from iap/feat/skill-verification-sections
-- **drift**: re-baseline to upstream daec3cd ([#380](https://github.com/iap/hermes-guide/pull/380))
-- Merge pull request #377 from iap/fix/skill-review-findings
-- Merge pull request #375 from iap/fix/skill-verification-templates
-- Merge pull request #374 from iap/docs/nixos-wsl-plugin-verification
-- Merge pull request #373 from iap/docs/disk-hygiene-crossref
-- Merge pull request #371 from iap/feat/storage-check
-- **drift**: bump upstream baseline to edfa1c2a13 (closes #369) ([#370](https://github.com/iap/hermes-guide/pull/370))
-- **deps**: bump actions/setup-python ([#360](https://github.com/iap/hermes-guide/pull/360))
-
-### Refactoring
-
-- **skills**: split plugin-authoring into SKILL.md + references/
-
-### Tests
-
-- **ci**: add probe_shell invalid override case per CodeRabbit
-- **ci**: add dotvenv-only resolution case per CodeRabbit
-- **ci**: address CodeRabbit findings (dotvenv case, assert guard)
-- **ci**: fix active-prefix test to actually exercise sys.prefix fallback
-- **ci**: address CodeRabbit findings (prefix precedence, assert guard)
-- **ci**: strengthen activate quoting assertion per CodeRabbit
-- **ci**: address Qodo findings (env restore, path quoting, Windows coverage)
-- **ci**: add behavioral tests for venv detection patterns
-- **ci**: verify full multiline content survives in fit_body
-- **ci**: address CodeRabbit findings (env isolation, stderr, multiline)
-- **ci**: strengthen cap and fit_body assertions per Qodo findings
-- **ci**: add behavioral regression tests for upstream drift helpers
-- **ci**: strengthen window-boundary assertion per Qodo finding
-- **ci**: add behavioral regression tests for skill consistency parsing
-- **ci**: add behavioral regression tests for CLI surface parsing
-- **storage**: update the three hardcoded check counts to ten
+- **agents**: add release-flow agent checklist ([#425](https://github.com/iap/hermes-guide/pull/425))
 
 ## v0.8.12 (2026-10-26)
 
 ### Bug Fixes
 
-- **redact**: stop AUTH matching --author, add regression cases ([#352](https://github.com/iap/hermes-guide/pull/352))
 - **hooks**: fold quoted continuations and prune nested artifacts ([#365](https://github.com/iap/hermes-guide/pull/365))
 - **hooks**: redact continued credentials and scope mutation scans ([#361](https://github.com/iap/hermes-guide/pull/361))
+- **redact**: keep quoted values whole and mask only credential-bearing keys ([#352](https://github.com/iap/hermes-guide/pull/352))
 
 ### Documentation
 
-- **agents**: correct the hooks default and --deep opt-in ([#352](https://github.com/iap/hermes-guide/pull/352))
-- name the upstream catalog path and point contributors at the interpreter setup ([#358](https://github.com/iap/hermes-guide/pull/358))
+- **changelog**: list the release-note PRs ([#368](https://github.com/iap/hermes-guide/pull/368))
+- **changelog**: cover the v0.8.12 release PR changes ([#367](https://github.com/iap/hermes-guide/pull/367))
+- **changelog**: complete the v0.8.12 section ([#366](https://github.com/iap/hermes-guide/pull/366))
+- **changelog**: name the upstream catalog path and point contributors at the interpreter setup ([#358](https://github.com/iap/hermes-guide/pull/358))
 - **agent**: record the local interpreter and pin it to the CI floor ([#356](https://github.com/iap/hermes-guide/pull/356))
+- **agents**: correct hooks behavior guidance in AGENTS.md and docs/agent/ops.md ([#352](https://github.com/iap/hermes-guide/pull/352))
 
 ### Chores
 
-- **changelog**: complete the v0.8.12 section ([#366](https://github.com/iap/hermes-guide/pull/366))
-- **changelog**: cover the release PR changes ([#367](https://github.com/iap/hermes-guide/pull/367))
 - Configure CodeRabbit as a manual second reviewer after Qodo (#355)
 - **review**: require a trigger for regex/parser findings ([#354](https://github.com/iap/hermes-guide/pull/354))
 
@@ -226,7 +70,7 @@ All notable changes to hermes-guide are documented here.
 
 - **checks**: give broken and unknown findings stable ids ([#337](https://github.com/iap/hermes-guide/pull/337))
 - **guide**: machine-readable --json output mode ([#336](https://github.com/iap/hermes-guide/pull/336))
-- **tools**: verify the upstream catalog pin before tagging ([#328](https://github.com/iap/hermes-guide/pull/328))
+- **tools**: verdict the upstream catalog pin before tagging ([#328](https://github.com/iap/hermes-guide/pull/328))
 
 ### Documentation
 
@@ -239,27 +83,18 @@ All notable changes to hermes-guide are documented here.
 
 ### Bug Fixes
 
+- **skills**: disclose the update scope's lock probe ([#327](https://github.com/iap/hermes-guide/pull/327))
 - **tools**: fail the changelog guard on a missing release entry ([#325](https://github.com/iap/hermes-guide/pull/325))
 
 ### Documentation
 
 - **scope**: carve out the plugin's own catalog listing ([#324](https://github.com/iap/hermes-guide/pull/324))
-- **skills**: disclose the update scope's lock probe ([#327](https://github.com/iap/hermes-guide/pull/327))
 
 ### Chores
 
 - **drift**: re-baseline to upstream 8f555f4 ([#326](https://github.com/iap/hermes-guide/pull/326))
 
-## v0.8.6 (2026-10-21)
-
-### Bug Fixes
-
-- **tools**: skip the release commit in generated changelogs
-- **tools**: read the whole folded description, not the first paragraph
-
-### Documentation
-
-- keep the catalog description inside the list column
+## v0.8.6 (2026-10-22)
 
 ### Chores
 
@@ -352,7 +187,7 @@ All notable changes to hermes-guide are documented here.
 
 - **upstream**: re-pin the drift baseline to the Oct-13 sync tip (f97608f -> d97007c32) ([#283](https://github.com/iap/hermes-guide/pull/283))
 
-## v0.8.1 (2026-10-17)
+## v0.8.1 (2026-10-18)
 
 ### Features
 
@@ -360,6 +195,7 @@ All notable changes to hermes-guide are documented here.
 
 ### Bug Fixes
 
+- **review**: reword fast clause to wedge-safety, drop literal line cite, normalize footer dates to repo UTC consensus
 - **review**: v0.8.1 audit fixes
 
 ### Chores
@@ -379,6 +215,8 @@ All notable changes to hermes-guide are documented here.
 
 ### Bug Fixes
 
+- **test**: deterministic overlap via iteration event in cache-isolation test
+- **review**: per-context memo store, cache-isolation test, _store() call sites
 - **skill**: cite pin-resolvable update_cmd_maint hint, step path to 1.5.11
 - **review**: ContextVar fast flag, missing-config path, EPERM nuance, upstream cites
 - annotate mixed kwargs dict for mypy (bool into str-or-None map)
@@ -403,7 +241,7 @@ All notable changes to hermes-guide are documented here.
 
 ### Chores
 
-- release: bump to v0.8.0 with changelog section
+- release: refresh v0.8.0 changelog on rebased base
 - **qodo**: tune primary reviewer with repo context ([#259](https://github.com/iap/hermes-guide/pull/259))
 
 ## v0.7.2 (2026-10-16)
@@ -450,7 +288,6 @@ All notable changes to hermes-guide are documented here.
 
 ### Chores
 
-- **release**: bump to 0.7.2
 - **reviews**: silence coderabbit skipped-status noise via config ([#229](https://github.com/iap/hermes-guide/pull/229))
 - Revert "docs(contributing): add commit signing section for human and agent contributors (#209)" (#210)
 - **scanner**: move scanner-hygiene guard under tests/ per upstream review ([#207](https://github.com/iap/hermes-guide/pull/207))
@@ -479,7 +316,6 @@ All notable changes to hermes-guide are documented here.
 
 ### Chores
 
-- **release**: bump to 0.7.1 ([#205](https://github.com/iap/hermes-guide/pull/205))
 - update CHANGELOG.md for v0.7.0 ([#183](https://github.com/iap/hermes-guide/pull/183))
 
 ### Tests
@@ -500,10 +336,6 @@ All notable changes to hermes-guide are documented here.
 
 - address CodeRabbit follow-up findings on version check ([#181](https://github.com/iap/hermes-guide/pull/181))
 - **triage**: move host-pressure branch before per-surface branches ([#177](https://github.com/iap/hermes-guide/pull/177))
-
-### Chores
-
-- **release**: bump to 0.7.0 ([#182](https://github.com/iap/hermes-guide/pull/182))
 
 ## v0.6.0 (2026-10-07)
 
@@ -571,7 +403,6 @@ All notable changes to hermes-guide are documented here.
 ### Chores
 
 - build(deps): bump actions/github-script (#151)
-- **release**: bump to 0.6.0; guard _plugin_skill_names against an unhashable name ([#135](https://github.com/iap/hermes-guide/pull/135))
 - build: declare project metadata in pyproject.toml (#131)
 - drift: bump upstream baseline to 5000e299; refresh venv facts; retry ls-remote flakes (#124)
 - Merge pull request #122 from iap/fix/drift-body-cap
@@ -599,7 +430,6 @@ All notable changes to hermes-guide are documented here.
 ### Chores
 
 - Merge pull request #113 from iap/chore/release-0.5.1
-- **release**: v0.5.1
 - Merge pull request #112 from iap/fix/memory-limit-measurement
 - Merge pull request #111 from iap/fix/configuration-map-routing-coverage
 
@@ -627,7 +457,6 @@ All notable changes to hermes-guide are documented here.
 - Merge pull request #109 from iap/chore/release-bump-0.5.0
 - Merge pull request #110 from iap/drift/baseline-bump-v2026.9.21
 - drift: bump upstream baseline to 2f6170bf; re-point two moved citations; CI pin to v2026.9.21
-- **release**: bump to 0.5.0
 - **skills**: close the provenance-footer gap, flip guard to enforcing
 
 ## v0.4.0 (2026-09-16)
