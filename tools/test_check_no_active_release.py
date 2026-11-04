@@ -160,17 +160,43 @@ def test_get_tag_dates_parses_for_each_ref():
 def test_selftest_alias_accepted():
     """The workflow may spell it --selftest; argparse must accept both."""
     mod = _load_guard()
-    old_argv = sys.argv
-    try:
-        sys.argv = ["check_no_active_release.py", "--selftest"]
-        args = mod._parse_args()
-        assert args.self_test is True
-        sys.argv = ["check_no_active_release.py", "--self-test"]
-        args = mod._parse_args()
-        assert args.self_test is True
-    finally:
-        sys.argv = old_argv
+    assert mod._parse_args(["--selftest"]).self_test is True
+    assert mod._parse_args(["--self-test"]).self_test is True
     print("OK: --selftest and --self-test both accepted")
+
+
+def test_prerelease_is_not_a_duplicate():
+    """v0.10.0-rc.1 must not parse as (0,10,0) and collide with v0.10.0."""
+    mod = _load_guard()
+    assert mod.parse_version_tag("v0.10.0-rc.1") is None
+    assert mod.parse_version_tag("v0.10.0") == (0, 10, 0)
+    print("OK: prerelease tags are not duplicate versions")
+
+
+def test_duplicate_tags_detected_without_version():
+    """The no-version audit must refuse when two tags parse to one version.
+
+    Only reachable for the same version spelled two ways (``v0.9.2`` and
+    ``0.9.2``); a suffixed tag like ``v0.9.2-dup`` is deliberately NOT a
+    duplicate (see test_prerelease_is_not_a_duplicate).
+    """
+    mod = _load_guard()
+    mod.get_sorted_tags = lambda: ["v0.9.2", "0.9.2", "v0.9.1"]
+    mod.get_tag_dates = lambda: {"v0.9.2": 0.0, "0.9.2": 0.0, "v0.9.1": 0.0}
+    code, evidence = mod.check_release_guard(window_hours=48)
+    assert code == 1, evidence
+    assert any("duplicate version" in e for e in evidence), evidence
+    print("OK: duplicate tags refused without --version")
+
+
+def test_duplicate_audit_clean_tree():
+    """The no-version audit must allow a tree with no duplicate tags."""
+    mod = _load_guard()
+    mod.get_sorted_tags = lambda: ["v0.9.2", "v0.9.1", "v0.9.0"]
+    mod.get_tag_dates = lambda: {"v0.9.2": 0.0, "v0.9.1": 0.0, "v0.9.0": 0.0}
+    code, evidence = mod.check_release_guard(window_hours=48)
+    assert code == 0, evidence
+    print("OK: no duplicates -> allowed")
 
 
 def main() -> int:
@@ -188,6 +214,9 @@ def main() -> int:
         test_check_release_guard_unreadable_dates()
         test_get_tag_dates_parses_for_each_ref()
         test_selftest_alias_accepted()
+        test_prerelease_is_not_a_duplicate()
+        test_duplicate_tags_detected_without_version()
+        test_duplicate_audit_clean_tree()
 
     print("PASS: check_no_active_release regression suite")
     return 0

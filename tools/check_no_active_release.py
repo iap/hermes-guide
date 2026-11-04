@@ -34,11 +34,22 @@ DEFAULT_WINDOW_HOURS = 48
 
 
 def _run_git(*args: str) -> tuple[int, str]:
-    proc = subprocess.run(
-        ["git", "-C", str(REPO)] + list(args),
-        capture_output=True,
-        text=True,
-    )
+    """Run a git command. Returns (returncode, stdout).
+
+    A missing git binary or a hung process must not crash the guard with a
+    traceback, so both are turned into a non-zero code with the cause on
+    stderr; the caller then fails closed.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO)] + list(args),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"git {' '.join(args)} could not run: {exc}", file=sys.stderr)
+        return 1, ""
     return proc.returncode, proc.stdout.strip()
 
 
@@ -90,8 +101,12 @@ def get_latest_tag() -> str | None:
 
 
 def parse_version_tag(tag: str) -> tuple[int, ...] | None:
-    """'v0.9.2' -> (0, 9, 2). Returns None if it doesn't look like a version tag."""
-    m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", tag.strip())
+    """'v0.9.2' -> (0, 9, 2). Returns None for anything else.
+
+    Anchored (``fullmatch``) so a prerelease like ``v0.10.0-rc.1`` does not
+    parse as ``(0, 10, 0)`` and masquerade as a duplicate of ``v0.10.0``.
+    """
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag.strip())
     if not m:
         return None
     return tuple(int(g) for g in m.groups())
@@ -168,7 +183,7 @@ def check_release_guard(
     return exit_code, evidence
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Release-guard for the action bot: refuse a bump when a "
         "release is active or the proposed version is already tagged."
@@ -191,11 +206,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run internal consistency checks and exit.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args()
+    args = _parse_args(argv)
 
     if args.self_test:
         return _self_test()

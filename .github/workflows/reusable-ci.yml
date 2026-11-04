@@ -394,12 +394,22 @@ jobs:
         # The refusal rule the action bot enforces: a version bump is refused
         # while a release is active (latest tag created within --window-hours)
         # or when the proposed version is already a tag (a redundant release).
-        # Only a changed VERSION triggers the guard, so a metadata-only edit to
-        # plugin.yaml (description, tags, ...) is a no-op rather than a false
-        # redundant-release refusal.
-        if: runner.os == 'Linux' && matrix.python-version == '3.11'
+        # Pre-merge only. On the post-merge push to master the merge has
+        # already happened, so a refusal cannot stop anything -- and the
+        # maintainer's `v*` tag push can land mid-run, which would make the
+        # guard report REDUNDANT/ACTIVE against a merge already on master
+        # (CodeRabbit finding on #428). PR and merge-group runs enforce it
+        # before merge. Only a changed VERSION triggers the guard, so a
+        # metadata-only plugin.yaml edit stays a no-op.
+        if: runner.os == 'Linux' && matrix.python-version == '3.11' && inputs.event-name != 'push'
+        env:
+          # Through env, not interpolated into the `run:` body: a ref is
+          # caller-supplied text, and shell interpolation of it would be an
+          # injection point.
+          BASE_REF: ${{ inputs.base-ref }}
         run: |
-          base_version="$(git show "${{ inputs.base-ref }}:plugin.yaml" | grep '^version:' | awk '{print $2}')"
+          set -euo pipefail
+          base_version="$(git show "$BASE_REF:plugin.yaml" | grep '^version:' | awk '{print $2}')"
           proposed="$(grep '^version:' plugin.yaml | awk '{print $2}')"
           if [ "$base_version" = "$proposed" ]; then
             echo "plugin.yaml version unchanged ($proposed) — release guard skipped"
