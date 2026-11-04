@@ -144,7 +144,7 @@ def _path_hermes_executables():
     install even though a working `hermes` sits further down `PATH`. Walking
     the whole `PATH` is what makes the fall-through contract meaningful.
     """
-    found = []
+    found: list[str] = []
     seen = set()
     # An UNSET PATH and an explicitly EMPTY one are different states. Unset
     # means "use the system default", so search os.defpath -- which is what
@@ -399,32 +399,41 @@ def _has_symlink_cycle(skills_root):
     """True when ``skills_root`` contains a symlink that points back at an
     ancestor. Hermes' own walker follows symlinks without cycle detection, so
     a cycle there would stall diagnostics; detect it first and use the
-    cycle-safe mirror instead."""
+    cycle-safe mirror instead. Iterative to avoid RecursionError on deep trees.
+    """
     root_real = os.path.realpath(skills_root)
-
-    def _visit(dirpath, ancestors):
-        try:
-            with os.scandir(dirpath) as entries:
-                names = [entry.name for entry in entries]
-        except OSError:
-            return False
-        has_skill_md = "SKILL.md" in names and os.path.isfile(os.path.join(dirpath, "SKILL.md"))
-        for name in names:
-            if name in constants.SKILL_EXCLUDED_DIRS:
-                continue
-            if has_skill_md and name in constants.SKILL_SUPPORT_DIRS:
-                continue
-            child = os.path.join(dirpath, name)
-            if not os.path.isdir(child):
-                continue
-            real = os.path.realpath(child)
-            if real in ancestors:
-                return True
-            if _visit(child, ancestors | {real}):
-                return True
+    try:
+        with os.scandir(skills_root) as entries:
+            root_names = [entry.name for entry in entries]
+    except OSError:
         return False
-
-    return _visit(skills_root, {root_real})
+    root_has = "SKILL.md" in root_names and os.path.isfile(os.path.join(skills_root, "SKILL.md"))
+    stack = [[skills_root, frozenset({root_real}), root_names, 0, root_has]]
+    while stack:
+        dirpath, ancestors, names, idx, has_skill_md = stack[-1]
+        if idx >= len(names):
+            stack.pop()
+            continue
+        stack[-1][3] = idx + 1
+        name = names[idx]
+        if name in constants.SKILL_EXCLUDED_DIRS:
+            continue
+        if has_skill_md and name in constants.SKILL_SUPPORT_DIRS:
+            continue
+        child = os.path.join(dirpath, name)
+        if not os.path.isdir(child):
+            continue
+        real = os.path.realpath(child)
+        if real in ancestors:
+            return True
+        try:
+            with os.scandir(child) as entries:
+                child_names = [entry.name for entry in entries]
+        except OSError:
+            continue
+        child_has = "SKILL.md" in child_names and os.path.isfile(os.path.join(child, "SKILL.md"))
+        stack.append([child, ancestors | {real}, child_names, 0, child_has])
+    return False
 
 
 def _skill_index_paths(skills_root):
@@ -445,32 +454,43 @@ def _skill_index_paths(skills_root):
             return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
         except Exception:
             pass  # nosec B110 - fall through to the local mirror
-    found = []
+    found: list[str] = []
     root_real = os.path.realpath(skills_root)
-
-    def _visit(dirpath, ancestors):
+    try:
+        with os.scandir(skills_root) as entries:
+            root_names = [entry.name for entry in entries]
+    except OSError:
+        return sorted(found)
+    root_has = "SKILL.md" in root_names and os.path.isfile(os.path.join(skills_root, "SKILL.md"))
+    if root_has:
+        found.append(os.path.join(skills_root, "SKILL.md"))
+    stack = [[skills_root, frozenset({root_real}), root_names, 0, root_has]]
+    while stack:
+        dirpath, ancestors, names, idx, has_skill_md = stack[-1]
+        if idx >= len(names):
+            stack.pop()
+            continue
+        stack[-1][3] = idx + 1
+        name = names[idx]
+        if name in constants.SKILL_EXCLUDED_DIRS:
+            continue
+        if has_skill_md and name in constants.SKILL_SUPPORT_DIRS:
+            continue
+        child = os.path.join(dirpath, name)
+        if not os.path.isdir(child):
+            continue
+        real = os.path.realpath(child)
+        if real in ancestors:
+            continue
         try:
-            with os.scandir(dirpath) as entries:
-                names = [entry.name for entry in entries]
+            with os.scandir(child) as entries:
+                child_names = [entry.name for entry in entries]
         except OSError:
-            return
-        has_skill_md = "SKILL.md" in names and os.path.isfile(os.path.join(dirpath, "SKILL.md"))
-        child_names = [n for n in names if n not in constants.SKILL_EXCLUDED_DIRS
-                       and not (has_skill_md and n in constants.SKILL_SUPPORT_DIRS)]
-        if has_skill_md:
-            found.append(os.path.join(dirpath, "SKILL.md"))
-        for name in child_names:
-            child = os.path.join(dirpath, name)
-            if not os.path.isdir(child):
-                continue
-            real = os.path.realpath(child)
-            # Guard against symlink cycles: a directory already on the current
-            # path is never re-entered, but non-cyclic links are still followed.
-            if real in ancestors:
-                continue
-            _visit(child, ancestors | {real})
-
-    _visit(skills_root, {root_real})
+            continue
+        child_has = "SKILL.md" in child_names and os.path.isfile(os.path.join(child, "SKILL.md"))
+        if child_has:
+            found.append(os.path.join(child, "SKILL.md"))
+        stack.append([child, ancestors | {real}, child_names, 0, child_has])
     return sorted(found)
 
 
