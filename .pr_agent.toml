@@ -7,7 +7,10 @@
 # for extra_instructions that are clear and concise, not a handbook.
 
 [pr_reviewer]
-extra_instructions = """This repo is a READ-ONLY diagnostics plugin for Hermes agent (plugin + skills tap). Plugin Python must never write config or filesystem (enforced by tools/check_no_mutation.py) — flag any write-mode open, dump, or mutating subprocess in plugin sources.
+require_tests_review = true
+
+[review_agent]
+issues_user_guidelines = """This repo is a READ-ONLY diagnostics plugin for Hermes agent (plugin + skills tap). Plugin Python must never write config or filesystem (enforced by tools/check_no_mutation.py) — flag any write-mode open, dump, or mutating subprocess in plugin sources.
 
 check scopes: checks.py _CHECKS labels must mirror tools/check_cli_surface.py PLUGIN_COMMANDS guide scopes — flag any scope present in one but not the other.
 
@@ -31,7 +34,3 @@ Static verification: Assess false acceptance and false rejection separately. Nev
 
 GitHub Actions: Check event-specific token permissions, fork pull-request restrictions, untrusted-code execution, job conditions, and the current required status contexts."""
 
-# Ask Qodo to surface coverage gaps in review. This is advisory only — it
-# does not block merges; enforcement stays with CI's tool-coverage guard
-# (tools/check_tool_coverage.py), which fails closed on unwired tests.
-require_tests_review = true

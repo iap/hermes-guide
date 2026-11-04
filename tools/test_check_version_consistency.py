@@ -54,13 +54,15 @@ def main() -> int:
     assert m, "could not parse version from pyproject.toml"
     current_ver = m.group(1)
     drifted_ver = "0.0.0" if current_ver != "0.0.0" else "0.0.1"
-    drifted = original.replace(f'version = "{current_ver}"', f'version = "{drifted_ver}"', 1)
+    drifted = re.sub(r'^version\s*=\s*"([^"]+)"', f'version = "{drifted_ver}"', original, count=1, flags=re.MULTILINE)
     assert drifted != original
     try:
         pyproject.write_text(drifted, encoding="utf-8")
         r = run([])
-        if r.returncode == 0:
-            failures.append("checker did not detect version drift")
+        if r.returncode != 1:
+            failures.append(f"checker exited with {r.returncode}, expected 1 for drift")
+        if "pyproject.toml" not in (r.stdout + r.stderr):
+            failures.append("checker diagnostic does not identify pyproject.toml")
     finally:
         pyproject.write_text(original, encoding="utf-8")
     # verify restored

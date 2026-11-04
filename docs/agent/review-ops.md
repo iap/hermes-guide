@@ -101,7 +101,7 @@ query($owner:String!,$repo:String!,$pr:Int!,$endCursor:String){
       nodes{id isResolved isOutdated path line startLine diffSide subjectType
         comments(first:100){nodes{databaseId author{login} body createdAt}}}}}}
 }' -F owner="${REPO%/*}" -F repo="${REPO#*/}" -F pr=<PR> \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|{path,line,startLine,diffSide,thread:.id,firstCommentId:.comments.nodes[0].databaseId,author:.comments.nodes[0].author.login,body:.comments.nodes[0].body}'
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|{path,line,startLine,diffSide,isOutdated,thread:.id,firstCommentId:.comments.nodes[0].databaseId,author:.comments.nodes[0].author.login,body:.comments.nodes[0].body}'
 ```
 
 `--paginate` follows `endCursor` until `hasNextPage` is false; never declare a
