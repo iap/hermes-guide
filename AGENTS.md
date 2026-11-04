@@ -158,6 +158,40 @@ table with honest `not run` entries is accepted; a claim that outruns the eviden
 is not — `validate-claim.yml` re-runs the hermetic gates against your PR head and
 fails the check if your table does not match reality.
 
+## Release flow (agent checklist)
+
+When you open, finalize, or ship a branch that changes a skill, bumps the plugin
+version, or cuts a tag, run the flow in order — each step maps to a hermetic
+gate, so the order is the safety net:
+
+1. **Fix skill version regressions first.** Run
+   `python tools/check_skill_version_bump.py origin/master`; it must exit 0
+   (a downgraded `SKILL.md` version fails too, and the check catches the
+   subset-bumped case this checklist exists for). Do this before anything else.
+2. **Bump the version in all four sites** — `plugin.yaml`, `__init__.py`,
+   `SECURITY.md`, and `pyproject.toml` — not a subset
+   (`python tools/check_version_consistency.py` asserts they agree).
+3. **Generate the changelog**: `python tools/gen_changelog.py --upcoming`.
+   The upcoming tag must have a section, or `gen_changelog.py --check` rejects
+   the bump.
+4. **Run all hermetic gates**: `python tools/check_gates.py` must report
+   13/13 passed before the branch is merge-eligible.
+5. **Run release readiness**: `python tools/check_release_readiness.py` before
+   the tag is cut — it pins the catalog pin, changelog entry, and CI status
+   `release.yml` depends on.
+6. **Tag and re-pin the upstream catalog**, then re-verify: `check_version_consistency.py`
+   and `check_skill_provenance.py` confirm the landed code matches the release.
+7. **Verify CI and merge status** — `validate-claim.yml` re-runs the hermetic
+   gates against the PR head and fails the check if the PR validation table
+   does not match the gate output.
+
+Notes — a few honest caveats:
+- **Version regression first (step 1)** is what catches the case this checklist
+  prevents: a `SKILL.md` whose `version` goes down, or a subset of sites bumped
+  while the rest lag.
+- A skipped gate is `not run` in the PR validation table, never a claim that
+  outruns the gate result.
+
 ## Pre-merge cross-check
 
 Never merge on green CI alone — run the checklist in
