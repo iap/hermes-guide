@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths, including the PM-era no-in-tree-venv case."
-version: 1.5.16
+version: 1.5.17
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -250,16 +250,23 @@ Causes:
 Diagnosis:
 
 ```bash
+# Resolve the hermes binary the shell actually finds (works for Nix, Homebrew, MacPorts, etc.)
+HERMES_BIN=$(command -v hermes 2>/dev/null || type -P hermes 2>/dev/null)
+echo "Resolved: ${HERMES_BIN:-<not found>}"
+
+# Fall back to standard installer shim if no command found
+: "${HERMES_BIN:=$HOME/.local/bin/hermes}"
+
 # Check if shim exists and what's in PATH
-ls -la ~/.local/bin/hermes 2>&1
+ls -la "$HERMES_BIN" 2>&1
 echo $PATH | grep -q '.local/bin' && echo "in PATH" || echo "NOT in PATH"
 
 # Check shim target (portable: works on macOS BSD readlink and GNU readlink)
-python3 -c "import os; print(os.path.realpath('$HOME/.local/bin/hermes'))" 2>&1
-cat ~/.local/bin/hermes 2>&1 | head -3
+python3 -c "import os; print(os.path.realpath('$HERMES_BIN'))" 2>&1
+cat "$HERMES_BIN" 2>&1 | head -3
 
 # Try running directly
-~/.local/bin/hermes --version 2>&1 | head -3
+"$HERMES_BIN" --version 2>&1 | head -3
 ```
 
 Fix:
@@ -279,34 +286,40 @@ If the direct path works but `hermes` doesn't, it's purely a PATH issue. On some
 
 ### Windows: "hermes" not found
 
-Native Windows installs use app-managed launchers under `%LOCALAPPDATA%\hermes` and `%LOCALAPPDATA%\Programs\hermes`, not `~/.local/bin` shims. The POSIX steps above do not apply.
+Native Windows installs (Desktop app, Nix flake) use app-managed launchers and do not use `~/.local/bin` shims. The POSIX steps above do not apply.
 
 Diagnosis:
 
 ```powershell
-# Check if the hermes launcher exists
+# Find the hermes executable the shell resolves
 Get-Command hermes -ErrorAction SilentlyContinue
-Test-Path "$env:LOCALAPPDATA\hermes\hermes.exe"
-Test-Path "$env:LOCALAPPDATA\Programs\hermes\hermes.exe"
 
-# Check PATH
-$env:PATH -split ';' | Select-String -Pattern 'hermes|localappdata'
+# Check common app-managed locations
+$hermesHome = (hermes config path 2>$null)  # canonical source of truth
+if ($hermesHome) { Write-Host "HERMES_HOME: $hermesHome" }
+Test-Path "$env:LOCALAPPDATA\hermes"
+Test-Path "$env:LOCALAPPDATA\Programs\hermes"
 
-# Try running directly
-& "$env:LOCALAPPDATA\hermes\hermes.exe" --version 2>&1 | Select-Object -First 3
+# Check PATH for hermes-related entries
+$env:PATH -split ';' | Where-Object { $_ -match 'hermes|localappdata' }
+
+# Try running directly from the install location
+$directPath = "$env:LOCALAPPDATA\hermes\hermes.exe"
+if (Test-Path $directPath) { & $directPath --version 2>&1 | Select-Object -First 3 }
 ```
 
 Fix:
 
 ```powershell
-# Add Hermes to PATH for current session
-$env:PATH = "$env:LOCALAPPDATA\hermes;$env:PATH"
+# Add the Hermes directory to PATH for the current session
+$hermesDir = "$env:LOCALAPPDATA\hermes"
+if (Test-Path $hermesDir) { $env:PATH = "$hermesDir;$env:PATH" }
 
 # Make permanent (user-level)
-[Environment]::SetEnvironmentVariable("PATH", "$env:LOCALAPPDATA\hermes;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
+[Environment]::SetEnvironmentVariable("PATH", "$hermesDir;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
 ```
 
-If the direct path works but `hermes` doesn't, it's a PATH issue — restart the terminal after making PATH changes permanent.
+If the direct path works but `hermes` doesn't, it's a PATH issue — restart the terminal after making PATH changes permanent. For Desktop app installs, use `hermes config path` to locate the canonical data directory.
 
 ### Windows: "python" not found
 
