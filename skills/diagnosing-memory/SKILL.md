@@ -147,7 +147,7 @@ Your external memory provider (honcho) is not available because the API key is m
 | MEDIUM | External memory disabled for session | Log at session start: `honcho unavailable; external memory disabled for this session` |
 
 ### Recommended Fix
-Add `HONCHO_API_KEY=<your-key>` to `$HERMES_HOME/.env`, then restart the session. Verify with `hermes memory status` — the provider should show `Status: available ✓`. If the provider plugin is also missing, run `hermes memory setup honcho` first.
+Add `HONCHO_API_KEY=<your-key>` to `$HERMES_HOME/.env`, then restart the session. Verify with `hermes memory status` — the provider should show `Status: available ✓`. If the provider plugin is also missing, install it first (`hermes plugins install honcho`), then run `hermes memory setup honcho` to install its dependencies and record the key — `memory setup` prints the catalog install command but cannot install the plugin itself.
 
 ### References
 - `$HERMES_HOME/.env` — the missing API key
