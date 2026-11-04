@@ -407,7 +407,7 @@ def _has_symlink_cycle(skills_root):
             root_names = [entry.name for entry in entries]
     except OSError:
         return False
-    root_has = "SKILL.md" in root_names and os.path.isfile(os.path.join(skills_root, "SKILL.md"))
+    root_has = "SKILL.md" in root_names and not os.path.isdir(os.path.join(skills_root, "SKILL.md"))
     stack = [[skills_root, frozenset({root_real}), root_names, 0, root_has]]
     while stack:
         dirpath, ancestors, names, idx, has_skill_md = stack[-1]
@@ -431,7 +431,7 @@ def _has_symlink_cycle(skills_root):
                 child_names = [entry.name for entry in entries]
         except OSError:
             continue
-        child_has = "SKILL.md" in child_names and os.path.isfile(os.path.join(child, "SKILL.md"))
+        child_has = "SKILL.md" in child_names and not os.path.isdir(os.path.join(child, "SKILL.md"))
         stack.append([child, ancestors | {real}, child_names, 0, child_has])
     return False
 
@@ -461,7 +461,7 @@ def _skill_index_paths(skills_root):
             root_names = [entry.name for entry in entries]
     except OSError:
         return sorted(found)
-    root_has = "SKILL.md" in root_names and os.path.isfile(os.path.join(skills_root, "SKILL.md"))
+    root_has = "SKILL.md" in root_names and not os.path.isdir(os.path.join(skills_root, "SKILL.md"))
     if root_has:
         found.append(os.path.join(skills_root, "SKILL.md"))
     stack = [[skills_root, frozenset({root_real}), root_names, 0, root_has]]
@@ -487,7 +487,7 @@ def _skill_index_paths(skills_root):
                 child_names = [entry.name for entry in entries]
         except OSError:
             continue
-        child_has = "SKILL.md" in child_names and os.path.isfile(os.path.join(child, "SKILL.md"))
+        child_has = "SKILL.md" in child_names and not os.path.isdir(os.path.join(child, "SKILL.md"))
         if child_has:
             found.append(os.path.join(child, "SKILL.md"))
         stack.append([child, ancestors | {real}, child_names, 0, child_has])

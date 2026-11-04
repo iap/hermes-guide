@@ -367,6 +367,8 @@ def main(argv: list[str]) -> int:
             ".hermes-dist/staged",
         )
         for rel in discovered + pruned:
+            if rel == "danglingskill":
+                continue
             _write(disc_home / f"skills/{rel}/SKILL.md",
                    f"---\nname: {rel.split('/')[-1]}\ndescription: fixture\n---\nbody\n")
         expect = {rel.split("/")[-1] for rel in discovered}
@@ -396,6 +398,17 @@ def main(argv: list[str]) -> int:
             cycle_created = True
         except (OSError, NotImplementedError):
             pass
+        # Dangling SKILL.md symlink is still a file entry in Hermes' walk.
+        dangling_created = False
+        try:
+            dangling_dir = disc_home / "skills" / "danglingskill"
+            dangling_dir.mkdir(parents=True, exist_ok=True)
+            os.symlink(str(dangling_dir / "missing-target"),
+                       str(dangling_dir / "SKILL.md"))
+            dangling_created = True
+            expect.add("danglingskill")
+        except (OSError, NotImplementedError):
+            pass
         with mock.patch.dict(sys.modules, {"agent": None, "agent.skill_utils": None}):
             checks._store().clear()
             checks._hermes_home_from_library = lambda: str(disc_home)
@@ -412,8 +425,10 @@ def main(argv: list[str]) -> int:
             failures.append("false positive symlink-cycle detection")
 
         # A directory named SKILL.md is not a skill file, so the support dir
-        # under it must still be traversed for cycles.
-        bad = disc_home / "skills/badskill"
+        # under it must still be traversed for cycles. Use a fresh root so the
+        # earlier cycleskill links cannot make this assertion pass.
+        bad_home = Path(td) / "bad-home"
+        bad = bad_home / "skills" / "badskill"
         (bad / "SKILL.md").mkdir(parents=True, exist_ok=True)
         (bad / "references").mkdir(parents=True, exist_ok=True)
         bad_cycle_created = False
@@ -422,7 +437,7 @@ def main(argv: list[str]) -> int:
             bad_cycle_created = True
         except (OSError, NotImplementedError):
             pass
-        if bad_cycle_created and not checks._has_symlink_cycle(disc_home / "skills"):
+        if bad_cycle_created and not checks._has_symlink_cycle(bad_home / "skills"):
             failures.append("cycle behind a SKILL.md directory was not detected")
 
     if failures:
