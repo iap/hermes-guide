@@ -54,6 +54,11 @@ jobs:
           fi
           echo "$GITHUB_SHA is on origin/master (required checks passed at merge)"
 
+      - name: No version gap — new tag must be newer than previous tag
+        # The new tag must be strictly greater than the previous tag to avoid
+        # a gap in the release sequence (e.g. v0.9.1 -> v0.9.3 skipping v0.9.2).
+        run: python tools/check_tag_version_gap.py
+
       - name: Quick gates (no Hermes install needed)
         run: |
           python -m py_compile __init__.py checks.py constants.py
