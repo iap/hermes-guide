@@ -199,6 +199,20 @@ def test_duplicate_audit_clean_tree():
     print("OK: no duplicates -> allowed")
 
 
+def test_main_exit_codes():
+    """main(argv) returns 2 on bad semver, 0 when allowed, 1 on refusal."""
+    mod = _load_guard()
+    # Malformed --version exits before any git read.
+    assert mod.main(["--version", "not-semver"]) == 2
+    mod.get_sorted_tags = lambda: ["v0.9.2"]
+    mod.get_tag_dates = lambda: {"v0.9.2": 0.0}
+    # Allowed: new version, window disabled so the epoch tag is not "active".
+    assert mod.main(["--version", "0.9.3", "--window-hours", "0"]) == 0
+    # Refusal: proposed version already tagged.
+    assert mod.main(["--version", "0.9.2", "--window-hours", "0"]) == 1
+    print("OK: main() exit codes")
+
+
 def main() -> int:
     import tempfile
 
@@ -217,6 +231,7 @@ def main() -> int:
         test_prerelease_is_not_a_duplicate()
         test_duplicate_tags_detected_without_version()
         test_duplicate_audit_clean_tree()
+        test_main_exit_codes()
 
     print("PASS: check_no_active_release regression suite")
     return 0
