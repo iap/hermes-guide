@@ -29,6 +29,7 @@ import importlib
 import io
 import json
 import os
+import pathlib
 import stat
 import re
 import shlex
@@ -394,13 +395,45 @@ def _plugin_skill_names():
     return names
 
 
+def _skill_index_paths(skills_root):
+    """SKILL.md paths under ``skills_root`` that Hermes would discover.
+
+    Prefers Hermes' own walker (the normal in-session case), so the plugin sees
+    exactly the set the loader sees. The local mirror exists for the hermetic
+    tier and must prune by NAME — ``constants.SKILL_EXCLUDED_DIRS`` — never by
+    "any dotted directory": Hermes loads a skill that sits under a dotted dir it
+    does not list, and its walk follows symlinked directories.
+    """
+    try:
+        from agent.skill_utils import iter_skill_index_files  # type: ignore[import-not-found]
+
+        return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
+    except Exception:
+        pass  # nosec B110 - fall through to the local mirror
+    found = []
+    for dirpath, dirnames, filenames in os.walk(skills_root, followlinks=True):
+        has_skill_md = "SKILL.md" in filenames
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if d not in constants.SKILL_EXCLUDED_DIRS
+            and not (has_skill_md and d in constants.SKILL_SUPPORT_DIRS)
+        ]
+        if has_skill_md:
+            found.append(os.path.join(dirpath, "SKILL.md"))
+    return sorted(found)
+
+
 def _iter_skills():
     """Yield (skill_dir_path, frontmatter_or_None) for every SKILL.md, cached.
 
-    Skips hidden/archive directories (``.archive``, ``.curator_backups``,
-    ``.hub``) that Hermes uses for internal bookkeeping but does not load as
-    skills — mirroring the loader so archived/backup copies never produce
-    false positives.
+    Only skills Hermes itself would discover are yielded. The walk prunes the
+    loader's excluded dir names (``.archive``, ``.hub``, ``venv``,
+    ``node_modules``, ``site-packages``, the ``.hermes-dist`` swap dir, ...) and
+    the support dirs of a skill root, and it follows symlinked directories as
+    the loader does. A skill under a dotted directory the loader does not list
+    is therefore still reported, and a stray ``SKILL.md`` under a vendored
+    ``venv``/``node_modules``/``references`` tree is not.
     """
     if "skills" not in _store():
         home = _hermes_home()
@@ -408,10 +441,10 @@ def _iter_skills():
         if home:
             skills_root = os.path.join(home, "skills")
             if os.path.isdir(skills_root):
-                for dirpath, dirnames, filenames in os.walk(skills_root):
-                    dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-                    if "SKILL.md" in filenames:
-                        out.append((dirpath, frontmatter(os.path.join(dirpath, "SKILL.md"))))
+                out = [
+                    (os.path.dirname(path), frontmatter(path))
+                    for path in _skill_index_paths(skills_root)
+                ]
         _store()["skills"] = out
     return _store()["skills"]
 

@@ -23,6 +23,20 @@ FOREIGN_MCP_KEYS = ("mcpServers",)
 # in checks.py — reference it from here.
 SKILL_PLATFORMS_KEY = "platforms"
 
+# Skill-discovery directory pruning. Hermes prunes these NAMES
+# (agent/skill_utils.py::EXCLUDED_SKILL_DIRS at 07274ac) — never "every dotted
+# directory": a skill under a dotted dir that is not listed here IS loaded. The
+# support dirs are pruned only when they sit directly inside a skill root that
+# carries a SKILL.md (::SKILL_SUPPORT_DIRS). checks.py::_iter_skills prefers
+# Hermes' own walker and falls back to this mirror in the hermetic tier, so the
+# two must agree; agent/skill_utils.py is in the drift watcher's WATCH_FILES.
+SKILL_EXCLUDED_DIRS = frozenset((
+    ".git", ".github", ".hub", ".archive", ".curator_backups", ".locks",
+    ".hermes-dist", ".venv", "venv", "node_modules", "site-packages", "__pycache__",
+    ".tox", ".nox", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+))
+SKILL_SUPPORT_DIRS = frozenset(("references", "templates", "assets", "scripts"))
+
 # MCP server shape requirements (per entry): stdio needs `command`, http needs `url`
 MCP_STDIO_KEY = "command"
 MCP_HTTP_KEY = "url"

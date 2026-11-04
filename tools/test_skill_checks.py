@@ -25,6 +25,7 @@ real install and does not require the ``hermes`` CLI.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
@@ -347,11 +348,56 @@ def main(argv: list[str]) -> int:
                     "normalize to" in d for d in (cr6.get("detail") or [])):
                 failures.append(f"Unicode skill names reported a false collision: {cr6}")
 
+        # (9) the discovery walk mirrors the loader's prune rules, not "any
+        # dotted dir". Two divergences this pins: a skill under a dotted dir the
+        # loader does not list IS loaded (previously missed), and a stray
+        # SKILL.md under a vendored venv/node_modules/site-packages tree or under
+        # a skill's support dir is NOT a skill (previously invented). The
+        # upstream import is blocked so the hermetic mirror runs even on a host
+        # where Hermes is installed.
+        disc_home = Path(td) / "discovery-home"
+        discovered = ("plain-skill", ".dotdir/dotskill", "toolsy/toolskill")
+        pruned = (
+            "toolsy/toolskill/venv/lib/dep",
+            "toolsy/toolskill/references/refskill",
+            "vendored/node_modules/dep",
+            "vendored/localsite/site-packages/dep",
+            ".hub/hubskill",
+            ".archive/oldskill",
+            ".hermes-dist/staged",
+        )
+        for rel in discovered + pruned:
+            _write(disc_home / f"skills/{rel}/SKILL.md",
+                   f"---\nname: {rel.split('/')[-1]}\ndescription: fixture\n---\nbody\n")
+        expect = {rel.split("/")[-1] for rel in discovered}
+        linked = None
+        try:
+            external = Path(td) / "external-lib/linkedskill"
+            _write(external / "SKILL.md",
+                   "---\nname: linkedskill\ndescription: linked\n---\nbody\n")
+            os.symlink(str(external), str(disc_home / "skills/linkedskill"))
+            linked = "linkedskill"
+            expect.add(linked)
+        except (OSError, NotImplementedError):
+            # Windows CI without developer mode cannot create symlinks; the
+            # remaining cases still bind the prune rules.
+            pass
+        with mock.patch.dict(sys.modules, {"agent": None, "agent.skill_utils": None}):
+            checks._store().clear()
+            checks._hermes_home_from_library = lambda: str(disc_home)
+            walked = {Path(d).name for d, _ in checks._iter_skills()}
+        if walked != expect:
+            failures.append(
+                "skill discovery diverged from the loader: missing "
+                f"{sorted(expect - walked)}, invented {sorted(walked - expect)}")
+        if linked is not None and linked not in walked:
+            failures.append("symlinked skill dir was not followed (the loader follows it)")
+
     if failures:
         for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
         return 1
-    print("OK: skill-library checks behave as expected (catalog validity, Unicode slugs, bundled label, hidden-dir skip, versioned collisions)")
+    print("OK: skill-library checks behave as expected (catalog validity, Unicode slugs, bundled label, hidden-dir skip, loader-mirror prune rules, versioned collisions)")
     return 0
 
 
