@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Release-guard for the action bot: refuse bump or repin to upstream when an
-active or redundant release is detected.
+"""Release-guard for the action bot: refuse a version bump when a release is
+already active or the proposed version is a redundant (already-tagged) release.
 
 Hermetic gate (stdlib-only, no network). Runs before bumping the plugin version
 or re-pointing a tag, so a bump/repin can be refused if:
 
-  1. an ACTIVE release exists — a tag created within the last ``--window-hours``
-     (default 48h) while a release is in flight; and
-  2. a REDUNDANT release would result — the proposed version is already a git
-     tag (the same exact version already tagged) or already documented in
-     CHANGELOG.md.
+  1. an ACTIVE release exists — a tag whose creation date is within the last
+     ``--window-hours`` (default 48h), so a release is still in flight; or
+  2. the proposed version is already a git tag (a REDUNDANT release).
 
 Verdict contract (like ``check_release_readiness.py``): exit 0 = safe to bump;
 exit 1 = refuse the bump/repin, with machine-readable evidence on stdout.
+A guard that cannot read tag dates fails closed (exit 1), never open.
+
+Note: a ``## vX.Y.Z`` section in CHANGELOG.md is deliberately NOT a refusal
+signal. The version-bump PR is required to add that section before merge, so
+treating it as "already released" would refuse every valid bump.
 """
 
 from __future__ import annotations
@@ -27,7 +30,6 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 CHANGELOG = REPO / "CHANGELOG.md"
 
-# Fallback info for when the git history is unreadable.
 DEFAULT_WINDOW_HOURS = 48
 
 
@@ -49,29 +51,42 @@ def get_sorted_tags() -> list[str]:
 
 
 def get_tag_dates() -> dict[str, float]:
-    """Map tag -> commit date (epoch seconds)."""
-    tags = get_sorted_tags()
+    """Map tag -> creation date (epoch seconds).
+
+    ``%(creatordate:unix)`` is the tagger date for annotated tags and the commit
+    date for lightweight tags — closer to "when was this release cut" than
+    ``%ct`` alone, which is always the commit date and misses a freshly pushed
+    tag that points at an older commit.
+
+    One ``for-each-ref`` call, not one ``git show`` per tag, so a large tag list
+    does not multiply subprocesses. A tag whose date cannot be read is omitted;
+    the caller fails closed when no dates remain.
+    """
+    code, out = _run_git(
+        "for-each-ref",
+        "--format=%(refname:short)\t%(creatordate:unix)",
+        "refs/tags/",
+    )
     dates: dict[str, float] = {}
-    for tag in tags:
-        code, out = _run_git("show", "-s", "--format=%ct", tag)
-        if code == 0:
-            try:
-                dates[tag] = float(out)
-            except ValueError:
-                continue
+    if code != 0:
+        return dates
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 2:
+            continue
+        tag, raw = parts[0].strip(), parts[1].strip()
+        if not tag:
+            continue
+        try:
+            dates[tag] = float(raw)
+        except ValueError:
+            continue
     return dates
 
 
 def get_latest_tag() -> str | None:
     tags = get_sorted_tags()
     return tags[0] if tags else None
-
-
-def get_latest_tag_date() -> float | None:
-    dates = get_tag_dates()
-    if not dates:
-        return None
-    return max(dates.values())
 
 
 def parse_version_tag(tag: str) -> tuple[int, ...] | None:
@@ -91,10 +106,6 @@ def read_changelog_versions() -> list[str]:
     return re.findall(r"^## v?(\d+\.\d+\.\d+)", text, re.MULTILINE)
 
 
-def version_already_updated(version: str, changelog_versions: list[str]) -> bool:
-    return version in changelog_versions
-
-
 def check_release_guard(
     proposed_version: str | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
@@ -108,40 +119,39 @@ def check_release_guard(
         evidence.append("no git tags found — release guard cannot verify")
         return (1, evidence)
 
-    latest_tag = get_latest_tag()
-    latest_date = get_latest_tag_date()
+    # 1. Active release check: a tag created within the last N hours.
+    #    Fail closed when the dates cannot be read: a guard that cannot see the
+    #    release state must not report "safe to bump".
+    tag_dates = get_tag_dates()
+    if not tag_dates:
+        evidence.append(
+            "cannot read any tag creation dates — release guard fails closed"
+        )
+        return (1, evidence)
 
-    # 1. Active release check: tag created within the last N hours.
-    if latest_date is not None:
-        now = datetime.now(timezone.utc).timestamp()
-        age_hours = (now - latest_date) / 3600.0
-        if age_hours < window_hours:
-            evidence.append(
-                f"ACTIVE RELEASE: latest tag {latest_tag} was created "
-                f"{age_hours:.1f}h ago (window {window_hours}h)"
-            )
-            exit_code = 1
+    latest_tag = max(tag_dates, key=lambda t: tag_dates[t])
+    latest_date = tag_dates[latest_tag]
+    now = datetime.now(timezone.utc).timestamp()
+    age_hours = (now - latest_date) / 3600.0
+    if age_hours < window_hours:
+        evidence.append(
+            f"ACTIVE RELEASE: latest tag {latest_tag} was created "
+            f"{age_hours:.1f}h ago (window {window_hours}h)"
+        )
+        exit_code = 1
 
-    # 2. Redundant release checks.
+    # 2. Redundant release: the proposed version is already a tag.
     if proposed_version:
-        # Same exact version already tagged.
         if f"v{proposed_version}" in tags:
             evidence.append(
                 f"REDUNDANT RELEASE: proposed version v{proposed_version} "
                 f"already tagged"
             )
             exit_code = 1
-        # Same version already documented in CHANGELOG.md.
-        else:
-            changelog_versions = read_changelog_versions()
-            if version_already_updated(proposed_version, changelog_versions):
-                evidence.append(
-                    f"DOCUMENTED RELEASE: v{proposed_version} already in CHANGELOG.md"
-                )
-                exit_code = 1
     else:
-        # No version proposed: look for exact-duplicate tags (two tags share
-        # the same major.minor.patch) — the only "redundant" case that matters.
+        # No version proposed: flag exact-duplicate tags (two tags share the
+        # same major.minor.patch) — the only "redundant" case detectable
+        # without a proposed version.
         seen: dict[tuple[int, ...], list[str]] = {}
         for tag in tags:
             pv = parse_version_tag(tag)
@@ -160,13 +170,13 @@ def check_release_guard(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Release-guard for the action bot: refuse bump/repin when an "
-        "active or redundant release exists."
+        description="Release-guard for the action bot: refuse a bump when a "
+        "release is active or the proposed version is already tagged."
     )
     parser.add_argument(
         "--version",
         default=None,
-        help="Proposed new version, e.g. 0.9.3 (default: use latest tag + 1).",
+        help="Proposed new version, e.g. 0.9.3.",
     )
     parser.add_argument(
         "--window-hours",
@@ -176,6 +186,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--self-test",
+        "--selftest",
+        dest="self_test",
         action="store_true",
         help="Run internal consistency checks and exit.",
     )
@@ -219,6 +231,13 @@ def _self_test() -> int:
         print("self-test: FAIL — no tags found in git")
         return 1
     print(f"self-test: OK — found {len(tags)} tag(s)")
+
+    print("self-test: checking get_tag_dates()...")
+    dates = get_tag_dates()
+    if not dates:
+        print("self-test: FAIL — could not read any tag creation dates")
+        return 1
+    print(f"self-test: OK — read creation dates for {len(dates)} tag(s)")
 
     latest_tag = get_latest_tag()
     if latest_tag and latest_tag in {"v" + v for v in versions}:

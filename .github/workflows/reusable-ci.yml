@@ -392,19 +392,21 @@ jobs:
 
       - name: Release guard — refuse bump on active / redundant release
         # The refusal rule the action bot enforces: a version bump is refused
-        # while an active release exists (latest tag within --window-hours) or
-        # when the proposed version is already tagged / already documented in
-        # CHANGELOG.md (a redundant release). Runs only when plugin.yaml's
-        # version actually changes, so a non-bump PR is a no-op.
+        # while a release is active (latest tag created within --window-hours)
+        # or when the proposed version is already a tag (a redundant release).
+        # Only a changed VERSION triggers the guard, so a metadata-only edit to
+        # plugin.yaml (description, tags, ...) is a no-op rather than a false
+        # redundant-release refusal.
         if: runner.os == 'Linux' && matrix.python-version == '3.11'
         run: |
-          if git diff --quiet "${{ inputs.base-ref }}" -- plugin.yaml; then
-            echo "plugin.yaml unchanged — release guard skipped"
+          base_version="$(git show "${{ inputs.base-ref }}:plugin.yaml" | grep '^version:' | awk '{print $2}')"
+          proposed="$(grep '^version:' plugin.yaml | awk '{print $2}')"
+          if [ "$base_version" = "$proposed" ]; then
+            echo "plugin.yaml version unchanged ($proposed) — release guard skipped"
             exit 0
           fi
-          proposed="$(grep '^version:' plugin.yaml | awk '{print $2}')"
-          echo "plugin.yaml changed; proposed version: $proposed"
-          python tools/check_no_active_release.py --selftest
+          echo "version bump: $base_version -> $proposed"
+          python tools/check_no_active_release.py --self-test
           python tools/check_no_active_release.py --version "$proposed"
 
       - name: Release-guard regression

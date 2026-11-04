@@ -162,9 +162,10 @@ release-related change (the authoritative, always-current source is
    `SKILL.md` version is a bug, not a release note.
    The version-bump PR also runs the release guard
    (`python tools/check_no_active_release.py --version <proposed>`), which
-   **refuses the bump** while a release is active (latest tag within
-   `--window-hours`, default 48h) or when the proposed version is already
-   tagged or already documented in `CHANGELOG.md` (a redundant release).
+   **refuses the bump** while a release is active (latest tag created within
+   `--window-hours`, default 48h) or when the proposed version is already a git
+   tag (a redundant release). A `CHANGELOG.md` section for the new version is
+   required by design and is not a refusal signal.
 2. **Bump the version in all five sites** (`plugin.yaml`, `__init__.py`,
    `SECURITY.md` policy sentence + supported table, `pyproject.toml`), with the
    bump **uncommitted**.

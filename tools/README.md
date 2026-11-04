@@ -38,7 +38,7 @@ gate.
 | `check_citation_integrity.py` | File/symbol citations resolve against `.github/upstream-drift.baseline` |
 | `check_upstream_drift.py` | Weekly drift watcher: diffs watched Hermes files vs the baseline commit |
 | `check_release_readiness.py` | Pre-tag verdict (tree, version, changelog, master CI, blockers, catalog pin) |
-| `check_no_active_release.py` | Release guard: refuses a version bump while a release is active (tag within `--window-hours`) or the proposed version is already tagged/documented |
+| `check_no_active_release.py` | Release guard: refuses a version bump while a release is active (latest tag created within `--window-hours`) or the proposed version is already tagged |
 | `check_tool_coverage.py` | Every `tools/*.py` and `tests/*.py` is wired into a workflow `run:` block |
 | `check_eol_contract.py` | `.gitattributes` + `git ls-files --eol` LF contract |
 | `check_cli_surface.py` | CLI registry mirror sync + live CLI surface assertions |
