@@ -153,26 +153,42 @@ host in the PR Environment block.
 
 ## Release flow (agent checklist)
 
-Releases ship via stacked PRs and tag-gated releases. As an agent working on
-this repo, follow this order for any release-related changes:
+Releases ship via stacked PRs and tag-gated releases. Working checklist for any
+release-related change (the authoritative, always-current source is
+[CONTRIBUTING.md#cutting-a-release](CONTRIBUTING.md#cutting-a-release)):
 
-1. **Fix skill version regressions first.** Run
-   `python tools/check_skill_version_bump.py origin/master` and confirm 0 failures.
-   Version downgrades silently break the guard and should be treated as bugs,
-   not accepted.
-2. **Bump version in all 5 sites** in one commit:
-   `plugin.yaml`, `__init__.py`, `SECURITY.md` (policy sentence + supported table),
-   `pyproject.toml`.
-3. **Generate changelog section**: `python tools/gen_changelog.py --upcoming`.
-   Run with the bump uncommitted; the section is validated by CI before the tag
-   exists.
-4. **Run all gates**: `python tools/check_gates.py` — 13/13 must pass.
-5. **Run release readiness**: `python tools/check_release_readiness.py`.
-   It verdicts `READY` / `READY WITH ADVISORIES` / `NOT READY`.
-6. **Tag and re-pin**: Push tag `v<version>`, then re-pin the upstream catalog
-   entry in `NousResearch/hermes-agent` (`plugin-catalog/hermes-guide.yaml`).
-7. **Verify**: `gh pr checks <pr>` and `gh pr view <pr>` — both must be green
-   and `MERGED` before the next step.
+1. **Confirm no skill version regressions** before the bump: `python
+   tools/check_skill_version_bump.py origin/master` — 0 failures. A downgraded
+   `SKILL.md` version is a bug, not a release note.
+2. **Bump the version in all five sites** (`plugin.yaml`, `__init__.py`,
+   `SECURITY.md` policy sentence + supported table, `pyproject.toml`), with the
+   bump **uncommitted**.
+3. **Generate the section** in the same checkout: `python tools/gen_changelog.py
+   --upcoming`. Requires `git fetch --tags` — the tag half of the check is
+   invisible without tags.
+4. **Commit the bump and the section together**, then run `python
+   tools/check_gates.py` — all hermetic gates in `--list` must pass locally;
+   the gates it leaves to CI must pass in CI before merge.
+5. **Merge the PR, then check readiness on the merged master**:
+   `python tools/check_release_readiness.py`. It fails a dirty tree or a
+   non-`master` branch; when the `origin/master` fetch fails it reports sync as
+   an advisory, so confirm `HEAD == origin/master` by hand before tagging.
+6. **Audit the one drift direction the guard cannot see** (docs/agent/deep-ops.md,
+   "Values that drift go in `constants.py`"):
+   `git ls-tree -d --name-only <upstream-head>:plugins/` vs PLUGIN_SUBCATEGORY_DIRS.
+7. **Tag and re-pin**: push `v<plugin.yaml version>` to master, then re-pin the
+   upstream catalog entry (NousResearch/hermes-agent,
+   `plugin-catalog/hermes-guide.yaml`): sha = `git rev-parse v<version>^{commit}`,
+   version = tag without the `v`. Refresh an open pin PR rather than opening a
+   second one; run `python scripts/validate_plugin_catalog.py plugin-catalog` in
+   that clone, then re-run `python tools/check_release_readiness.py` here.
+8. **Verify the release**: `release.yml` fails closed unless the tag matches
+   plugin.yaml, the tagged commit is on master, and every tag has a changelog
+   section. Confirm with `gh release view v<version>` after creation.
+
+The full procedure, including readiness verdicts and the drift audit, is
+[CONTRIBUTING.md#cutting-a-release](CONTRIBUTING.md#cutting-a-release). Deep-ops
+reference material lives in docs/agent/deep-ops.md.
 
 ## Dual-environment verification
 
