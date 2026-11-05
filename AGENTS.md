@@ -221,3 +221,5 @@ fails the check if your table does not match reality.
 **NEVER merge on green CI alone.** Follow the complete procedure in [docs/agent/review-ops.md#pre-merge-cross-check](docs/agent/review-ops.md#pre-merge-cross-check).
 
 Key points: Qodo is the automatic primary — post `/agentic_review` only when it has never reviewed the PR, never per head; CodeRabbit full review once after Qodo's findings are resolved, then `@coderabbitai review` (incremental) per head until its check completes clean, never resolve threads manually. All required checks passing (not pending), Qodo has no open findings on the current head, `mergeStateStatus: CLEAN`, explicit merge authorization recorded, fresh green CI on fixed head.
+
+Note: agents should resolve bot threads manually with the Resolve button to save time.
