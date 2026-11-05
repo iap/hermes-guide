@@ -64,16 +64,22 @@ way to decide "should I trigger?". Run it before posting any trigger command.
    and an unpaginated query can silently miss the current head's review or a
    recent pending trigger. Retain each review's commit, body, and state in the
    history so a full review is distinguishable from an incremental one. A
-   trigger counts as pending for THIS head only if it was posted after the head
-   commit's committer date and its body is the command itself (a mention in
-   prose is not a request); require that the comment body starts with the
+   trigger counts as pending for THIS head only if it was posted after the
+   head reached the server (the earliest check-run on the head SHA, not
+   the mutable committer date) and its body is the command itself (a mention
+   in prose is not a request); require that the comment body starts with the
    command and that a matching review or check-run record exists before
    classifying a trigger as accepted. Check issue comments before any manual
    trigger:
 
        REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
        HEAD_SHA=$(gh pr view <PR> --json headRefOid -q .headRefOid)
-       HEAD_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.commit.committer.date')
+       # Head boundary = earliest check-run created_at on the head SHA (the
+       # server-side push time); a commit's committer.date is mutable and can
+       # predate a previous head's trigger. Fall back to committer.date only
+       # when the head has no check runs.
+       HEAD_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" --paginate --jq '[.check_runs[].created_at] | min // empty' 2>/dev/null)
+       [ -n "$HEAD_DATE" ] || HEAD_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.commit.committer.date')
        # Current-head state (per-head gate):
        gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
          --jq ".[] | select(.commit_id|startswith(\"$HEAD_SHA\")) | {user: .user.login, state, submitted_at}"
