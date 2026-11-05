@@ -29,7 +29,7 @@ with file:line evidence, not implemented.
   is the spam this rule exists to prevent). Once Qodo has reviewed and its
   findings are resolved, do not re-trigger it; let CodeRabbit gate each
   subsequent head until its check completes clean.
-- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (authoritative for `isOutdated`, which REST does not expose; REST `/pulls/{n}/review-threads` exposes `resolved` only, and the resolve mutations are GraphQL-only). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` only means the anchor moved — it is not evidence of a fix, and GitHub never auto-resolves outdated threads (they still block under `required_review_thread_resolution`). Never resolve a thread before replying with evidence.
+- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (required for resolution state; REST has no equivalent — a `GET /pulls/{n}/review-threads` probe returns 404). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` means outdated by newer changes (the anchor moved or was removed) — it is not evidence of a fix, and GitHub never auto-resolves outdated threads (they still block under `required_review_thread_resolution`). Never resolve a thread before replying with evidence.
 - **Both, then merge.** A clean primary reviewer does not replace the second
   review, and a clean second reviewer does not erase a new primary finding.
   Merge only after the primary has reviewed with no open findings AND the
@@ -233,8 +233,8 @@ query($owner:String!,$repo:String!,$pr:Int!,$endCursor:String){
 `--paginate` follows `endCursor` until `hasNextPage` is false; never declare a
 PR clear from one page. Treat the result as binary: no rows after paging means
 clear (report `OK: 0 unresolved review threads`); any row is a thread to triage
-before replying. `isOutdated: true` only means the anchor moved to a newer
-commit — it is not evidence the finding was fixed.
+before replying. `isOutdated: true` means newer changes made the thread outdated
+(the anchor moved or was removed) — it is not evidence the finding was fixed.
 Each row carries both ids: `thread=PRRT_…` feeds
 `addPullRequestReviewThreadReply`; `firstCommentId=<numeric>` feeds the REST
 `in_reply_to` reply below. Ids carried in a review body are not thread nodes.
@@ -440,13 +440,15 @@ merge decision time, on the current head:
    a reply is a bot re-review, not another reply.
 2. **Follow-up path.** For a Qodo decline the bot has not accepted after a
    re-review, post the `@qodo` chat-dismiss reply (reason + file:line) — the
-   plain decline shape does not dismiss. For a CodeRabbit decline, there is
-   no single-thread bot resolution: the thread stays open and escalates
-   under step 3. The top-level `@coderabbitai resolve` (all threads) applies
-   only once every other CodeRabbit thread is accepted or resolved (#433, #434).
-3. **Escalation.** If the bot still will not resolve after its own re-review
-   of the replies, stop: leave the thread open, record the exact state in the
-   PR summary, and escalate to the maintainer (recorded bypass or explicit
+   plain decline shape does not dismiss. A silent Qodo head (no review
+   arrives) goes straight to step 3. For a CodeRabbit decline, after the
+   bot's re-review of the evidence, post `@coderabbitai resolve` as a reply
+   in that thread (verified per-thread scope, #433); the top-level command
+   (all threads) applies only once every other CodeRabbit thread is
+   accepted or resolved.
+3. **Escalation.** If no re-review of the head arrives, or the bot still
+   will not resolve after its own re-review of the replies, stop: leave
+   the thread open, record the exact state in the PR summary, and escalate to the maintainer (recorded bypass or explicit
    authorization). Never click "Resolve conversation" — an agent-resolved
    thread records the agent, not the bot, as the acceptor, and destroys the
    audit trail. A follow-up issue is the right home for a defect in already
@@ -557,14 +559,15 @@ Declined — never resolves a thread; only the bot's actions do:
   status — Qodo marks Outdated/Resolved only when the code changed enough
   that the finding no longer applies. Wait for the finding to be marked
   resolved; a reply alone is not acceptance. (#434)
-- **CodeRabbit:** when its re-review no longer reports the finding, the thread
-  auto-resolves. A declined CodeRabbit thread the bot will not accept stays
-  open and escalates under the Evaluation escalation step — there is no
-  single-thread bot command for it (the reference documents per-thread
-  in-reply `@coderabbitai resolve`; the commands guide says top-level
-  only, resolving **all** CodeRabbit threads at once — #433). Use the
-  top-level command only when every other CodeRabbit thread is accepted or
-  resolved, so it may resolve the remaining declined thread.
+- **CodeRabbit:** on a new head, check the thread state — a finding the
+  re-review no longer reports may resolve, but do not assume it. If the
+  thread remains open after the bot's re-review of the evidence, post
+  `@coderabbitai resolve` as a reply **in that thread** — verified on
+  disposable PR #436 to resolve only that thread. A top-level
+  `@coderabbitai resolve` resolves **all** CodeRabbit threads at once, so use
+  it only when every other CodeRabbit thread is accepted or resolved. (The
+  commands guide claims in-reply use is unsupported; live behavior
+  contradicts it — #433.)
 - **No bot confirmation:** leave the thread unresolved and stop. A stalled or
   silent bot is not an approval. Escalate to the maintainer; never click
   "Resolve conversation" or call `resolveReviewThread` to fill the gap. A
