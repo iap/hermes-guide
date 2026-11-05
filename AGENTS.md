@@ -97,7 +97,7 @@ CI adds `tools/test_*.py`, citation integrity, install-scan parity, mypy, and ba
 | `hermes guide --json` is one stdout document; no update notice; `/hermes-doctor` stays text | [deep-ops.md](docs/agent/deep-ops.md#the-hermes-guide---json-document-phase-4-contract) |
 | Hooks default to in-process `check_hooks_readonly()` (executes nothing); `--deep` runs `hermes hooks doctor`, which executes approved hooks once; `--fast` wins when both are given | [deep-ops.md](docs/agent/deep-ops.md#read-only-always) |
 | Review threads: enumerate `reviewThreads`, reply with evidence, then resolve; `isOutdated` is not a fix | [review-ops.md](docs/agent/review-ops.md#reviewer-bot-threads) |
-| Reviewer order: primary finding bot clean → one CodeRabbit full review → both clean before merge | [review-ops.md](docs/agent/review-ops.md#review-sequence) |
+| Reviewer order: Qodo auto-reviews (never re-triggered per head); CodeRabbit full review once after Qodo clean, then incremental per head until clean | [review-ops.md](docs/agent/review-ops.md#review-sequence) |
 | Tone / no emoji / no filler | [CONTRIBUTING.md#tone](CONTRIBUTING.md#tone), `check_doc_style.py` |
 
 Never `git add -A`. Stage named paths. Platform facts: three claim tiers
@@ -220,4 +220,4 @@ fails the check if your table does not match reality.
 
 **NEVER merge on green CI alone.** Follow the complete procedure in [docs/agent/review-ops.md#pre-merge-cross-check](docs/agent/review-ops.md#pre-merge-cross-check).
 
-Key points: Qodo first (trigger with `/agentic_review` if silent), CodeRabbit full review once after Qodo clean, use `@coderabbitai review` (incremental) for subsequent pushes on same head, both must be clean on same head commit, never resolve threads manually. All required checks passing (not pending), `mergeStateStatus: CLEAN`, explicit merge authorization recorded, fresh green CI on fixed head.
+Key points: Qodo is the automatic primary — post `/agentic_review` only when it has never reviewed the PR, never per head; CodeRabbit full review once after Qodo's findings are resolved, then `@coderabbitai review` (incremental) per head until its check completes clean, never resolve threads manually. All required checks passing (not pending), Qodo has no open findings on the current head, `mergeStateStatus: CLEAN`, explicit merge authorization recorded, fresh green CI on fixed head.

@@ -11,9 +11,10 @@
 # findings on one pass (duplicate comments) or contradict each other with
 # different verdicts (bot-vs-bot conflict). One reviewer runs automatically; the
 # second runs on request once the first is clean. This does not assert that Qodo
-# covered every head — docs/agent/review-ops.md Step 4 and the head-binding rule
-# still require a Qodo review of each new head. These are third-party check
-# semantics; confirm them on a live PR.
+# covered every head — the asymmetric head-binding rule in
+# docs/agent/review-ops.md keeps CodeRabbit as the per-head gate while Qodo
+# auto-reviews each head (manual `/agentic_review` only when Qodo has never
+# reviewed the PR). These are third-party check semantics; confirm on a live PR.
 #
 # `reviews.review_status: false` separately suppresses the per-push "Review
 # skipped" comment (#229).

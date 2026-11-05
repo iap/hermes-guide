@@ -14,8 +14,8 @@ with file:line evidence, not implemented.
 | 1. Primary reviewer | Finding bot (Qodo) has open findings | Reproduce and cross-check each finding. Fix confirmed defects; reply with evidence and wait for the bot to accept or decline. Never click Resolve yourself. Re-run until clean. |
 | 2. Second reviewer | Primary is clean on the current head | Post `@coderabbitai full review` **once** for this PR. Wait for the review record; a trigger comment is not a review. |
 | 3. Second findings | CodeRabbit reports findings | Verify each against the code. Fix real findings; decline false positives/negatives with evidence. After new commits, use `@coderabbitai review` (incremental), never a second full review. |
-| 4. Re-check primary | Any second-review fix created a new head | A clean review is bound to its commit. Do not carry the previous Qodo result forward: wait for Qodo to complete a review of the new head, or treat it as "not heard" and do not merge. Resolve new findings, then request CodeRabbit's incremental review of the same head. Repeat steps 2–4 until both reviewers are clean on that head. |
-| 5. Merge gate | Both reviewers clean on the current head | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. A green review from an earlier commit does not satisfy this gate. |
+| 4. Re-check second reviewer | Any second-review fix created a new head | The primary's resolved findings stand — Qodo auto-reviews each head, and once it has reviewed the PR with no open findings, do not manually re-trigger it per head. Request CodeRabbit's incremental review of the new head and proceed until CodeRabbit's check completes clean on that head. Repeat for each new head with CodeRabbit alone. |
+| 5. Merge gate | CodeRabbit clean on the current head; Qodo has a no-open-findings verdict on the current head | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo's automatic review covers each head — a new head does not merge on an older Qodo review alone, so require Qodo's no-open-findings verdict on the current head (reached by its automatic review, never by a manual trigger; a silent Qodo on the current head is "not heard" and needs explicit authorization) alongside CodeRabbit's clean completion on the current head. |
 
 - **False positives are first-class.** A bot recommendation can be stale,
   miscited, or wrong for this repo. Cite the guard, test, or source that
@@ -23,18 +23,125 @@ with file:line evidence, not implemented.
 - **Trigger etiquette.** One manual full review per PR/head. Do not repost
   `@coderabbitai full review` after every push, and do not post a second trigger
   while one review is pending. If there are no new commits, do not trigger again.
-  A silent bot is "not heard", never "clean".
-- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (required for resolution state; REST has no equivalent). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` only means the anchor moved — it is not evidence of a fix. Never resolve a thread before replying with evidence.
+  A silent bot is "not heard", never "clean". Manual triggers are for silence
+  only: Qodo auto-reviews, so post `/agentic_review` only when it has no review
+  on the PR at all — never on a new head merely because the head changed (that
+  is the spam this rule exists to prevent). Once Qodo has reviewed and its
+  findings are resolved, do not re-trigger it; let CodeRabbit gate each
+  subsequent head until its check completes clean.
+- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (authoritative for `isOutdated`, which REST does not expose; REST `/pulls/{n}/review-threads` exposes `resolved` only, and the resolve mutations are GraphQL-only). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` only means the anchor moved — it is not evidence of a fix, and GitHub never auto-resolves outdated threads (they still block under `required_review_thread_resolution`). Never resolve a thread before replying with evidence.
 - **Both, then merge.** A clean primary reviewer does not replace the second
-  review. A clean second reviewer does not erase a new primary finding. Merge
-  only after the loop reaches clean on both.
-- **Head binding.** Any push after a clean review invalidates that clean result.
-  Re-request/await the primary reviewer's review of the new head; use the
-  second reviewer's incremental mode for the same head. Never merge on a
-  mixture of reviews from different commits. If Qodo does not pick up the new
-  head automatically, use its documented manual trigger (`/agentic_review` for
-  this installation) and wait; if no trigger is accepted, treat the head as
-  unreviewed and require explicit authorization before merging.
+  review, and a clean second reviewer does not erase a new primary finding.
+  Merge only after the primary has reviewed with no open findings AND the
+  second reviewer is clean on the current head.
+- **Head binding (asymmetric).** A push after a clean review invalidates that
+  clean result for the *second* reviewer: re-request its incremental review of
+  the new head, and never merge on a mixture of reviews from different commits.
+  The primary is different — Qodo auto-reviews each head on its own, so the
+  newest head is examined by Qodo automatically; do not manually re-trigger
+  it per head. A clean Qodo review whose findings are resolved is not
+  re-requested per push. Manually post `/agentic_review` only when Qodo has
+  no review on the PR at all (genuinely silent); if no trigger is accepted,
+  treat the PR as unreviewed and require explicit authorization before
+  merging.
+
+### Trigger gate (idempotent, head-bound) — run before every trigger
+
+Bot reviews are bound to the commit they reviewed, so triggering is idempotent
+per (bot, head): at most one trigger per bot per head, and never while a review
+on that head is pending or already completed. This gate is the only sanctioned
+way to decide "should I trigger?". Run it before posting any trigger command.
+
+1. Resolve the current head:
+
+       HEAD=$(gh pr view <PR> --json headRefOid -q .headRefOid | cut -c1-8)
+
+2. Read review state for that head, plus PR-wide history. The current-head
+   check answers "is this head reviewed?"; the PR-wide history answers "has
+   either bot ever reviewed this PR?" — the two manual-trigger conditions
+   (Qodo silent, CodeRabbit full-review-once) need the history, not just the
+   head. Paginate every query: GitHub caps REST responses at 100 rows per page,
+   and an unpaginated query can silently miss the current head's review or a
+   recent pending trigger. Retain each review's commit, body, and state in the
+   history so a full review is distinguishable from an incremental one. A
+   trigger counts as pending for THIS head only if it was posted after the
+   head boundary (the earlier of the head commit's committer date and the
+   earliest check-run on the head SHA) and its body is the command itself
+   (a mention in prose is not a request); require that the comment body
+   starts with the command and that a matching review or check-run record
+   exists before classifying a trigger as accepted. Check issue comments
+   before any manual trigger:
+
+       REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+       HEAD_SHA=$(gh pr view <PR> --json headRefOid -q .headRefOid)
+       # Head boundary = the EARLIER of the head commit's committer date and
+       # the earliest check-run started_at on the head SHA (check-run objects
+       # carry started_at, not created_at). Either alone is wrong in one
+       # direction: committer.date can predate a previous head's trigger, and
+       # the first check-run (often CodeRabbit's own) can postdate a trigger
+       # sent before CI started. The earlier of the two never hides a trigger
+       # for this head. gh applies --jq per page, so collect each page's
+       # minimum and take the smallest.
+       COMMITTER_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.commit.committer.date')
+       CHECKRUN_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
+         --paginate --jq '[.check_runs[].started_at | select(. != null)] | min // empty' \
+         2>/dev/null | sort | head -1)
+       if [[ -n "$CHECKRUN_DATE" && "$CHECKRUN_DATE" < "$COMMITTER_DATE" ]]; then HEAD_DATE="$CHECKRUN_DATE"; else HEAD_DATE="$COMMITTER_DATE"; fi
+       # Fail closed on an empty boundary: an empty HEAD_DATE would make the
+       # pending-trigger filter below match every historical trigger.
+       [ -n "$HEAD_DATE" ] || { echo "ERROR: HEAD_DATE is empty; cannot judge pending triggers" >&2; return 1 2>/dev/null || exit 1; }
+       # Current-head state (per-head gate):
+       gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
+         --jq ".[] | select(.commit_id|startswith(\"$HEAD_SHA\")) | {user: .user.login, state, submitted_at}"
+       gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" --paginate \
+         --jq ".check_runs[] | select(.name==\"CodeRabbit\") | {status, conclusion, completed_at}"
+       # PR-wide history (never-reviewed / full-once decisions); body retained
+       # so a full review (@coderabbitai full review) is distinguishable from
+       # an incremental (@coderabbitai review):
+       gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
+         --jq '.[] | {user: .user.login, commit: .commit_id[0:8], state, body: .body[0:80]}'
+       # Pending-trigger guard: comments posted AFTER the head boundary
+       # whose body IS the command (starts with it, not a prose mention).
+       # A trigger is pending only; classify as accepted only when a matching
+       # review row or completed check-run for this head also exists:
+       gh api "repos/$REPO/issues/<PR>/comments?per_page=100" --paginate \
+         --jq ".[] | select(.created_at > \"$HEAD_DATE\") \
+               | select(.body | test(\"^(@coderabbitai (full )?review|/agentic_review)([[:space:]]|$)\")) \
+               | {user: .user.login, created_at, body: .body[0:80]}" 
+
+3. Decide by this table — trigger only in the "trigger" rows:
+
+   | Bot | No review on this head | Review pending | Review completed |
+   |---|---|---|---|
+   | Qodo (auto-reviews) | wait — it reviews on its own | wait — never trigger over a pending review | do not trigger; triage findings or accept clean |
+   | `/agentic_review` | trigger ONLY if the PR-wide history shows Qodo has never reviewed (silent) AND no trigger is already pending | do not trigger | do not trigger — head already reviewed |
+   | `@coderabbitai full review` | trigger ONCE, only if the PR-wide history shows no full review yet AND Qodo's findings are resolved | do not trigger | do not trigger |
+   | `@coderabbitai review` (incremental) | trigger once if a full review completed on an earlier head and no request for this head is in flight | do not trigger | trigger after fixes land a NEW head; proceed when its check completes clean |
+
+4. Spam rules (the reason PR #429 collected five `/agentic_review` posts on one
+   head):
+
+   - One trigger per (bot, head). Once a review exists on the current head
+     (pending or completed), there is nothing to trigger. A new head resets
+     the gate; a prior head's clean result does not carry over to a different
+     trigger response.
+   - Never issue two triggers for the same bot in one tool block. Trigger one
+     bot, confirm its review record lands (step 2), then consider the next.
+   - Never issue CodeRabbit's trigger before Qodo has reviewed. Qodo-first is
+     the order; a missing Qodo review is "not heard", not a signal to skip to
+     the second bot. Use `/agentic_review` only when Qodo has never reviewed
+     this PR — not merely because the head changed.
+   - Once Qodo has reviewed and its findings are resolved, do not re-trigger
+     it per head. The per-head gate from then on is CodeRabbit: use
+     `@coderabbitai review` (incremental) for new changes, never a second
+     `full review`, and proceed when the CodeRabbit check completes clean on
+     the current head.
+   - A trigger comment is not a review. Wait for the review record (the
+     `completed` check-run and the review row on that head). Poll with the
+     step-2 commands; do not re-post to "check" whether it ran.
+   - A silent bot is "not heard," never "clean," and never a reason to
+     re-trigger. If a poll finds no review, escalate; do not spam another
+     trigger.
 
 ## CodeRabbit configuration
 
@@ -57,8 +164,9 @@ the same findings (duplicate comments) and can contradict each other with
 different verdicts on the same diff (bot-vs-bot conflict). One reviewer runs
 automatically; the second runs on request, once the first is clean, and reviews
 only the diff since. This rationale does not assert that Qodo has covered every
-head — Step 4 (re-check primary) and the head-binding rule remain the gate that
-requires a Qodo review of each new head before merge. Mention `@coderabbitai`
+head — the asymmetric head-binding rule keeps CodeRabbit as the per-head gate
+while Qodo auto-reviews each head (manual `/agentic_review` only when Qodo has
+never reviewed the PR). Mention `@coderabbitai`
 for follow-up chat. See the [command reference](https://docs.coderabbit.ai/reference/review-commands).
 
 A `CodeRabbit` check reporting `skipping` on a PR is the expected state with
@@ -304,14 +412,50 @@ Save transcripts for long probes.
 Never merge on green CI alone. For the normal merge path, immediately before
 merging a PR, verify: all checks pass (not pending), every review thread
 resolved by the bot after a reply that fixes or declines the finding with
-evidence (never human-resolved to unblock), both reviewers clean on the current
-head (a silent bot is not a clean reviewer), `mergeStateStatus` is `CLEAN`, and
+evidence (never human-resolved to unblock), CodeRabbit clean on the current
+head, and Qodo has a no-open-findings verdict on the current head (Qodo auto-reviews
+each head; do not manually re-trigger it per head — a bot silent on a PR it
+never reviewed is not a clean reviewer), `mergeStateStatus` is `CLEAN`, and
 the merge is explicitly authorized. A recorded maintainer-authorized bypass is
 the exception to the unresolved-thread check; it does not mark the thread as
 accepted. When enumerating threads, use `gh api graphql`
 reviewThreads for resolution state and full bodies; REST `pulls/<n>/comments`
 only for quick inline enumeration (Greptile bodies live there, not in
 `reviews`). Report the checklist result, then merge.
+
+### Evaluation (before any merge)
+
+Evaluate the bot-review state itself right before the merge decision — a
+green CI board does not prove the review loop converged. Run this only at
+merge decision time, on the current head:
+
+1. **Thread hygiene.** Enumerate `reviewThreads` (paginated). For every
+   unresolved thread, classify it: live finding (code still present), outdated
+   (`isOutdated: true` — decide whether the concern survives the anchor move;
+   an outdated thread is not a fix), or declined-unaccepted (evidence reply
+   posted, bot has not resolved). Count comments per thread: more than one
+   agent reply on the same finding with no head change in between is a
+   duplicate — bots do not parse plain-text replies, and a second identical
+   reply changes nothing. One reply per finding per head; the next move after
+   a reply is a bot re-review, not another reply.
+2. **Follow-up path.** For a Qodo decline the bot has not accepted after a
+   re-review, post the `@qodo` chat-dismiss reply (reason + file:line) — the
+   plain decline shape does not dismiss. For a CodeRabbit decline, there is
+   no single-thread bot resolution: the thread stays open and escalates
+   under step 3. The top-level `@coderabbitai resolve` (all threads) applies
+   only once every other CodeRabbit thread is accepted or resolved (#433, #434).
+3. **Escalation.** If the bot still will not resolve after its own re-review
+   of the replies, stop: leave the thread open, record the exact state in the
+   PR summary, and escalate to the maintainer (recorded bypass or explicit
+   authorization). Never click "Resolve conversation" — an agent-resolved
+   thread records the agent, not the bot, as the acceptor, and destroys the
+   audit trail. A follow-up issue is the right home for a defect in already
+   merged code, never for unmerged code.
+4. **Verdict.** Report: checks (all pass, none pending), threads
+   (N unresolved, classified), CodeRabbit (clean on this head), Qodo (verdict
+   on this head or not heard), `mergeStateStatus`, and the authorization. If
+   any element is missing, the verdict is "blocked" — name the element, do
+   not average past it.
 
 ### CI failure triage (before merge)
 
@@ -403,15 +547,24 @@ CI: <pass | fail>. Threads: <N unresolved>.
 ```
 
 **Bot-owned resolution.** Reply with evidence first; the reviewer bot owns the
-accept/decline decision and the thread state:
+accept/decline decision and the thread state. A plain reply — Fixed or
+Declined — never resolves a thread; only the bot's actions do:
 
-- **Qodo:** a re-review updates each finding's status. Wait for the finding to
-  be marked resolved; a reply alone is not acceptance.
-- **CodeRabbit:** when its re-review no longer reports the finding, post
-  `@coderabbitai resolve` as a separate reply in the thread (the whole comment
-  must be the command). It resolves only that thread. A top-level
-  `@coderabbitai resolve` resolves every CodeRabbit thread, so use it only after
-  every thread is accepted.
+- **Qodo:** a plain decline reply is discussion only and does not dismiss. To
+  dismiss, reply in the thread starting with `@qodo` stating the reason
+  ("this is a false positive — ..."), or use the finding's portal Dismiss link
+  (irreversible; portal access required). A re-review updates each finding's
+  status — Qodo marks Outdated/Resolved only when the code changed enough
+  that the finding no longer applies. Wait for the finding to be marked
+  resolved; a reply alone is not acceptance. (#434)
+- **CodeRabbit:** when its re-review no longer reports the finding, the thread
+  auto-resolves. A declined CodeRabbit thread the bot will not accept stays
+  open and escalates under the Evaluation escalation step — there is no
+  single-thread bot command for it (the reference documents per-thread
+  in-reply `@coderabbitai resolve`; the commands guide says top-level
+  only, resolving **all** CodeRabbit threads at once — #433). Use the
+  top-level command only when every other CodeRabbit thread is accepted or
+  resolved, so it may resolve the remaining declined thread.
 - **No bot confirmation:** leave the thread unresolved and stop. A stalled or
   silent bot is not an approval. Escalate to the maintainer; never click
   "Resolve conversation" or call `resolveReviewThread` to fill the gap. A
