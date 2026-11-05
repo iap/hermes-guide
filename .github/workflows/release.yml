@@ -37,6 +37,22 @@ jobs:
           fi
           echo "releasing $GITHUB_REF_NAME (matches plugin.yaml)"
 
+      - name: Tag must be annotated and signed
+        # A lightweight tag carries no signature; require an annotated,
+        # SSH-signed tag so every published release is verifiable
+        # (same key as commit signing; see `tag.gpgsign true` locally).
+        run: |
+          object_type="$(git cat-file -t "$GITHUB_REF_NAME" 2>/dev/null || echo none)"
+          if [ "$object_type" != "tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME is $object_type, not an annotated tag — signed releases must be annotated"
+            exit 1
+          fi
+          if ! git tag -v "$GITHUB_REF_NAME" 2>&1 | grep -q 'Good "git" signature'; then
+            echo "::error::tag $GITHUB_REF_NAME has no verifiable signature"
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME is annotated and signed"
+
       - name: Tagged commit must be on master with passing checks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
