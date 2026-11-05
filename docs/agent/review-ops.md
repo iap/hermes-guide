@@ -450,12 +450,14 @@ merge decision time, on the current head:
    caused by `required_review_thread_resolution` means only "a conversation
    must be resolved first" — it does not mean the review failed. When every
    unresolved thread is (a) fixed or declined with evidence **in the current
-   head**, (b) the bot is clean on that head, and (c) the thread is
-   `isOutdated` or the bot is silent past its next review, the conversation
-   gate is the only remaining blocker: run steps 2–3 against that thread
-   (resolve command / chat-dismiss / re-review wait), and if the bot still
-   will not accept, escalate under step 3 rather than treating BLOCKED as a
-   code defect or merging on CI alone.
+   head**, (b) the bot is **positively clean** on that head (a completed
+   review with no open findings), and (c) every `isOutdated` thread's concern
+   has been re-decided under step 1, the conversation gate is the only
+   remaining blocker: run steps 2–3 against that thread (resolve command /
+   chat-dismiss / re-review wait), and if the bot still will not accept,
+   escalate under step 3 rather than treating BLOCKED as a code defect or
+   merging on CI alone. A silent bot is never "clean" for (b) — it goes to
+   step 3 — and `isOutdated` never substitutes for the fix in (a).
 3. **Escalation.** If no re-review of the head arrives, or the bot still
    will not resolve after its own re-review of the replies, stop: leave
    the thread open, record the exact state in the PR summary, and escalate to the maintainer (recorded bypass or explicit
