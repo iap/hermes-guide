@@ -188,8 +188,10 @@ release-related change (the authoritative, always-current source is
    falls back to GPG or fails, configure `gpg.format=ssh` and
    `user.signingkey` first). Set
    `git config gpg.ssh.allowedSignersFile .github/allowed_signers`, then
-   run `git tag -v v<version>` and confirm its first line starts with
-   `Good "git" signature for`. Then push `v<plugin.yaml version>` to master,
+   run `git tag -v v<version> 1>/dev/null` and confirm its first (stderr)
+   line starts with `Good "git" signature for` — stdout carries the tag
+   payload, so an unredirected check can show `object ...` even for a valid
+   tag. Then push `v<plugin.yaml version>` to master,
    then re-pin the upstream catalog entry (NousResearch/hermes-agent,
    `plugin-catalog/hermes-guide.yaml`): sha = `git rev-parse v<version>^{commit}`,
    version = tag without the `v`. Refresh an open pin PR rather than opening a
