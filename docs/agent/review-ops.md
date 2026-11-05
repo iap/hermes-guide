@@ -233,8 +233,8 @@ query($owner:String!,$repo:String!,$pr:Int!,$endCursor:String){
 `--paginate` follows `endCursor` until `hasNextPage` is false; never declare a
 PR clear from one page. Treat the result as binary: no rows after paging means
 clear (report `OK: 0 unresolved review threads`); any row is a thread to triage
-before replying. `isOutdated: true` only means the anchor moved to a newer
-commit — it is not evidence the finding was fixed.
+before replying. `isOutdated: true` means newer changes made the thread outdated
+(the anchor moved or was removed) — it is not evidence the finding was fixed.
 Each row carries both ids: `thread=PRRT_…` feeds
 `addPullRequestReviewThreadReply`; `firstCommentId=<numeric>` feeds the REST
 `in_reply_to` reply below. Ids carried in a review body are not thread nodes.
