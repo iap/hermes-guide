@@ -37,6 +37,7 @@ tracked top-level path and every `.github/` file.
 | `.github/workflows/label-prs.yml`, `label-pr-metadata.yml` | Auto-labelling (paths, then PR body) |
 | `.github/workflows/release.yml` | Release on tag; compares the tag against `plugin.yaml` |
 | `.github/upstream-drift.baseline` | The pinned upstream revision that file/symbol citations resolve against |
+| `.github/allowed_signers` | Authorized release-tag SSH keys for release.yml signature verification |
 | `.github/ISSUE_TEMPLATE/` | Bug report, config, and per-skill drift templates |
 | `.github/PULL_REQUEST_TEMPLATE.md` | The validation table `validate-claim.yml` checks |
 | `.github/labeler.yml` | Path-based labels (the body-based ones live in a workflow, since labeler v5 cannot read the body) |

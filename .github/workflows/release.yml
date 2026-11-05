@@ -41,10 +41,10 @@ jobs:
         # A lightweight tag carries no signature; require an annotated,
         # SSH-signed tag so every published release is verifiable
         # (same key as commit signing; `tag.gpgsign true` locally).
-        # The verifier prints its "Good ... signature for ..." line FIRST,
-        # before the tag dump (an unsigned tag's dump starts with
-        # "object ..."), so check the first line — a grep over the whole
-        # output would match the phrase inside an unsigned tag's message.
+        # The verifier's verdict goes to stderr, the tag payload to stdout;
+        # capture stderr only (merged order is not reliable for large
+        # messages) and require its first line to be the verdict — an
+        # unsigned tag reports "error: no signature found" there.
         run: |
           object_type="$(git cat-file -t "$GITHUB_REF_NAME" 2>/dev/null || echo none)"
           if [ "$object_type" != "tag" ]; then
@@ -52,7 +52,7 @@ jobs:
             exit 1
           fi
           git config gpg.ssh.allowedSignersFile .github/allowed_signers
-          verify_line="$(git tag -v "$GITHUB_REF_NAME" 2>&1 | head -1)"
+          verify_line="$(git tag -v "$GITHUB_REF_NAME" 2>&1 1>/dev/null | head -1)"
           echo "$verify_line"
           if ! echo "$verify_line" | grep -q '^Good "git" signature for '; then
             echo "::error::tag $GITHUB_REF_NAME has no verifiable signature (first verifier line: $verify_line)"
