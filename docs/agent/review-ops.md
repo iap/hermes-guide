@@ -29,7 +29,7 @@ with file:line evidence, not implemented.
   is the spam this rule exists to prevent). Once Qodo has reviewed and its
   findings are resolved, do not re-trigger it; let CodeRabbit gate each
   subsequent head until its check completes clean.
-- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (required for resolution state; REST has no equivalent). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` only means the anchor moved — it is not evidence of a fix. Never resolve a thread before replying with evidence.
+- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (authoritative for `isOutdated`, which REST does not expose; REST `/pulls/{n}/review-threads` exposes `resolved` only, and the resolve mutations are GraphQL-only). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` only means the anchor moved — it is not evidence of a fix, and GitHub never auto-resolves outdated threads (they still block under `required_review_thread_resolution`). Never resolve a thread before replying with evidence.
 - **Both, then merge.** A clean primary reviewer does not replace the second
   review, and a clean second reviewer does not erase a new primary finding.
   Merge only after the primary has reviewed with no open findings AND the
@@ -423,6 +423,40 @@ reviewThreads for resolution state and full bodies; REST `pulls/<n>/comments`
 only for quick inline enumeration (Greptile bodies live there, not in
 `reviews`). Report the checklist result, then merge.
 
+### Evaluation (before any merge)
+
+Evaluate the bot-review state itself right before the merge decision — a
+green CI board does not prove the review loop converged. Run this only at
+merge decision time, on the current head:
+
+1. **Thread hygiene.** Enumerate `reviewThreads` (paginated). For every
+   unresolved thread, classify it: live finding (code still present), outdated
+   (`isOutdated: true` — decide whether the concern survives the anchor move;
+   an outdated thread is not a fix), or declined-unaccepted (evidence reply
+   posted, bot has not resolved). Count comments per thread: more than one
+   agent reply on the same finding with no head change in between is a
+   duplicate — bots do not parse plain-text replies, and a second identical
+   reply changes nothing. One reply per finding per head; the next move after
+   a reply is a bot re-review, not another reply.
+2. **Follow-up path.** For a Qodo decline the bot has not accepted after a
+   re-review, post the `@qodo` chat-dismiss reply (reason + file:line) — the
+   plain decline shape does not dismiss. For a CodeRabbit decline, the only
+   bot-executed resolution outside auto-resolve is the top-level
+   `@coderabbitai resolve` (all threads) — do not use it while other
+   CodeRabbit threads are live (#433, #434).
+3. **Escalation.** If the bot still will not resolve after its own re-review
+   of the replies, stop: leave the thread open, record the exact state in the
+   PR summary, and escalate to the maintainer (recorded bypass or explicit
+   authorization). Never click "Resolve conversation" — an agent-resolved
+   thread records the agent, not the bot, as the acceptor, and destroys the
+   audit trail. A follow-up issue is the right home for a defect in already
+   merged code, never for unmerged code.
+4. **Verdict.** Report: checks (all pass, none pending), threads
+   (N unresolved, classified), CodeRabbit (clean on this head), Qodo (verdict
+   on this head or not heard), `mergeStateStatus`, and the authorization. If
+   any element is missing, the verdict is "blocked" — name the element, do
+   not average past it.
+
 ### CI failure triage (before merge)
 
 A red CI gate is a signal that something is unknown — not a label to work
@@ -513,15 +547,24 @@ CI: <pass | fail>. Threads: <N unresolved>.
 ```
 
 **Bot-owned resolution.** Reply with evidence first; the reviewer bot owns the
-accept/decline decision and the thread state:
+accept/decline decision and the thread state. A plain reply — Fixed or
+Declined — never resolves a thread; only the bot's actions do:
 
-- **Qodo:** a re-review updates each finding's status. Wait for the finding to
-  be marked resolved; a reply alone is not acceptance.
-- **CodeRabbit:** when its re-review no longer reports the finding, post
-  `@coderabbitai resolve` as a separate reply in the thread (the whole comment
-  must be the command). It resolves only that thread. A top-level
-  `@coderabbitai resolve` resolves every CodeRabbit thread, so use it only after
-  every thread is accepted.
+- **Qodo:** a plain decline reply is discussion only and does not dismiss. To
+  dismiss, reply in the thread starting with `@qodo` stating the reason
+  ("this is a false positive — ..."), or use the finding's portal Dismiss link
+  (irreversible; portal access required). A re-review updates each finding's
+  status — Qodo marks Outdated/Resolved only when the code changed enough
+  that the finding no longer applies. Wait for the finding to be marked
+  resolved; a reply alone is not acceptance. (#434)
+- **CodeRabbit:** when its re-review no longer reports the finding, the thread
+  auto-resolves. For a decline the bot will not accept, `@coderabbitai
+  resolve` must be a **top-level PR comment** (not supported in thread replies,
+  per the commands guide) and resolves **all** CodeRabbit threads at once —
+  use it only after every CodeRabbit thread is accepted. The command
+  reference documents per-thread in-reply use; the two pages contradict each
+  (#433). Never resolve a single declined thread with the all-threads command
+  while other CodeRabbit threads are still live.
 - **No bot confirmation:** leave the thread unresolved and stop. A stalled or
   silent bot is not an approval. Escalate to the maintainer; never click
   "Resolve conversation" or call `resolveReviewThread` to fill the gap. A
