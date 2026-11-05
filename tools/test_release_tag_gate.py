@@ -135,6 +135,52 @@ def test_release_published_maps_gh_exit():
     print('OK: _release_published maps gh exit to True/None')
 
 
+def test_run_gh_maps_os_errors_and_uses_repo_cwd():
+    """_run_gh: missing binary / timeout -> (127, ''); and it targets REPO.
+
+    This exercises the real subprocess.run path (not a stubbed _run_gh), so a
+    regression in the OSError/TimeoutExpired handling or the cwd=REPO
+    argument would fail the suite. The cwd assertion pins the repo-scoping
+    the review asked for: gh must resolve the same repo whose tags are read.
+    """
+    import subprocess
+
+    rg = sys.modules['release_gate_shared']
+    calls = {}
+
+    def run_and_capture(*args, **kwargs):
+        calls['kwargs'] = kwargs
+        calls['args'] = args
+        return subprocess.CompletedProcess(args, 0, '{"isDraft":false,"publishedAt":"2026-11-04T10:53:29Z"}', '')
+
+    real_run = rg.subprocess.run
+    try:
+        # Success path + cwd pinning.
+        rg.subprocess.run = run_and_capture
+        code, out = rg._run_gh('release', 'view', 'v0.9.2', '--json', 'isDraft,publishedAt')
+        assert code == 0, (code, out)
+        assert calls['kwargs'].get('cwd') == rg.REPO, calls
+        assert calls['args'][0][0] == 'gh', calls
+        assert rg._release_published('v0.9.2') is True
+
+        # Missing binary -> (127, '') -> publication unknown.
+        def raise_oserror(*args, **kwargs):
+            raise FileNotFoundError('gh not found')
+        rg.subprocess.run = raise_oserror
+        assert rg._run_gh('release', 'view', 'v0.9.2') == (127, '')
+        assert rg._release_published('v0.9.2') is None
+
+        # Timeout -> (127, '') -> publication unknown.
+        def raise_timeout(*args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd=args, timeout=30)
+        rg.subprocess.run = raise_timeout
+        assert rg._run_gh('release', 'view', 'v0.9.2') == (127, '')
+        assert rg._release_published('v0.9.2') is None
+    finally:
+        rg.subprocess.run = real_run
+    print('OK: _run_gh maps OS errors and targets REPO cwd')
+
+
 if __name__ == '__main__':
     test_gap_against_stable_not_rc()
     test_malformed_version()
@@ -142,4 +188,5 @@ if __name__ == '__main__':
     test_recent_but_published_is_not_active()
     test_recent_unknown_publication_still_refuses()
     test_release_published_maps_gh_exit()
+    test_run_gh_maps_os_errors_and_uses_repo_cwd()
     print('ALL OK')
