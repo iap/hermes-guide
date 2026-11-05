@@ -60,7 +60,9 @@ jobs:
           fi
           # The signature covers the tag *object*; bind it to the ref name so
           # a ref cannot point at a differently-named signed tag object.
-          signed_tag_name="$(git cat-file tag "$GITHUB_REF_NAME" | sed -n 's/^tag //p' | head -1)"
+          # The `tag` header is always the 3rd line; read only that line
+          # (sed consumes the whole object, so no SIGPIPE under pipefail).
+          signed_tag_name="$(git cat-file tag "$GITHUB_REF_NAME" | sed -n '3s/^tag //p')"
           if [ "$signed_tag_name" != "$GITHUB_REF_NAME" ]; then
             echo "::error::signed tag name $signed_tag_name does not match release ref $GITHUB_REF_NAME"
             exit 1
