@@ -21,23 +21,14 @@ from release_gate_shared import (
     _git_tags,
     parse_version,
     is_prerelease,
+    _is_stable_version_tag,
 )
 
 
-def _is_stable_version_tag(tag: str) -> bool:
+def _is_stable_version_tag_local(tag: str) -> bool:
     if tag.startswith("refs/tags/"):
         tag = tag[len("refs/tags/"):]
-    if tag.startswith('v'):
-        tag_clean = tag[1:]
-    else:
-        tag_clean = tag
-    if '-' in tag_clean or '+' in tag_clean:
-        return False
-    if parse_version(tag) is None:
-        return False
-    if re.match(r'^v?\d+\.\d+', tag):
-        return True
-    return False
+    return _is_stable_version_tag(tag)
 
 
 def check_tag_version_gap(current_tag: str) -> int:
@@ -46,6 +37,10 @@ def check_tag_version_gap(current_tag: str) -> int:
     # Strip refs/tags/ prefix if present
     if current_tag.startswith("refs/tags/"):
         current_tag = current_tag[len("refs/tags/"):]
+
+    if parse_version(current_tag) is None:
+        print(f"::error::cannot parse tag {current_tag!r}", file=sys.stderr)
+        return 2
 
     try:
         tags = _git_tags()
@@ -62,7 +57,7 @@ def check_tag_version_gap(current_tag: str) -> int:
     for tag in tags:
         if tag == current_tag:
             continue
-        if not _is_stable_version_tag(tag):
+        if not _is_stable_version_tag_local(tag):
             continue
         if is_prerelease(tag):
             continue
@@ -80,8 +75,8 @@ def check_tag_version_gap(current_tag: str) -> int:
     current_key = parse_version(current_tag)
     previous_key = parse_version(previous_tag)
 
-    if current_key is None or previous_key is None:
-        print(f"::warning::cannot parse versions (current={current_tag!r}, previous={previous_key!r}), skipping gap check")
+    if previous_key is None:
+        print(f"::warning::cannot parse versions (current={current_tag!r}, previous={previous_tag!r}), skipping gap check")
         return 0
 
     # Normalize
@@ -193,7 +188,7 @@ def _selftest() -> int:
                 bad += 1
 
     if bad:
-        print(f"FAIL: {bad} selftest case(s) mismatched")
+        print(f"FAIL: {bad} selftest case(s) mismatched", file=sys.stderr)
         return 1
     print("selftest PASS")
     return 0

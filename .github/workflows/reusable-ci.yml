@@ -447,7 +447,16 @@ jobs:
       - name: Tag version-gap gate regression
         # Tag-time gap protection must stay tested on PRs too.
         if: runner.os == 'Linux' && matrix.python-version == '3.11'
-        run: python tools/check_tag_version_gap.py --selftest
+        run: |
+          python tools/check_tag_version_gap.py --selftest
+          python tools/test_check_tag_version_gap.py
+
+      - name: Release-tag gate regression
+        # Hermetic: mocked git, no network. Runs on every PR, not only version bumps.
+        run: |
+          python tools/check_release_tag_gate.py --selftest
+          python tools/test_release_tag_gate.py
+          python tools/test_check_tag_version_gap.py
 
       - name: Changelog guard regression
         # The guard is only worth having if it can fail, so this runs its
