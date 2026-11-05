@@ -20,7 +20,7 @@ def _load_mod():
     return mod
 
 
-def test_unrelated_tags_ignored():
+def test_newer_stable_tag_refuses_older_proposal():
     mod = _load_mod()
     rg = sys.modules['release_gate_shared']
     def fake_run(*args):
@@ -31,8 +31,8 @@ def test_unrelated_tags_ignored():
     with mock.patch.object(rg, '_run', side_effect=fake_run):
         with mock.patch.object(mod, '_git_tags', return_value=['v1.0.0', 'v0.9.2']):
             code = mod.check_tag_version_gap('v0.9.3')
-            assert code == 0
-    print('OK: unrelated tags ignored')
+            assert code == 1
+    print('OK: older proposal refused')
 
 
 def test_gap_refused():
@@ -51,6 +51,6 @@ def test_gap_refused():
 
 
 if __name__ == '__main__':
-    test_unrelated_tags_ignored()
+    test_newer_stable_tag_refuses_older_proposal()
     test_gap_refused()
     print('ALL OK')
