@@ -29,7 +29,7 @@ with file:line evidence, not implemented.
   is the spam this rule exists to prevent). Once Qodo has reviewed and its
   findings are resolved, do not re-trigger it; let CodeRabbit gate each
   subsequent head until its check completes clean.
-- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (authoritative for `isOutdated`, which REST does not expose; REST `/pulls/{n}/review-threads` exposes `resolved` only, and the resolve mutations are GraphQL-only). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` only means the anchor moved — it is not evidence of a fix, and GitHub never auto-resolves outdated threads (they still block under `required_review_thread_resolution`). Never resolve a thread before replying with evidence.
+- **Deep review operations.** Use `gh api graphql` with `reviewThreads` (required for resolution state; REST has no equivalent — a `GET /pulls/{n}/review-threads` probe returns 404). For reply bodies use GraphQL `addPullRequestReviewThreadReply` when targeting a thread, or REST `pulls/<n>/comments` with `in_reply_to` for inline replies to specific comments. `isOutdated` only means the anchor moved — it is not evidence of a fix, and GitHub never auto-resolves outdated threads (they still block under `required_review_thread_resolution`). Never resolve a thread before replying with evidence.
 - **Both, then merge.** A clean primary reviewer does not replace the second
   review, and a clean second reviewer does not erase a new primary finding.
   Merge only after the primary has reviewed with no open findings AND the
@@ -439,7 +439,8 @@ merge decision time, on the current head:
    reply changes nothing. One reply per finding per head; the next move after
    a reply is a bot re-review, not another reply.
 2. **Follow-up path.** For a Qodo decline the bot has not accepted after a
-   re-review, post the `@qodo` chat-dismiss reply (reason + file:line) — the
+   re-review (or if no re-review of the head arrives, under step 3), post
+   the `@qodo` chat-dismiss reply (reason + file:line) — the
    plain decline shape does not dismiss. For a CodeRabbit decline, there is
    no single-thread bot resolution: the thread stays open and escalates
    under step 3. The top-level `@coderabbitai resolve` (all threads) applies
