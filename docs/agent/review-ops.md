@@ -15,7 +15,7 @@ with file:line evidence, not implemented.
 | 2. Second reviewer | Primary is clean on the current head | Post `@coderabbitai full review` **once** for this PR. Wait for the review record; a trigger comment is not a review. |
 | 3. Second findings | CodeRabbit reports findings | Verify each against the code. Fix real findings; decline false positives/negatives with evidence. After new commits, use `@coderabbitai review` (incremental), never a second full review. |
 | 4. Re-check second reviewer | Any second-review fix created a new head | The primary's resolved findings stand — Qodo auto-reviews each head, and once it has reviewed the PR with no open findings, do not manually re-trigger it per head. Request CodeRabbit's incremental review of the new head and proceed until CodeRabbit's check completes clean on that head. Repeat for each new head with CodeRabbit alone. |
-| 5. Merge gate | CodeRabbit clean on the current head; Qodo has reviewed with no open findings | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo's automatic review covers each head — a new head does not merge on an older Qodo review alone, so require Qodo's no-open-findings verdict (reached by its automatic review, never by a manual trigger) alongside CodeRabbit's clean completion on the current head. |
+| 5. Merge gate | CodeRabbit clean on the current head; Qodo has a no-open-findings verdict on the current head | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo's automatic review covers each head — a new head does not merge on an older Qodo review alone, so require Qodo's no-open-findings verdict on the current head (reached by its automatic review, never by a manual trigger; a silent Qodo on the current head is "not heard" and needs explicit authorization) alongside CodeRabbit's clean completion on the current head. |
 
 - **False positives are first-class.** A bot recommendation can be stale,
   miscited, or wrong for this repo. Cite the guard, test, or source that
@@ -84,9 +84,12 @@ way to decide "should I trigger?". Run it before posting any trigger command.
        # minimum and take the smallest.
        COMMITTER_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.commit.committer.date')
        CHECKRUN_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
-         --paginate --jq '[.check_runs[].started_at] | min // empty' \
+         --paginate --jq '[.check_runs[].started_at | select(. != null)] | min // empty' \
          2>/dev/null | sort | head -1)
        if [[ -n "$CHECKRUN_DATE" && "$CHECKRUN_DATE" < "$COMMITTER_DATE" ]]; then HEAD_DATE="$CHECKRUN_DATE"; else HEAD_DATE="$COMMITTER_DATE"; fi
+       # Fail closed on an empty boundary: an empty HEAD_DATE would make the
+       # pending-trigger filter below match every historical trigger.
+       [ -n "$HEAD_DATE" ] || { echo "ERROR: HEAD_DATE is empty; cannot judge pending triggers" >&2; return 1 2>/dev/null || exit 1; }
        # Current-head state (per-head gate):
        gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
          --jq ".[] | select(.commit_id|startswith(\"$HEAD_SHA\")) | {user: .user.login, state, submitted_at}"
@@ -97,8 +100,8 @@ way to decide "should I trigger?". Run it before posting any trigger command.
        # an incremental (@coderabbitai review):
        gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
          --jq '.[] | {user: .user.login, commit: .commit_id[0:8], state, body: .body[0:80]}'
-       # Pending-trigger guard: comments posted AFTER this head's committer
-       # date whose body IS the command (starts with it, not a prose mention).
+       # Pending-trigger guard: comments posted AFTER the head boundary
+       # whose body IS the command (starts with it, not a prose mention).
        # A trigger is pending only; classify as accepted only when a matching
        # review row or completed check-run for this head also exists:
        gh api "repos/$REPO/issues/<PR>/comments?per_page=100" --paginate \
