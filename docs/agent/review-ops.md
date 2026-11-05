@@ -15,7 +15,7 @@ with file:line evidence, not implemented.
 | 2. Second reviewer | Primary is clean on the current head | Post `@coderabbitai full review` **once** for this PR. Wait for the review record; a trigger comment is not a review. |
 | 3. Second findings | CodeRabbit reports findings | Verify each against the code. Fix real findings; decline false positives/negatives with evidence. After new commits, use `@coderabbitai review` (incremental), never a second full review. |
 | 4. Re-check second reviewer | Any second-review fix created a new head | The primary's resolved findings stand — Qodo auto-reviews each head, and once it has reviewed the PR with no open findings, do not manually re-trigger it per head. Request CodeRabbit's incremental review of the new head and proceed until CodeRabbit's check completes clean on that head. Repeat for each new head with CodeRabbit alone. |
-| 5. Merge gate | CodeRabbit clean on the current head; Qodo has reviewed with no open findings | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo opens the gate (findings resolved); CodeRabbit's successful completion on the current head is the per-head gate. |
+| 5. Merge gate | CodeRabbit clean on the current head; Qodo has reviewed with no open findings | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo's automatic review covers each head — a new head does not merge on an older Qodo review alone, so require Qodo's no-open-findings verdict (reached by its automatic review, never by a manual trigger) alongside CodeRabbit's clean completion on the current head. |
 
 - **False positives are first-class.** A bot recommendation can be stale,
   miscited, or wrong for this repo. Cite the guard, test, or source that
@@ -37,12 +37,13 @@ with file:line evidence, not implemented.
 - **Head binding (asymmetric).** A push after a clean review invalidates that
   clean result for the *second* reviewer: re-request its incremental review of
   the new head, and never merge on a mixture of reviews from different commits.
-  The primary is different — Qodo auto-reviews each head, and a clean Qodo
-  review whose findings are resolved stands across a subsequent head; do not
-  manually re-trigger it per head. Manually post `/agentic_review` only when
-  Qodo has no review on the PR at all (genuinely silent); if no trigger is
-  accepted, treat the PR as unreviewed and require explicit authorization
-  before merging.
+  The primary is different — Qodo auto-reviews each head on its own, so the
+  newest head is examined by Qodo automatically; do not manually re-trigger
+  it per head. A clean Qodo review whose findings are resolved is not
+  re-requested per push. Manually post `/agentic_review` only when Qodo has
+  no review on the PR at all (genuinely silent); if no trigger is accepted,
+  treat the PR as unreviewed and require explicit authorization before
+  merging.
 
 ### Trigger gate (idempotent, head-bound) — run before every trigger
 
@@ -55,22 +56,35 @@ way to decide "should I trigger?". Run it before posting any trigger command.
 
        HEAD=$(gh pr view <PR> --json headRefOid -q .headRefOid | cut -c1-8)
 
-2. Read review state for that head:
+2. Read review state for that head, plus PR-wide history. The current-head
+   check answers "is this head reviewed?"; the PR-wide history answers "has
+   either bot ever reviewed this PR?" — the two manual-trigger conditions
+   (Qodo silent, CodeRabbit full-review-once) need the history, not just the
+   head. A trigger already posted but not yet represented by a review or check
+   run also counts as pending, so check issue comments before any manual
+   trigger:
 
        REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+       # Current-head state (per-head gate):
        gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" \
          --jq ".[] | select(.commit_id|startswith(\"$HEAD\")) | {user: .user.login, state, submitted_at}"
        gh api "repos/$REPO/commits/$HEAD/check-runs?per_page=100" \
          --jq ".check_runs[] | select(.name==\"CodeRabbit\") | {status, conclusion}"
+       # PR-wide history (never-reviewed / full-once decisions):
+       gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" \
+         --jq "[.[] | .user.login] | unique"
+       # Pending-trigger guard (an accepted trigger with no review yet):
+       gh api "repos/$REPO/issues/<PR>/comments?per_page=100" \
+         --jq ".[] | select(.body | test(\"@coderabbitai (full )?review|/agentic_review\")) | {user: .user.login, created_at}"
 
 3. Decide by this table — trigger only in the "trigger" rows:
 
    | Bot | No review on this head | Review pending | Review completed |
    |---|---|---|---|
    | Qodo (auto-reviews) | wait — it reviews on its own | wait — never trigger over a pending review | do not trigger; triage findings or accept clean |
-   | `/agentic_review` | trigger ONLY if Qodo has no review on the PR at all (silent) | do not trigger | do not trigger — head already reviewed |
-   | `@coderabbitai full review` | trigger ONCE, only after Qodo's findings are resolved | do not trigger | do not trigger |
-   | `@coderabbitai review` (incremental) | — | do not trigger | trigger after fixes land a NEW head; proceed when its check completes clean |
+   | `/agentic_review` | trigger ONLY if the PR-wide history shows Qodo has never reviewed (silent) AND no trigger is already pending | do not trigger | do not trigger — head already reviewed |
+   | `@coderabbitai full review` | trigger ONCE, only if the PR-wide history shows no full review yet AND Qodo's findings are resolved | do not trigger | do not trigger |
+   | `@coderabbitai review` (incremental) | trigger once if a full review completed on an earlier head and no request for this head is in flight | do not trigger | trigger after fixes land a NEW head; proceed when its check completes clean |
 
 4. Spam rules (the reason PR #429 collected five `/agentic_review` posts on one
    head):
@@ -367,11 +381,10 @@ Never merge on green CI alone. For the normal merge path, immediately before
 merging a PR, verify: all checks pass (not pending), every review thread
 resolved by the bot after a reply that fixes or declines the finding with
 evidence (never human-resolved to unblock), CodeRabbit clean on the current
-head, and Qodo has reviewed the PR with no open findings (a Qodo review from an
-earlier head stands once its findings are resolved — do not manually
-re-trigger Qodo per head; a bot silent on a PR it never reviewed is not a
-clean reviewer), `mergeStateStatus` is `CLEAN`, and the merge is explicitly
-authorized. A recorded maintainer-authorized bypass is
+head, and Qodo has reviewed the PR with no open findings (Qodo auto-reviews
+each head; do not manually re-trigger it per head — a bot silent on a PR it
+never reviewed is not a clean reviewer), `mergeStateStatus` is `CLEAN`, and
+the merge is explicitly authorized. A recorded maintainer-authorized bypass is
 the exception to the unresolved-thread check; it does not mark the thread as
 accepted. When enumerating threads, use `gh api graphql`
 reviewThreads for resolution state and full bodies; REST `pulls/<n>/comments`
