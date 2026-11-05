@@ -83,7 +83,7 @@ way to decide "should I trigger?". Run it before posting any trigger command.
        # so a full review (@coderabbitai full review) is distinguishable from
        # an incremental (@coderabbitai review):
        gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
-         --jq "[.[] | {user: .user.login, commit: .commit_id[0:8], state, body: .body[0:80]}]"
+         --jq '.[] | {user: .user.login, commit: .commit_id[0:8], state, body: .body[0:80]}'
        # Pending-trigger guard: comments posted AFTER this head's committer
        # date whose body IS the command (starts with it, not a prose mention).
        # A trigger is pending only; classify as accepted only when a matching
