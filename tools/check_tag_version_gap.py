@@ -81,8 +81,14 @@ def check_tag_version_gap(current_tag: str) -> int:
     previous_key = parse_version(previous_tag)
 
     if current_key is None or previous_key is None:
-        print(f"::warning::cannot parse versions (current={current_tag!r}, previous={previous_tag!r}), skipping gap check")
+        print(f"::warning::cannot parse versions (current={current_tag!r}, previous={previous_key!r}), skipping gap check")
         return 0
+
+    # Normalize
+    if len(current_key) == 2:
+        current_key = current_key + (0,)
+    if len(previous_key) == 2:
+        previous_key = previous_key + (0,)
 
     if current_key <= previous_key:
         print(f"::error::tag {current_tag} is not newer than previous tag {previous_tag} — refusing the version gap", file=sys.stderr)

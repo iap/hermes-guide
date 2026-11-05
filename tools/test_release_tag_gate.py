@@ -51,7 +51,7 @@ def test_window_hours_passed():
     orig = rg.active_release
     def wrapped(*args, **kwargs):
         calls.append(args)
-        return orig(*args, **kwargs)
+        return (False, '')
     def fake_run(*args):
         s = ' '.join(str(a) for a in args)
         if 'rev-parse' in s:
@@ -61,8 +61,9 @@ def test_window_hours_passed():
         return (0, '')
     with mock.patch.object(rg, '_run', side_effect=fake_run):
         with mock.patch.object(rg, '_git_tag_date', return_value=1000000000):
-            with mock.patch.object(rg, 'active_release', side_effect=wrapped):
-                mod.check_release_tag_gate('0.9.3', window_hours=7)
+            with mock.patch.object(mod, 'active_release', side_effect=wrapped):
+                with mock.patch.object(rg, 'active_release', side_effect=wrapped):
+                    mod.check_release_tag_gate('0.9.3', window_hours=7)
     assert calls and calls[0][1] == 7
     print('OK: window hours passed')
 

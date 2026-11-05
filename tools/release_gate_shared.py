@@ -111,6 +111,11 @@ def version_gap(version: str, latest_tag: str | None) -> tuple[bool, str]:
     lt = parse_version(latest_tag)
     if pv is None or lt is None:
         return False, f"version {version!r} is not dotted-numeric, cannot compare"
+    # Normalize to 3 components
+    if len(pv) == 2:
+        pv = pv + (0,)
+    if len(lt) == 2:
+        lt = lt + (0,)
     if pv <= lt:
         return True, (
             f"version {version!r} is not newer than latest tag {latest_tag}, "
