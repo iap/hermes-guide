@@ -193,8 +193,9 @@ release-related change (the authoritative, always-current source is
    section, and the tag is annotated + SSH-signed (verifier line first,
    against `.github/allowed_signers`). Create the tag annotated and signed —
    `git tag -s v<version> master` (local `tag.gpgsign true` makes this the
-   default; same SSH key as commit signing). Confirm with
-   `gh release view v<version>` after creation.
+   default; same SSH key as commit signing — if `git tag -s` falls back to
+   GPG or fails, configure `gpg.format=ssh` and `user.signingkey` first).
+   Confirm with `gh release view v<version>` after creation.
 
 The full procedure, including readiness verdicts and the drift audit, is
 [CONTRIBUTING.md#cutting-a-release](CONTRIBUTING.md#cutting-a-release). Deep-ops
