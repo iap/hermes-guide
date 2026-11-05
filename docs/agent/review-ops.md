@@ -441,10 +441,10 @@ merge decision time, on the current head:
 2. **Follow-up path.** For a Qodo decline the bot has not accepted after a
    re-review (or if no re-review of the head arrives, under step 3), post
    the `@qodo` chat-dismiss reply (reason + file:line) — the
-   plain decline shape does not dismiss. For a CodeRabbit decline, there is
-   no single-thread bot resolution: the thread stays open and escalates
-   under step 3. The top-level `@coderabbitai resolve` (all threads) applies
-   only once every other CodeRabbit thread is accepted or resolved (#433, #434).
+   plain decline shape does not dismiss. For a CodeRabbit decline, post
+   `@coderabbitai resolve` as a reply in that thread (verified per-thread
+   scope, #433); the top-level command (all threads) applies only once
+   every other CodeRabbit thread is accepted or resolved.
 3. **Escalation.** If the bot still will not resolve after its own re-review
    of the replies, stop: leave the thread open, record the exact state in the
    PR summary, and escalate to the maintainer (recorded bypass or explicit
@@ -559,13 +559,13 @@ Declined — never resolves a thread; only the bot's actions do:
   that the finding no longer applies. Wait for the finding to be marked
   resolved; a reply alone is not acceptance. (#434)
 - **CodeRabbit:** when its re-review no longer reports the finding, the thread
-  auto-resolves. A declined CodeRabbit thread the bot will not accept stays
-  open and escalates under the Evaluation escalation step — there is no
-  single-thread bot command for it (the reference documents per-thread
-  in-reply `@coderabbitai resolve`; the commands guide says top-level
-  only, resolving **all** CodeRabbit threads at once — #433). Use the
-  top-level command only when every other CodeRabbit thread is accepted or
-  resolved, so it may resolve the remaining declined thread.
+  auto-resolves. For a decline the bot will not accept, post
+  `@coderabbitai resolve` as a reply **in that thread** — verified on
+  disposable PR #436 to resolve only that thread. A top-level
+  `@coderabbitai resolve` resolves **all** CodeRabbit threads at once, so use
+  it only when every other CodeRabbit thread is accepted or resolved. (The
+  commands guide claims in-reply use is unsupported; live behavior
+  contradicts it — #433.)
 - **No bot confirmation:** leave the thread unresolved and stop. A stalled or
   silent bot is not an approval. Escalate to the maintainer; never click
   "Resolve conversation" or call `resolveReviewThread` to fill the gap. A
