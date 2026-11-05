@@ -453,7 +453,8 @@ merge decision time, on the current head:
    head**, (b) the bot is **positively clean** on that head (a completed
    review with no open findings), and (c) every `isOutdated` thread's concern
    has been re-decided under step 1, the conversation gate is the only
-   remaining blocker: run steps 2–3 against that thread (resolve command /
+   remaining **review-thread** blocker (required checks and merge
+   authorization still apply): run steps 2–3 against that thread (resolve command /
    chat-dismiss / re-review wait), and if the bot still will not accept,
    escalate under step 3 rather than treating BLOCKED as a code defect or
    merging on CI alone. A silent bot is never "clean" for (b) — it goes to
