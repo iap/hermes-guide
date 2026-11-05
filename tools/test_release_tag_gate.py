@@ -68,8 +68,125 @@ def test_window_hours_passed():
     print('OK: window hours passed')
 
 
+def test_recent_but_published_is_not_active():
+    mod = _load_gate()
+    rg = sys.modules['release_gate_shared']
+    import time as _time
+    recent = _time.time() - 18 * 3600  # 18h ago, inside the 48h window
+    def fake_run(*args):
+        s = ' '.join(str(a) for a in args)
+        if 'rev-parse' in s and 'refs/tags/v0.9.3' in s:
+            return (1, '')  # not tagged
+        if 'tag' in s and '-l' in s:
+            return (0, 'v0.9.2')
+        return (0, '')
+    with mock.patch.object(rg, '_run', side_effect=fake_run):
+        with mock.patch.object(rg, '_git_tag_date', return_value=recent):
+            with mock.patch.object(rg, '_release_published', return_value=True):
+                code, errs = mod.check_release_tag_gate('0.9.3', window_hours=48)
+                assert code == 0, (code, errs)
+                # The shared active_release() returns (False, NOTE) when
+                # published; the gate surfaces det only when act is True, so
+                # the note is swallowed and errs stays empty. The observable
+                # contract is: allowed, and no ACTIVE RELEASE refusal.
+                assert not any('ACTIVE RELEASE' in e for e in errs), errs
+    # And the shared helper itself reports the explanatory note.
+    with mock.patch.object(rg, '_git_tag_date', return_value=recent):
+        with mock.patch.object(rg, '_release_published', return_value=True):
+            act, det = rg.active_release('v0.9.2', 48)
+            assert act is False, (act, det)
+            assert 'not treating as in flight' in det, det
+    print('OK: recent-but-published is not active')
+
+
+def test_recent_unknown_publication_still_refuses():
+    mod = _load_gate()
+    rg = sys.modules['release_gate_shared']
+    import time as _time
+    recent = _time.time() - 3600  # 1h ago
+    def fake_run(*args):
+        s = ' '.join(str(a) for a in args)
+        if 'rev-parse' in s and 'refs/tags/v0.9.3' in s:
+            return (1, '')
+        if 'tag' in s and '-l' in s:
+            return (0, 'v0.9.2')
+        return (0, '')
+    with mock.patch.object(rg, '_run', side_effect=fake_run):
+        with mock.patch.object(rg, '_git_tag_date', return_value=recent):
+            with mock.patch.object(rg, '_release_published', return_value=None):
+                code, errs = mod.check_release_tag_gate('0.9.3', window_hours=48)
+                assert code == 1, (code, errs)
+                assert any('ACTIVE RELEASE' in e for e in errs), errs
+    print('OK: recent unknown publication still refuses')
+
+
+def test_release_published_maps_gh_exit():
+    rg = sys.modules['release_gate_shared']
+    with mock.patch.object(rg, '_run_gh', return_value=(0, '{"isDraft":false,"publishedAt":"2026-11-04T10:53:29Z"}')):
+        assert rg._release_published('v0.9.2') is True
+    with mock.patch.object(rg, '_run_gh', return_value=(0, '{"isDraft":true,"publishedAt":null}')):
+        assert rg._release_published('v0.9.3') is None  # draft, not published
+    with mock.patch.object(rg, '_run_gh', return_value=(0, '{"isDraft":false,"publishedAt":null}')):
+        assert rg._release_published('v0.9.2') is None  # no timestamp
+    with mock.patch.object(rg, '_run_gh', return_value=(1, '')):
+        assert rg._release_published('v9.9.9') is None
+    with mock.patch.object(rg, '_run_gh', return_value=(127, '')):
+        assert rg._release_published('v0.9.2') is None
+    print('OK: _release_published maps gh exit to True/None')
+
+
+def test_run_gh_maps_os_errors_and_uses_repo_cwd():
+    """_run_gh: missing binary / timeout -> (127, ''); and it targets REPO.
+
+    This exercises the real subprocess.run path (not a stubbed _run_gh), so a
+    regression in the OSError/TimeoutExpired handling or the cwd=REPO
+    argument would fail the suite. The cwd assertion pins the repo-scoping
+    the review asked for: gh must resolve the same repo whose tags are read.
+    """
+    import subprocess
+
+    rg = sys.modules['release_gate_shared']
+    calls = {}
+
+    def run_and_capture(*args, **kwargs):
+        calls['kwargs'] = kwargs
+        calls['args'] = args
+        return subprocess.CompletedProcess(args, 0, '{"isDraft":false,"publishedAt":"2026-11-04T10:53:29Z"}', '')
+
+    real_run = rg.subprocess.run
+    try:
+        # Success path + cwd pinning.
+        rg.subprocess.run = run_and_capture
+        code, out = rg._run_gh('release', 'view', 'v0.9.2', '--json', 'isDraft,publishedAt')
+        assert code == 0, (code, out)
+        assert calls['kwargs'].get('cwd') == rg.REPO, calls
+        assert calls['args'][0][0] == 'gh', calls
+        assert rg._release_published('v0.9.2') is True
+
+        # Missing binary -> (127, '') -> publication unknown.
+        def raise_oserror(*args, **kwargs):
+            raise FileNotFoundError('gh not found')
+        rg.subprocess.run = raise_oserror
+        assert rg._run_gh('release', 'view', 'v0.9.2') == (127, '')
+        assert rg._release_published('v0.9.2') is None
+
+        # Timeout -> (127, '') -> publication unknown.
+        def raise_timeout(*args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd=args, timeout=30)
+        rg.subprocess.run = raise_timeout
+        assert rg._run_gh('release', 'view', 'v0.9.2') == (127, '')
+        assert rg._release_published('v0.9.2') is None
+    finally:
+        rg.subprocess.run = real_run
+    print('OK: _run_gh maps OS errors and targets REPO cwd')
+
+
 if __name__ == '__main__':
     test_gap_against_stable_not_rc()
     test_malformed_version()
     test_window_hours_passed()
+    test_recent_but_published_is_not_active()
+    test_recent_unknown_publication_still_refuses()
+    test_release_published_maps_gh_exit()
+    test_run_gh_maps_os_errors_and_uses_repo_cwd()
     print('ALL OK')
