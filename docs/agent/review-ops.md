@@ -413,7 +413,7 @@ Never merge on green CI alone. For the normal merge path, immediately before
 merging a PR, verify: all checks pass (not pending), every review thread
 resolved by the bot after a reply that fixes or declines the finding with
 evidence (never human-resolved to unblock), CodeRabbit clean on the current
-head, and Qodo has reviewed the PR with no open findings (Qodo auto-reviews
+head, and Qodo has a no-open-findings verdict on the current head (Qodo auto-reviews
 each head; do not manually re-trigger it per head — a bot silent on a PR it
 never reviewed is not a clean reviewer), `mergeStateStatus` is `CLEAN`, and
 the merge is explicitly authorized. A recorded maintainer-authorized bypass is
@@ -443,7 +443,7 @@ merge decision time, on the current head:
    plain decline shape does not dismiss. For a CodeRabbit decline, there is
    no single-thread bot resolution: the thread stays open and escalates
    under step 3. The top-level `@coderabbitai resolve` (all threads) applies
-   only once every CodeRabbit thread is accepted (#433, #434).
+   only once every other CodeRabbit thread is accepted or resolved (#433, #434).
 3. **Escalation.** If the bot still will not resolve after its own re-review
    of the replies, stop: leave the thread open, record the exact state in the
    PR summary, and escalate to the maintainer (recorded bypass or explicit
@@ -563,7 +563,8 @@ Declined — never resolves a thread; only the bot's actions do:
   single-thread bot command for it (the reference documents per-thread
   in-reply `@coderabbitai resolve`; the commands guide says top-level
   only, resolving **all** CodeRabbit threads at once — #433). Use the
-  top-level command only when every CodeRabbit thread is accepted.
+  top-level command only when every other CodeRabbit thread is accepted or
+  resolved, so it may resolve the remaining declined thread.
 - **No bot confirmation:** leave the thread unresolved and stop. A stalled or
   silent bot is not an approval. Escalate to the maintainer; never click
   "Resolve conversation" or call `resolveReviewThread` to fill the gap. A
