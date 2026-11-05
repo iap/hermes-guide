@@ -44,6 +44,7 @@ from release_gate_shared import (
     _git_tags,
     print_ok,
     print_latest,
+    parse_version,
 )
 
 import unittest.mock
@@ -58,7 +59,10 @@ def check_release_tag_gate(version: str | None, window_hours: int = 48) -> tuple
             version = plugin_version()
         except ValueError as exc:
             return 2, [str(exc)]
-        print(f"[release-tag-gate] proposed version from plugin.yaml: v{version}")
+        print(f"[release-tag-gate] proposed version from plugin.yaml: v{version}", file=sys.stderr)
+
+    if parse_version(version) is None:
+        return 2, [f"malformed version {version!r}"]
 
     latest_stable = get_latest_stable_tag()
     latest_any = get_latest_tag()
@@ -68,21 +72,21 @@ def check_release_tag_gate(version: str | None, window_hours: int = 48) -> tuple
     if dup:
         errors.append(det)
 
-    # 2) Gap check (against latest tag of any kind)
-    gap, det = version_gap(version, get_latest_tag())
+    # 2) Gap check (against latest stable tag)
+    gap, det = version_gap(version, latest_stable)
     if gap:
         errors.append(det)
 
     # 3) Active release check (stable tags only)
     if latest_stable:
-        act, det = active_release(latest_stable, 48)
+        act, det = active_release(latest_stable, window_hours)
         if act:
             errors.append(det)
 
     # Output
     print_latest(get_latest_tag())
     for line in errors:
-        print(f"[release-tag-gate] REFUSE: {line}")
+        print(f"[release-tag-gate] REFUSE: {line}", file=sys.stderr)
     if errors:
         return 1, errors
 
@@ -108,7 +112,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="run deterministic unit cases and exit",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _selftest() -> int:
@@ -120,10 +124,10 @@ def _selftest() -> int:
     from release_gate_shared import parse_version
 
     if parse_version("0.9.2") != (0, 9, 2):
-        print("FAIL: parse_version('0.9.2')")
+        print("FAIL: parse_version('0.9.2')", file=sys.stderr)
         return 1
     if parse_version("0.9.3-rc.1") != (0, 9, 3):
-        print("FAIL: parse_version('0.9.3-rc.1')")
+        print("FAIL: parse_version('0.9.3-rc.1')", file=sys.stderr)
         return 1
     if parse_version("not.version") is not None:
         return 1
@@ -138,36 +142,37 @@ def _selftest() -> int:
 
     with unittest.mock.patch.object(rg, "_git_tags", return_value=["v0.9.2"]):
         with unittest.mock.patch.object(rg, "_run", side_effect=fake_run):
-            # clean bump
-            code1 = check_release_tag_gate("0.9.3", window_hours=0)
-            code2 = check_release_tag_gate("0.9.2", window_hours=0)
-            if code1[0] != 0:
-                print(f"FAIL: clean bump returned {code1}")
-                return 1
-            if code2[0] != 1:
-                print(f"FAIL: duplicate returned {code2}")
-                return 1
+            with unittest.mock.patch.object(rg, "_git_tag_date", return_value=1000000000):  # recent/fake date
+                # clean bump
+                code1 = check_release_tag_gate("0.9.3", window_hours=0)
+                code2 = check_release_tag_gate("0.9.2", window_hours=0)
+                if code1[0] != 0:
+                    print(f"FAIL: clean bump returned {code1}", file=sys.stderr)
+                    return 1
+                if code2[0] != 1:
+                    print(f"FAIL: duplicate returned {code2}", file=sys.stderr)
+                    return 1
 
     print("selftest PASS")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Release-tag protection gate.")
-    parser.add_argument("--version", default=None, help="the version the bump proposes")
-    parser.add_argument("--window-hours", type=int, default=48, help="active window")
-    parser.add_argument("--selftest", action="store_true", help="run unit cases")
-    args = parser.parse_args(argv)
+    try:
+        args = _parse_args(argv)
 
-    if args.selftest:
-        return _selftest()
+        if args.selftest:
+            return _selftest()
 
-    code, evidence = check_release_tag_gate(args.version, args.window_hours)
-    if code != 0 and evidence:
-        print("FAIL: release-tag gate blocked the bump")
-        for line in evidence:
-            print(f"  - {line}")
-    return code
+        code, evidence = check_release_tag_gate(args.version, args.window_hours)
+        if code != 0 and evidence:
+            print("FAIL: release-tag gate blocked the bump", file=sys.stderr)
+            for line in evidence:
+                print(f"  - {line}", file=sys.stderr)
+        return code
+    except Exception as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

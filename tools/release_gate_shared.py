@@ -36,18 +36,37 @@ def _run(*args: str) -> tuple[int, str]:
 
 def _git_tags() -> list[str]:
     """All git tags sorted newest-first (semantic version order)."""
+    # Prefer tags merged into origin/master to avoid unrelated branch tags
+    code, out = _run("git", "tag", "-l", "--sort=-version:refname", "--merged", "origin/master")
+    if code == 0 and out:
+        tags = [t for t in out.splitlines() if t.strip()]
+        if tags:
+            return tags
+    # Fallback to all tags if origin/master not available or has no merged tags
     code, out = _run("git", "tag", "-l", "--sort=-version:refname")
     if code != 0:
-        return []
+        raise RuntimeError(f"git tag -l failed (exit {code}): {out}")
     return [t for t in out.splitlines() if t.strip()] if out else []
 
 
 def _git_tag_date(tag: str) -> int | None:
-    """Return the tagger date (epoch seconds) for an annotated tag, else commit date."""
-    code, out = _run("git", "show", "-s", "--format=%(creatordate:unix)", tag)
-    if code == 0:
+    """Return the tagger/creator date (epoch seconds) for a tag."""
+    code, out = _run("git", "for-each-ref", f"--format=%(creatordate:unix)", f"refs/tags/{tag}")
+    if code == 0 and out:
         try:
-            return int(out.strip())
+            # Might have multiple lines in some cases, take first
+            first = out.splitlines()[0].strip()
+            if first and first.isdigit():
+                return int(first)
+        except ValueError:
+            pass
+    # Fallback to commit date
+    code, out = _run("git", "log", "-1", "--format=%ct", tag)
+    if code == 0 and out:
+        try:
+            first = out.splitlines()[0].strip()
+            if first and first.isdigit():
+                return int(first)
         except ValueError:
             pass
     return None
@@ -85,7 +104,7 @@ def duplicate_version(version: str) -> tuple[bool, str]:
 
 
 def version_gap(version: str, latest_tag: str | None) -> tuple[bool, str]:
-    """True when the proposal is NOT strictly greater than the latest tag."""
+    """True when the proposal is NOT strictly greater than the latest tag or skips a version."""
     if latest_tag is None:
         return False, ""
     pv = parse_version(version)
@@ -97,6 +116,29 @@ def version_gap(version: str, latest_tag: str | None) -> tuple[bool, str]:
             f"version {version!r} is not newer than latest tag {latest_tag}, "
             f"a gap release would drag CHANGELOG out of sync"
         )
+    # Enforce no version skipping - must be exactly next version
+    if len(pv) >= 3 and len(lt) >= 3:
+        # If same major.minor, patch must increment by exactly 1
+        if pv[0] == lt[0] and pv[1] == lt[1]:
+            if pv[2] != lt[2] + 1:
+                return True, (
+                    f"version {version!r} skips from {latest_tag} (expected patch {lt[2]+1}), "
+                    f"a gap release would drag CHANGELOG out of sync"
+                )
+            return False, ""
+        # If major same but minor bumped, patch must be 0 and minor must be previous_minor + 1
+        if pv[0] == lt[0] and pv[1] == lt[1] + 1 and pv[2] == 0:
+            return False, ""
+        # If major bumped, minor and patch must be 0
+        if pv[0] == lt[0] + 1 and pv[1] == 0 and pv[2] == 0:
+            return False, ""
+        # Other transitions - also check if it's jumping over something
+        # More generally, if it's a patch-level bump relative to latest, must be +1
+        # If changing minor/major, must be exactly +1 at that level
+        return True, (
+            f"version {version!r} is not the next allowed release after {latest_tag}, "
+            f"a gap release would drag CHANGELOG out of sync"
+        )
     return False, ""
 
 
@@ -106,7 +148,7 @@ def active_release(latest_tag: str | None, window_hours: int) -> tuple[bool, str
         return False, ""
     date = _git_tag_date(latest_tag)
     if date is None:
-        return False, f"cannot determine creation date of tag {latest_tag}"
+        return True, f"cannot determine creation date of tag {latest_tag} (fail-closed)"
     age_hours = (time.time() - date) / 3600.0
     if age_hours < window_hours:
         return True, (
@@ -116,10 +158,28 @@ def active_release(latest_tag: str | None, window_hours: int) -> tuple[bool, str
     return False, ""
 
 
+def _is_stable_version_tag(tag: str) -> bool:
+    """Return True only for tags that parse as stable version tags (no prerelease)."""
+    if tag.startswith('v'):
+        tag_clean = tag[1:]
+    else:
+        tag_clean = tag
+    # Must not be prerelease
+    if '-' in tag_clean or '+' in tag_clean:
+        return False
+    # Must parse as dotted numeric version
+    if parse_version(tag) is None:
+        return False
+    # Also ensure it's a version-like tag (starts with digit after optional v)
+    if re.match(r'^v?\d+\.\d+', tag):
+        return True
+    return False
+
+
 def get_latest_stable_tag() -> str | None:
-    """Return the latest non-prerelease tag, or None."""
+    """Return the latest non-prerelease version tag, or None."""
     for tag in _git_tags():
-        if not is_prerelease(tag):
+        if _is_stable_version_tag(tag) and not is_prerelease(tag):
             return tag
     return None
 

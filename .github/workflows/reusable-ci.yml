@@ -441,8 +441,13 @@ jobs:
             exit 0
           fi
           echo "version bump: $base_version -> $proposed"
-          python tools/check_release_tag_gate.py --self-test
+          python tools/check_release_tag_gate.py --selftest
           python tools/check_release_tag_gate.py --version "$proposed"
+
+      - name: Tag version-gap gate regression
+        # Tag-time gap protection must stay tested on PRs too.
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
+        run: python tools/check_tag_version_gap.py --selftest
 
       - name: Changelog guard regression
         # The guard is only worth having if it can fail, so this runs its

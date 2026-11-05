@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from release_gate_shared import (
     REPO,
@@ -23,13 +24,34 @@ from release_gate_shared import (
 )
 
 
+def _is_stable_version_tag(tag: str) -> bool:
+    if tag.startswith("refs/tags/"):
+        tag = tag[len("refs/tags/"):]
+    if tag.startswith('v'):
+        tag_clean = tag[1:]
+    else:
+        tag_clean = tag
+    if '-' in tag_clean or '+' in tag_clean:
+        return False
+    if parse_version(tag) is None:
+        return False
+    if re.match(r'^v?\d+\.\d+', tag):
+        return True
+    return False
+
+
 def check_tag_version_gap(current_tag: str) -> int:
     """Return exit code: 0 = ok, 1 = gap, 2 = bad input."""
+    import re
     # Strip refs/tags/ prefix if present
     if current_tag.startswith("refs/tags/"):
         current_tag = current_tag[len("refs/tags/"):]
 
-    tags = _git_tags()
+    try:
+        tags = _git_tags()
+    except Exception as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
     if not tags:
         print("::notice::first release — no previous tag to compare")
         return 0
@@ -40,11 +62,13 @@ def check_tag_version_gap(current_tag: str) -> int:
     for tag in tags:
         if tag == current_tag:
             continue
+        if not _is_stable_version_tag(tag):
+            continue
         if is_prerelease(tag):
             continue
         tag_key = parse_version(tag)
         if tag_key is not None and current_key is not None and tag_key == current_key:
-            # Skip stable tag of the same version (e.g., current=v0.9.2-rc.1, tag=v0.9.2)
+            # Skip stable tag of the same version
             continue
         previous_tag = tag
         break
@@ -61,36 +85,54 @@ def check_tag_version_gap(current_tag: str) -> int:
         return 0
 
     if current_key <= previous_key:
-        print(f"::error::tag {current_tag} is not newer than previous tag {previous_tag} — refusing the version gap")
+        print(f"::error::tag {current_tag} is not newer than previous tag {previous_tag} — refusing the version gap", file=sys.stderr)
         return 1
+
+    # Enforce no version skipping
+    if len(current_key) >= 3 and len(previous_key) >= 3:
+        if current_key[0] == previous_key[0] and current_key[1] == previous_key[1]:
+            if current_key[2] != previous_key[2] + 1:
+                print(f"::error::tag {current_tag} skips from {previous_tag} (expected patch {previous_key[2]+1}) — refusing the version gap", file=sys.stderr)
+                return 1
+        elif current_key[0] == previous_key[0] and current_key[1] == previous_key[1] + 1 and current_key[2] == 0:
+            pass  # minor bump ok
+        elif current_key[0] == previous_key[0] + 1 and current_key[1] == 0 and current_key[2] == 0:
+            pass  # major bump ok
+        else:
+            print(f"::error::tag {current_tag} is not the next allowed release after {previous_tag} — refusing the version gap", file=sys.stderr)
+            return 1
 
     print(f"::notice::version gate ok — {current_tag} is newer than previous {previous_tag}")
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Tag-time version-gap check.")
-    parser.add_argument(
-        "--selftest",
-        action="store_true",
-        help="run deterministic unit cases and exit",
-    )
-    parser.add_argument(
-        "--version",
-        default=None,
-        help="override GITHUB_REF_NAME for testing",
-    )
-    args = parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser(description="Tag-time version-gap check.")
+        parser.add_argument(
+            "--selftest",
+            action="store_true",
+            help="run deterministic unit cases and exit",
+        )
+        parser.add_argument(
+            "--version",
+            default=None,
+            help="override GITHUB_REF_NAME for testing",
+        )
+        args = parser.parse_args()
 
-    if args.selftest:
-        return _selftest()
+        if args.selftest:
+            return _selftest()
 
-    current_tag = args.version or os.environ.get("GITHUB_REF_NAME")
-    if not current_tag:
-        print("::error::GITHUB_REF_NAME not set", file=sys.stderr)
+        current_tag = args.version or os.environ.get("GITHUB_REF_NAME")
+        if not current_tag:
+            print("::error::GITHUB_REF_NAME not set", file=sys.stderr)
+            return 1
+
+        return check_tag_version_gap(current_tag)
+    except Exception as exc:
+        print(f"::error::{exc}", file=sys.stderr)
         return 1
-
-    return check_tag_version_gap(current_tag)
 
 
 def _selftest() -> int:
