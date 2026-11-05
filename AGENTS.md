@@ -97,7 +97,7 @@ CI adds `tools/test_*.py`, citation integrity, install-scan parity, mypy, and ba
 | `hermes guide --json` is one stdout document; no update notice; `/hermes-doctor` stays text | [deep-ops.md](docs/agent/deep-ops.md#the-hermes-guide---json-document-phase-4-contract) |
 | Hooks default to in-process `check_hooks_readonly()` (executes nothing); `--deep` runs `hermes hooks doctor`, which executes approved hooks once; `--fast` wins when both are given | [deep-ops.md](docs/agent/deep-ops.md#read-only-always) |
 | Review threads: enumerate `reviewThreads`, reply with evidence, then resolve; `isOutdated` is not a fix | [review-ops.md](docs/agent/review-ops.md#reviewer-bot-threads) |
-| Reviewer order: primary finding bot clean → one CodeRabbit full review → both clean before merge | [review-ops.md](docs/agent/review-ops.md#review-sequence) |
+| Reviewer order: Qodo auto-reviews (never re-triggered per head); CodeRabbit full review once after Qodo clean, then incremental per head until clean | [review-ops.md](docs/agent/review-ops.md#review-sequence) |
 | Tone / no emoji / no filler | [CONTRIBUTING.md#tone](CONTRIBUTING.md#tone), `check_doc_style.py` |
 
 Never `git add -A`. Stage named paths. Platform facts: three claim tiers

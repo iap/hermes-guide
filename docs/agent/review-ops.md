@@ -60,22 +60,38 @@ way to decide "should I trigger?". Run it before posting any trigger command.
    check answers "is this head reviewed?"; the PR-wide history answers "has
    either bot ever reviewed this PR?" — the two manual-trigger conditions
    (Qodo silent, CodeRabbit full-review-once) need the history, not just the
-   head. A trigger already posted but not yet represented by a review or check
-   run also counts as pending, so check issue comments before any manual
+   head. Paginate every query: GitHub caps REST responses at 100 rows per page,
+   and an unpaginated query can silently miss the current head's review or a
+   recent pending trigger. Retain each review's commit, body, and state in the
+   history so a full review is distinguishable from an incremental one. A
+   trigger counts as pending for THIS head only if it was posted after the head
+   commit's committer date and its body is the command itself (a mention in
+   prose is not a request); require that the comment body starts with the
+   command and that a matching review or check-run record exists before
+   classifying a trigger as accepted. Check issue comments before any manual
    trigger:
 
        REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+       HEAD_SHA=$(gh pr view <PR> --json headRefOid -q .headRefOid)
+       HEAD_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.commit.committer.date')
        # Current-head state (per-head gate):
-       gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" \
-         --jq ".[] | select(.commit_id|startswith(\"$HEAD\")) | {user: .user.login, state, submitted_at}"
-       gh api "repos/$REPO/commits/$HEAD/check-runs?per_page=100" \
-         --jq ".check_runs[] | select(.name==\"CodeRabbit\") | {status, conclusion}"
-       # PR-wide history (never-reviewed / full-once decisions):
-       gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" \
-         --jq "[.[] | .user.login] | unique"
-       # Pending-trigger guard (an accepted trigger with no review yet):
-       gh api "repos/$REPO/issues/<PR>/comments?per_page=100" \
-         --jq ".[] | select(.body | test(\"@coderabbitai (full )?review|/agentic_review\")) | {user: .user.login, created_at}"
+       gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
+         --jq ".[] | select(.commit_id|startswith(\"$HEAD_SHA\")) | {user: .user.login, state, submitted_at}"
+       gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" --paginate \
+         --jq ".check_runs[] | select(.name==\"CodeRabbit\") | {status, conclusion, completed_at}"
+       # PR-wide history (never-reviewed / full-once decisions); body retained
+       # so a full review (@coderabbitai full review) is distinguishable from
+       # an incremental (@coderabbitai review):
+       gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
+         --jq "[.[] | {user: .user.login, commit: .commit_id[0:8], state, body: .body[0:80]}]"
+       # Pending-trigger guard: comments posted AFTER this head's committer
+       # date whose body IS the command (starts with it, not a prose mention).
+       # A trigger is pending only; classify as accepted only when a matching
+       # review row or completed check-run for this head also exists:
+       gh api "repos/$REPO/issues/<PR>/comments?per_page=100" --paginate \
+         --jq ".[] | select(.created_at > \"$HEAD_DATE\") \
+               | select(.body | test(\"^(@coderabbitai (full )?review|/agentic_review)([[:space:]]|$)\")) \
+               | {user: .user.login, created_at, body: .body[0:80]}" 
 
 3. Decide by this table — trigger only in the "trigger" rows:
 
