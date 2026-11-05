@@ -401,10 +401,12 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    `git ls-tree -d --name-only <upstream-head>:plugins/` against
    `PLUGIN_SUBCATEGORY_DIRS`. The guard proves every pinned name is real; only a
    human notices a *new* upstream sub-category the pin omits (docs/agent/deep-ops.md,
-   "Values that drift go in `constants.py`"). Then push the tag
-   `v<plugin.yaml version>` to master; `release.yml` verifies the tag matches
-   `plugin.yaml`, that the tagged commit is on master, and that every tag has
-   a section.
+   "Values that drift go in `constants.py`"). Then push an annotated, SSH-signed
+   tag (`git tag -s v<plugin.yaml version> master`, or `tag.gpgsign true`
+   locally — same SSH key as commit signing); `release.yml` verifies the tag
+   matches `plugin.yaml`, that the tagged commit is on master, that every tag
+   has a section, and that the tag is annotated + signed (verifier line first,
+   against `.github/allowed_signers`).
 4. Re-pin the upstream catalog listing. Its `sha` and `version` live in
    `plugin-catalog/hermes-guide.yaml` in `NousResearch/hermes-agent`, and they
    follow the tag, not the merge commit: `sha` is

@@ -37,6 +37,38 @@ jobs:
           fi
           echo "releasing $GITHUB_REF_NAME (matches plugin.yaml)"
 
+      - name: Tag must be annotated and signed
+        # A lightweight tag carries no signature; require an annotated,
+        # SSH-signed tag so every published release is verifiable
+        # (same key as commit signing; `tag.gpgsign true` locally).
+        # The verifier's verdict goes to stderr, the tag payload to stdout;
+        # capture stderr only (merged order is not reliable for large
+        # messages) and require its first line to be the verdict — an
+        # unsigned tag reports "error: no signature found" there.
+        run: |
+          object_type="$(git cat-file -t "$GITHUB_REF_NAME" 2>/dev/null || echo none)"
+          if [ "$object_type" != "tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME is $object_type, not an annotated tag — signed releases must be annotated"
+            exit 1
+          fi
+          git config gpg.ssh.allowedSignersFile .github/allowed_signers
+          verify_line="$(git tag -v "$GITHUB_REF_NAME" 2>&1 1>/dev/null | head -1)"
+          echo "$verify_line"
+          if ! echo "$verify_line" | grep -q '^Good "git" signature for '; then
+            echo "::error::tag $GITHUB_REF_NAME has no verifiable signature (first verifier line: $verify_line)"
+            exit 1
+          fi
+          # The signature covers the tag *object*; bind it to the ref name so
+          # a ref cannot point at a differently-named signed tag object.
+          # The `tag` header is always the 3rd line; read only that line
+          # (sed consumes the whole object, so no SIGPIPE under pipefail).
+          signed_tag_name="$(git cat-file tag "$GITHUB_REF_NAME" | sed -n '3s/^tag //p')"
+          if [ "$signed_tag_name" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::signed tag name $signed_tag_name does not match release ref $GITHUB_REF_NAME"
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME is annotated and signed"
+
       - name: Tagged commit must be on master with passing checks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
