@@ -434,12 +434,18 @@ jobs:
 
       - name: Release-tag gate — refuse duplicate or gap version
         # Core release-tag protection: refuses a bump whose proposed version is
-        # already tagged (duplicate) or not strictly newer than the latest tag
-        # (gap). Runs only on non-push events (PR/merge_group) when plugin.yaml
-        # version actually changes.
+        # already tagged (duplicate), not the next allowed release (gap), or
+        # while a previous release is still in flight (recent tag whose release
+        # is not confirmed published via `gh release view`). Runs only on
+        # non-push events (PR/merge_group) when plugin.yaml version actually
+        # changes.
         if: runner.os == 'Linux' && matrix.python-version == '3.11' && inputs.event-name != 'push'
         env:
           BASE_REF: ${{ inputs.base-ref }}
+          # The shared gate best-effort confirms the previous release's
+          # publication via `gh release view`; GH_TOKEN lets that read succeed.
+          # Unset or failing `gh` degrades to the age-only refusal.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           base_version="$(git show "$BASE_REF:plugin.yaml" | grep '^version:' | awk '{print $2}')"

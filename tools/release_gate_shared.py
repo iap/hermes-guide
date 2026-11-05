@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Shared utilities for release-tag gates (hermetic, stdlib-only)."""
+"""Shared utilities for release-tag gates.
+
+Stdlib-only git base, plus a best-effort read-only ``gh release view``
+lookup. "In flight" is: the newest tag is recent (within the window) AND its
+release has not been confirmed published. Tag age alone is a blunt proxy that
+refuses every follow-up bump inside the window even after the previous
+release fully published. When ``gh`` confirms a published release the tag is
+not in flight regardless of age; when ``gh`` is unavailable or cannot
+confirm, the guard falls back to the age-only refusal (fail closed, never
+open). The ``gh`` lookup can only ever *clear* an active flag it can prove,
+never raise one.
+"""
 
 from __future__ import annotations
 
@@ -32,6 +43,38 @@ def _run(*args: str) -> tuple[int, str]:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 127, str(exc)
     return proc.returncode, proc.stdout.strip()
+
+
+def _run_gh(*args: str) -> tuple[int, str]:
+    """Run a ``gh`` command, returning (returncode, stdout).
+
+    Used read-only (``release view``). A missing binary or a timeout must not
+    crash the guard, so both become a non-zero code; the caller treats that as
+    "publication unknown" and falls back to the age check.
+    """
+    try:
+        proc = subprocess.run(
+            ["gh", *args], capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return 127, ""
+    return proc.returncode, proc.stdout
+
+
+def _release_published(tag: str) -> bool | None:
+    """True if `tag` has a published GitHub release, else None.
+
+    One boolean-ish answer covers two distinct "not confirmed" cases, on
+    purpose: ``gh release view`` failing (no such release, or ``gh`` itself
+    unavailable) cannot distinguish "release not created yet" from "release
+    failed" from "no network" — and none of those prove the release is
+    finished. So any non-zero result is folded to None, and the caller falls
+    back to the age check. Only an unambiguous success (returncode 0) counts
+    as published. This keeps the lookup from ever widening the allow path
+    beyond what it can prove.
+    """
+    code, _ = _run_gh("release", "view", tag, "--json", "tagName")
+    return True if code == 0 else None
 
 
 def _git_tags() -> list[str]:
@@ -148,7 +191,14 @@ def version_gap(version: str, latest_tag: str | None) -> tuple[bool, str]:
 
 
 def active_release(latest_tag: str | None, window_hours: int) -> tuple[bool, str]:
-    """True if latest tag was created within the window."""
+    """True if a release is still in flight.
+
+    In flight = the tag is recent (within the window) AND its release has not
+    been confirmed published via ``gh release view``. A confirmed-published
+    release is complete regardless of age, so age alone must not refuse the
+    next bump. When publication cannot be confirmed (None), fall back to the
+    age-only refusal (fail closed, never open).
+    """
     if latest_tag is None:
         return False, ""
     date = _git_tag_date(latest_tag)
@@ -156,6 +206,11 @@ def active_release(latest_tag: str | None, window_hours: int) -> tuple[bool, str
         return True, f"cannot determine creation date of tag {latest_tag} (fail-closed)"
     age_hours = (time.time() - date) / 3600.0
     if age_hours < window_hours:
+        if _release_published(latest_tag) is True:
+            return False, (
+                f"NOTE: {latest_tag} is {age_hours:.1f}h old but its release "
+                f"is published — not treating as in flight"
+            )
         return True, (
             f"ACTIVE RELEASE: latest tag {latest_tag} was created "
             f"{age_hours:.1f}h ago (window {window_hours}h)"
