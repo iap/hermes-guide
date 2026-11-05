@@ -189,8 +189,12 @@ release-related change (the authoritative, always-current source is
    second one; run `python scripts/validate_plugin_catalog.py plugin-catalog` in
    that clone, then re-run `python tools/check_release_readiness.py` here.
 8. **Verify the release**: `release.yml` fails closed unless the tag matches
-   plugin.yaml, the tagged commit is on master, and every tag has a changelog
-   section. Confirm with `gh release view v<version>` after creation.
+   plugin.yaml, the tagged commit is on master, every tag has a changelog
+   section, and the tag is annotated + SSH-signed (verifier line first,
+   against `.github/allowed_signers`). Create the tag annotated and signed —
+   `git tag -s v<version> master` (local `tag.gpgsign true` makes this the
+   default; same SSH key as commit signing). Confirm with
+   `gh release view v<version>` after creation.
 
 The full procedure, including readiness verdicts and the drift audit, is
 [CONTRIBUTING.md#cutting-a-release](CONTRIBUTING.md#cutting-a-release). Deep-ops
