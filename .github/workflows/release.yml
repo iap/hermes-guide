@@ -58,6 +58,13 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME has no verifiable signature (first verifier line: $verify_line)"
             exit 1
           fi
+          # The signature covers the tag *object*; bind it to the ref name so
+          # a ref cannot point at a differently-named signed tag object.
+          signed_tag_name="$(git cat-file tag "$GITHUB_REF_NAME" | sed -n 's/^tag //p' | head -1)"
+          if [ "$signed_tag_name" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::signed tag name $signed_tag_name does not match release ref $GITHUB_REF_NAME"
+            exit 1
+          fi
           echo "tag $GITHUB_REF_NAME is annotated and signed"
 
       - name: Tagged commit must be on master with passing checks
