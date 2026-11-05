@@ -182,15 +182,26 @@ release-related change (the authoritative, always-current source is
 6. **Audit the one drift direction the guard cannot see** (docs/agent/deep-ops.md,
    "Values that drift go in `constants.py`"):
    `git ls-tree -d --name-only <upstream-head>:plugins/` vs PLUGIN_SUBCATEGORY_DIRS.
-7. **Tag and re-pin**: push `v<plugin.yaml version>` to master, then re-pin the
-   upstream catalog entry (NousResearch/hermes-agent,
+7. **Tag, verify, push, and re-pin**: create the tag annotated and signed —
+   `git tag -s v<plugin.yaml version> master` (local `tag.gpgsign true`
+   makes this the default; same SSH key as commit signing — if `git tag -s`
+   falls back to GPG or fails, configure `gpg.format=ssh` and
+   `user.signingkey` first). Set
+   `git config gpg.ssh.allowedSignersFile .github/allowed_signers`, then
+   run `git tag -v v<version> 1>/dev/null` and confirm its first (stderr)
+   line starts with `Good "git" signature for` — stdout carries the tag
+   payload, so an unredirected check can show `object ...` even for a valid
+   tag. Then push `v<plugin.yaml version>` to master,
+   then re-pin the upstream catalog entry (NousResearch/hermes-agent,
    `plugin-catalog/hermes-guide.yaml`): sha = `git rev-parse v<version>^{commit}`,
    version = tag without the `v`. Refresh an open pin PR rather than opening a
    second one; run `python scripts/validate_plugin_catalog.py plugin-catalog` in
    that clone, then re-run `python tools/check_release_readiness.py` here.
 8. **Verify the release**: `release.yml` fails closed unless the tag matches
-   plugin.yaml, the tagged commit is on master, and every tag has a changelog
-   section. Confirm with `gh release view v<version>` after creation.
+   plugin.yaml, the tagged commit is on master, every tag has a changelog
+   section, and the tag is annotated + SSH-signed (verifier line first,
+   against `.github/allowed_signers`). Confirm with
+   `gh release view v<version>` after creation.
 
 The full procedure, including readiness verdicts and the drift audit, is
 [CONTRIBUTING.md#cutting-a-release](CONTRIBUTING.md#cutting-a-release). Deep-ops
