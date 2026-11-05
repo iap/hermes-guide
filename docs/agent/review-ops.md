@@ -65,21 +65,24 @@ way to decide "should I trigger?". Run it before posting any trigger command.
    recent pending trigger. Retain each review's commit, body, and state in the
    history so a full review is distinguishable from an incremental one. A
    trigger counts as pending for THIS head only if it was posted after the
-   head reached the server (the earliest check-run on the head SHA, not
-   the mutable committer date) and its body is the command itself (a mention
-   in prose is not a request); require that the comment body starts with the
-   command and that a matching review or check-run record exists before
-   classifying a trigger as accepted. Check issue comments before any manual
-   trigger:
+   head boundary (the earlier of the head commit's committer date and the
+   earliest check-run on the head SHA) and its body is the command itself
+   (a mention in prose is not a request); require that the comment body
+   starts with the command and that a matching review or check-run record
+   exists before classifying a trigger as accepted. Check issue comments
+   before any manual trigger:
 
        REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
        HEAD_SHA=$(gh pr view <PR> --json headRefOid -q .headRefOid)
-       # Head boundary = earliest check-run created_at on the head SHA (the
-       # server-side push time); a commit's committer.date is mutable and can
-       # predate a previous head's trigger. Fall back to committer.date only
-       # when the head has no check runs.
-       HEAD_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" --paginate --jq '[.check_runs[].created_at] | min // empty' 2>/dev/null)
-       [ -n "$HEAD_DATE" ] || HEAD_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.commit.committer.date')
+       # Head boundary = the EARLIER of the head commit's committer date and
+       # the earliest check-run created_at on the head SHA. Either alone is
+       # wrong in one direction: committer.date can predate a previous head's
+       # trigger, and the first check-run (often CodeRabbit's own) can postdate
+       # a trigger sent before CI started. The earlier of the two never hides
+       # a trigger for this head.
+       COMMITTER_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.commit.committer.date')
+       CHECKRUN_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" --paginate --jq '[.check_runs[].created_at] | min // empty' 2>/dev/null)
+       if [ -n "$CHECKRUN_DATE" ] && [ "$CHECKRUN_DATE" < "$COMMITTER_DATE" ]; then HEAD_DATE="$CHECKRUN_DATE"; else HEAD_DATE="$COMMITTER_DATE"; fi
        # Current-head state (per-head gate):
        gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
          --jq ".[] | select(.commit_id|startswith(\"$HEAD_SHA\")) | {user: .user.login, state, submitted_at}"
