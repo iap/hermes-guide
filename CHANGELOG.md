@@ -2,6 +2,39 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.3 (2026-11-05)
+
+### Features
+
+- **release**: add shared logic module and release-tag protection gates ([#429](https://github.com/iap/hermes-guide/pull/429))
+- **release**: refuse bump on active or redundant release ([#428](https://github.com/iap/hermes-guide/pull/428))
+
+### Bug Fixes
+
+- address more Qodo findings
+- respect Qodo-first workflow in gate
+- address Qodo findings (outdated threads, coverage, help)
+- reduce reviewThreads first to 100
+
+### Documentation
+
+- finalise release-flow agent checklist ([#427](https://github.com/iap/hermes-guide/pull/427))
+- add missing pre-merge conditions per Qodo feedback
+- fix review trigger instructions per CodeRabbit feedback
+- strengthen mandatory pre-merge gate instructions
+
+### CI
+
+- remove script reference
+- fix cross-platform check in workflow
+
+### Chores
+
+- Merge pull request #426 from iap/docs/strengthen-merge-gate
+- remove pr review gate script
+- tools/check_pr_review_clean: harden against Qodo findings (head binding, both bots, pagination)
+- tools: add check_pr_review_clean.py to enforce bot review gate
+
 ## v0.9.2 (2026-11-04)
 
 ### Features
