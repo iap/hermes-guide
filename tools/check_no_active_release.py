@@ -31,6 +31,7 @@ treating it as "already released" would refuse every valid bump.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -134,13 +135,16 @@ def read_changelog_versions() -> list[str]:
 def _run_gh(*args: str) -> tuple[int, str]:
     """Run a ``gh`` command, returning (returncode, stdout).
 
-    Used read-only (``release view``). A missing binary or a timeout must not
-    crash the guard, so both become a non-zero code; the caller treats that as
-    "publication unknown" and falls back to the age check.
+    Used read-only (``release view``). Runs with ``cwd=REPO`` so ``gh``
+    resolves the same repository whose tags the gate reads — running from an
+    arbitrary directory could resolve a different repo's release of the same
+    tag name. A missing binary or a timeout must not crash the guard, so both
+    become a non-zero code; the caller treats that as "publication unknown"
+    and falls back to the age check.
     """
     try:
         proc = subprocess.run(
-            ["gh", *args], capture_output=True, text=True, timeout=30
+            ["gh", *args], capture_output=True, text=True, cwd=REPO, timeout=30
         )
     except (OSError, subprocess.TimeoutExpired):
         return 127, ""
@@ -155,12 +159,22 @@ def _release_published(tag: str) -> bool | None:
     unavailable) cannot distinguish "release not created yet" from "release
     failed" from "no network" — and none of those prove the release is
     finished. So any non-zero result is folded to None, and the caller falls
-    back to the age check. Only an unambiguous success (returncode 0) counts
-    as published. This keeps the lookup from ever widening the allow path
-    beyond what it can prove.
+    back to the age check. A *success* is not enough either: a draft release
+    is a successful lookup but is still unpublished. Only an explicitly
+    non-draft release with a publication timestamp counts as published.
     """
-    code, _ = _run_gh("release", "view", tag, "--json", "tagName")
-    return True if code == 0 else None
+    code, out = _run_gh(
+        "release", "view", tag, "--json", "isDraft,publishedAt"
+    )
+    if code != 0:
+        return None
+    try:
+        data = json.loads(out)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if isinstance(data, dict) and data.get("isDraft") is False and data.get("publishedAt"):
+        return True
+    return None
 
 
 def check_release_guard(

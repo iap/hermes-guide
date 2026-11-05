@@ -141,15 +141,26 @@ def test_recent_but_published_release_is_not_active():
 
 
 def test_release_published_maps_gh_exit():
-    """_release_published: gh exit 0 -> True; any failure -> None (unknown)."""
+    """_release_published: only a non-draft release with publishedAt -> True.
+
+    Exit 0 alone is not enough: a draft release is a successful lookup but is
+    unpublished. Failures and ambiguous/draft responses all -> None (unknown),
+    so the guard falls back to the age-only refusal.
+    """
     mod = _load_guard()
     old = mod._run_gh
     try:
-        mod._run_gh = lambda *a: (0, '{"tagName":"v0.9.2"}')
+        mod._run_gh = lambda *a: (0, '{"isDraft":false,"publishedAt":"2026-11-04T10:53:29Z"}')
         assert mod._release_published("v0.9.2") is True
+        mod._run_gh = lambda *a: (0, '{"isDraft":true,"publishedAt":null}')  # draft
+        assert mod._release_published("v0.9.3") is None
+        mod._run_gh = lambda *a: (0, '{"isDraft":false,"publishedAt":null}')  # no ts
+        assert mod._release_published("v0.9.2") is None
         mod._run_gh = lambda *a: (1, "")  # no such release / gh error
         assert mod._release_published("v9.9.9") is None
         mod._run_gh = lambda *a: (127, "")  # gh not installed
+        assert mod._release_published("v0.9.2") is None
+        mod._run_gh = lambda *a: (0, "not json")  # unparseable body
         assert mod._release_published("v0.9.2") is None
     finally:
         mod._run_gh = old

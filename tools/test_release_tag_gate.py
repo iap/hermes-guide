@@ -122,8 +122,12 @@ def test_recent_unknown_publication_still_refuses():
 
 def test_release_published_maps_gh_exit():
     rg = sys.modules['release_gate_shared']
-    with mock.patch.object(rg, '_run_gh', return_value=(0, '{"tagName":"v0.9.2"}')):
+    with mock.patch.object(rg, '_run_gh', return_value=(0, '{"isDraft":false,"publishedAt":"2026-11-04T10:53:29Z"}')):
         assert rg._release_published('v0.9.2') is True
+    with mock.patch.object(rg, '_run_gh', return_value=(0, '{"isDraft":true,"publishedAt":null}')):
+        assert rg._release_published('v0.9.3') is None  # draft, not published
+    with mock.patch.object(rg, '_run_gh', return_value=(0, '{"isDraft":false,"publishedAt":null}')):
+        assert rg._release_published('v0.9.2') is None  # no timestamp
     with mock.patch.object(rg, '_run_gh', return_value=(1, '')):
         assert rg._release_published('v9.9.9') is None
     with mock.patch.object(rg, '_run_gh', return_value=(127, '')):
