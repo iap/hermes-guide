@@ -101,8 +101,14 @@ def test_documented_version_is_not_refused(tmp_path):
 
 
 def test_check_release_guard_active_release():
-    """A tag created inside the window -> exit 1 (active release)."""
+    """A tag created inside the window -> exit 1 (active release).
+
+    Publication is unknown (None), so the guard falls back to the age-only
+    refusal. Deterministic: _release_published is stubbed so a real `gh`
+    in the environment cannot flip the verdict.
+    """
     mod = _load_guard()
+    mod._release_published = lambda tag: None
     mod.get_sorted_tags = lambda: ["v0.9.2", "v0.9.1"]
     mod.get_tag_dates = lambda: {
         "v0.9.2": time.time() - 3600,  # one hour ago
@@ -112,6 +118,42 @@ def test_check_release_guard_active_release():
     assert code == 1, evidence
     assert any("ACTIVE RELEASE" in e for e in evidence), evidence
     print("OK: active release refused")
+
+
+def test_recent_but_published_release_is_not_active():
+    """A recent tag whose release is confirmed published -> exit 0.
+
+    This is the false-positive fix: tag age alone must not refuse the next
+    bump once the previous release's publication is proven.
+    """
+    mod = _load_guard()
+    mod._release_published = lambda tag: True
+    mod.get_sorted_tags = lambda: ["v0.9.2", "v0.9.1"]
+    mod.get_tag_dates = lambda: {
+        "v0.9.2": time.time() - 18 * 3600,  # 18h ago, inside the 48h window
+        "v0.9.1": 0.0,
+    }
+    code, evidence = mod.check_release_guard(proposed_version="0.9.3", window_hours=48)
+    assert code == 0, evidence
+    assert any("not treating as in flight" in e for e in evidence), evidence
+    assert not any(e.startswith("ACTIVE RELEASE") for e in evidence), evidence
+    print("OK: recent-but-published release is not active")
+
+
+def test_release_published_maps_gh_exit():
+    """_release_published: gh exit 0 -> True; any failure -> None (unknown)."""
+    mod = _load_guard()
+    old = mod._run_gh
+    try:
+        mod._run_gh = lambda *a: (0, '{"tagName":"v0.9.2"}')
+        assert mod._release_published("v0.9.2") is True
+        mod._run_gh = lambda *a: (1, "")  # no such release / gh error
+        assert mod._release_published("v9.9.9") is None
+        mod._run_gh = lambda *a: (127, "")  # gh not installed
+        assert mod._release_published("v0.9.2") is None
+    finally:
+        mod._run_gh = old
+    print("OK: _release_published maps gh exit to True/None")
 
 
 def test_check_release_guard_empty_tags():
@@ -224,6 +266,8 @@ def main() -> int:
         test_check_release_guard_already_tagged()
         test_documented_version_is_not_refused(tmp_path)
         test_check_release_guard_active_release()
+        test_recent_but_published_release_is_not_active()
+        test_release_published_maps_gh_exit()
         test_check_release_guard_empty_tags()
         test_check_release_guard_unreadable_dates()
         test_get_tag_dates_parses_for_each_ref()

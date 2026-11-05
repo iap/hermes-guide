@@ -2,12 +2,22 @@
 """Release-guard for the action bot: refuse a version bump when a release is
 already active or the proposed version is a redundant (already-tagged) release.
 
-Hermetic gate (stdlib-only, no network). Runs before bumping the plugin version
-or re-pointing a tag, so a bump/repin can be refused if:
+Stdlib-only git base, plus a best-effort read-only ``gh release view``
+lookup. Runs before bumping the plugin version or re-pointing a tag, so a
+bump/repin can be refused if:
 
-  1. an ACTIVE release exists — a tag whose creation date is within the last
-     ``--window-hours`` (default 48h), so a release is still in flight; or
+  1. an ACTIVE release exists — a release still in flight; or
   2. the proposed version is already a git tag (a REDUNDANT release).
+
+"Still in flight" is: the newest tag is recent (within ``--window-hours``,
+default 48h) AND its release has not been confirmed published. Tag age alone
+is a blunt proxy — a release stays "recent" for the whole window after it is
+fully published, so age alone would refuse every follow-up bump inside it.
+When ``gh`` confirms the release is published the tag is not in flight
+regardless of age. When ``gh`` is unavailable or cannot confirm, the guard
+falls back to the age-only refusal (fail closed, never open). The ``gh``
+lookup can only ever *clear* an active flag it can prove, never raise one:
+it never widens the allow path beyond what it can verify.
 
 Verdict contract (like ``check_release_readiness.py``): exit 0 = safe to bump;
 exit 1 = refuse the bump/repin, with machine-readable evidence on stdout.
@@ -121,6 +131,38 @@ def read_changelog_versions() -> list[str]:
     return re.findall(r"^## v?(\d+\.\d+\.\d+)", text, re.MULTILINE)
 
 
+def _run_gh(*args: str) -> tuple[int, str]:
+    """Run a ``gh`` command, returning (returncode, stdout).
+
+    Used read-only (``release view``). A missing binary or a timeout must not
+    crash the guard, so both become a non-zero code; the caller treats that as
+    "publication unknown" and falls back to the age check.
+    """
+    try:
+        proc = subprocess.run(
+            ["gh", *args], capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return 127, ""
+    return proc.returncode, proc.stdout
+
+
+def _release_published(tag: str) -> bool | None:
+    """True if `tag` has a published GitHub release, else None.
+
+    One boolean-ish answer covers two distinct "not confirmed" cases, on
+    purpose: ``gh release view`` failing (no such release, or ``gh`` itself
+    unavailable) cannot distinguish "release not created yet" from "release
+    failed" from "no network" — and none of those prove the release is
+    finished. So any non-zero result is folded to None, and the caller falls
+    back to the age check. Only an unambiguous success (returncode 0) counts
+    as published. This keeps the lookup from ever widening the allow path
+    beyond what it can prove.
+    """
+    code, _ = _run_gh("release", "view", tag, "--json", "tagName")
+    return True if code == 0 else None
+
+
 def check_release_guard(
     proposed_version: str | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
@@ -149,11 +191,21 @@ def check_release_guard(
     now = datetime.now(timezone.utc).timestamp()
     age_hours = (now - latest_date) / 3600.0
     if age_hours < window_hours:
-        evidence.append(
-            f"ACTIVE RELEASE: latest tag {latest_tag} was created "
-            f"{age_hours:.1f}h ago (window {window_hours}h)"
-        )
-        exit_code = 1
+        # A recent tag is "in flight" only until its release is confirmed
+        # published. A published release is complete regardless of age, so
+        # age alone must not refuse the next bump. When publication cannot
+        # be confirmed (None), fall back to the age-only refusal.
+        if _release_published(latest_tag) is True:
+            evidence.append(
+                f"NOTE: {latest_tag} is {age_hours:.1f}h old but its "
+                f"release is published — not treating as in flight"
+            )
+        else:
+            evidence.append(
+                f"ACTIVE RELEASE: latest tag {latest_tag} was created "
+                f"{age_hours:.1f}h ago (window {window_hours}h)"
+            )
+            exit_code = 1
 
     # 2. Redundant release: the proposed version is already a tag.
     if proposed_version:

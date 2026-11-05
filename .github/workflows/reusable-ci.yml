@@ -392,8 +392,12 @@ jobs:
 
       - name: Release guard — refuse bump on active / redundant release
         # The refusal rule the action bot enforces: a version bump is refused
-        # while a release is active (latest tag created within --window-hours)
-        # or when the proposed version is already a tag (a redundant release).
+        # while a release is active (the newest tag is recent AND its release
+        # is not confirmed published via `gh release view`) or when the
+        # proposed version is already a tag (a redundant release). Age alone
+        # would refuse every follow-up bump inside the window even after the
+        # previous release fully published, so a confirmed-published release
+        # clears the in-flight flag; an unconfirmable one keeps the refusal.
         # Pre-merge only. On the post-merge push to master the merge has
         # already happened, so a refusal cannot stop anything -- and the
         # maintainer's `v*` tag push can land mid-run, which would make the
@@ -407,6 +411,10 @@ jobs:
           # caller-supplied text, and shell interpolation of it would be an
           # injection point.
           BASE_REF: ${{ inputs.base-ref }}
+          # The guard best-effort confirms the previous release's publication
+          # via `gh release view`; GH_TOKEN lets that read succeed. Unset or
+          # failing `gh` degrades to the age-only refusal, never to a pass.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           base_version="$(git show "$BASE_REF:plugin.yaml" | grep '^version:' | awk '{print $2}')"
