@@ -75,14 +75,18 @@ way to decide "should I trigger?". Run it before posting any trigger command.
        REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
        HEAD_SHA=$(gh pr view <PR> --json headRefOid -q .headRefOid)
        # Head boundary = the EARLIER of the head commit's committer date and
-       # the earliest check-run created_at on the head SHA. Either alone is
-       # wrong in one direction: committer.date can predate a previous head's
-       # trigger, and the first check-run (often CodeRabbit's own) can postdate
-       # a trigger sent before CI started. The earlier of the two never hides
-       # a trigger for this head.
+       # the earliest check-run started_at on the head SHA (check-run objects
+       # carry started_at, not created_at). Either alone is wrong in one
+       # direction: committer.date can predate a previous head's trigger, and
+       # the first check-run (often CodeRabbit's own) can postdate a trigger
+       # sent before CI started. The earlier of the two never hides a trigger
+       # for this head. gh applies --jq per page, so collect each page's
+       # minimum and take the smallest.
        COMMITTER_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.commit.committer.date')
-       CHECKRUN_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" --paginate --jq '[.check_runs[].created_at] | min // empty' 2>/dev/null)
-       if [ -n "$CHECKRUN_DATE" ] && [ "$CHECKRUN_DATE" < "$COMMITTER_DATE" ]; then HEAD_DATE="$CHECKRUN_DATE"; else HEAD_DATE="$COMMITTER_DATE"; fi
+       CHECKRUN_DATE=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
+         --paginate --jq '[.check_runs[].started_at] | min // empty' \
+         2>/dev/null | sort | head -1)
+       if [[ -n "$CHECKRUN_DATE" && "$CHECKRUN_DATE" < "$COMMITTER_DATE" ]]; then HEAD_DATE="$CHECKRUN_DATE"; else HEAD_DATE="$COMMITTER_DATE"; fi
        # Current-head state (per-head gate):
        gh api "repos/$REPO/pulls/<PR>/reviews?per_page=100" --paginate \
          --jq ".[] | select(.commit_id|startswith(\"$HEAD_SHA\")) | {user: .user.login, state, submitted_at}"
