@@ -3342,7 +3342,7 @@ def check_gateway_health():
         return {"status": "healthy", "reason": "gateway closed normally (no failures)",
                 "detail": detail + notes}
     if notes and not any(str(entry).startswith(("disconnect", "send failure", "receive failure", "gateway keepalive")) for entry in notes):
-        return {"status": "healthy", "reason": "no gateway failures (delegate timeouts only)",
+        return {"status": "informational", "reason": "no gateway failures (delegate timeouts only)",
                 "detail": detail + notes}
     return {"status": "informational", "reason": f"{len(notes)} past gateway disconnect(s)",
             "detail": detail + notes}

@@ -173,6 +173,8 @@ def main() -> int:
     ])
     if combined.get("status") != "broken":
         failures.append(f"combined case expected broken, got {combined}")
+    if not any("delegate timeout after 990.0s" in str(d) for d in (combined.get("detail") or [])):
+        failures.append(f"combined case missing delegate timeout: {combined.get('detail')}")
     if any("no gateway failure" in str(d) for d in (combined.get("detail") or [])):
         failures.append(f"combined case must not claim no gateway failure: {combined.get('detail')}")
 
