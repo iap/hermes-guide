@@ -141,6 +141,7 @@ SKILL_FOR_SCOPE = {
     "plugins": "diagnosing-plugins",
     "memories": "diagnosing-memory",
     "sessions": "diagnosing-triage",
+    "storage": "diagnosing-storage",
     "update": "diagnosing-update",
 }
 
