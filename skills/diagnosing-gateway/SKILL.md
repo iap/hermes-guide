@@ -60,7 +60,7 @@ WARNING tools.delegate_tool: Subagent 3 timed out after 990.0s
 Diagnosis: the client pings every 20s and expects a pong in 20s (`dashboard.ws_ping_interval/timeout`, websockets defaults). If the gateway event loop is blocked by one long call (API latency or a tool) for >20s, the ping starves and the client closes first; the gateway then fails to send the `subagent.list` answer. Check the ~120s before the disconnect for a blocking call:
 
 ```bash
-hermes logs -n 500 | grep -E "latency=([2-9][0-9]|100)|tool .* completed \(([2-9][0-9]|100)"
+hermes logs -n 500 | grep -E "latency=(2[0-9]|[3-9][0-9]|[0-9]{3,})|tool .* completed \(([2-9][0-9]|[0-9]{3,})s"
 hermes guide gateway
 ```
 

@@ -3189,11 +3189,11 @@ def check_gateway_health():
             "detail": None,
         }
     log_path = os.path.join(home, "logs", "agent.log")
-    if not os.path.exists(log_path):
-        return {"status": "healthy", "reason": "no agent activity logged yet (nothing to audit)",
-                "detail": log_path}
     try:
         lines = _read_log_tail(log_path, _GATEWAY_LOG_TAIL_LINES)
+    except FileNotFoundError:
+        return {"status": "healthy", "reason": "no agent activity logged yet (nothing to audit)",
+                "detail": log_path}
     except OSError as exc:
         return {
             "id": "GATEWAY_LOG_UNREADABLE",
@@ -3205,10 +3205,11 @@ def check_gateway_health():
     recent_from = len(tail) - _GATEWAY_RECENT_LINES
 
     disconnects = []  # (index, timestamp_or_none, peer, reason, messages)
-    send_failures = []  # (index, method_or_none)
+    send_failures = []  # (index, kind, method_or_none) kind is "send" or "receive"
     delegate_timeouts = []  # (index, seconds)
-    keepalive = False
+    keepalive_hits = []  # indexes of keepalive / ConnectionClosedError lines
     blocking = []  # (index, timestamp_or_none, seconds, kind)
+    now = datetime.datetime.now()
 
     for index, line in enumerate(tail):
         ts = _parse_log_timestamp(line)
@@ -3217,9 +3218,10 @@ def check_gateway_health():
             disconnects.append((index, ts, m.group(1), m.group(2), int(m.group(3))))
         m = _SEND_FAIL_RE.search(line)
         if m:
-            send_failures.append((index, m.group(4)))
+            # Group 1 is "response " or empty: both are send failures.
+            send_failures.append((index, "send", m.group(4)))
         if _RECEIVE_FAIL_RE.search(line):
-            send_failures.append((index, None))
+            send_failures.append((index, "receive", None))
         m = _DELEGATE_TIMEOUT_RE.search(line)
         if m:
             try:
@@ -3227,7 +3229,7 @@ def check_gateway_health():
             except ValueError:
                 pass
         if _KEEPALIVE_RE.search(line):
-            keepalive = True
+            keepalive_hits.append(index)
         m = _API_LATENCY_RE.search(line)
         if m:
             try:
@@ -3245,14 +3247,29 @@ def check_gateway_health():
             if tool_seconds >= _GATEWAY_BLOCKING_SECONDS:
                 blocking.append((index, ts, tool_seconds, "tool"))
 
-    if not disconnects and not send_failures and not delegate_timeouts and not keepalive:
+    if not disconnects and not send_failures and not delegate_timeouts and not keepalive_hits:
         return {"status": "healthy", "reason": "no gateway disconnects in recent log tail",
                 "detail": log_path}
+
+    def _is_recent(index, ts):
+        """A disconnect is recent by line position AND (when timestamped) not older than 7 days."""
+        if index < recent_from:
+            return False
+        if ts is not None and (now - ts).days > 7:
+            return False
+        return True
+
+    def _is_normal_close(reason):
+        """Normal TUI exits, never a failure."""
+        return "client_disconnect" in reason or "code=1000" in reason
 
     detail: list[str] = [log_path]
     broken: list[str] = []
     notes: list[str] = []
     for index, ts, peer, reason, messages in disconnects:
+        if _is_normal_close(reason):
+            notes.append(f"normal close peer={peer} reason={reason} messages={messages}")
+            continue
         aligned = False
         if ts is not None:
             for b_index, b_ts, seconds, kind in blocking:
@@ -3265,19 +3282,21 @@ def check_gateway_health():
         entry = f"disconnect peer={peer} reason={reason} messages={messages}"
         entry += " — aligned with a >20s blocking call (event-loop stall)" if aligned \
             else " — no >20s blocking call in the preceding 120s"
-        target = broken if index >= recent_from else notes
+        target = broken if _is_recent(index, ts) else notes
         target.append(entry)
 
-    for index, method in send_failures:
-        entry = f"send failure method={method}" if method else "receive failure"
+    for index, kind, method in send_failures:
+        if kind == "send":
+            entry = f"send failure method={method}" if method else "send failure"
+        else:
+            entry = "receive failure"
         (broken if index >= recent_from else notes).append(entry)
     for index, seconds in delegate_timeouts:
         entry = f"delegate timeout after {seconds}s"
         (broken if index >= recent_from else notes).append(entry)
-    if keepalive:
-        (broken if disconnects and disconnects[-1][0] >= recent_from else notes).append(
-            "keepalive ping timeout / ConnectionClosedError in log"
-        )
+    for index in keepalive_hits:
+        entry = "keepalive ping timeout / ConnectionClosedError in log"
+        (broken if index >= recent_from else notes).append(entry)
 
     if broken:
         return {
@@ -3286,6 +3305,9 @@ def check_gateway_health():
             "reason": f"{len(broken)} recent gateway disconnect(s)",
             "detail": detail + broken + notes,
         }
+    if notes and all(str(entry).startswith("normal close") for entry in notes):
+        return {"status": "healthy", "reason": "gateway closed normally (no failures)",
+                "detail": detail + notes}
     return {"status": "informational", "reason": f"{len(notes)} past gateway disconnect(s)",
             "detail": detail + notes}
 

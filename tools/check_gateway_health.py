@@ -24,12 +24,17 @@ def _load_checks():
     td = Path(tempfile.mkdtemp())
     pkg = td / "hermes_guide"
     pkg.mkdir()
-    for name in ("__init__.py", "checks.py", "constants.py"):
-        shutil.copy(REPO / name, pkg / name)
-    sys.path.insert(0, str(td))
-    from hermes_guide import checks
+    try:
+        for name in ("__init__.py", "checks.py", "constants.py"):
+            shutil.copy(REPO / name, pkg / name)
+        sys.path.insert(0, str(td))
+        from hermes_guide import checks
 
-    return checks
+        return checks
+    finally:
+        # Imported modules stay in memory; remove the temporary copy so the
+        # read-only wrapper leaves no package behind.
+        shutil.rmtree(td, ignore_errors=True)
 
 
 def main(argv: list[str]) -> int:

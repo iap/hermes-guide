@@ -259,9 +259,15 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_gateway_health.py
 
-      - name: Gateway health probe (hermetic)
+      - name: Gateway health probe (isolated home)
+        # Runs the wrapper with an isolated empty HERMES_HOME so the audit
+        # stays hermetic (no runner state). The fixture test above covers
+        # classification.
         if: inputs.run-full-gate
-        run: python tools/check_gateway_health.py
+        run: |
+          tmp_home="$(mktemp -d)"
+          HERMES_HOME="$tmp_home" python tools/check_gateway_health.py
+          rm -rf "$tmp_home"
 
       - name: Update lock regression test
         # Shim-loads checks.py with fixture lock dirs — no Hermes, no network.

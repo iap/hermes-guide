@@ -102,6 +102,41 @@ def main() -> int:
     if crash.get("status") != "healthy":
         failures.append(f"malformed case expected healthy, got {crash}")
 
+    # 6. Normal client close (code=1000) -> healthy, never broken.
+    normal = run([
+        "2026-11-06 22:19:01,494 INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=client_disconnect(code=1000,reason=) messages=12\n",
+    ])
+    if normal.get("status") != "healthy":
+        failures.append(f"normal close expected healthy, got {normal}")
+
+    # 7. Unreadable log (chmod 000) -> unknown GATEWAY_LOG_UNREADABLE.
+    unreadable = _home_with_log(["2026-11-06 22:19:01,494 INFO tui_gateway.ws: ws closed peer=x reason=receive_failed messages=1\n"])
+    try:
+        os.chmod(os.path.join(unreadable, "logs", "agent.log"), 0o000)
+        with patch.object(checks, "_hermes_home", return_value=unreadable):
+            result = checks.check_gateway_health()
+        if result.get("status") != "unknown" or result.get("id") != "GATEWAY_LOG_UNREADABLE":
+            failures.append(f"unreadable case expected unknown GATEWAY_LOG_UNREADABLE, got {result}")
+    finally:
+        try:
+            os.chmod(os.path.join(unreadable, "logs", "agent.log"), 0o644)
+        except OSError:
+            pass
+
+    # 7. Keepalive-only failure -> broken.
+    keepalive = run([
+        "2026-11-06 22:19:00,000 ERROR tui_gateway.ws: keepalive ping timeout\n",
+    ])
+    if keepalive.get("status") != "broken":
+        failures.append(f"keepalive-only expected broken, got {keepalive}")
+
+    # 8. Old (>7d) disconnect -> informational, not broken.
+    old = run([
+        "2026-10-20 22:19:01,494 INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=7\n",
+    ])
+    if old.get("status") != "informational":
+        failures.append(f"old disconnect expected informational, got {old}")
+
     if failures:
         print("FAIL:")
         for failure in failures:
