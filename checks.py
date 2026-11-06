@@ -3205,9 +3205,9 @@ def check_gateway_health():
     recent_from = len(tail) - _GATEWAY_RECENT_LINES
 
     disconnects = []  # (index, timestamp_or_none, peer, reason, messages)
-    send_failures = []  # (index, kind, method_or_none) kind is "send" or "receive"
-    delegate_timeouts = []  # (index, seconds)
-    keepalive_hits = []  # indexes of keepalive / ConnectionClosedError lines
+    send_failures = []  # (index, timestamp_or_none, kind, method_or_none) kind is "send" or "receive"
+    delegate_timeouts = []  # (index, timestamp_or_none, seconds)
+    keepalive_hits = []  # (index, timestamp_or_none) of keepalive / ConnectionClosedError lines
     blocking = []  # (index, timestamp_or_none, seconds, kind)
     now = datetime.datetime.now()
 
@@ -3219,17 +3219,17 @@ def check_gateway_health():
         m = _SEND_FAIL_RE.search(line)
         if m:
             # Group 1 is "response " or empty: both are send failures.
-            send_failures.append((index, "send", m.group(4)))
+            send_failures.append((index, ts, "send", m.group(4)))
         if _RECEIVE_FAIL_RE.search(line):
-            send_failures.append((index, "receive", None))
+            send_failures.append((index, ts, "receive", None))
         m = _DELEGATE_TIMEOUT_RE.search(line)
         if m:
             try:
-                delegate_timeouts.append((index, float(m.group(2))))
+                delegate_timeouts.append((index, ts, float(m.group(2))))
             except ValueError:
                 pass
         if _KEEPALIVE_RE.search(line):
-            keepalive_hits.append(index)
+            keepalive_hits.append((index, ts))
         m = _API_LATENCY_RE.search(line)
         if m:
             try:
@@ -3260,8 +3260,13 @@ def check_gateway_health():
         return True
 
     def _is_normal_close(reason):
-        """Normal TUI exits, never a failure."""
-        return "client_disconnect" in reason or "code=1000" in reason
+        """Normal TUI exits, never a failure. Only a websocket close code 1000
+        (normal closure) counts; other client_disconnect codes (e.g. 1009
+        oversized message) are abnormal."""
+        m = re.search(r"code=(\d+)", reason)
+        if m:
+            return m.group(1) == "1000"
+        return "client_disconnect" in reason
 
     detail: list[str] = [log_path]
     broken: list[str] = []
@@ -3285,24 +3290,24 @@ def check_gateway_health():
         target = broken if _is_recent(index, ts) else notes
         target.append(entry)
 
-    for index, kind, method in send_failures:
+    for index, ts, kind, method in send_failures:
         if kind == "send":
             entry = f"send failure method={method}" if method else "send failure"
         else:
             entry = "receive failure"
-        (broken if index >= recent_from else notes).append(entry)
-    for index, seconds in delegate_timeouts:
+        (broken if _is_recent(index, ts) else notes).append(entry)
+    for index, ts, seconds in delegate_timeouts:
         entry = f"delegate timeout after {seconds}s"
-        (broken if index >= recent_from else notes).append(entry)
-    for index in keepalive_hits:
+        (broken if _is_recent(index, ts) else notes).append(entry)
+    for index, ts in keepalive_hits:
         entry = "keepalive ping timeout / ConnectionClosedError in log"
-        (broken if index >= recent_from else notes).append(entry)
+        (broken if _is_recent(index, ts) else notes).append(entry)
 
     if broken:
         return {
             "id": "GATEWAY_HEALTH_ISSUES",
             "status": "broken",
-            "reason": f"{len(broken)} recent gateway disconnect(s)",
+            "reason": f"{len(broken)} recent gateway failure log entries",
             "detail": detail + broken + notes,
         }
     if notes and all(str(entry).startswith("normal close") for entry in notes):

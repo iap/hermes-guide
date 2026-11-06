@@ -170,7 +170,7 @@ If none of the above resolves the issue:
 
 When a deep dive spawns subagents (`delegate_task`), keep the swarm cheap enough to keep the gateway loop responsive:
 
-- **Concurrency:** at most 6 children (`tasks[]` max 6); children can delegate further to depth 2 only. Fewer, more specific children finish sooner and expose the gateway to fewer polls.
+- **Concurrency:** keep delegations focused — roughly six children (`tasks[]`) and nesting depth of two. Hermes enforces the configured `delegation.max_concurrent_children` and `delegation.max_spawn_depth` values; the caps above are recommendations to finish sooner and expose the gateway to fewer polls, not hard limits.
 - **Poll cadence:** while busy, the TUI monitor polls `subagent.list` at most once a second. A dead connection surfaces first as `ws response send failed … method=subagent.list` — see `diagnosing-gateway` §3b; `hermes guide gateway` reports the disconnect and message count.
 - **Timeout budget:** a 990s timeout was observed on the installed Hermes (2026-11-06), but the pinned Hermes has no child-timeout default — an optional configured timeout is an inactivity cap. Diagnose a timed-out delegate by checking child progress (last API call / tool) and the configured timeout, not a presumed default. Prefer explicit, short budgets per task and re-run with narrower `goal`/`context` instead of raising the deadline.
 - **Context budget:** keep per-turn input tokens small. A 60–80k input context makes single API calls block the gateway loop for >20s and starves keepalive pings (see `diagnosing-gateway` §3b). Pass file paths, not file contents, in `context`; let the child read what it needs.

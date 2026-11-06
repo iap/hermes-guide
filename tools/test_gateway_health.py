@@ -16,6 +16,7 @@ Run: python3 tools/test_gateway_health.py
 
 from __future__ import annotations
 
+import datetime
 import os
 import shutil
 import sys
@@ -57,14 +58,19 @@ def main() -> int:
         with patch.object(checks, "_hermes_home", return_value=home):
             return checks.check_gateway_health()
 
+    def ts_line(offset_seconds, suffix):
+        dt = datetime.datetime.now() - datetime.timedelta(seconds=offset_seconds)
+        return f"{dt.strftime('%Y-%m-%d %H:%M:%S')},000 {suffix}\n"
+
     # 1. Recent disconnect aligned with a >20s blocking call -> broken+aligned.
+    # Fixture timestamps derive from the test clock so "recent" never ages out.
     aligned = run([
-        "2026-11-06 22:17:31,403 INFO [s1] agent.tool_executor: tool terminal completed (204.11s, 243 chars)\n",
-        "2026-11-06 22:18:57,888 INFO [s1] agent.conversation_loop: API call #40: model=x in=62059 latency=46.7s id=a\n",
-        "2026-11-06 22:19:00,727 WARNING tui_gateway.ws: ws send failed peer=127.0.0.1:61582 error_type=WebSocketDisconnect error=\n",
-        "2026-11-06 22:19:00,744 WARNING tui_gateway.ws: ws response send failed peer=127.0.0.1:61582 id=1056 method=subagent.list\n",
-        "2026-11-06 22:19:00,776 ERROR tui_gateway.ws: ws receive failed peer=127.0.0.1:61582\n",
-        "2026-11-06 22:19:01,494 INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=1056 parse_errors=0\n",
+        ts_line(90, "INFO [s1] agent.tool_executor: tool terminal completed (204.11s, 243 chars)"),
+        ts_line(4, "INFO [s1] agent.conversation_loop: API call #40: model=x in=62059 latency=46.7s id=a"),
+        ts_line(2, "WARNING tui_gateway.ws: ws send failed peer=127.0.0.1:61582 error_type=WebSocketDisconnect error="),
+        ts_line(2, "WARNING tui_gateway.ws: ws response send failed peer=127.0.0.1:61582 id=1056 method=subagent.list"),
+        ts_line(2, "ERROR tui_gateway.ws: ws receive failed peer=127.0.0.1:61582"),
+        ts_line(1, "INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=1056 parse_errors=0"),
     ])
     if aligned.get("status") != "broken":
         failures.append(f"aligned case expected broken, got {aligned}")
@@ -78,8 +84,8 @@ def main() -> int:
 
     # 2. Disconnect without a preceding blocking call -> broken without aligned.
     plain = run([
-        "2026-11-06 22:19:00,744 WARNING tui_gateway.ws: ws response send failed peer=127.0.0.1:61582 id=7 method=subagent.list\n",
-        "2026-11-06 22:19:01,494 INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=7\n",
+        ts_line(2, "WARNING tui_gateway.ws: ws response send failed peer=127.0.0.1:61582 id=7 method=subagent.list"),
+        ts_line(1, "INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=7"),
     ])
     if plain.get("status") != "broken":
         failures.append(f"plain disconnect expected broken, got {plain}")
@@ -87,8 +93,22 @@ def main() -> int:
     if any("aligned" in str(d) for d in detail):
         failures.append(f"plain case must not claim alignment: {detail}")
 
+    # 2b. Disconnect-only (no send failure) -> still broken.
+    alone = run([
+        ts_line(1, "INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=42"),
+    ])
+    if alone.get("status") != "broken":
+        failures.append(f"disconnect-only expected broken, got {alone}")
+
+    # 2c. Non-1000 client_disconnect (code 1009) -> abnormal (broken).
+    abnormal = run([
+        ts_line(1, "INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=client_disconnect(code=1009,reason=) messages=12"),
+    ])
+    if abnormal.get("status") != "broken":
+        failures.append(f"code-1009 close expected broken, got {abnormal}")
+
     # 3. Quiet log -> healthy.
-    quiet = run(["2026-11-06 22:00:00,000 INFO run_agent: OpenAI client closed ok\n"])
+    quiet = run([ts_line(10, "INFO run_agent: OpenAI client closed ok")])
     if quiet.get("status") != "healthy":
         failures.append(f"quiet case expected healthy, got {quiet}")
 
@@ -104,15 +124,15 @@ def main() -> int:
 
     # 6. Normal client close (code=1000) -> healthy, never broken.
     normal = run([
-        "2026-11-06 22:19:01,494 INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=client_disconnect(code=1000,reason=) messages=12\n",
+        ts_line(1, "INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=client_disconnect(code=1000,reason=) messages=12"),
     ])
     if normal.get("status") != "healthy":
         failures.append(f"normal close expected healthy, got {normal}")
 
-    # 6b. Unreadable log (POSIX chmod 000) -> unknown GATEWAY_LOG_UNREADABLE.
-    # Windows ACLs ignore chmod 000, so this case is POSIX-only.
-    if os.name != "nt":
-        unreadable = _home_with_log(["2026-11-06 22:19:01,494 INFO tui_gateway.ws: ws closed peer=x reason=receive_failed messages=1\n"])
+    # 6b. Unreadable log (POSIX chmod 000, non-root) -> unknown GATEWAY_LOG_UNREADABLE.
+    # Windows ACLs ignore chmod 000, and root bypasses permissions; POSIX-only.
+    if os.name != "nt" and getattr(os, "geteuid", None) is not None and os.geteuid() != 0:
+        unreadable = _home_with_log([ts_line(1, "INFO tui_gateway.ws: ws closed peer=x reason=receive_failed messages=1")])
         try:
             os.chmod(os.path.join(unreadable, "logs", "agent.log"), 0o000)
             with patch.object(checks, "_hermes_home", return_value=unreadable):
@@ -127,14 +147,14 @@ def main() -> int:
 
     # 7. Keepalive-only failure -> broken.
     keepalive = run([
-        "2026-11-06 22:19:00,000 ERROR tui_gateway.ws: keepalive ping timeout\n",
+        ts_line(1, "ERROR tui_gateway.ws: keepalive ping timeout"),
     ])
     if keepalive.get("status") != "broken":
         failures.append(f"keepalive-only expected broken, got {keepalive}")
 
     # 8. Old (>7d) disconnect -> informational, not broken.
     old = run([
-        "2026-10-20 22:19:01,494 INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=7\n",
+        ts_line(8 * 86400, "INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=7"),
     ])
     if old.get("status") != "informational":
         failures.append(f"old disconnect expected informational, got {old}")
