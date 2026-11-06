@@ -142,6 +142,7 @@ SKILL_FOR_SCOPE = {
     "memories": "diagnosing-memory",
     "sessions": "diagnosing-triage",
     "update": "diagnosing-update",
+    "gateway": "diagnosing-gateway",
 }
 
 # Near-duplicate detection budget: entries beyond this count skip the pairwise

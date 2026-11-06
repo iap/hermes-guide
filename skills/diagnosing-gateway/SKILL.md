@@ -1,7 +1,7 @@
 ---
 name: diagnosing-gateway
 description: Diagnose Hermes gateway and messaging platform issues — bot not responding, platform allowlist confusion, token validation, gateway connectivity, and multi-platform setup.
-version: 1.1.10
+version: 1.1.11
 metadata:
   hermes:
     tags: [hermes, gateway, messaging, troubleshooting]
@@ -44,6 +44,27 @@ Separately from platforms, Hermes manages named third-party accounts via Nous Po
 6. **Bot responds twice** — (a) duplicate gateway processes; (b) platform retry on timeout. → Check `launchctl list | grep -i hermes` (macOS); kill duplicate processes; check platform retry settings.
 7. **Voice messages not transcribing on Telegram** — ffmpeg unavailable. → See `diagnosing-voice` for the ffmpeg restore (`hermes pm install ffmpeg` on a PM-era install, system package manager on an older checkout); restart the gateway afterward.
 8. **Gateway not persisting across reboots** — (a) no launchd/systemd service; (b) gateway not set to auto-start. → Create launchd plist (macOS) or systemd service (Linux) — on Windows use `hermes gateway install` (schtasks ONLOGON; see `diagnosing-cli-tui`); enable auto-start.
+
+## 3b. Keepalive / websocket timeouts (the 1011 signature)
+
+Symptom: the TUI shows `ConnectionClosedError: sent 1011 (internal error) keepalive ping timeout` while a delegate/subagent is running (e.g. during `subagent.list` polling), and `hermes logs` shows the matching server lines:
+
+```
+WARNING tui_gateway.ws: ws send failed peer=127.0.0.1:61582 error_type=WebSocketDisconnect
+WARNING tui_gateway.ws: ws response send failed peer=127.0.0.1:61582 id=1056 method=subagent.list
+ERROR tui_gateway.ws: ws receive failed peer=127.0.0.1:61582
+INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=1056 ...
+WARNING tools.delegate_tool: Subagent 3 timed out after 990.0s
+```
+
+Diagnosis: the client pings every 20s and expects a pong in 20s (`dashboard.ws_ping_interval/timeout`, websockets defaults). If the gateway event loop is blocked by one long call (API latency or a tool) for >20s, the ping starves and the client closes first; the gateway then fails to send the `subagent.list` answer. Check the ~120s before the disconnect for a blocking call:
+
+```bash
+hermes logs -n 500 | grep -E "latency=([2-9][0-9]|100)|tool .* completed \(([2-9][0-9]|100)"
+hermes guide gateway
+```
+
+`hermes guide gateway` (`check_gateway_health`) reports the last disconnect reason, message count, and whether a >20s blocking call aligns within 120s. Fix: shrink the delegate context and retry (large input tokens make single API calls block the loop), avoid free-tier auxiliary chains (429 rate limits add seconds inside the loop), and `hermes gateway restart` only after the blocking call clears. Do not raise delegate timeouts to compensate — a hung child keeps the dead connection held. See `diagnosing-runtime` § Step 7 for delegate budgets.
 
 ## 4. Localization workflow
 
@@ -107,4 +128,4 @@ Run `hermes gateway start` to start the gateway, then verify with `hermes gatewa
 - `hermes_cli/gateway.py` — gateway CLI commands
 - `hermes_cli/platforms/` — platform-specific adapters
 
-*Facts re-verified 2026-09-28 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/gateway.py`, `hermes_cli/platforms/`; plus the official docs (hermes-agent.nousresearch.com/docs/user-guide/messaging/). Connectors section verified 2026-10-15 against the installed CLI (`hermes connectors`: list/accounts/connect/rename/disconnect). Re-verify before reuse.*
+*Facts re-verified 2026-11-06 against the installed Hermes (v0.22.5, `tui_gateway/ws.py` per-connection task reads, `gateway_client` websocket defaults; `hermes logs` keepalive signature) and this repo's `check_gateway_health` in `checks.py`; earlier verification 2026-09-28 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667` (`hermes_cli/gateway.py`, `hermes_cli/platforms/`). Connectors section verified 2026-10-15 against the installed CLI (`hermes connectors`: list/accounts/connect/rename/disconnect). Re-verify before reuse.*

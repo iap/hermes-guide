@@ -1,8 +1,8 @@
 name: hermes-guide
 version: 0.9.3
 description: >-
-  Self-diagnosis for Hermes: health checks across `config`, `mcp`, `skills`,
-  `commands`, `hooks`, `plugins`, `memories`, `sessions`, `storage`, and `update`, plus
+  Hermes self-diagnosis: health checks across `config`, `mcp`, `skills`,
+  `commands`, `hooks`, `plugins`, `memories`, `sessions`, `storage`, `update`, and `gateway`, plus
   playbooks in the tap; read-only.
 manifest_version: 1
 api_version: 1
