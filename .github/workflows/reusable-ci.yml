@@ -254,6 +254,15 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_session_health.py
 
+      - name: Gateway health regression test
+        # Shim-loads checks.py with fixture logs — no Hermes, no network.
+        if: inputs.run-full-gate
+        run: python tools/test_gateway_health.py
+
+      - name: Gateway health probe (hermetic)
+        if: inputs.run-full-gate
+        run: python tools/check_gateway_health.py
+
       - name: Update lock regression test
         # Shim-loads checks.py with fixture lock dirs — no Hermes, no network.
         if: inputs.run-full-gate
