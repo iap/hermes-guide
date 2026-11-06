@@ -152,6 +152,27 @@ def main() -> int:
     if keepalive.get("status") != "broken":
         failures.append(f"keepalive-only expected broken, got {keepalive}")
 
+    # 7b. Bedrock ConnectionClosedError (no gateway signature) -> healthy.
+    bedrock = run([
+        ts_line(1, "ERROR bedrock.client: ConnectionClosedError: upstream closed"),
+    ])
+    if bedrock.get("status") != "healthy":
+        failures.append(f"bedrock case expected healthy, got {bedrock}")
+
+    # 7c. Standalone delegate timeout (no gateway failure) -> healthy/informational, never broken.
+    standalone = run([
+        ts_line(1, "WARNING tools.delegate_tool: Subagent 3 timed out after 990.0s"),
+    ])
+    if standalone.get("status") == "broken":
+        failures.append(f"standalone timeout must not be broken, got {standalone}")
+
+    # 7d. Malformed timeout seconds -> unknown, never healthy.
+    malformed_timeout = run([
+        ts_line(1, "WARNING tools.delegate_tool: Subagent 3 timed out after 1.2.3s"),
+    ])
+    if malformed_timeout.get("status") != "unknown":
+        failures.append(f"malformed timeout expected unknown, got {malformed_timeout}")
+
     # 8. Old (>7d) disconnect -> informational, not broken.
     old = run([
         ts_line(8 * 86400, "INFO tui_gateway.ws: ws closed peer=127.0.0.1:61582 reason=receive_failed messages=7"),

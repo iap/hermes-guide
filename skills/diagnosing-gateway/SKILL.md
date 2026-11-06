@@ -64,7 +64,7 @@ hermes logs -n 500 | grep -E "latency=(2[0-9]|[3-9][0-9]|[0-9]{3,})|tool .* comp
 hermes guide gateway
 ```
 
-`hermes guide gateway` (`check_gateway_health`) reports the last disconnect reason, message count, and whether a >20s blocking call aligns within 120s. Alignment is correlation, not proof of which thread was executing or that the event loop stalled (child conversations run on a worker thread); require independent evidence of a gateway-loop stall before attributing a disconnect to API latency or context size. Fix: shrink the delegate context and retry (large input tokens make single API calls block the loop), avoid free-tier auxiliary chains (429 rate limits add seconds inside the loop), and `hermes gateway restart` only after the blocking call clears. Do not raise delegate timeouts to compensate — a hung child keeps the dead connection held. See `diagnosing-runtime` § Step 7 for delegate budgets.
+`hermes guide gateway` (`check_gateway_health`) reports the last disconnect reason, message count, and whether a >20s blocking call aligns within 120s. Alignment is correlation, not proof of which thread was executing or that the event loop stalled — gateway turns run in an executor thread, so a slow provider call or large input alone does not establish a loop stall; require independent stall evidence before attributing the disconnect to it. Fix: shrink the delegate context and retry (smaller contexts shorten child work and API cost), avoid free-tier auxiliary chains (429 rate limits add seconds), and `hermes gateway restart` only after the blocking call clears. Do not raise delegate timeouts to compensate — a hung child keeps the dead connection held. See `diagnosing-runtime` § Step 7 for delegate budgets.
 
 ## 4. Localization workflow
 
