@@ -262,8 +262,8 @@ jobs:
       - name: Gateway health probe (isolated home)
         # Runs the wrapper with an isolated empty HERMES_HOME so the audit
         # stays hermetic (no runner state). The fixture test above covers
-        # classification.
-        if: inputs.run-full-gate
+        # classification. Bash-only on POSIX; Windows runs the fixture test.
+        if: inputs.run-full-gate && runner.os == 'Linux'
         run: |
           tmp_home="$(mktemp -d)"
           HERMES_HOME="$tmp_home" python tools/check_gateway_health.py
