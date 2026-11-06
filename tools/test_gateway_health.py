@@ -109,19 +109,21 @@ def main() -> int:
     if normal.get("status") != "healthy":
         failures.append(f"normal close expected healthy, got {normal}")
 
-    # 7. Unreadable log (chmod 000) -> unknown GATEWAY_LOG_UNREADABLE.
-    unreadable = _home_with_log(["2026-11-06 22:19:01,494 INFO tui_gateway.ws: ws closed peer=x reason=receive_failed messages=1\n"])
-    try:
-        os.chmod(os.path.join(unreadable, "logs", "agent.log"), 0o000)
-        with patch.object(checks, "_hermes_home", return_value=unreadable):
-            result = checks.check_gateway_health()
-        if result.get("status") != "unknown" or result.get("id") != "GATEWAY_LOG_UNREADABLE":
-            failures.append(f"unreadable case expected unknown GATEWAY_LOG_UNREADABLE, got {result}")
-    finally:
+    # 6b. Unreadable log (POSIX chmod 000) -> unknown GATEWAY_LOG_UNREADABLE.
+    # Windows ACLs ignore chmod 000, so this case is POSIX-only.
+    if os.name != "nt":
+        unreadable = _home_with_log(["2026-11-06 22:19:01,494 INFO tui_gateway.ws: ws closed peer=x reason=receive_failed messages=1\n"])
         try:
-            os.chmod(os.path.join(unreadable, "logs", "agent.log"), 0o644)
-        except OSError:
-            pass
+            os.chmod(os.path.join(unreadable, "logs", "agent.log"), 0o000)
+            with patch.object(checks, "_hermes_home", return_value=unreadable):
+                result = checks.check_gateway_health()
+            if result.get("status") != "unknown" or result.get("id") != "GATEWAY_LOG_UNREADABLE":
+                failures.append(f"unreadable case expected unknown GATEWAY_LOG_UNREADABLE, got {result}")
+        finally:
+            try:
+                os.chmod(os.path.join(unreadable, "logs", "agent.log"), 0o644)
+            except OSError:
+                pass
 
     # 7. Keepalive-only failure -> broken.
     keepalive = run([
