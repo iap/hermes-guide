@@ -186,7 +186,8 @@ def test_malformed_lines_never_crash():
 def test_sessions_label_registered():
     checks = _load_checks()
     assert "sessions" in checks.labels()
-    assert len(checks.labels()) == 10
+    assert "gateway" in checks.labels()
+    assert len(checks.labels()) == 11
 
 
 def test_repair_signature_without_free_model():
