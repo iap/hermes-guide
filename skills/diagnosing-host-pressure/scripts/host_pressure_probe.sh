@@ -217,7 +217,9 @@ if ps -Ao stat >/dev/null 2>&1; then
   # A single blocked process is routine (any process can stall on one fsync),
   # so a lone D must not redirect the whole diagnosis. Escalate on a cluster,
   # or on one blocker when the box is already running well past its core count.
-  if [ "${d:-0}" -ge 3 ] || { [ "${d:-0}" -ge 1 ] && [ "${r:-0}" -ge $(( ${cores:-1} * 2 )) ]; }; then
+  # The runnable threshold needs a real core count: with cores unknown,
+  # ${cores:-1} would invent a 2-process bar that a healthy large host clears.
+  if [ "${d:-0}" -ge 3 ] || { [ "${d:-0}" -ge 1 ] && [ -n "${cores:-}" ] && [ "${r:-0}" -ge $(( cores * 2 )) ]; }; then
     echo "  >> $d io-blocked proc(s) with r=$r on ${cores:-?} core(s): storage is stalling."
     echo "  >> This inflates load. Do the resource work before Hermes-side fixes."
     verdict=1

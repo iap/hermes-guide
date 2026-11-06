@@ -512,6 +512,17 @@ def main() -> int:
     _check("no pressure verdict without trigger", "HOST PRESSURE DETECTED" not in f["out"])
     shutil.rmtree(f["td"], ignore_errors=True)
 
+    # Unknown cores + 1 D + 2 R must stay inconclusive: the single-blocker
+    # runnable threshold needs a real core count, not the ${cores:-1}
+    # fallback (which would invent a 2-process bar on any host).
+    f = _fixture(os_name="Darwin", cores="", load="1",
+                 top_line="CPU usage: 2.00% user, 3.00% sys, 95.00% idle",
+                 states=["S", "S", "S", "R", "R", "D"],
+                 swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+    _check("unknown cores + 1D + 2R stays inconclusive (rc=2)", f["rc"] == 2, f"rc={f['rc']}")
+    _check("no false storage verdict on unknown cores", "storage is stalling" not in f["out"])
+    shutil.rmtree(f["td"], ignore_errors=True)
+
     # Historical log residue must never assert a platform is down/misconfigured,
     # and must never set a verdict on its own.
     late = (
