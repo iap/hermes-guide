@@ -3249,9 +3249,9 @@ def check_gateway_health():
         return {"status": "healthy", "reason": "no gateway disconnects in recent log tail",
                 "detail": log_path}
 
-    detail = [log_path]
-    broken = []
-    notes = []
+    detail: list[str] = [log_path]
+    broken: list[str] = []
+    notes: list[str] = []
     for index, ts, peer, reason, messages in disconnects:
         aligned = False
         if ts is not None:
