@@ -488,6 +488,30 @@ def main() -> int:
     _check("three D processes IS a verdict", f["rc"] == 1, f"rc={f['rc']}")
     shutil.rmtree(f["td"], ignore_errors=True)
 
+    # Dual condition: cores unavailable (inconclusive) + three D processes
+    # (measured pressure). Measured pressure must win: the probe exits 1,
+    # not 2, and names the missing signals so a reader does not treat the
+    # run as fully healthy.
+    f = _fixture(os_name="Darwin", cores="", load="1",
+                 top_line="CPU usage: 2.00% user, 3.00% sys, 95.00% idle",
+                 states=["S", "S", "R", "R", "D", "D", "D"],
+                 swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+    _check("measured pressure beats inconclusive (rc=1)", f["rc"] == 1, f"rc={f['rc']}")
+    _check("dual-condition NOTE names missing signals",
+           "NOTE: some signals were unavailable, but measured pressure still stands." in f["out"])
+    shutil.rmtree(f["td"], ignore_errors=True)
+
+    # Negative control: same unknown-cores fixture without a verdict trigger
+    # must stay inconclusive (exit 2), proving the dual case above is not a
+    # vacuous pass from the inconclusive path alone.
+    f = _fixture(os_name="Darwin", cores="", load="1",
+                 top_line="CPU usage: 2.00% user, 3.00% sys, 95.00% idle",
+                 states=["S", "S", "S", "R", "D"],
+                 swapusage="total = 0.00M  used = 0.00M  free = 0.00M")
+    _check("unknown cores without pressure stays inconclusive (rc=2)", f["rc"] == 2, f"rc={f['rc']}")
+    _check("no pressure verdict without trigger", "HOST PRESSURE DETECTED" not in f["out"])
+    shutil.rmtree(f["td"], ignore_errors=True)
+
     # Historical log residue must never assert a platform is down/misconfigured,
     # and must never set a verdict on its own.
     late = (

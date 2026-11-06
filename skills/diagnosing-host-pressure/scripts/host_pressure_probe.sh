@@ -408,17 +408,20 @@ if [ $((t_end - t_start)) -ge "$stall_limit" ]; then
 fi
 
 hr
-if [ "$inconclusive" = "1" ]; then
-  echo "RESULT: INCONCLUSIVE on this host (some signals unavailable) — read the partial"
-  echo "output above. An unavailable signal is NOT evidence of a healthy host."
-  exit 2
-elif [ "$verdict" = "1" ]; then
+if [ "$verdict" = "1" ]; then
   echo "RESULT: HOST PRESSURE DETECTED (from this run's live measurements)."
   echo "Hermes-side fixes (config, tokens, plugin enablement) will NOT help until"
   echo "process count / swap pressure comes down. Confirm the target was CONFIGURED"
   echo "before acting, then do the resource work FIRST, re-run this probe, and only"
   echo "then restart the gateway."
+  if [ "$inconclusive" = "1" ]; then
+    echo "NOTE: some signals were unavailable, but measured pressure still stands."
+  fi
   exit 1
+elif [ "$inconclusive" = "1" ]; then
+  echo "RESULT: INCONCLUSIVE on this host (some signals unavailable) — read the partial"
+  echo "output above. An unavailable signal is NOT evidence of a healthy host."
+  exit 2
 else
   echo "RESULT: no host pressure detected in this run's live measurements."
   echo "If Hermes still fails, the cause is Hermes-side — route to diagnosing-plugins"
