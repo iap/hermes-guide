@@ -166,6 +166,16 @@ def main() -> int:
     if standalone.get("status") == "broken":
         failures.append(f"standalone timeout must not be broken, got {standalone}")
 
+    # 7c2. Keepalive + delegate timeout together -> broken, delegate not labeled no-gateway.
+    combined = run([
+        ts_line(2, "ERROR tui_gateway.ws: keepalive ping timeout"),
+        ts_line(1, "WARNING tools.delegate_tool: Subagent 3 timed out after 990.0s"),
+    ])
+    if combined.get("status") != "broken":
+        failures.append(f"combined case expected broken, got {combined}")
+    if any("no gateway failure" in str(d) for d in (combined.get("detail") or [])):
+        failures.append(f"combined case must not claim no gateway failure: {combined.get('detail')}")
+
     # 7d. Malformed timeout seconds -> unknown, never healthy.
     malformed_timeout = run([
         ts_line(1, "WARNING tools.delegate_tool: Subagent 3 timed out after 1.2.3s"),

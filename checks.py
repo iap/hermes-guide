@@ -3297,6 +3297,9 @@ def check_gateway_health():
         else:
             entry = "receive failure"
         (broken if _is_recent(index, ts) else notes).append(entry)
+    for index, ts in keepalive_hits:
+        entry = "gateway keepalive ping timeout in log"
+        (broken if _is_recent(index, ts) else notes).append(entry)
     # Delegate timeouts alone are not a gateway failure: the child-wait path
     # also emits them on its own inactivity budget. They are broken context
     # only when a gateway failure is already present; otherwise informational.
@@ -3308,9 +3311,6 @@ def check_gateway_health():
     else:
         for index, ts, seconds in delegate_timeouts:
             notes.append(f"delegate timeout after {seconds}s (no gateway failure)")
-    for index, ts in keepalive_hits:
-        entry = "gateway keepalive ping timeout in log"
-        (broken if _is_recent(index, ts) else notes).append(entry)
 
     def _aggregate(entries):
         counts: dict[str, int] = {}
