@@ -3260,6 +3260,19 @@ def check_gateway_health():
             return False
         return True
 
+    detail: list[str] = [log_path]
+    broken: list[str] = []
+    notes: list[str] = []
+    notes_include_gateway = False
+
+    def _report(entry, index, ts):
+        nonlocal notes_include_gateway
+        if _is_recent(index, ts):
+            broken.append(entry)
+        else:
+            notes.append(entry)
+            notes_include_gateway = True
+
     def _is_normal_close(reason):
         """Normal TUI exits, never a failure. Only a websocket close code 1000
         (normal closure) counts; other client_disconnect codes (e.g. 1009
@@ -3269,9 +3282,6 @@ def check_gateway_health():
             return m.group(1) == "1000"
         return "client_disconnect" in reason
 
-    detail: list[str] = [log_path]
-    broken: list[str] = []
-    notes: list[str] = []
     for index, ts, peer, reason, messages in disconnects:
         if _is_normal_close(reason):
             notes.append(f"normal close peer={peer} reason={reason} messages={messages}")
@@ -3288,18 +3298,17 @@ def check_gateway_health():
         entry = f"disconnect peer={peer} reason={reason} messages={messages}"
         entry += " — aligned with a >20s blocking call (event-loop stall)" if aligned \
             else " — no >20s blocking call in the preceding 120s"
-        target = broken if _is_recent(index, ts) else notes
-        target.append(entry)
+        _report(entry, index, ts)
 
     for index, ts, kind, method in send_failures:
         if kind == "send":
             entry = f"send failure method={method}" if method else "send failure"
         else:
             entry = "receive failure"
-        (broken if _is_recent(index, ts) else notes).append(entry)
+        _report(entry, index, ts)
     for index, ts in keepalive_hits:
         entry = "gateway keepalive ping timeout in log"
-        (broken if _is_recent(index, ts) else notes).append(entry)
+        _report(entry, index, ts)
     # Delegate timeouts alone are not a gateway failure: the child-wait path
     # also emits them on its own inactivity budget. They are broken context
     # only when a gateway failure is already present; otherwise informational.
@@ -3307,7 +3316,10 @@ def check_gateway_health():
     if has_gateway_failure:
         for index, ts, seconds in delegate_timeouts:
             entry = f"delegate timeout after {seconds}s"
-            (broken if _is_recent(index, ts) else notes).append(entry)
+            if _is_recent(index, ts):
+                broken.append(entry)
+            else:
+                notes.append(entry)
     else:
         for index, ts, seconds in delegate_timeouts:
             notes.append(f"delegate timeout after {seconds}s (no gateway failure)")
@@ -3341,7 +3353,7 @@ def check_gateway_health():
     if notes and all(str(entry).startswith("normal close") for entry in notes):
         return {"status": "healthy", "reason": "gateway closed normally (no failures)",
                 "detail": detail + notes}
-    if notes and not any(str(entry).startswith(("disconnect", "send failure", "receive failure", "gateway keepalive")) for entry in notes):
+    if notes and not notes_include_gateway:
         return {"status": "informational", "reason": "no gateway failures (delegate timeouts only)",
                 "detail": detail + notes}
     return {"status": "informational", "reason": f"{len(notes)} past gateway disconnect(s)",
