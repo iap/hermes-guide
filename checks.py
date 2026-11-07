@@ -3673,7 +3673,7 @@ def check_dashboard():
                         "reason": f"node {installed_node} violates engines {engines_node}",
                         "detail": [f"installed: {installed_node}", f"engines: {engines_node}"],
                     }
-            except Exception:
+            except Exception:  # nosec B110
                 pass
     # Lazy policy: disabled while node is missing/outdated blocks the build
     _, cfg = _read_config()
@@ -3711,7 +3711,7 @@ def check_dashboard():
                     "reason": f"web UI built with node {built_node}, installed is {installed_node}",
                     "detail": build_json,
                 }
-        except Exception:
+        except Exception:  # nosec B110
             pass
     return {
         "status": "healthy",
