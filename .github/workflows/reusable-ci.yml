@@ -254,6 +254,11 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_session_health.py
 
+      - name: Dashboard toolchain regression test
+        # Shim-loads checks.py with fixture toolchain files — no Hermes, no network.
+        if: inputs.run-full-gate
+        run: python tools/test_dashboard_toolchain.py
+
       - name: Gateway health regression test
         # Shim-loads checks.py with fixture logs — no Hermes, no network.
         if: inputs.run-full-gate

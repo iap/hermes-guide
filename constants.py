@@ -142,6 +142,7 @@ SKILL_FOR_SCOPE = {
     "memories": "diagnosing-memory",
     "sessions": "diagnosing-triage",
     "storage": "diagnosing-storage",
+    "dashboard": "diagnosing-runtime",
     "update": "diagnosing-update",
     "gateway": "diagnosing-gateway",
 }
