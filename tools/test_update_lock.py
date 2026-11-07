@@ -332,7 +332,8 @@ def test_windows_probe_never_raises():
 def test_update_label_registered():
     checks = _load_checks()
     assert "update" in checks.labels()
-    assert len(checks.labels()) == 10
+    assert "gateway" in checks.labels()
+    assert len(checks.labels()) == 11
 
 
 def main() -> int:

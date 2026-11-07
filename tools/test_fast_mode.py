@@ -64,8 +64,8 @@ def main() -> int:
     # too, so a machine without Hermes can exercise the normal-run recorder.
     checks._hermes_candidates = lambda: ["fixture-hermes"]
     labels = checks.labels()
-    if len(labels) != 10:
-        failures.append(f"expected 10 check labels, got {labels}")
+    if len(labels) != 11 or "gateway" not in labels:
+        failures.append(f"expected 11 check labels with gateway, got {labels}")
 
     calls: list = []
     lock = threading.Lock()

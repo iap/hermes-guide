@@ -1,7 +1,7 @@
 ---
 name: diagnosing-runtime
 description: "Diagnose Hermes runtime failures — CLI commands that produce no output, exit 0 with no diagnostic text, hang, or return empty (e.g. hermes guide prints nothing, hermes --version is blank). Covers stuck source updates, broken node dependencies, and recovery routes when the runtime itself is the problem."
-version: 1.0.6
+version: 1.0.7
 metadata:
   hermes:
     tags: [hermes, runtime, cli, node, update, recovery, troubleshooting]
@@ -166,6 +166,16 @@ If none of the above resolves the issue:
 2. **Check for stale processes:** `ps aux | grep hermes` — identify stray Hermes processes before killing any; never blanket-kill
 3. **As a last resort, reinstall Hermes** — see `installing-hermes`
 
+## Step 7 — Delegate / swarm budgets
+
+When a deep dive spawns subagents (`delegate_task`), keep the swarm cheap enough to keep the gateway loop responsive:
+
+- **Concurrency:** keep delegations focused — roughly six children (`tasks[]`) and nesting depth of two. Hermes enforces the configured `delegation.max_concurrent_children` and `delegation.max_spawn_depth` values; the caps above are recommendations to finish sooner and expose the gateway to fewer polls, not hard limits. In Hermes v0.22.5 the default depth limit is one, so children cannot delegate unless `delegation.max_spawn_depth` is configured higher. In one-shot sessions, `delegation.oneshot_max_children` also limits the total children per session (default two; zero means unlimited).
+- **Poll cadence:** while busy, the TUI monitor polls `subagent.list` at most once a second. A dead connection surfaces first as `ws response send failed … method=subagent.list` — see `diagnosing-gateway` §3b; `hermes guide gateway` reports the disconnect and message count.
+- **Timeout budget:** a 990s timeout was observed on the installed Hermes (2026-11-06), but the pinned Hermes has no child-timeout default — an optional configured timeout is an inactivity cap. Diagnose a timed-out delegate by checking child progress (last API call / tool) and the configured timeout, not a presumed default. Prefer explicit, short budgets per task and re-run with narrower `goal`/`context` instead of raising the deadline.
+- **Context budget:** keep per-turn input tokens small. Large inputs lengthen child work and provider cost, and align (by correlation only) with keepalive pressure (see `diagnosing-gateway` §3b); never attribute a disconnect to context size without independent stall evidence. Pass file paths, not file contents, in `context`; let the child read what it needs.
+- **Swarm shape:** split by surface (project core, probe/tests, PR diff, skill mapping), each child self-contained — the child knows nothing of the parent conversation. After all children return, the parent synthesizes; children return findings only and never mutate.
+
 ## When to use this vs other skills
 
 - **This skill:** CLI produces no output, commands hang, runtime is broken
@@ -229,4 +239,4 @@ Adjust to match the probe: for CLI-wide failure, state the interpreter/venv/runt
 
 ---
 
-*Facts verified 2026-10-16 against upstream source at `9bda154d` (v0.21.7): PM-versioned tool layout under `$HERMES_HOME/tools/` (live: `node-26.7.0-win32-x64`; `pm doctor`/`install [names]`/`repair` in `hermes pm --help`); owed-tail marker `source-completion-pending` (`hermes_cli/venv_sync.py`); checkout lock names (`hermes_cli/update_lock.py`); platform selection keys over `plugins.enabled` (see diagnosing-plugins). Re-verify before reuse.*
+*Facts re-verified 2026-11-06 against the installed Hermes (v0.22.5, `delegate_task` 6-child / depth-2 limits, `subagent.list` once-a-second poll, 990s delegate deadline; see `diagnosing-gateway` §3b) and this repo's `check_gateway_health`; upstream source at `9bda154d` (v0.21.7) verified 2026-10-16: PM-versioned tool layout; owed-tail marker `source-completion-pending`; checkout lock names; platform selection keys over `plugins.enabled`. Re-verify before reuse.*

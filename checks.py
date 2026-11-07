@@ -25,6 +25,7 @@ side-effect free; proactive runs (session start/end) always stay in-process.
 
 import collections
 import contextvars
+import datetime
 import importlib
 import io
 import json
@@ -2996,6 +2997,20 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "optimize-storage` (see `hermes sessions optimize-storage --help`). "
         "Do not use `--force` while holders are live.",
     ),
+    "GATEWAY_LOG_UNREADABLE": (
+        "gateway log unreadable",
+        "Gateway connection health cannot be audited because the agent log "
+        "could not be read.",
+        "Check read permissions on the reported agent log, then re-run "
+        "`hermes guide gateway`.",
+    ),
+    "GATEWAY_HEALTH_ISSUES": (
+        "gateway connection failures",
+        "The listed gateway websocket disconnects mean subagent polling and "
+        "delegation status were lost during the affected sessions.",
+        "See `diagnosing-gateway` (keepalive/timeout section); reduce delegate "
+        "context and retry the deep dive, then re-run `hermes guide gateway`.",
+    ),
 }
 
 _FINDING_STATUSES = ("broken", "unknown")
@@ -3121,6 +3136,230 @@ def check_storage():
     }
 
 
+# --- gateway keepalive health ------------------------------------------------
+
+_GATEWAY_LOG_TAIL_LINES = 3000
+_GATEWAY_RECENT_LINES = 1000
+_GATEWAY_BLOCKING_SECONDS = 20.0
+_GATEWAY_BLOCK_WINDOW_SECONDS = 120.0
+
+_DISCONNECT_RE = re.compile(
+    r"ws closed peer=(\S+).*?reason=(\S+).*?messages=(\d+)"
+)
+_SEND_FAIL_RE = re.compile(
+    r"ws (response )?send failed peer=(\S+)(?:.*id=(\d+) method=(\S+))?"
+)
+_RECEIVE_FAIL_RE = re.compile(r"ws receive failed peer=(\S+)")
+_DELEGATE_TIMEOUT_RE = re.compile(r"Subagent (\d+) timed out after ([0-9.]+)s")
+_API_LATENCY_RE = re.compile(r"latency=([0-9.]+)s")
+_TOOL_SECONDS_RE = re.compile(
+    r"tool .* completed \(([0-9.]+)s"
+)
+_KEEPALIVE_RE = re.compile(
+    r"tui_gateway\.ws.*keepalive|keepalive ping timeout"
+)
+_LOG_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
+
+
+def _parse_log_timestamp(line: str):
+    """Parse the ``YYYY-MM-DD HH:MM:SS`` log prefix, or return None."""
+    m = _LOG_TS_RE.match(line)
+    if not m:
+        return None
+    try:
+        return datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def check_gateway_health():
+    """Read-only audit of gateway websocket disconnects in logs/agent.log.
+
+    Reports the last disconnect reason, the websocket message count, and
+    whether a >20s blocking call (API latency or tool execution) occurred
+    within 120s before the disconnect — the event-loop-stall signature that
+    starves keepalive pings. Never mutates anything; reads only the log tail.
+    """
+    home = _hermes_home()
+    if not home:
+        return {
+            "id": "HOME_UNRESOLVED",
+            "status": "unknown",
+            "reason": "cannot resolve $HERMES_HOME",
+            "detail": None,
+        }
+    log_path = os.path.join(home, "logs", "agent.log")
+    try:
+        lines = _read_log_tail(log_path, _GATEWAY_LOG_TAIL_LINES)
+    except FileNotFoundError:
+        return {"status": "healthy", "reason": "no agent activity logged yet (nothing to audit)",
+                "detail": log_path}
+    except OSError as exc:
+        return {
+            "id": "GATEWAY_LOG_UNREADABLE",
+            "status": "unknown",
+            "reason": f"cannot read agent log: {exc}",
+            "detail": log_path,
+        }
+    tail = list(lines)
+    recent_from = len(tail) - _GATEWAY_RECENT_LINES
+
+    disconnects = []  # (index, timestamp_or_none, peer, reason, messages)
+    send_failures = []  # (index, timestamp_or_none, kind, method_or_none) kind is "send" or "receive"
+    delegate_timeouts = []  # (index, timestamp_or_none, seconds)
+    timeout_unparsed = False  # a matched timeout line whose seconds failed to parse
+    keepalive_hits = []  # (index, timestamp_or_none) of gateway keepalive lines
+    blocking = []  # (index, timestamp_or_none, seconds, kind)
+    now = datetime.datetime.now()
+
+    for index, line in enumerate(tail):
+        ts = _parse_log_timestamp(line)
+        m = _DISCONNECT_RE.search(line)
+        if m:
+            disconnects.append((index, ts, m.group(1), m.group(2), int(m.group(3))))
+        m = _SEND_FAIL_RE.search(line)
+        if m:
+            # Group 1 is "response " or empty: both are send failures.
+            send_failures.append((index, ts, "send", m.group(4)))
+        if _RECEIVE_FAIL_RE.search(line):
+            send_failures.append((index, ts, "receive", None))
+        m = _DELEGATE_TIMEOUT_RE.search(line)
+        if m:
+            try:
+                delegate_timeouts.append((index, ts, float(m.group(2))))
+            except ValueError:
+                timeout_unparsed = True
+        if _KEEPALIVE_RE.search(line):
+            keepalive_hits.append((index, ts))
+        m = _API_LATENCY_RE.search(line)
+        if m:
+            try:
+                latency = float(m.group(1))
+            except ValueError:
+                latency = 0.0
+            if latency >= _GATEWAY_BLOCKING_SECONDS:
+                blocking.append((index, ts, latency, "api"))
+        m = _TOOL_SECONDS_RE.search(line)
+        if m:
+            try:
+                tool_seconds = float(m.group(1))
+            except ValueError:
+                tool_seconds = 0.0
+            if tool_seconds >= _GATEWAY_BLOCKING_SECONDS:
+                blocking.append((index, ts, tool_seconds, "tool"))
+
+    if not disconnects and not send_failures and not delegate_timeouts and not keepalive_hits and not timeout_unparsed:
+        return {"status": "healthy", "reason": "no gateway disconnects in recent log tail",
+                "detail": log_path}
+
+    def _is_recent(index, ts):
+        """A disconnect is recent by line position AND (when timestamped) not older than 7 days."""
+        if index < recent_from:
+            return False
+        if ts is not None and (now - ts).days > 7:
+            return False
+        return True
+
+    detail: list[str] = [log_path]
+    broken: list[str] = []
+    notes: list[str] = []
+    notes_include_gateway = False
+
+    def _report(entry, index, ts):
+        nonlocal notes_include_gateway
+        if _is_recent(index, ts):
+            broken.append(entry)
+        else:
+            notes.append(entry)
+            notes_include_gateway = True
+
+    def _is_normal_close(reason):
+        """Normal TUI exits, never a failure. Only a websocket close code 1000
+        (normal closure) counts; other client_disconnect codes (e.g. 1009
+        oversized message) are abnormal."""
+        m = re.search(r"code=(\d+)", reason)
+        if m:
+            return m.group(1) == "1000"
+        return "client_disconnect" in reason
+
+    for index, ts, peer, reason, messages in disconnects:
+        if _is_normal_close(reason):
+            notes.append(f"normal close peer={peer} reason={reason} messages={messages}")
+            continue
+        aligned = False
+        if ts is not None:
+            for b_index, b_ts, seconds, kind in blocking:
+                if b_ts is None or b_index >= index:
+                    continue
+                elapsed = (ts - b_ts).total_seconds()
+                if 0 <= elapsed <= _GATEWAY_BLOCK_WINDOW_SECONDS:
+                    aligned = True
+                    break
+        entry = f"disconnect peer={peer} reason={reason} messages={messages}"
+        entry += " — aligned with a >20s blocking call (event-loop stall)" if aligned \
+            else " — no >20s blocking call in the preceding 120s"
+        _report(entry, index, ts)
+
+    for index, ts, kind, method in send_failures:
+        if kind == "send":
+            entry = f"send failure method={method}" if method else "send failure"
+        else:
+            entry = "receive failure"
+        _report(entry, index, ts)
+    for index, ts in keepalive_hits:
+        entry = "gateway keepalive ping timeout in log"
+        _report(entry, index, ts)
+    # Delegate timeouts alone are not a gateway failure: the child-wait path
+    # also emits them on its own inactivity budget. They are broken context
+    # only when a gateway failure is already present; otherwise informational.
+    has_gateway_failure = bool(broken)
+    if has_gateway_failure:
+        for index, ts, seconds in delegate_timeouts:
+            entry = f"delegate timeout after {seconds}s"
+            if _is_recent(index, ts):
+                broken.append(entry)
+            else:
+                notes.append(entry)
+    else:
+        for index, ts, seconds in delegate_timeouts:
+            notes.append(f"delegate timeout after {seconds}s (no gateway failure)")
+
+    def _aggregate(entries):
+        counts: dict[str, int] = {}
+        order: list[str] = []
+        for entry in entries:
+            if entry not in counts:
+                order.append(entry)
+            counts[entry] = counts.get(entry, 0) + 1
+        return [f"{entry} (×{counts[entry]})" if counts[entry] > 1 else entry for entry in order]
+
+    broken = _aggregate(broken)
+    notes = _aggregate(notes)
+
+    if broken:
+        return {
+            "id": "GATEWAY_HEALTH_ISSUES",
+            "status": "broken",
+            "reason": f"{len(broken)} recent gateway failure log entries",
+            "detail": detail + broken + notes,
+        }
+    if timeout_unparsed:
+        return {
+            "id": "GATEWAY_HEALTH_ISSUES",
+            "status": "unknown",
+            "reason": "delegate timeout line could not be parsed",
+            "detail": detail + notes,
+        }
+    if notes and all(str(entry).startswith("normal close") for entry in notes):
+        return {"status": "healthy", "reason": "gateway closed normally (no failures)",
+                "detail": detail + notes}
+    if notes and not notes_include_gateway:
+        return {"status": "informational", "reason": "no gateway failures (delegate timeouts only)",
+                "detail": detail + notes}
+    return {"status": "informational", "reason": f"{len(notes)} past gateway disconnect(s)",
+            "detail": detail + notes}
+
+
 # --- runner ---------------------------------------------------------------
 
 _CHECKS = [
@@ -3144,6 +3383,10 @@ _CHECKS = [
     # Label is "update" (the hermes-agent update lock audited for stale
     # dead-owner state) — "upgrade" is not a Hermes term, so no alias.
     ("update", check_update_lock),
+    # Label is "gateway" (gateway websocket keepalive disconnects audited in
+    # logs/agent.log) — "gateway_health" is longer than the surface; the
+    # function keeps the longer name for grep-ability.
+    ("gateway", check_gateway_health),
 ]
 
 
