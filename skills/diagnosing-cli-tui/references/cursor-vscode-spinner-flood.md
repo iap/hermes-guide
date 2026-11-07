@@ -6,7 +6,7 @@ Detailed playbook for §4.11 of `diagnosing-cli-tui`.
 
 Note: `display.interface: cli` alone does not establish that the classic CLI ran — `--tui` and `HERMES_TUI=1` both select the TUI before the config value is checked. Verify launch flags and env vars before assuming the classic CLI ran.
 
-Observable symptoms (all must be present or the flood alone on a wider pane):
+Apply this playbook when all three symptoms below are present. On a wider pane the flood alone suffices — the clipped prompt may not appear there.
 - launches from Cursor/VS Code's bottom panel
 - repeated `ruminating...`/`brainstorming...` lines persisting in scrollback
 - first char missing from the next `> ` prompt
