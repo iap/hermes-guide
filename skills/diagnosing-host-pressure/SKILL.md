@@ -194,8 +194,8 @@ After applying fixes:
 # Re-run the probe — must exit 0 (no pressure) before declaring done
 # (repo checkout)
 bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh
-# (installed copy)
-bash "${HERMES_HOME:-$HOME/.hermes}/skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh"
+# (installed copy: run from the installed skill directory, which may include a category)
+bash scripts/host_pressure_probe.sh
 
 # Confirm plugins now load inside budget (post-restart entries only).
 # errors.log is append-only, so bound the check: record the line count BEFORE
