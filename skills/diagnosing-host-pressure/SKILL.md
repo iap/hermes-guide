@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.10
+version: 1.3.13
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -194,8 +194,8 @@ After applying fixes:
 # Re-run the probe — must exit 0 (no pressure) before declaring done
 # (repo checkout)
 bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh
-# (installed copy)
-bash "${HERMES_HOME:-$HOME/.hermes}/skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh"
+# (installed copy: run from the installed skill directory, which may include a category)
+bash scripts/host_pressure_probe.sh
 
 # Confirm plugins now load inside budget (post-restart entries only).
 # errors.log is append-only, so bound the check: record the line count BEFORE
@@ -236,7 +236,7 @@ average as "the CPU is maxed out" when idle CPU says otherwise.
   date-like substring of a filesystem path; inspect the real name (`ls | cat -v`)
   before grepping for it.
 - **Slowness of ordinary commands is data.** Treat it as a measurement.
-- **"Gateway did not answer session.create" in the TUI/agent** can be a gateway RPC that exceeded its budget while other Hermes surfaces also fail because the host is stalled. Run `host_pressure_probe.sh` first. If it exits 1, relieve host pressure before restarting the gateway. If it exits 2, read the partial output; an unavailable signal is not a healthy host. If it exits 0 and Hermes still fails, or other surfaces are not failing, use the surface-specific diagnosing skill rather than this skill. (Added 2026-11-04 from a live host finding; not an upstream source recheck.)
+- **"Gateway did not answer session.create" in the TUI/agent** can be a gateway RPC that exceeded its budget while other Hermes surfaces also fail because the host is stalled. On POSIX or WSL, run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` from the repo root, first. For an installed copy, run `bash scripts/host_pressure_probe.sh` from the installed skill directory (locate it via `ls ${HERMES_HOME:-$HOME/.hermes}/skills/**/diagnosing-host-pressure/` — a `--category` install lives under `skills/<category>/diagnosing-host-pressure`); mirror that for the verification command below. If it exits 1, relieve host pressure before restarting the gateway. If it exits 2, read the partial measurements for high load, I/O-blocked processes, or swap pressure; if a live reading shows pressure, relieve it and re-run before restarting. If it exits 0 and Hermes still fails, or other surfaces are not failing, use the surface-specific diagnosing skill rather than this skill. (Added 2026-11-04 from a live host finding; not an upstream source recheck.)
 
 ## Reference
 

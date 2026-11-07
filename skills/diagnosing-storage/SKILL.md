@@ -1,7 +1,7 @@
 ---
 name: diagnosing-storage
 description: Diagnose Hermes storage issues — state.db size, disk pressure, session database bloat, and cleanup opportunities.
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, storage, disk, troubleshooting]
@@ -16,8 +16,8 @@ Goal: reduce any storage problem to one concrete fix — a database optimization
 
 - `hermes guide` — runs `check_storage` (state.db size audit)
 - `hermes sessions optimize-storage` — reclaim space from session database
-- `du -sh ~/.hermes/` — total Hermes disk usage
-- `du -sh ~/.hermes/state.db` — session database size
+- ``cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; du -sh "$home/"` — total Hermes disk usage (resolve home via `hermes config path`, never assume `~/.hermes`)
+- `cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; du -sh "$home/state.db"` — session database size
 
 ## 2. Common failures
 
@@ -44,9 +44,9 @@ hermes sessions delete <session_id>
 **Fix:**
 ```bash
 df -h /                          # check disk usage
-du -sh ~/.hermes/*               # Hermes breakdown
+cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; du -sh "$home"/*  # Hermes breakdown (custom $HERMES_HOME safe)
 # Clean caches:
-find ~/.hermes/cache/scratch -maxdepth 1 -type f -delete  # scratch files (24h TTL anyway)
+cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; find "$home/cache/scratch" -maxdepth 1 -type f -delete  # scratch files (24h TTL anyway)
 # Prune old sessions:
 hermes sessions optimize-storage
 # See hermes-disk-housekeeping skill for full cleanup
@@ -74,12 +74,12 @@ hermes --version
 
 **Fix:**
 ```bash
-ls -la ~/.hermes/state.db
-file ~/.hermes/state.db
+cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; ls -la "$home/state.db"
+cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; file "$home/state.db"
 # Fix permissions:
-chmod 600 ~/.hermes/state.db
+cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; chmod 600 "$home/state.db"
 # If corrupted, back up and let Hermes recreate:
-mv ~/.hermes/state.db ~/.hermes/state.db.bak
+cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; mv "$home/state.db" "$home/state.db.bak"
 hermes --version
 ```
 
@@ -87,7 +87,7 @@ hermes --version
 
 ```bash
 hermes guide               # storage check healthy
-du -sh ~/.hermes/state.db  # size reasonable
+cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; du -sh "$home/state.db"  # size reasonable
 hermes sessions optimize-storage  # completes without error
 ```
 
@@ -101,7 +101,7 @@ After applying the fix:
 
 ```bash
 hermes guide               # storage check healthy
-du -sh ~/.hermes/state.db  # size reasonable
+cfg=$(hermes config path) && [ -n "$cfg" ] && home=$(dirname "$cfg") || { echo 'hermes config path failed'; exit 1; }; du -sh "$home/state.db"  # size reasonable
 hermes sessions optimize-storage  # completes without error (stop gateway first)
 ```
 

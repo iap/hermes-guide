@@ -17,6 +17,7 @@ Guards:
 4. ``scope=None`` runs every check.
 5. The CLI handler exits non-zero on an unknown scope; the slash-command
    handler returns the error as text (slash commands have no exit contract).
+6. Every check label maps in ``SKILL_FOR_SCOPE`` to a shipped skill.
 
 Run: python3 tools/test_scope_validation.py
 """
@@ -43,6 +44,7 @@ def main(argv: list[str]) -> int:
 
         import hermes_guide as guide  # noqa: E402
         import hermes_guide.checks as checks  # noqa: E402
+        import hermes_guide.constants as constants  # noqa: E402
 
         labels = [label for label, _ in checks._CHECKS]
 
@@ -104,6 +106,22 @@ def main(argv: list[str]) -> int:
         ok = guide._handle_doctor("mcp")
         if "mcp" not in ok:
             failures.append(f"_handle_doctor('mcp') lost its result: {ok!r}")
+
+        # (6) every check label maps to a shipped skill; no scope falls
+        # back to diagnosing-triage silently.
+        for label in labels:
+            if label not in constants.SKILL_FOR_SCOPE:
+                failures.append(f"scope {label!r} has no SKILL_FOR_SCOPE entry")
+        for scope, skill in constants.SKILL_FOR_SCOPE.items():
+            if not (REPO / "skills" / skill / "SKILL.md").is_file():
+                failures.append(
+                    f"SKILL_FOR_SCOPE[{scope!r}] = {skill!r} is not a shipped skill"
+                )
+        if constants.SKILL_FOR_SCOPE.get("storage") != "diagnosing-storage":
+            failures.append(
+                f"storage mapping is {constants.SKILL_FOR_SCOPE.get('storage')!r}, "
+                "expected 'diagnosing-storage'"
+            )
 
     if failures:
         for f in failures:
