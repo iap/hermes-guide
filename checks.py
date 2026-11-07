@@ -3015,8 +3015,8 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "dashboard node outdated",
         "The PM-managed Node version differs from the lockfile pin, so the "
         "dashboard Web UI build uses a toolchain the lock does not describe.",
-        "Run `hermes pm install node` (explicit install bypasses the "
-        "lazy-install policy), then re-run `hermes guide dashboard`.",
+        "Ask the user to confirm before running `hermes pm install node` (explicit install bypasses the "
+        "lazy-install policy), then verify with `hermes guide dashboard`.",
     ),
     "DASHBOARD_NODE_OS_FLOOR_MISMATCH": (
         "dashboard node OS floor mismatch",
@@ -3423,176 +3423,6 @@ def check_dashboard():
             "reason": "cannot resolve $HERMES_HOME",
             "detail": None,
         }
-    log_path = os.path.join(home, "logs", "agent.log")
-    try:
-        lines = _read_log_tail(log_path, _GATEWAY_LOG_TAIL_LINES)
-    except FileNotFoundError:
-        return {"status": "healthy", "reason": "no agent activity logged yet (nothing to audit)",
-                "detail": log_path}
-    except OSError as exc:
-        return {
-            "id": "GATEWAY_LOG_UNREADABLE",
-            "status": "unknown",
-            "reason": f"cannot read agent log: {exc}",
-            "detail": log_path,
-        }
-    tail = list(lines)
-    recent_from = len(tail) - _GATEWAY_RECENT_LINES
-
-    disconnects = []  # (index, timestamp_or_none, peer, reason, messages)
-    send_failures = []  # (index, timestamp_or_none, kind, method_or_none) kind is "send" or "receive"
-    delegate_timeouts = []  # (index, timestamp_or_none, seconds)
-    timeout_unparsed = False  # a matched timeout line whose seconds failed to parse
-    keepalive_hits = []  # (index, timestamp_or_none) of gateway keepalive lines
-    blocking = []  # (index, timestamp_or_none, seconds, kind)
-    now = datetime.datetime.now()
-
-    for index, line in enumerate(tail):
-        ts = _parse_log_timestamp(line)
-        m = _DISCONNECT_RE.search(line)
-        if m:
-            disconnects.append((index, ts, m.group(1), m.group(2), int(m.group(3))))
-        m = _SEND_FAIL_RE.search(line)
-        if m:
-            # Group 1 is "response " or empty: both are send failures.
-            send_failures.append((index, ts, "send", m.group(4)))
-        if _RECEIVE_FAIL_RE.search(line):
-            send_failures.append((index, ts, "receive", None))
-        m = _DELEGATE_TIMEOUT_RE.search(line)
-        if m:
-            try:
-                delegate_timeouts.append((index, ts, float(m.group(2))))
-            except ValueError:
-                timeout_unparsed = True
-        if _KEEPALIVE_RE.search(line):
-            keepalive_hits.append((index, ts))
-        m = _API_LATENCY_RE.search(line)
-        if m:
-            try:
-                latency = float(m.group(1))
-            except ValueError:
-                latency = 0.0
-            if latency >= _GATEWAY_BLOCKING_SECONDS:
-                blocking.append((index, ts, latency, "api"))
-        m = _TOOL_SECONDS_RE.search(line)
-        if m:
-            try:
-                tool_seconds = float(m.group(1))
-            except ValueError:
-                tool_seconds = 0.0
-            if tool_seconds >= _GATEWAY_BLOCKING_SECONDS:
-                blocking.append((index, ts, tool_seconds, "tool"))
-
-    if not disconnects and not send_failures and not delegate_timeouts and not keepalive_hits and not timeout_unparsed:
-        return {"status": "healthy", "reason": "no gateway disconnects in recent log tail",
-                "detail": log_path}
-
-    def _is_recent(index, ts):
-        """A disconnect is recent by line position AND (when timestamped) not older than 7 days."""
-        if index < recent_from:
-            return False
-        if ts is not None and (now - ts).days > 7:
-            return False
-        return True
-
-    detail: list[str] = [log_path]
-    broken: list[str] = []
-    notes: list[str] = []
-    notes_include_gateway = False
-
-    def _report(entry, index, ts):
-        nonlocal notes_include_gateway
-        if _is_recent(index, ts):
-            broken.append(entry)
-        else:
-            notes.append(entry)
-            notes_include_gateway = True
-
-    def _is_normal_close(reason):
-        """Normal TUI exits, never a failure. Only a websocket close code 1000
-        (normal closure) counts; other client_disconnect codes (e.g. 1009
-        oversized message) are abnormal."""
-        m = re.search(r"code=(\d+)", reason)
-        if m:
-            return m.group(1) == "1000"
-        return "client_disconnect" in reason
-
-    for index, ts, peer, reason, messages in disconnects:
-        if _is_normal_close(reason):
-            notes.append(f"normal close peer={peer} reason={reason} messages={messages}")
-            continue
-        aligned = False
-        if ts is not None:
-            for b_index, b_ts, seconds, kind in blocking:
-                if b_ts is None or b_index >= index:
-                    continue
-                elapsed = (ts - b_ts).total_seconds()
-                if 0 <= elapsed <= _GATEWAY_BLOCK_WINDOW_SECONDS:
-                    aligned = True
-                    break
-        entry = f"disconnect peer={peer} reason={reason} messages={messages}"
-        entry += " — aligned with a >20s blocking call (event-loop stall)" if aligned \
-            else " — no >20s blocking call in the preceding 120s"
-        _report(entry, index, ts)
-
-    for index, ts, kind, method in send_failures:
-        if kind == "send":
-            entry = f"send failure method={method}" if method else "send failure"
-        else:
-            entry = "receive failure"
-        _report(entry, index, ts)
-    for index, ts in keepalive_hits:
-        entry = "gateway keepalive ping timeout in log"
-        _report(entry, index, ts)
-    # Delegate timeouts alone are not a gateway failure: the child-wait path
-    # also emits them on its own inactivity budget. They are broken context
-    # only when a gateway failure is already present; otherwise informational.
-    has_gateway_failure = bool(broken)
-    if has_gateway_failure:
-        for index, ts, seconds in delegate_timeouts:
-            entry = f"delegate timeout after {seconds}s"
-            if _is_recent(index, ts):
-                broken.append(entry)
-            else:
-                notes.append(entry)
-    else:
-        for index, ts, seconds in delegate_timeouts:
-            notes.append(f"delegate timeout after {seconds}s (no gateway failure)")
-
-    def _aggregate(entries):
-        counts: dict[str, int] = {}
-        order: list[str] = []
-        for entry in entries:
-            if entry not in counts:
-                order.append(entry)
-            counts[entry] = counts.get(entry, 0) + 1
-        return [f"{entry} (×{counts[entry]})" if counts[entry] > 1 else entry for entry in order]
-
-    broken = _aggregate(broken)
-    notes = _aggregate(notes)
-
-    if broken:
-        return {
-            "id": "GATEWAY_HEALTH_ISSUES",
-            "status": "broken",
-            "reason": f"{len(broken)} recent gateway failure log entries",
-            "detail": detail + broken + notes,
-        }
-    if timeout_unparsed:
-        return {
-            "id": "GATEWAY_HEALTH_ISSUES",
-            "status": "unknown",
-            "reason": "delegate timeout line could not be parsed",
-            "detail": detail + notes,
-        }
-    if notes and all(str(entry).startswith("normal close") for entry in notes):
-        return {"status": "healthy", "reason": "gateway closed normally (no failures)",
-                "detail": detail + notes}
-    if notes and not notes_include_gateway:
-        return {"status": "informational", "reason": "no gateway failures (delegate timeouts only)",
-                "detail": detail + notes}
-    return {"status": "informational", "reason": f"{len(notes)} past gateway disconnect(s)",
-            "detail": detail + notes}
     checkout = os.path.join(home, "hermes-agent")
     facts_path = os.path.join(home, "tools", "facts.json")
     lock_path = os.path.join(checkout, "pm", "lock.json")
@@ -3645,7 +3475,7 @@ def check_dashboard():
         except Exception:
             parts = []
         host_major = parts[0] if parts else 0
-        if major >= 26 and host_major < 14:
+        if major >= 25 and host_major < 13:
             return {
                 "id": "DASHBOARD_NODE_OS_FLOOR_MISMATCH",
                 "status": "broken",
@@ -3660,21 +3490,43 @@ def check_dashboard():
         engines_node = pkg.get("engines", {}).get("node")
     except Exception:
         pkg = None
-    if installed_node and engines_node and isinstance(engines_node, str):
-        m = re.search(r">=\s*(\d+)", engines_node)
-        if m:
+    engines_npm = None
+    if engines_node is not None and isinstance(pkg, dict):
+        engines_npm = pkg.get("engines", {}).get("npm") if isinstance(pkg.get("engines"), dict) else None
+    for installed, req, label in ((installed_node, engines_node, "node"), (installed_npm, engines_npm, "npm")):
+        if isinstance(req, str) and installed is not None:
             try:
-                need = int(m.group(1))
-                have = int(str(installed_node).split(".")[0])
-                if have < need:
-                    return {
-                        "id": "DASHBOARD_NODE_ENGINES_MISMATCH",
-                        "status": "broken",
-                        "reason": f"node {installed_node} violates engines {engines_node}",
-                        "detail": [f"installed: {installed_node}", f"engines: {engines_node}"],
-                    }
-            except Exception:  # nosec B110
-                pass
+                have_t = tuple(int(x) for x in str(installed).split("."))
+            except Exception:
+                have_t = ()
+            def _parse(v):
+                parts=[]
+                for x in str(v).lstrip(" ^~>=<").split("."):
+                    try:
+                        parts.append(int(x))
+                    except Exception:
+                        parts.append(0)
+                return tuple(parts)
+            _m = re.search(r"(\d+(?:\.\d+)*)", req)
+            need_t = _parse(_m.group(1)) if _m else None
+            if need_t is None:
+                return {"status": "unknown", "reason": f"engines.{label} range {req} cannot be evaluated", "detail": f"engines.{label}: {req}"}
+            # engines like ">=26.12.1" or "^24 || >=26": compare major; for simplicity, if installed major < need major, mismatch
+            if have_t and have_t[0] < need_t[0]:
+                return {
+                    "id": "DASHBOARD_NODE_ENGINES_MISMATCH",
+                    "status": "broken",
+                    "reason": f"{label} {installed} violates engines {req}",
+                    "detail": [f"installed {label}: {installed}", f"engines.{label}: {req}"],
+                }
+            # minor/patch boundary when the range pins a minor
+            if have_t and need_t and len(need_t) >= 2 and "||" not in req and have_t[0] == need_t[0] and len(have_t) >= 2 and have_t[1] < need_t[1]:
+                return {
+                    "id": "DASHBOARD_NODE_ENGINES_MISMATCH",
+                    "status": "broken",
+                    "reason": f"{label} {installed} violates engines {req}",
+                    "detail": [f"installed {label}: {installed}", f"engines.{label}: {req}"],
+                }
     # Lazy policy: disabled while node is missing/outdated blocks the build
     _, cfg = _read_config()
     lazy = True
@@ -3682,7 +3534,9 @@ def check_dashboard():
         sec = cfg.get("security", {})
         if isinstance(sec, dict) and "allow_lazy_installs" in sec:
             lazy = sec["allow_lazy_installs"] is True
-    if not lazy and installed_node is None:
+    if os.environ.get("HERMES_DISABLE_LAZY_INSTALLS"):
+        lazy = False
+    if not lazy and (installed_node is None or lock_node is None or installed_node != lock_node):
         return {
             "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
             "status": "broken",
@@ -3692,6 +3546,13 @@ def check_dashboard():
     # Web UI freshness: dist present and built with installed node
     dist = os.path.join(checkout, "hermes_cli", "web_dist")
     build_json = os.path.join(dist, "hermes-build.json")
+    # Indeterminate toolchain (no lock pin and no installed evidence) is never healthy.
+    if installed_node is None and lock_node is None:
+        return {
+            "status": "unknown",
+            "reason": "dashboard toolchain indeterminate (no lock pin and no PM facts)",
+            "detail": [facts_path, lock_path],
+        }
     if not os.path.isfile(build_json):
         return {
             "id": "DASHBOARD_WEBUI_STALE_BUILD",
@@ -3704,6 +3565,13 @@ def check_dashboard():
             with open(build_json, "r", encoding="utf-8") as f:
                 built = json.load(f)
             built_node = built.get("node") if isinstance(built, dict) else None
+            if not built_node:
+                return {
+                    "id": "DASHBOARD_WEBUI_STALE_BUILD",
+                    "status": "unknown",
+                    "reason": "web UI build receipt is empty or invalid",
+                    "detail": build_json,
+                }
             if built_node and built_node != installed_node:
                 return {
                     "id": "DASHBOARD_WEBUI_STALE_BUILD",
@@ -3712,7 +3580,12 @@ def check_dashboard():
                     "detail": build_json,
                 }
         except Exception:  # nosec B110
-            pass
+            return {
+                "id": "DASHBOARD_WEBUI_STALE_BUILD",
+                "status": "unknown",
+                "reason": "web UI build receipt cannot be read",
+                "detail": build_json,
+            }
     return {
         "status": "healthy",
         "reason": "dashboard toolchain OK",
