@@ -1,7 +1,7 @@
 ---
 name: diagnosing-storage
 description: Diagnose Hermes storage issues — state.db size, disk pressure, session database bloat, and cleanup opportunities.
-version: 1.0.2
+version: 1.0.3
 metadata:
   hermes:
     tags: [hermes, storage, disk, troubleshooting]
@@ -16,8 +16,8 @@ Goal: reduce any storage problem to one concrete fix — a database optimization
 
 - `hermes guide` — runs `check_storage` (state.db size audit)
 - `hermes sessions optimize-storage` — reclaim space from session database
-- `du -sh ~/.hermes/` — total Hermes disk usage
-- `du -sh ~/.hermes/state.db` — session database size
+- `cfg=$(hermes config path); du -sh "$(dirname "$cfg")/"` — total Hermes disk usage (resolve home via `hermes config path`, never assume `~/.hermes`)
+- `cfg=$(hermes config path); du -sh "$(dirname "$cfg")/state.db"` — session database size
 
 ## 2. Common failures
 
@@ -44,9 +44,9 @@ hermes sessions delete <session_id>
 **Fix:**
 ```bash
 df -h /                          # check disk usage
-du -sh ~/.hermes/*               # Hermes breakdown
+cfg=$(hermes config path); du -sh "$(dirname "$cfg")"/*  # Hermes breakdown (custom $HERMES_HOME safe)
 # Clean caches:
-find ~/.hermes/cache/scratch -maxdepth 1 -type f -delete  # scratch files (24h TTL anyway)
+cfg=$(hermes config path); find "$(dirname "$cfg")/cache/scratch" -maxdepth 1 -type f -delete  # scratch files (24h TTL anyway)
 # Prune old sessions:
 hermes sessions optimize-storage
 # See hermes-disk-housekeeping skill for full cleanup
@@ -74,12 +74,12 @@ hermes --version
 
 **Fix:**
 ```bash
-ls -la ~/.hermes/state.db
-file ~/.hermes/state.db
+cfg=$(hermes config path); ls -la "$(dirname "$cfg")/state.db"
+cfg=$(hermes config path); file "$(dirname "$cfg")/state.db"
 # Fix permissions:
-chmod 600 ~/.hermes/state.db
+cfg=$(hermes config path); chmod 600 "$(dirname "$cfg")/state.db"
 # If corrupted, back up and let Hermes recreate:
-mv ~/.hermes/state.db ~/.hermes/state.db.bak
+cfg=$(hermes config path); mv "$(dirname "$cfg")/state.db" "$(dirname "$cfg")/state.db.bak"
 hermes --version
 ```
 
@@ -87,7 +87,7 @@ hermes --version
 
 ```bash
 hermes guide               # storage check healthy
-du -sh ~/.hermes/state.db  # size reasonable
+cfg=$(hermes config path); du -sh "$(dirname "$cfg")/state.db"  # size reasonable
 hermes sessions optimize-storage  # completes without error
 ```
 
@@ -101,7 +101,7 @@ After applying the fix:
 
 ```bash
 hermes guide               # storage check healthy
-du -sh ~/.hermes/state.db  # size reasonable
+cfg=$(hermes config path); du -sh "$(dirname "$cfg")/state.db"  # size reasonable
 hermes sessions optimize-storage  # completes without error (stop gateway first)
 ```
 
@@ -116,4 +116,4 @@ Fail: storage check shows warning — re-check disk usage and state.db.
 - `diagnosing-host-pressure` — OOM and host load issues
 - `diagnosing-sessions` — session health issues
 
-*Facts re-verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_storage), `hermes_constants.py` (get_hermes_home). Re-verify before reuse.*
+*Facts re-verified 2026-11-07 against this repo's `check_storage` (`checks.py` uses `_hermes_home()` from `hermes_constants.get_hermes_home()`) and upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_storage), `hermes_constants.py` (get_hermes_home). Re-verify before reuse.*
