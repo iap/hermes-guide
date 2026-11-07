@@ -3510,7 +3510,7 @@ def check_dashboard():
             _m = re.search(r"(\d+(?:\.\d+)*)", req)
             need_t = _parse(_m.group(1)) if _m else None
             if need_t is None:
-                return {"status": "unknown", "reason": f"engines.{label} range {req} cannot be evaluated", "detail": f"engines.{label}: {req}"}
+                return {"id": "DASHBOARD_NODE_ENGINES_MISMATCH", "status": "unknown", "reason": f"engines.{label} range {req} cannot be evaluated", "detail": f"engines.{label}: {req}"}
             # engines like ">=26.12.1" or "^24 || >=26": compare major; for simplicity, if installed major < need major, mismatch
             if have_t and have_t[0] < need_t[0]:
                 return {
@@ -3549,6 +3549,7 @@ def check_dashboard():
     # Indeterminate toolchain (no lock pin and no installed evidence) is never healthy.
     if installed_node is None and lock_node is None:
         return {
+            "id": "DASHBOARD_NODE_OUTDATED",
             "status": "unknown",
             "reason": "dashboard toolchain indeterminate (no lock pin and no PM facts)",
             "detail": [facts_path, lock_path],
