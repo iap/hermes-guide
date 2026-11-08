@@ -3423,8 +3423,27 @@ def check_dashboard():
             "reason": "cannot resolve $HERMES_HOME",
             "detail": None,
         }
+    # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
+    # common relocation paths for PM-era installs.
     checkout = os.path.join(home, "hermes-agent")
+    if not os.path.isdir(checkout):
+        installs_dir = os.path.join(home, "installs")
+        if os.path.isdir(installs_dir):
+            for entry in sorted(os.listdir(installs_dir)):
+                candidate = os.path.join(installs_dir, entry, "hermes-agent")
+                if os.path.isdir(candidate):
+                    checkout = candidate
+                    break
+    # PM-era installs store facts under installs/<key>/facts.json; fall back
+    # to the legacy tools/facts.json location.
     facts_path = os.path.join(home, "tools", "facts.json")
+    installs_dir = os.path.join(home, "installs")
+    if os.path.isdir(installs_dir):
+        for entry in sorted(os.listdir(installs_dir)):
+            candidate = os.path.join(installs_dir, entry, "facts.json")
+            if os.path.isfile(candidate):
+                facts_path = candidate
+                break
     lock_path = os.path.join(checkout, "pm", "lock.json")
     installed_node = None
     installed_npm = None
