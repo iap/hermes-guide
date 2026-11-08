@@ -32,7 +32,7 @@ If you are on Windows, do NOT modify POSIX-only code paths. If you need to chang
 ### 3. Test on your platform, verify on others
 - Run full test suite before pushing
 - Add `needs:os-verify` if you couldn't verify on all target platforms
-- CI runs on Ubuntu + Windows — if both pass, the change is verified
+- CI runs on Ubuntu + Windows — passing on both means the required gates passed
 
 ### 4. Label your PR correctly
 Every PR MUST have at least one OS label. If you could only verify on one platform, add `needs:os-verify`.
