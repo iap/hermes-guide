@@ -393,6 +393,11 @@ def main(argv: list[str]) -> int:
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
         return 1
+    # init_py_problems: a label mismatch with a correct count must fail.
+    assert init_py_problems(
+        check_labels(), "Checks: config, mcp, tokens — three read-only checks"
+    ), "init_py_problems should flag a label mismatch even when the count is right"
+
     count = len(check_labels())
     print(
         "OK: plugin.yaml, README.md, __init__.py and the router skill agree with "

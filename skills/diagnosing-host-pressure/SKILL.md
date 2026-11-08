@@ -175,7 +175,9 @@ while writes fail. Treat it as a separate branch:
 3. For ephemeral files, caches, cron output, request dumps and scratch, run
    `/disk-cleanup dry-run` in a session (the `disk-cleanup` plugin), review
    the results, then run `/disk-cleanup quick` to reclaim space.
-   The `disk-cleanup` plugin tracks and ages these out automatically.
+   Note: `quick` also removes empty directories outside protected trees, which
+   are not shown in the `dry-run` preview.
+    The `disk-cleanup` plugin tracks and ages these out automatically.
 4. Reclaiming *disk* does not relieve *memory* pressure — never present a
    cleanup as a fix for swapping (see section 4).
 

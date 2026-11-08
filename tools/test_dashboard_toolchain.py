@@ -129,7 +129,9 @@ def test_check_dashboard_broken_when_node_missing_but_lock_present():
     os.makedirs(os.path.join(home, "hermes-agent", "pm"), exist_ok=True)
     with open(os.path.join(home, "hermes-agent", "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] in ("broken", "unknown")
     assert "id" in result
@@ -140,7 +142,9 @@ def test_check_dashboard_unknown_when_no_checkout():
     td = tempfile.mkdtemp()
     home = os.path.join(td, "hermes")
     os.makedirs(os.path.join(home, "tools"), exist_ok=True)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.run_all(scope="dashboard")["dashboard"]
     assert result["status"] == "unknown"
     assert result["id"] == "DASHBOARD_CHECKOUT_UNRESOLVED"
@@ -191,7 +195,9 @@ def test_check_dashboard_paired_install_local_node():
     _write_web_dist(checkout, "26.7.0")
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
     assert "26.7.0" in result.get("detail", "")
@@ -212,7 +218,9 @@ def test_check_dashboard_legacy_facts_displaced_by_install_local():
     _write_node_facts(os.path.join(home, "tools"), version="26.7.0")
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
     assert "24.0.0" in result.get("detail", "")
@@ -234,7 +242,9 @@ def test_check_dashboard_legacy_facts_without_entry_keeps_install():
         json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
     assert "24.0.0" in result.get("detail", "")
@@ -255,7 +265,9 @@ def test_check_dashboard_legacy_facts_unreadable_keeps_install():
         f.write("{not valid json")
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
     assert "24.0.0" in result.get("detail", "")
@@ -276,7 +288,9 @@ def test_check_dashboard_venv_only_install_falls_back_to_legacy():
     _write_node_facts(os.path.join(home, "tools"), version="26.7.0")
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
     assert "26.7.0" in result.get("detail", "")
@@ -297,7 +311,9 @@ def test_check_dashboard_legacy_without_node_does_not_override_install():
         json.dump({"packages": {"python": {"entry": "venv"}}}, f)
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
     assert "24.0.0" in result.get("detail", "")
@@ -318,7 +334,9 @@ def test_check_dashboard_legacy_truthy_node_without_entry_keeps_install():
         json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
-    with patch.object(checks, "_hermes_home", return_value=home):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
     assert "24.0.0" in result.get("detail", "")
