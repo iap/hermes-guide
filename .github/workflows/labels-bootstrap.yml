@@ -1,0 +1,49 @@
+# Bootstrap the labels no other workflow creates: the assist:* handoff
+# axis and the manual environment labels.
+#
+# Run from Actions -> "labels-bootstrap" -> Run workflow. It is a
+# create-or-update ensure: missing labels are created, existing ones are
+# recolored/re-described to the palette below. Safe to run repeatedly.
+#
+# These labels are owned here because no workflow creates them: the
+# environment axis is derived from PR bodies by label-pr-metadata.yml and
+# the area axis lives in .github/labeler.yml, so neither palette is
+# duplicated here.
+
+name: labels-bootstrap
+
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  create-labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create labels (idempotent)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # No checkout in this job, so gh needs the repo context explicit.
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ensure() {
+            local name="$1" color="$2" desc="$3"
+            # One create-or-update call: GitHub matches label names
+            # case-insensitively, so a list-then-create branch can miss an
+            # existing differently-capitalized label and fail on create.
+            gh label create "$name" --color "$color" --description "$desc" --force >/dev/null
+            echo "ensured: $name"
+          }
+          ensure "assist:windows-confirm" "93C5FD" "Request Windows-agent confirmation on another Windows device"
+          ensure "assist:linux-confirm"   "FDBA74" "Request Linux-agent confirmation on another Linux device"
+          ensure "assist:macos-confirm"   "C4B5FD" "Request macOS-agent confirmation on another macOS device"
+          ensure "assist:wsl-confirm"     "BFD4F2" "Request WSL-agent confirmation on another WSL device"
+          ensure "needs:os-verify"        "FFA500" "Needs verification by an agent on another device"
+          ensure "cross-platform"         "9400D3" "Affects multiple operating systems"
+          ensure "platform:windows-only"  "0E8A16" "Windows-only changes; must not touch POSIX paths"
+          ensure "platform:posix-only"    "3D7DCE" "POSIX-only changes; must not touch Windows paths"

@@ -219,6 +219,31 @@ Hermes facts CI cannot see (`hermes config path`, TUI rendering, installer
 layouts) stay in the second and third tiers. Lean on CI for shared code; use
 dual checkouts for those Hermes-facing facts.
 
+### OS labels: environment and assist axes
+
+Two label axes answer different questions, and neither replaces the other.
+The **environment axis** includes `macos`, `linux`,
+`windows`, `wsl`, `macos-legacy` (derived automatically from the PR
+`OS / shell:` line by `label-pr-metadata.yml`), plus manual
+`cross-platform`, `needs:os-verify`, `platform:windows-only`, and
+`platform:posix-only`. OS labels alone do not prove a check: a body line
+naming several platforms labels all of them, and the add-only workflow
+re-applies a manually removed label on removal (`unlabeled`) or any later
+edit. Record which checks
+ran, passed, failed, or were not run in the PR body. The **assist axis**
+names which device's agent should confirm next:
+`assist:windows-confirm`, `assist:linux-confirm`, `assist:macos-confirm`,
+`assist:wsl-confirm` (palette owned by `labels-bootstrap.yml`). Use the
+assist axis when handing work across devices: add `needs:os-verify` plus
+the `assist:*` label for the target OS and document the exact commands to
+run. The receiving agent runs those commands and records failures or
+`not run` checks in the PR. If all requested checks pass, the agent adds
+its own OS label and removes its own `assist:*` label. Otherwise, leave
+the `assist:*` label in place. Remove `needs:os-verify` only when no
+other `assist:*` label remains on the PR: one OS confirming does not
+clear another OS's outstanding request. Do not add an `os:*` routing axis
+here: this repo's maintainers work from whichever device is available.
+
 ### Host limitation register
 
 Facts verified on a live host that constrain what an agent session there may
