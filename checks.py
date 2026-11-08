@@ -3423,21 +3423,6 @@ def check_dashboard():
             "reason": "cannot resolve $HERMES_HOME",
             "detail": None,
         }
-    # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
-    # the same PM install dir as facts (not a different one).
-    checkout = os.path.join(home, "hermes-agent")
-    if install_dir is not None:
-        candidate = os.path.join(install_dir, "hermes-agent")
-        if os.path.isdir(candidate):
-            checkout = candidate
-    if not os.path.isdir(checkout):
-        installs_dir = os.path.join(home, "installs")
-        if os.path.isdir(installs_dir):
-            for entry in sorted(os.listdir(installs_dir)):
-                candidate = os.path.join(installs_dir, entry, "hermes-agent")
-                if os.path.isdir(candidate):
-                    checkout = candidate
-                    break
     # PM-era installs store facts under installs/<key>/facts.json; fall back
     # to the legacy tools/facts.json location. Track the install dir so
     # checkout resolves from the same install (not a different one).
@@ -3451,6 +3436,20 @@ def check_dashboard():
                 facts_path = candidate
                 install_dir = os.path.join(installs_dir, entry)
                 break
+    # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
+    # the same PM install dir as facts (not a different one).
+    checkout = os.path.join(home, "hermes-agent")
+    if install_dir is not None:
+        candidate = os.path.join(install_dir, "hermes-agent")
+        if os.path.isdir(candidate):
+            checkout = candidate
+    if not os.path.isdir(checkout):
+        if os.path.isdir(installs_dir):
+            for entry in sorted(os.listdir(installs_dir)):
+                candidate = os.path.join(installs_dir, entry, "hermes-agent")
+                if os.path.isdir(candidate):
+                    checkout = candidate
+                    break
     lock_path = os.path.join(checkout, "pm", "lock.json")
     installed_node = None
     installed_npm = None
