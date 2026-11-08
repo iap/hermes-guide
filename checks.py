@@ -3495,6 +3495,13 @@ def check_dashboard():
     except Exception:
         pkg = None
     for installed, req, label in ((installed_node, engines_node, "node"), (installed_npm, engines_npm, "npm")):
+        if isinstance(req, str) and installed is None:
+            return {
+                "id": "DASHBOARD_NODE_ENGINES_MISMATCH",
+                "status": "broken",
+                "reason": f"{label} not installed but engines requires {req}",
+                "detail": [f"engines.{label}: {req}"],
+            }
         if isinstance(req, str) and installed is not None:
             try:
                 have_t = tuple(int(x) for x in str(installed).split("."))
