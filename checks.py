@@ -3544,6 +3544,13 @@ def check_dashboard():
             "reason": "lazy installs disabled while PM node is missing",
             "detail": "security.allow_lazy_installs is false",
         }
+    if not lazy:
+        return {
+            "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
+            "status": "informational",
+            "reason": "lazy installs disabled (toolchain OK)",
+            "detail": "security.allow_lazy_installs is false",
+        }
     # Web UI freshness: dist present and built with installed node
     dist = os.path.join(checkout, "hermes_cli", "web_dist")
     build_json = os.path.join(dist, "hermes-build.json")
