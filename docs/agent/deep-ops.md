@@ -230,12 +230,14 @@ The **verification axis** claims what was checked: `macos`, `linux`,
 should confirm next: `assist:windows-confirm`, `assist:linux-confirm`,
 `assist:macos-confirm` (palette owned by `labels-bootstrap.yml`). Use the
 assist axis when handing work across devices: add `needs:os-verify` plus
-the `assist:*` label for the target OS, document the exact commands to
-run, and the receiving agent removes `needs:os-verify` and adds its own
-verification label after running them. Do not add an `os:*` routing axis
-here: this repo's maintainers work from whichever device is available,
-and an assignment label would contradict the verification claim on the
-same PR.
+the `assist:*` label for the target OS and document the exact commands to
+run. The receiving agent runs those commands, adds its own verification
+label, then removes its own `assist:*` label. Remove `needs:os-verify`
+only when no other `assist:*` label remains on the PR: one OS confirming
+does not clear another OS's outstanding request. Do not add an `os:*`
+routing axis here: this repo's maintainers work from whichever device is
+available, and an assignment label would contradict the verification
+claim on the same PR.
 
 ### Host limitation register
 
