@@ -151,7 +151,9 @@ def _write_node_facts(dirpath, version="26.7.0"):
     entry = f"node-{version}-win32-x64"
     node_dir = os.path.join(dirpath, entry)
     os.makedirs(node_dir, exist_ok=True)
-    with open(os.path.join(node_dir, "node.exe" if sys.platform == "win32" else os.path.join("bin", "node")), "w") as f:
+    node_bin = os.path.join(node_dir, "node.exe" if sys.platform == "win32" else os.path.join("bin", "node"))
+    os.makedirs(os.path.dirname(node_bin), exist_ok=True)
+    with open(node_bin, "w") as f:
         f.write("fake")
     with open(os.path.join(dirpath, "facts.json"), "w") as f:
         json.dump({"packages": {"node": {"entry": entry, "version": version}}}, f)
