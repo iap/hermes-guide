@@ -20,7 +20,7 @@
 ## Rules
 
 ### 1. Platform-specific code only on verified OS; cross-platform changes may proceed with a verify label
-Platform-specific code for an OS you cannot verify is not changed. If you are on Windows, do NOT modify POSIX-only code paths. Cross-platform code may change only after adding `needs:os-verify` and requesting verification.
+Platform-specific code for an OS you cannot verify is not changed. If you are on Windows, do NOT modify POSIX-only code paths. Cross-platform code may change on a branch; once the PR exists, add `needs:os-verify` and request verification when another target still needs it.
 
 ### 2. Use platform-agnostic patterns
 - **Paths**: Use `pathlib.Path` or `os.path.join()`. Never hardcode separators.
