@@ -41,6 +41,8 @@ def _run_gh_graphql(query):
         ["gh", "api", "graphql", "-f", "query=" + query],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=60,
         check=False,
     )

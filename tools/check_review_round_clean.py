@@ -88,7 +88,7 @@ def _check_ledger(ledger: dict, pr_number: int, live_head: str) -> list[str]:
 def _fetch_fresh_ledger(pr_number: int) -> dict:
     """Fetch fresh threads and build a ledger (no disk write)."""
     threads, head_oid = rl._fetch_pr_threads(pr_number)
-    findings = rl._parse_threads(threads)
+    findings, _ = rl._parse_threads(threads)
     return rl.build_ledger(pr_number, head_oid, findings)
 
 
@@ -144,7 +144,7 @@ def main() -> int:
     if not args.no_live_check and not failures:
         try:
             threads, live_head2 = rl._fetch_pr_threads(pr_number)
-            findings = rl._parse_threads(threads)
+            findings, _ = rl._parse_threads(threads)
             open_findings = rl.unresolved_findings(findings)
             if open_findings:
                 failures.append(
