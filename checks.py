@@ -3054,8 +3054,9 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "dashboard check could not read the lock pin, the package.json "
         "engines, or the built Web UI receipt. It reports unknown rather "
         "than guessing at a different install.",
-        "Install or locate the Hermes source checkout (`hermes pm install` "
-        "or `git clone`), then re-run `hermes guide dashboard`.",
+        "Install or locate the Hermes source checkout (`git clone "
+        "https://github.com/NousResearch/hermes-agent` into a path the "
+        "dashboard check searches), then re-run `hermes guide dashboard`.",
     ),
 }
 
@@ -3456,17 +3457,46 @@ def check_dashboard():
             if os.path.isfile(candidate_facts) and os.path.isdir(candidate_checkout):
                 install_dir = os.path.join(installs_dir, entry)
                 checkout = candidate_checkout
+                facts_path = candidate_facts
                 break
-    # Prefer the legacy facts file when it actually tracks the toolchain;
-    # the install dir's facts may only carry the venv. A facts file with
-    # no node entry is not evidence that node is absent.
+    # Prefer the install dir's facts when they actually track the toolchain;
+    # otherwise fall back to the shared legacy tools/facts.json. The legacy
+    # file is shared across installs, so it must never displace install-local
+    # evidence: a legacy node-26 entry compared against a paired install's
+    # node-24 lock would report a mismatch on a healthy host, and a legacy
+    # entry with a version but no `entry` cannot be verified and must not
+    # override facts whose binary exists.
+    if install_dir is not None:
+        install_facts = os.path.join(install_dir, "facts.json")
+        if os.path.isfile(install_facts):
+            try:
+                with open(install_facts, "r", encoding="utf-8") as f:
+                    inst = json.load(f)
+                inst_node = inst.get("packages", {}).get("node") if isinstance(inst.get("packages"), dict) else None
+                if isinstance(inst_node, dict) and inst_node.get("entry"):
+                    inst_bin = os.path.join(
+                        install_dir,
+                        inst_node["entry"],
+                        "node.exe" if sys.platform == "win32" else "node",
+                    )
+                    if os.path.isfile(inst_bin):
+                        facts_path = install_facts
+            except Exception:  # nosec B110 - install facts unreadable is not a verdict; stay on the legacy file
+                pass
     legacy_facts = os.path.join(home, "tools", "facts.json")
-    if os.path.isfile(legacy_facts):
+    if os.path.isfile(legacy_facts) and facts_path == legacy_facts:
         try:
             with open(legacy_facts, "r", encoding="utf-8") as f:
                 legacy = json.load(f)
-            if isinstance(legacy.get("packages", {}), dict) and legacy["packages"].get("node"):
-                facts_path = legacy_facts
+            legacy_node = legacy.get("packages", {}).get("node") if isinstance(legacy.get("packages"), dict) else None
+            if isinstance(legacy_node, dict) and legacy_node.get("entry"):
+                node_bin = os.path.join(
+                    os.path.dirname(legacy_facts),
+                    legacy_node["entry"],
+                    "node.exe" if sys.platform == "win32" else "node",
+                )
+                if os.path.isfile(node_bin):
+                    facts_path = legacy_facts
         except Exception:  # nosec B110 - legacy facts unreadable is not a verdict; stay on the install dir
             pass
     # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check

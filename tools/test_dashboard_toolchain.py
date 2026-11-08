@@ -146,6 +146,111 @@ def test_check_dashboard_unknown_when_no_checkout():
     assert result["id"] == "DASHBOARD_CHECKOUT_UNRESOLVED"
 
 
+def _write_node_facts(dirpath, version="26.7.0"):
+    """Write a facts.json with a node entry whose binary exists."""
+    entry = f"node-{version}-win32-x64"
+    node_dir = os.path.join(dirpath, entry)
+    os.makedirs(node_dir, exist_ok=True)
+    with open(os.path.join(node_dir, "node.exe" if sys.platform == "win32" else "node"), "w") as f:
+        f.write("fake")
+    with open(os.path.join(dirpath, "facts.json"), "w") as f:
+        json.dump({"packages": {"node": {"entry": entry, "version": version}}}, f)
+
+
+def _write_web_dist(checkout, node_version="26.7.0"):
+    """Create the web UI dist marker the dashboard check requires."""
+    dist = os.path.join(checkout, "hermes_cli", "web_dist")
+    os.makedirs(dist, exist_ok=True)
+    with open(os.path.join(dist, "hermes-build.json"), "w") as f:
+        json.dump({"node": node_version}, f)
+    with open(os.path.join(dist, "index.html"), "w") as f:
+        f.write("<!doctype html>")
+
+
+def test_check_dashboard_paired_install_local_node():
+    """An install with both facts and checkout tracks node, even when the
+    shared legacy tools/facts.json is absent. The paired install's facts
+    must be selected, not the nonexistent legacy path."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    install = os.path.join(home, "installs", "abc123")
+    checkout = os.path.join(install, "hermes-agent")
+    os.makedirs(os.path.join(checkout, "pm"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    _write_node_facts(install)
+    _write_web_dist(checkout, "26.7.0")
+    with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
+    with patch.object(checks, "_hermes_home", return_value=home):
+        result = checks.check_dashboard()
+    assert result["status"] == "healthy", result
+    assert "26.7.0" in result.get("detail", "")
+
+
+def test_check_dashboard_legacy_facts_displaced_by_install_local():
+    """A legacy node-26 entry must not override a paired install's node-24
+    evidence; the install-local facts win because their binary exists."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    install = os.path.join(home, "installs", "abc123")
+    checkout = os.path.join(install, "hermes-agent")
+    os.makedirs(os.path.join(checkout, "pm"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    _write_node_facts(install, version="24.0.0")
+    _write_web_dist(checkout, "24.0.0")
+    # Legacy file claims node 26 — stale, must not displace the install
+    _write_node_facts(os.path.join(home, "tools"), version="26.7.0")
+    with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
+    with patch.object(checks, "_hermes_home", return_value=home):
+        result = checks.check_dashboard()
+    assert result["status"] == "healthy", result
+    assert "24.0.0" in result.get("detail", "")
+
+
+def test_check_dashboard_legacy_facts_without_entry_keeps_install():
+    """A legacy entry with a version but no `entry` cannot be verified and
+    must not displace install-local facts whose binary exists."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    install = os.path.join(home, "installs", "abc123")
+    checkout = os.path.join(install, "hermes-agent")
+    os.makedirs(os.path.join(checkout, "pm"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    _write_node_facts(install, version="24.0.0")
+    _write_web_dist(checkout, "24.0.0")
+    # Legacy has a version but no entry — unverifiable
+    with open(os.path.join(home, "tools", "facts.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
+    with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
+    with patch.object(checks, "_hermes_home", return_value=home):
+        result = checks.check_dashboard()
+    assert result["status"] == "healthy", result
+    assert "24.0.0" in result.get("detail", "")
+
+
+def test_check_dashboard_legacy_facts_unreadable_keeps_install():
+    """An unreadable legacy facts file must not crash the check or flip
+    the preference; the install dir's facts are used instead."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    install = os.path.join(home, "installs", "abc123")
+    checkout = os.path.join(install, "hermes-agent")
+    os.makedirs(os.path.join(checkout, "pm"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    _write_node_facts(install, version="24.0.0")
+    _write_web_dist(checkout, "24.0.0")
+    with open(os.path.join(home, "tools", "facts.json"), "w") as f:
+        f.write("{not valid json")
+    with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
+    with patch.object(checks, "_hermes_home", return_value=home):
+        result = checks.check_dashboard()
+    assert result["status"] == "healthy", result
+    assert "24.0.0" in result.get("detail", "")
+
+
 def main() -> int:
     failures = 0
     for name in sorted(globals()):
