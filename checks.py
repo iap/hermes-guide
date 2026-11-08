@@ -3467,7 +3467,7 @@ def check_dashboard():
                 legacy = json.load(f)
             if isinstance(legacy.get("packages", {}), dict) and legacy["packages"].get("node"):
                 facts_path = legacy_facts
-        except Exception:
+        except Exception:  # nosec B110 - legacy facts unreadable is not a verdict; stay on the install dir
             pass
     # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
     # the same PM install dir as facts (not a different one).
