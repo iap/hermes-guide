@@ -151,10 +151,16 @@ def _write_node_facts(dirpath, version="26.7.0"):
     entry = f"node-{version}-win32-x64"
     node_dir = os.path.join(dirpath, entry)
     os.makedirs(node_dir, exist_ok=True)
-    with open(os.path.join(node_dir, "node.exe" if sys.platform == "win32" else "node"), "w") as f:
+    with open(os.path.join(node_dir, "node.exe" if sys.platform == "win32" else os.path.join("bin", "node")), "w") as f:
         f.write("fake")
     with open(os.path.join(dirpath, "facts.json"), "w") as f:
         json.dump({"packages": {"node": {"entry": entry, "version": version}}}, f)
+
+
+def _write_venv_only_facts(dirpath):
+    """Write a facts.json that carries only the Python venv, no node entry."""
+    with open(os.path.join(dirpath, "facts.json"), "w") as f:
+        json.dump({"packages": {"python": {"entry": "venv"}}}, f)
 
 
 def _write_web_dist(checkout, node_version="26.7.0"):
@@ -243,6 +249,69 @@ def test_check_dashboard_legacy_facts_unreadable_keeps_install():
     _write_web_dist(checkout, "24.0.0")
     with open(os.path.join(home, "tools", "facts.json"), "w") as f:
         f.write("{not valid json")
+    with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
+    with patch.object(checks, "_hermes_home", return_value=home):
+        result = checks.check_dashboard()
+    assert result["status"] == "healthy", result
+    assert "24.0.0" in result.get("detail", "")
+
+
+def test_check_dashboard_venv_only_install_falls_back_to_legacy():
+    """A paired install whose facts carry only the venv must not lock
+    facts_path onto them; a valid legacy node entry is still read and
+    the toolchain reports healthy."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    install = os.path.join(home, "installs", "abc123")
+    checkout = os.path.join(install, "hermes-agent")
+    os.makedirs(os.path.join(checkout, "pm"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    _write_venv_only_facts(install)
+    _write_web_dist(checkout, "26.7.0")
+    _write_node_facts(os.path.join(home, "tools"), version="26.7.0")
+    with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
+    with patch.object(checks, "_hermes_home", return_value=home):
+        result = checks.check_dashboard()
+    assert result["status"] == "healthy", result
+    assert "26.7.0" in result.get("detail", "")
+
+
+def test_check_dashboard_legacy_without_node_does_not_override_install():
+    """A legacy facts file with no node entry must not displace install
+    facts whose binary exists."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    install = os.path.join(home, "installs", "abc123")
+    checkout = os.path.join(install, "hermes-agent")
+    os.makedirs(os.path.join(checkout, "pm"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    _write_node_facts(install, version="24.0.0")
+    _write_web_dist(checkout, "24.0.0")
+    with open(os.path.join(home, "tools", "facts.json"), "w") as f:
+        json.dump({"packages": {"python": {"entry": "venv"}}}, f)
+    with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
+    with patch.object(checks, "_hermes_home", return_value=home):
+        result = checks.check_dashboard()
+    assert result["status"] == "healthy", result
+    assert "24.0.0" in result.get("detail", "")
+
+
+def test_check_dashboard_legacy_truthy_node_without_entry_keeps_install():
+    """A legacy node entry that is truthy but has no `entry` field cannot
+    be verified and must not displace install facts whose binary exists."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    install = os.path.join(home, "installs", "abc123")
+    checkout = os.path.join(install, "hermes-agent")
+    os.makedirs(os.path.join(checkout, "pm"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    _write_node_facts(install, version="24.0.0")
+    _write_web_dist(checkout, "24.0.0")
+    with open(os.path.join(home, "tools", "facts.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "24.0.0"}}}, f)
     with patch.object(checks, "_hermes_home", return_value=home):

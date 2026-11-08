@@ -3056,7 +3056,8 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "than guessing at a different install.",
         "Install or locate the Hermes source checkout (`git clone "
         "https://github.com/NousResearch/hermes-agent` into a path the "
-        "dashboard check searches), then re-run `hermes guide dashboard`.",
+        "dashboard check searches), with explicit user confirmation before "
+        "any install or clone, then re-run `hermes guide dashboard`.",
     ),
 }
 
@@ -3450,6 +3451,7 @@ def check_dashboard():
     installs_dir = os.path.join(home, "installs")
     install_dir = None
     checkout = None
+    install_has_node = False
     if os.path.isdir(installs_dir):
         for entry in sorted(os.listdir(installs_dir)):
             candidate_facts = os.path.join(installs_dir, entry, "facts.json")
@@ -3466,6 +3468,9 @@ def check_dashboard():
     # node-24 lock would report a mismatch on a healthy host, and a legacy
     # entry with a version but no `entry` cannot be verified and must not
     # override facts whose binary exists.
+    # An install whose facts carry only the venv must not lock facts_path
+    # onto them: a valid legacy node entry would otherwise be ignored and
+    # the toolchain reported as missing.
     if install_dir is not None:
         install_facts = os.path.join(install_dir, "facts.json")
         if os.path.isfile(install_facts):
@@ -3477,14 +3482,26 @@ def check_dashboard():
                     inst_bin = os.path.join(
                         install_dir,
                         inst_node["entry"],
-                        "node.exe" if sys.platform == "win32" else "node",
+                        "node.exe" if sys.platform == "win32" else os.path.join("bin", "node"),
                     )
                     if os.path.isfile(inst_bin):
                         facts_path = install_facts
+                        install_has_node = True
+                    else:
+                        # install facts exist but their node binary is absent;
+                        # fall back to the shared legacy path
+                        facts_path = os.path.join(home, "tools", "facts.json")
+                else:
+                    # venv-only install facts: fall back to legacy
+                    facts_path = os.path.join(home, "tools", "facts.json")
             except Exception:  # nosec B110 - install facts unreadable is not a verdict; stay on the legacy file
-                pass
+                facts_path = os.path.join(home, "tools", "facts.json")
+    # Fall back to the shared legacy file when the selected facts do not
+    # carry a verifiable node entry. This runs regardless of which path
+    # facts_path currently holds, so a venv-only install file does not
+    # block a valid legacy node entry.
     legacy_facts = os.path.join(home, "tools", "facts.json")
-    if os.path.isfile(legacy_facts) and facts_path == legacy_facts:
+    if not install_has_node and os.path.isfile(legacy_facts):
         try:
             with open(legacy_facts, "r", encoding="utf-8") as f:
                 legacy = json.load(f)
@@ -3493,7 +3510,7 @@ def check_dashboard():
                 node_bin = os.path.join(
                     os.path.dirname(legacy_facts),
                     legacy_node["entry"],
-                    "node.exe" if sys.platform == "win32" else "node",
+                    "node.exe" if sys.platform == "win32" else "bin/node",
                 )
                 if os.path.isfile(node_bin):
                     facts_path = legacy_facts
@@ -3540,7 +3557,7 @@ def check_dashboard():
             facts_dir = os.path.dirname(facts_path)
             if node_entry:
                 node_bin = os.path.join(facts_dir, node_entry,
-                                        "node.exe" if sys.platform == "win32" else "node")
+                                        "node.exe" if sys.platform == "win32" else "bin/node")
                 if os.path.isfile(node_bin):
                     installed_node = node_version
                 else:
