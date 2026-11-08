@@ -3475,11 +3475,11 @@ def check_dashboard():
         except Exception:
             parts = []
         host_major = parts[0] if parts else 0
-        if major >= 25 and host_major < 13:
+        if major >= 26 and host_major < 14:
             return {
                 "id": "DASHBOARD_NODE_OS_FLOOR_MISMATCH",
                 "status": "broken",
-                "reason": f"pinned node {lock_node} requires macOS 13.5+, host is {mac_ver or 'unknown'}",
+                "reason": f"pinned node {lock_node} requires macOS 14+, host is {mac_ver or 'unknown'}",
                 "detail": [f"host macOS: {mac_ver}", f"lock node: {lock_node}"],
             }
     # Engines vs installed
@@ -3546,12 +3546,12 @@ def check_dashboard():
     # Web UI freshness: dist present and built with installed node
     dist = os.path.join(checkout, "hermes_cli", "web_dist")
     build_json = os.path.join(dist, "hermes-build.json")
-    # Indeterminate toolchain (no lock pin and no installed evidence) is never healthy.
-    if installed_node is None and lock_node is None:
+    # Indeterminate toolchain (no lock pin or no installed evidence) is never healthy.
+    if installed_node is None or lock_node is None:
         return {
             "id": "DASHBOARD_NODE_OUTDATED",
             "status": "unknown",
-            "reason": "dashboard toolchain indeterminate (no lock pin and no PM facts)",
+            "reason": "dashboard toolchain indeterminate (no lock pin or no PM facts)",
             "detail": [facts_path, lock_path],
         }
     if not os.path.isfile(build_json):
