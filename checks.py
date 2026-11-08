@@ -3452,7 +3452,18 @@ def check_dashboard():
             facts = json.load(f)
         pkgs = facts.get("packages", {}) if isinstance(facts, dict) else {}
         if isinstance(pkgs.get("node"), dict):
-            installed_node = pkgs["node"].get("version")
+            node_entry = pkgs["node"].get("entry")
+            node_version = pkgs["node"].get("version")
+            # Verify the binary actually exists (facts.json may be stale).
+            if node_entry:
+                node_bin = os.path.join(home, "tools", node_entry,
+                                        "node.exe" if sys.platform == "win32" else "node")
+                if os.path.isfile(node_bin):
+                    installed_node = node_version
+                else:
+                    installed_node = None
+            else:
+                installed_node = node_version
         if isinstance(pkgs.get("npm"), dict):
             installed_npm = pkgs["npm"].get("version")
     except Exception:
