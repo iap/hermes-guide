@@ -15,8 +15,10 @@ the old assertion.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import platform
 import shutil
 import sys
 import tempfile
@@ -67,6 +69,18 @@ def test_dashboard_ids_are_3tuples():
 
 def test_labels_includes_dashboard():
     assert "dashboard" in checks.labels()
+
+
+@contextlib.contextmanager
+def _modern_macos():
+    """Pretend the host is Darwin + macOS 15 so node >=26 OS-floor checks pass.
+
+    Patches both mac_ver and sys.platform so the OS-floor branch is
+    exercised on every host (Linux CI otherwise skips it entirely).
+    """
+    with patch.object(platform, "mac_ver", return_value=("15.0.0", ("", "", ""), "")), \
+         patch.object(sys, "platform", "darwin"):
+        yield
 
 
 def test_check_dashboard_fast_envelope():
@@ -157,10 +171,16 @@ def _write_node_facts(dirpath, version="26.7.0"):
     entry = f"node-{version}-win32-x64"
     node_dir = os.path.join(dirpath, entry)
     os.makedirs(node_dir, exist_ok=True)
-    node_bin = os.path.join(node_dir, "node.exe" if sys.platform == "win32" else os.path.join("bin", "node"))
-    os.makedirs(os.path.dirname(node_bin), exist_ok=True)
-    with open(node_bin, "w") as f:
-        f.write("fake")
+    # Write both binary layouts: checks.py picks node.exe only on win32 and
+    # bin/node otherwise, at check time after any sys.platform patch. The
+    # fixture runs on the real host (e.g. Windows makes node.exe), while a
+    # test may patch sys.platform to darwin, so the check looks for
+    # bin/node. Creating both makes the fixture independent of that mismatch.
+    for node_bin in (os.path.join(node_dir, "node.exe"),
+                     os.path.join(node_dir, "bin", "node")):
+        os.makedirs(os.path.dirname(node_bin), exist_ok=True)
+        with open(node_bin, "w") as f:
+            f.write("fake")
     with open(os.path.join(dirpath, "facts.json"), "w") as f:
         json.dump({"packages": {"node": {"entry": entry, "version": version}}}, f)
 
@@ -196,7 +216,8 @@ def test_check_dashboard_paired_install_local_node():
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
     with patch.object(checks, "_hermes_home", return_value=home), \
-         patch.object(checks, "_read_config", return_value=(None, {})):
+         patch.object(checks, "_read_config", return_value=(None, {})), \
+         _modern_macos():
         os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
@@ -289,7 +310,8 @@ def test_check_dashboard_venv_only_install_falls_back_to_legacy():
     with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
         json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
     with patch.object(checks, "_hermes_home", return_value=home), \
-         patch.object(checks, "_read_config", return_value=(None, {})):
+         patch.object(checks, "_read_config", return_value=(None, {})), \
+         _modern_macos():
         os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
@@ -340,6 +362,29 @@ def test_check_dashboard_legacy_truthy_node_without_entry_keeps_install():
         result = checks.check_dashboard()
     assert result["status"] == "healthy", result
     assert "24.0.0" in result.get("detail", "")
+
+
+def test_check_dashboard_os_floor_mismatch_on_legacy_macos():
+    """Node 26 needs macOS 14+; host 12.7.6 must report floor mismatch."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    install = os.path.join(home, "installs", "abc123")
+    checkout = os.path.join(install, "hermes-agent")
+    os.makedirs(os.path.join(checkout, "pm"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    _write_node_facts(install, version="26.7.0")
+    _write_web_dist(checkout, "26.7.0")
+    with open(os.path.join(checkout, "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
+    legacy = patch.object(platform, "mac_ver", return_value=("12.7.6", ("", "", ""), ""))
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})), \
+         legacy, \
+         patch.object(sys, "platform", "darwin"):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
+        result = checks.check_dashboard()
+    assert result["status"] == "broken", result
+    assert result["id"] == "DASHBOARD_NODE_OS_FLOOR_MISMATCH", result
 
 
 def main() -> int:
