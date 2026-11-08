@@ -3455,15 +3455,17 @@ def check_dashboard():
             node_entry = pkgs["node"].get("entry")
             node_version = pkgs["node"].get("version")
             # Verify the binary actually exists (facts.json may be stale).
+            facts_dir = os.path.dirname(facts_path)
             if node_entry:
-                node_bin = os.path.join(home, "tools", node_entry,
+                node_bin = os.path.join(facts_dir, node_entry,
                                         "node.exe" if sys.platform == "win32" else "node")
                 if os.path.isfile(node_bin):
                     installed_node = node_version
                 else:
                     installed_node = None
             else:
-                installed_node = node_version
+                # No entry field: cannot verify binary, treat as unverified
+                installed_node = None
         if isinstance(pkgs.get("npm"), dict):
             installed_npm = pkgs["npm"].get("version")
     except Exception:
@@ -3505,7 +3507,8 @@ def check_dashboard():
         except Exception:
             parts = []
         host_major = parts[0] if parts else 0
-        if major >= 25 and host_major < 13:
+        os_floor_violated = (major >= 26 and host_major < 14) or (major == 25 and host_major < 13)
+        if os_floor_violated:
             required = "14+" if major >= 26 else "13+"
             return {
                 "id": "DASHBOARD_NODE_OS_FLOOR_MISMATCH",
@@ -3526,6 +3529,10 @@ def check_dashboard():
         pkg = None
     for installed, req, label in ((installed_node, engines_node, "node"), (installed_npm, engines_npm, "npm")):
         if isinstance(req, str) and installed is None:
+            # engines.npm may be a message string (not a version range)
+            # e.g. "npm is not supported, use pnpm". Skip if not a version.
+            if label == "npm" and not re.search(r"\d", req):
+                continue
             return {
                 "id": "DASHBOARD_NODE_ENGINES_MISMATCH",
                 "status": "broken",
@@ -3533,6 +3540,9 @@ def check_dashboard():
                 "detail": [f"engines.{label}: {req}"],
             }
         if isinstance(req, str) and installed is not None:
+            # Skip non-version-range strings (e.g. npm refusal messages)
+            if label == "npm" and not re.search(r"\d", req):
+                continue
             try:
                 have_t = tuple(int(x) for x in str(installed).split("."))
             except Exception:
