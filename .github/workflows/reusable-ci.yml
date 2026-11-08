@@ -610,6 +610,27 @@ jobs:
           python tools/check_skill_provenance.py
           python tools/test_skill_provenance.py
 
+      - name: Review round clean gate
+        # Mechanical merge-blocking guard: verifies the PR's review rounds
+        # (Qodo + CodeRabbit) are clean with zero unresolved findings.
+        # Needs gh CLI + network, so it runs in the full tier on Linux.
+        # Skips on push events (no PR number). The guard also handles
+        # missing ledger by fetching fresh threads.
+        if: runner.os == 'Linux' && inputs.run-full-gate && inputs.event-name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python tools/check_review_round_clean.py --pr "$PR_NUMBER"
+
+      - name: Review round clean gate regression
+        # Hermetic unit tests for the gate logic (no network, no gh).
+        run: python tools/test_check_review_round_clean.py
+
+      - name: Review ledger regression
+        # Hermetic unit tests for the ledger parsing/build logic.
+        run: python tools/test_review_ledger.py
+
       - name: Scope validation regression
         if: inputs.run-full-gate
         run: python tools/test_scope_validation.py

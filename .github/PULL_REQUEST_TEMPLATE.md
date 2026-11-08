@@ -65,6 +65,14 @@ a merged PR claiming pending work misleads the next reader. -->
 - [ ] `.github/upstream-drift.baseline` bumped if this absorbs upstream drift
 - [ ] Anything I could NOT verify is listed above, not omitted
 
+## Review Round Status
+<!-- Machine-checked by tools/check_review_round_clean.py in CI.
+     Fill in after Qodo and CodeRabbit reviews are complete. -->
+- [ ] Qodo review clean (all findings resolved)
+- [ ] CodeRabbit review clean (all findings resolved)
+- [ ] Round ledger written (`.hermes/review-rounds.json`)
+- [ ] Both bots clean on same head commit
+
 ## Notes for reviewers
 <!-- Anything a reviewer should check by hand: judgement calls, facts that depend
 on a specific upstream revision, or a check you expect to behave differently on
