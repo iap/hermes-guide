@@ -177,7 +177,9 @@ while writes fail. Treat it as a separate branch:
    the results, then ask the user to confirm before running
    `/disk-cleanup quick` to reclaim space.
    Note: `quick` also removes empty directories outside protected trees, which
-   are not shown in the `dry-run` preview.
+   are not shown in the `dry-run` preview; inspect any listed directory before
+   confirmation, and use `/disk-cleanup forget <path>` to exclude one you want
+   to keep.
     The `disk-cleanup` plugin tracks and ages these out automatically.
 4. Reclaiming *disk* does not relieve *memory* pressure — never present a
    cleanup as a fix for swapping (see section 4).

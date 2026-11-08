@@ -3528,10 +3528,15 @@ def check_dashboard():
         if os.path.isdir(candidate):
             checkout = candidate
     if checkout is None and os.path.isdir(installs_dir):
-        # No install had both facts and checkout: take whichever has a
-        # checkout and fall back to the legacy tools/facts.json for the
-        # installed evidence. The lock pin and the built receipt both
-        # come from the checkout, so at least those agree.
+        candidates = [
+            os.path.join(installs_dir, entry, "hermes-agent")
+            for entry in sorted(os.listdir(installs_dir))
+            if os.path.isdir(os.path.join(installs_dir, entry, "hermes-agent"))
+        ]
+        # Only use the fallback when exactly one install has a checkout;
+        # otherwise we would pair a lock pin with the wrong toolchain.
+        if len(candidates) == 1:
+            checkout = candidates[0]
         for entry in sorted(os.listdir(installs_dir)):
             candidate = os.path.join(installs_dir, entry, "hermes-agent")
             if os.path.isdir(candidate):

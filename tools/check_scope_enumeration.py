@@ -219,6 +219,16 @@ def router_skill_problems(labels: list[str], text: str) -> list[str]:
     return _set_problems(labels, _BACKTICK.findall(match.group(1)), where)
 
 
+def _module_docstring(text: str) -> str:
+    """Return the module-level docstring of a Python source file, or ''."""
+    try:
+        import ast
+        tree = ast.parse(text)
+        return ast.get_docstring(tree) or ""
+    except SyntaxError:
+        return ""
+
+
 def init_py_problems(labels: list[str], text: str) -> list[str]:
     """The `Checks: ... — <count>` line must list the `_CHECKS` set."""
     match = re.search(r"Checks:\s*(.+?)\s*—", text)
@@ -235,7 +245,7 @@ def _collect() -> list[str]:
     for path, extra in (
         (PLUGIN_YAML, plugin_yaml_problems),
         (README, lambda ls, text: count_problems(text, expected, "checks", "README.md")),
-        (INIT_PY, lambda ls, text: count_problems(text, expected, "checks", "__init__.py") + init_py_problems(ls, text)),
+        (INIT_PY, lambda ls, text: count_problems(_module_docstring(text), expected, "checks", "__init__.py") + init_py_problems(ls, text)),
         (ROUTER_SKILL, router_skill_problems),
     ):
         try:
