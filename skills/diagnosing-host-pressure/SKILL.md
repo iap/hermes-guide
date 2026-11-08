@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.13
+version: 1.3.15
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -173,16 +173,21 @@ while writes fail. Treat it as a separate branch:
 2. If `state.db` dominates, follow `diagnosing-memory` (`references/state_db.md`)
    and the `storage` scope of `hermes guide` — do not delete `-wal`/`-shm` by hand.
 3. For ephemeral files, caches, cron output, request dumps and scratch, run
-   `/disk-cleanup` in a session (or the `hermes-disk-housekeeping` skill).
-   The `disk-cleanup` plugin tracks and ages these out automatically.
+   `/disk-cleanup dry-run` in a session (the `disk-cleanup` plugin), review
+   the results, then ask the user to confirm before running
+   `/disk-cleanup quick` to reclaim space.
+   Note: `quick` also removes empty directories outside protected trees, which
+   are not shown in the `dry-run` preview; inspect any listed directory before
+   confirmation, and use `/disk-cleanup forget <path>` to exclude one you want
+   to keep.
+    The `disk-cleanup` plugin tracks and ages these out automatically.
 4. Reclaiming *disk* does not relieve *memory* pressure — never present a
    cleanup as a fix for swapping (see section 4).
 
 > Provenance: verified 2026-10-27 against the live install — `/disk-cleanup`
 > slash command and the `disk-cleanup` plugin (`plugins/disk-cleanup/disk_cleanup.py`),
-> the `hermes-disk-housekeeping` skill, and standard OS disk commands (`df`, PowerShell
-> `Get-PSDrive`/`Get-Volume`). No upstream source citations are added; claims are limited
-> to commands and surfaces verified live.
+> plus standard OS disk commands (`df`, PowerShell `Get-PSDrive`/`Get-Volume`). No upstream
+> source citations are added; claims are limited to commands and surfaces verified live.
 
 ---
 

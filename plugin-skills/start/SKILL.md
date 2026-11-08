@@ -1,7 +1,7 @@
 ---
 name: start
 description: "Route vague Hermes problem reports ('something is wrong', slow, crashed, won't start, not responding) to the `hermes guide` baseline and the diagnosing-* playbooks. Registered by the plugin itself, so it works before the skills tap is installed."
-version: 1.1.4
+version: 1.1.5
 metadata:
   hermes:
     tags: [hermes, diagnostics, triage, routing]
@@ -68,7 +68,6 @@ Run the health check and read its lines:
 - In a session: `/hermes-doctor`, or `/hermes-doctor <scope>`.
 
 Valid scopes: `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
-`memories`, `sessions`, `storage`, `gateway`, `dashboard`, `update`.
 `memories`, `sessions`, `storage`, `gateway`, `dashboard`, `update`.
 
 The check writes nothing. The `hooks` scope is in-process by default (config,

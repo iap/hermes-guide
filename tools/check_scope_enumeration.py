@@ -2,20 +2,22 @@
 """Fail when a hand-written scope list, count or description length drifts.
 
 `checks.py` `_CHECKS` is the source of truth for the plugin's health-check
-scopes. Three files restate that set in prose that cannot be generated:
+scopes. Four files restate that set in prose that cannot be generated:
 
 - `plugin.yaml` — the catalog description. `hermes plugins info` prints it, so
   it is a YAML scalar and can carry no BEGIN/END GENERATED markers.
 - `README.md` — the "runs all nine checks" sentence under *Use the plugin*.
+- `__init__.py` — the module docstring's "Checks: … — twelve read-only checks" line.
 - `plugin-skills/start/SKILL.md` — the router skill's `Valid scopes:` line.
 
 `tools/render_docs.py` generates the scope lists it can (the README and AGENTS
 blocks) and `tools/test_skill_counts.py` no longer owns counts, so nothing read
-these three. They drifted twice: the router skill's list was corrected seven to
+these four. They drifted twice: the router skill's list was corrected seven to
 nine on 2026-10-17 while `plugin.yaml`'s kept the same stale seven, and the
-README count has never been checked at all.
+README count has never been checked at all. The `__init__.py` docstring said
+"eleven" for a whole release after the twelfth scope landed.
 
-Hermetic: an `ast` read of `checks.py` plus three file reads. No PyYAML, no
+Hermetic: an `ast` read of `checks.py` plus four file reads. No PyYAML, no
 Hermes install, no network. The `_CHECKS` reader is duplicated from
 `render_docs.py` on purpose — no script under `tools/` imports a sibling, so
 each guard stays runnable on a bare interpreter in a commit hook.
@@ -37,6 +39,7 @@ REPO = Path(__file__).resolve().parent.parent
 CHECKS_PY = REPO / "checks.py"
 PLUGIN_YAML = REPO / "plugin.yaml"
 README = REPO / "README.md"
+INIT_PY = REPO / "__init__.py"
 ROUTER_SKILL = REPO / "plugin-skills" / "start" / "SKILL.md"
 
 # Prose style is word-numbers, never digits, so only a word in this set is
@@ -216,6 +219,25 @@ def router_skill_problems(labels: list[str], text: str) -> list[str]:
     return _set_problems(labels, _BACKTICK.findall(match.group(1)), where)
 
 
+def _module_docstring(text: str) -> str:
+    """Return the module-level docstring of a Python source file, or ''."""
+    try:
+        import ast
+        tree = ast.parse(text)
+        return ast.get_docstring(tree) or ""
+    except SyntaxError:
+        return ""
+
+
+def init_py_problems(labels: list[str], text: str) -> list[str]:
+    """The `Checks: ... — <count>` line must list the `_CHECKS` set."""
+    match = re.search(r"Checks:\s*(.+?)\s*—", text)
+    if not match:
+        return ["__init__.py: no 'Checks: ... —' line found"]
+    listed = [x.strip() for x in match.group(1).split(",") if x.strip()]
+    return _set_problems(labels, listed, "__init__.py Checks:")
+
+
 def _collect() -> list[str]:
     labels = check_labels()
     expected = _word(len(labels))
@@ -223,6 +245,7 @@ def _collect() -> list[str]:
     for path, extra in (
         (PLUGIN_YAML, plugin_yaml_problems),
         (README, lambda ls, text: count_problems(text, expected, "checks", "README.md")),
+        (INIT_PY, lambda ls, text: count_problems(_module_docstring(text), expected, "checks", "__init__.py") + init_py_problems(ls, text)),
         (ROUTER_SKILL, router_skill_problems),
     ):
         try:
@@ -339,6 +362,18 @@ def selftest() -> int:
             count_problems("Twenty-two skills\n\nChecks are read-only.", "nine", "checks", "README.md"),
             False,
         ),
+        (
+            "count: the module docstring count is checked too",
+            count_problems(
+                "Checks: config, mcp, skills, commands, hooks, plugins, memories, "
+                "sessions, storage, update, gateway — eleven read-only checks "
+                "implemented in `checks.py`.",
+                "twelve",
+                "checks",
+                "__init__.py",
+            ),
+            True,
+        ),
     ]
     failures = 0
     for name, got, want_problem in cases:
@@ -368,9 +403,14 @@ def main(argv: list[str]) -> int:
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
         return 1
+    # init_py_problems: a label mismatch with a correct count must fail.
+    assert init_py_problems(
+        check_labels(), "Checks: config, mcp, tokens — three read-only checks"
+    ), "init_py_problems should flag a label mismatch even when the count is right"
+
     count = len(check_labels())
     print(
-        "OK: plugin.yaml, README.md and the router skill agree with "
+        "OK: plugin.yaml, README.md, __init__.py and the router skill agree with "
         f"_CHECKS ({count} scopes)"
     )
     return 0
