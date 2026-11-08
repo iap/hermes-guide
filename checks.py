@@ -3625,6 +3625,15 @@ def check_dashboard():
                     "reason": f"web UI built with node {built_node}, installed is {installed_node}",
                     "detail": build_json,
                 }
+            # Verify the build output is present (not just the receipt).
+            index_html = os.path.join(dist, "index.html")
+            if not os.path.isfile(index_html):
+                return {
+                    "id": "DASHBOARD_WEBUI_STALE_BUILD",
+                    "status": "broken",
+                    "reason": "web UI dist missing index.html (build incomplete)",
+                    "detail": dist,
+                }
         except Exception:  # nosec B110
             return {
                 "id": "DASHBOARD_WEBUI_STALE_BUILD",
