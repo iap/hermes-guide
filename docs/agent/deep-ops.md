@@ -228,7 +228,8 @@ The **environment axis** includes `macos`, `linux`,
 `cross-platform`, `needs:os-verify`, `platform:windows-only`, and
 `platform:posix-only`. OS labels alone do not prove a check: a body line
 naming several platforms labels all of them, and the add-only workflow
-re-applies a manually removed label on the next edit. Record which checks
+re-applies a manually removed label on removal (`unlabeled`) or any later
+edit. Record which checks
 ran, passed, failed, or were not run in the PR body. The **assist axis**
 names which device's agent should confirm next:
 `assist:windows-confirm`, `assist:linux-confirm`, `assist:macos-confirm`,

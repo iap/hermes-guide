@@ -1,14 +1,14 @@
-# Bootstrap the assist:* labels this repo's OS-handoff axis uses.
+# Bootstrap the labels no other workflow creates: the assist:* handoff
+# axis and the manual environment labels.
 #
 # Run from Actions -> "labels-bootstrap" -> Run workflow. It is a
 # create-or-update ensure: missing labels are created, existing ones are
 # recolored/re-described to the palette below. Safe to run repeatedly.
 #
-# These are the only labels declared here. The environment axis (macos,
-# linux, windows, wsl, macos-legacy, needs:os-verify, cross-platform) is
-# derived from PR bodies by label-pr-metadata.yml or applied by hand, and
-# the area axis lives in .github/labeler.yml; duplicating either palette
-# here would let the two drift apart.
+# These labels are owned here because no workflow creates them: the
+# environment axis is derived from PR bodies by label-pr-metadata.yml and
+# the area axis lives in .github/labeler.yml, so neither palette is
+# duplicated here.
 
 name: labels-bootstrap
 
@@ -43,3 +43,7 @@ jobs:
           ensure "assist:linux-confirm"   "FDBA74" "Request Linux-agent confirmation on another Linux device"
           ensure "assist:macos-confirm"   "C4B5FD" "Request macOS-agent confirmation on another macOS device"
           ensure "assist:wsl-confirm"     "BFD4F2" "Request WSL-agent confirmation on another WSL device"
+          ensure "needs:os-verify"        "FFA500" "Needs verification on a different OS by another agent"
+          ensure "cross-platform"         "9400D3" "Affects multiple operating systems"
+          ensure "platform:windows-only"  "0E8A16" "Windows-only changes; must not touch POSIX paths"
+          ensure "platform:posix-only"    "3D7DCE" "POSIX-only changes; must not touch Windows paths"
