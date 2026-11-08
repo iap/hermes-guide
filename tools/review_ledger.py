@@ -115,6 +115,7 @@ def _extract_title(body):
 
 def _parse_threads(threads):
     findings = []
+    human_open_count = 0
     for thread in threads:
         comments = thread.get("comments", {}).get("nodes", [])
         if not comments:
@@ -122,21 +123,26 @@ def _parse_threads(threads):
         first = comments[0]
         author = first.get("author", {}).get("login", "")
         bot = _classify_bot(author)
+        is_resolved = thread.get("isResolved", False)
         if bot is None:
+            if not is_resolved:
+                human_open_count += 1
             continue
         body = first.get("body", "")
         finding = {
+            "id": thread["id"],
             "thread_id": thread["id"],
             "bot": bot,
             "severity": _extract_severity(body),
             "title": _extract_title(body),
             "file": first.get("path"),
             "line": first.get("line"),
-            "status": "resolved" if thread.get("isResolved") else "open",
+            "status": "resolved" if is_resolved else "open",
+            "resolved_commit": None,
             "created_at": first.get("createdAt"),
         }
         findings.append(finding)
-    return findings
+    return findings, human_open_count
 
 
 def unresolved_findings(findings):
@@ -222,8 +228,8 @@ def main():
         print("error: " + str(exc), file=sys.stderr)
         return 2
 
-    findings = _parse_threads(threads)
-    ledger = build_ledger(args.pr, head_oid, findings)
+    findings, human_open_count = _parse_threads(threads)
+    ledger = build_ledger(args.pr, head_oid, findings, human_open_count)
 
     if args.write:
         if args.output:
