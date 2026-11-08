@@ -43,7 +43,7 @@ jobs:
           ensure "assist:linux-confirm"   "FDBA74" "Request Linux-agent confirmation on another Linux device"
           ensure "assist:macos-confirm"   "C4B5FD" "Request macOS-agent confirmation on another macOS device"
           ensure "assist:wsl-confirm"     "BFD4F2" "Request WSL-agent confirmation on another WSL device"
-          ensure "needs:os-verify"        "FFA500" "Needs verification on a different OS by another agent"
+          ensure "needs:os-verify"        "FFA500" "Needs verification by an agent on another device"
           ensure "cross-platform"         "9400D3" "Affects multiple operating systems"
           ensure "platform:windows-only"  "0E8A16" "Windows-only changes; must not touch POSIX paths"
           ensure "platform:posix-only"    "3D7DCE" "POSIX-only changes; must not touch Windows paths"
