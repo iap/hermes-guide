@@ -3048,6 +3048,15 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "Run `hermes pm install` explicitly (it bypasses the lazy policy), "
         "then re-run `hermes guide dashboard`.",
     ),
+    "DASHBOARD_CHECKOUT_UNRESOLVED": (
+        "dashboard checkout unresolved",
+        "No `hermes-agent` checkout was found under $HERMES_HOME, so the "
+        "dashboard check could not read the lock pin, the package.json "
+        "engines, or the built Web UI receipt. It reports unknown rather "
+        "than guessing at a different install.",
+        "Install or locate the Hermes source checkout (`hermes pm install` "
+        "or `git clone`), then re-run `hermes guide dashboard`.",
+    ),
 }
 
 _FINDING_STATUSES = ("broken", "unknown")
@@ -3424,32 +3433,69 @@ def check_dashboard():
             "detail": None,
         }
     # PM-era installs store facts under installs/<key>/facts.json; fall back
-    # to the legacy tools/facts.json location. Track the install dir so
-    # checkout resolves from the same install (not a different one).
+    # to the legacy tools/facts.json location. The legacy file is the
+    # primary: this host tracks node in tools/facts.json while the
+    # installs/<key>/facts.json only carries the venv. Locking onto the
+    # install dir's facts and dropping the legacy file reported a
+    # healthy toolchain as missing.
+    #
+    # The checkout, however, must come from the same install as the facts
+    # when possible: reading the lock pin from one checkout while reading
+    # installed evidence from another install's facts would compare a pin
+    # against the wrong toolchain. So resolve the checkout from the
+    # install dir when both facts and checkout live there, and fall back
+    # to $HERMES_HOME/hermes-agent otherwise.
     facts_path = os.path.join(home, "tools", "facts.json")
     installs_dir = os.path.join(home, "installs")
     install_dir = None
+    checkout = None
     if os.path.isdir(installs_dir):
         for entry in sorted(os.listdir(installs_dir)):
-            candidate = os.path.join(installs_dir, entry, "facts.json")
-            if os.path.isfile(candidate):
-                facts_path = candidate
+            candidate_facts = os.path.join(installs_dir, entry, "facts.json")
+            candidate_checkout = os.path.join(installs_dir, entry, "hermes-agent")
+            if os.path.isfile(candidate_facts) and os.path.isdir(candidate_checkout):
                 install_dir = os.path.join(installs_dir, entry)
+                checkout = candidate_checkout
                 break
+    # Prefer the legacy facts file when it actually tracks the toolchain;
+    # the install dir's facts may only carry the venv. A facts file with
+    # no node entry is not evidence that node is absent.
+    legacy_facts = os.path.join(home, "tools", "facts.json")
+    if os.path.isfile(legacy_facts):
+        try:
+            with open(legacy_facts, "r", encoding="utf-8") as f:
+                legacy = json.load(f)
+            if isinstance(legacy.get("packages", {}), dict) and legacy["packages"].get("node"):
+                facts_path = legacy_facts
+        except Exception:
+            pass
     # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
     # the same PM install dir as facts (not a different one).
-    checkout = os.path.join(home, "hermes-agent")
-    if install_dir is not None:
+    if checkout is None:
+        candidate = os.path.join(home, "hermes-agent")
+        if os.path.isdir(candidate):
+            checkout = candidate
+    if checkout is None and install_dir is not None:
         candidate = os.path.join(install_dir, "hermes-agent")
         if os.path.isdir(candidate):
             checkout = candidate
-    if not os.path.isdir(checkout):
-        if os.path.isdir(installs_dir):
-            for entry in sorted(os.listdir(installs_dir)):
-                candidate = os.path.join(installs_dir, entry, "hermes-agent")
-                if os.path.isdir(candidate):
-                    checkout = candidate
-                    break
+    if checkout is None and os.path.isdir(installs_dir):
+        # No install had both facts and checkout: take whichever has a
+        # checkout and fall back to the legacy tools/facts.json for the
+        # installed evidence. The lock pin and the built receipt both
+        # come from the checkout, so at least those agree.
+        for entry in sorted(os.listdir(installs_dir)):
+            candidate = os.path.join(installs_dir, entry, "hermes-agent")
+            if os.path.isdir(candidate):
+                checkout = candidate
+                break
+    if checkout is None:
+        return {
+            "id": "DASHBOARD_CHECKOUT_UNRESOLVED",
+            "status": "unknown",
+            "reason": "no hermes-agent checkout found under $HERMES_HOME",
+            "detail": home,
+        }
     lock_path = os.path.join(checkout, "pm", "lock.json")
     installed_node = None
     installed_npm = None

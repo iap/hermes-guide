@@ -32,8 +32,6 @@ All notable changes to hermes-guide are documented here.
 
 - Merge pull request #426 from iap/docs/strengthen-merge-gate
 - remove pr review gate script
-- tools/check_pr_review_clean: harden against Qodo findings (head binding, both bots, pagination)
-- tools: add check_pr_review_clean.py to enforce bot review gate
 
 ## v0.9.2 (2026-11-04)
 
