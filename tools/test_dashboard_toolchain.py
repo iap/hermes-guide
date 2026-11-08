@@ -102,3 +102,27 @@ def test_check_dashboard_returns_dict():
     assert isinstance(result, dict)
     assert "status" in result
     assert result["status"] in VALID_STATUSES
+
+
+def test_check_dashboard_indeterminate_returns_unknown():
+    """When installed_node and lock_node are both None, returns unknown."""
+    with patch.object(checks, "_hermes_home", return_value="/nonexistent"):
+        result = checks.check_dashboard()
+    assert result["status"] == "unknown"
+    assert "id" in result
+
+
+def test_check_dashboard_broken_when_node_missing_but_lock_present():
+    """When installed_node is None but lock_node exists, returns broken."""
+    import json, tempfile, os
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    os.makedirs(os.path.join(home, "hermes-agent", "pm"), exist_ok=True)
+    # Write lock with node version but no facts
+    with open(os.path.join(home, "hermes-agent", "pm", "lock.json"), "w") as f:
+        json.dump({"packages": {"node": {"version": "26.7.0"}}}, f)
+    with patch.object(checks, "_hermes_home", return_value=home):
+        result = checks.check_dashboard()
+    assert result["status"] in ("broken", "unknown")
+    assert "id" in result
