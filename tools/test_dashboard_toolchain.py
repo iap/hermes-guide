@@ -75,3 +75,30 @@ if __name__ == "__main__":
     test_check_dashboard_fast_envelope()
     test_check_dashboard_direct_envelope()
     print("OK: dashboard toolchain tests passed")
+
+
+def test_check_dashboard_home_unresolved():
+    with patch.object(checks, "_hermes_home", return_value=None):
+        result = checks.check_dashboard()
+    assert result["status"] == "unknown"
+    assert result["id"] == "HOME_UNRESOLVED"
+
+
+def test_check_dashboard_fast_mode_envelope():
+    token = checks._FAST_MODE.set(True)
+    try:
+        result = checks.check_dashboard()
+    finally:
+        checks._FAST_MODE.reset(token)
+    assert isinstance(result, dict)
+    assert "id" in result
+    assert "status" in result
+    assert "reason" in result
+
+
+def test_check_dashboard_returns_dict():
+    with patch.object(checks, "_hermes_home", return_value="/nonexistent"):
+        result = checks.check_dashboard()
+    assert isinstance(result, dict)
+    assert "status" in result
+    assert result["status"] in VALID_STATUSES
