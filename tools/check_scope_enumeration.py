@@ -219,6 +219,15 @@ def router_skill_problems(labels: list[str], text: str) -> list[str]:
     return _set_problems(labels, _BACKTICK.findall(match.group(1)), where)
 
 
+def init_py_problems(labels: list[str], text: str) -> list[str]:
+    """The `Checks: ... — <count>` line must list the `_CHECKS` set."""
+    match = re.search(r"Checks:\s*(.+?)\s*—", text)
+    if not match:
+        return ["__init__.py: no 'Checks: ... —' line found"]
+    listed = [x.strip() for x in match.group(1).split(",") if x.strip()]
+    return _set_problems(labels, listed, "__init__.py Checks:")
+
+
 def _collect() -> list[str]:
     labels = check_labels()
     expected = _word(len(labels))
@@ -226,7 +235,7 @@ def _collect() -> list[str]:
     for path, extra in (
         (PLUGIN_YAML, plugin_yaml_problems),
         (README, lambda ls, text: count_problems(text, expected, "checks", "README.md")),
-        (INIT_PY, lambda ls, text: count_problems(text, expected, "checks", "__init__.py")),
+        (INIT_PY, lambda ls, text: count_problems(text, expected, "checks", "__init__.py") + init_py_problems(ls, text)),
         (ROUTER_SKILL, router_skill_problems),
     ):
         try:

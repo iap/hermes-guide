@@ -141,9 +141,11 @@ def test_check_dashboard_unknown_when_no_checkout():
     home = os.path.join(td, "hermes")
     os.makedirs(os.path.join(home, "tools"), exist_ok=True)
     with patch.object(checks, "_hermes_home", return_value=home):
-        result = checks.check_dashboard()
+        result = checks.run_all(scope="dashboard")["dashboard"]
     assert result["status"] == "unknown"
     assert result["id"] == "DASHBOARD_CHECKOUT_UNRESOLVED"
+    assert result.get("impact")
+    assert result.get("fix")
 
 
 def _write_node_facts(dirpath, version="26.7.0"):

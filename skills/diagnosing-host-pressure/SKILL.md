@@ -1,7 +1,7 @@
 ---
 name: diagnosing-host-pressure
 description: "Slow, timing out, crashing, or multiple Hermes surfaces failing at once — host load, OOM kills, plugin load discards, and container/interpreter scope traps masquerading as Hermes faults."
-version: 1.3.14
+version: 1.3.15
 metadata:
   hermes:
     tags: [hermes, host-pressure, troubleshooting]
@@ -173,7 +173,8 @@ while writes fail. Treat it as a separate branch:
 2. If `state.db` dominates, follow `diagnosing-memory` (`references/state_db.md`)
    and the `storage` scope of `hermes guide` — do not delete `-wal`/`-shm` by hand.
 3. For ephemeral files, caches, cron output, request dumps and scratch, run
-   `/disk-cleanup` in a session (the `disk-cleanup` plugin).
+   `/disk-cleanup dry-run` in a session (the `disk-cleanup` plugin), review
+   the results, then run `/disk-cleanup quick` to reclaim space.
    The `disk-cleanup` plugin tracks and ages these out automatically.
 4. Reclaiming *disk* does not relieve *memory* pressure — never present a
    cleanup as a fix for swapping (see section 4).
