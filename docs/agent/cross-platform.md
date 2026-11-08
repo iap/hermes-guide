@@ -19,20 +19,21 @@
 
 ## Rules
 
-### 1. Never touch code for an OS you cannot verify
-If you are on Windows, do NOT modify POSIX-only code paths. If you need to change cross-platform code, add `needs:os-verify` and request verification.
+### 1. Platform-specific code only on verified OS; cross-platform changes may proceed with a verify label
+Platform-specific code for an OS you cannot verify is not changed. If you are on Windows, do NOT modify POSIX-only code paths. Cross-platform code may change only after adding `needs:os-verify` and requesting verification.
 
 ### 2. Use platform-agnostic patterns
 - **Paths**: Use `pathlib.Path` or `os.path.join()`. Never hardcode separators.
 - **Binaries**: Node is at `<entry>/bin/node` on POSIX, `<entry>/node.exe` on Windows.
-- **Line endings**: `*.sh text eol=lf` in `.gitattributes`.
+- **Line endings**: `.gitattributes` already sets `* text=auto eol=lf` and `*.sh text eol=lf`; new binary or script types need matching entries.
 - **Subprocess**: Use `subprocess.run` with list args.
 - **File ops**: `os.makedirs(..., exist_ok=True)` before writing to nested paths.
 
 ### 3. Test on your platform, verify on others
 - Run full test suite before pushing
 - Add `needs:os-verify` if you couldn't verify on all target platforms
-- CI runs on Ubuntu + Windows — passing on both means the required gates passed
+- CI runs on Ubuntu + Windows, but Windows skips mypy, the plugin doctor, the tap smoke test, the host-pressure probe, and the CLI-resolution test (Linux-gated per `reusable-ci.yml`); macOS Intel runs hermetic gates only on full-gate runs
+- If a change touches any Linux-only gate, it still needs `needs:os-verify` for the Windows path
 
 ### 4. Label your PR correctly
 Every PR MUST have at least one OS label. If you could only verify on one platform, add `needs:os-verify`.
@@ -47,11 +48,11 @@ When handing off to an agent on a different OS:
 
 ### 6. Common pitfalls
 - `python3` not on PATH on Windows — use `python` or `uv run python`
-- CRLF line endings on Windows — add `*.sh text eol=lf` to `.gitattributes`
+- CRLF line endings on Windows — `.gitattributes` already sets `* text=auto eol=lf` and `*.sh text eol=lf`; new binary or script types need matching entries
 - MSYS paths don't work with native Windows tools — use `C:/Users/...` forward-slash paths
 - Commit signatures must verify `G` — check with `git log --format='%h %G?'`
 - Node binary: POSIX `<entry>/bin/node`, Windows `<entry>/node.exe`
-- facts.json: `tools/facts.json` (legacy, tracks node) vs `installs/<key>/facts.json` (PM-era, may only track venv)
+- facts.json: `<hermes home>/tools/facts.json` (legacy, tracks node) vs `<hermes home>/installs/<key>/facts.json` (PM-era, may only track venv)
 
 ## Evaluation Checklist
 - [ ] All tests pass on your platform
