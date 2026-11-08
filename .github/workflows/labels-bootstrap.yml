@@ -4,7 +4,7 @@
 # create-or-update ensure: missing labels are created, existing ones are
 # recolored/re-described to the palette below. Safe to run repeatedly.
 #
-# These are the only labels declared here. The verification axis (macos,
+# These are the only labels declared here. The environment axis (macos,
 # linux, windows, wsl, macos-legacy, needs:os-verify, cross-platform) is
 # derived from PR bodies by label-pr-metadata.yml or applied by hand, and
 # the area axis lives in .github/labeler.yml; duplicating either palette
@@ -33,16 +33,13 @@ jobs:
           set -euo pipefail
           ensure() {
             local name="$1" color="$2" desc="$3"
-            # --limit 1000: the default page would hide existing labels
-            # past the window and abort the run on create under set -e.
-            if gh label list --limit 1000 --json name --jq '.[].name' | grep -xF "$name" >/dev/null; then
-              gh label edit "$name" --color "$color" --description "$desc" >/dev/null
-              echo "updated: $name"
-            else
-              gh label create "$name" --color "$color" --description "$desc" >/dev/null
-              echo "created: $name"
-            fi
+            # One create-or-update call: GitHub matches label names
+            # case-insensitively, so a list-then-create branch can miss an
+            # existing differently-capitalized label and fail on create.
+            gh label create "$name" --color "$color" --description "$desc" --force >/dev/null
+            echo "ensured: $name"
           }
           ensure "assist:windows-confirm" "93C5FD" "Request Windows-agent confirmation on another Windows device"
           ensure "assist:linux-confirm"   "FDBA74" "Request Linux-agent confirmation on another Linux device"
           ensure "assist:macos-confirm"   "C4B5FD" "Request macOS-agent confirmation on another macOS device"
+          ensure "assist:wsl-confirm"     "BFD4F2" "Request WSL-agent confirmation on another WSL device"
