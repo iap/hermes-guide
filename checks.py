@@ -3442,8 +3442,8 @@ def check_dashboard():
     # to the legacy tools/facts.json location. Track the install dir so
     # checkout resolves from the same install (not a different one).
     facts_path = os.path.join(home, "tools", "facts.json")
-    install_dir = None
     installs_dir = os.path.join(home, "installs")
+    install_dir = None
     if os.path.isdir(installs_dir):
         for entry in sorted(os.listdir(installs_dir)):
             candidate = os.path.join(installs_dir, entry, "facts.json")
