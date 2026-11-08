@@ -95,7 +95,7 @@ def _extract_severity(body):
 
 def _extract_title(body):
     # Qodo/CodeRabbit comments often start with a severity marker like
-    # "🔴 **High**" — skip those and find the actual finding title.
+    # "U+1F534 **High**" -- skip those and find the actual finding title.
     severity_words = {"high", "medium", "low", "minor", "trivial"}
     for match in re.finditer(r"\*\*(.+?)\*\*", body):
         title = match.group(1).strip()
