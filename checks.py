@@ -3055,8 +3055,8 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "engines, or the built Web UI receipt. It reports unknown rather "
         "than guessing at a different install.",
         "With explicit user confirmation, place the Hermes source checkout at "
-        "`hermes-agent` inside the Hermes home (resolve it with `hermes config "
-        "path`; for example `git clone "
+        "`hermes-agent` inside the Hermes home (the directory containing the "
+        "path printed by `hermes config path`; for example `git clone "
         "https://github.com/NousResearch/hermes-agent <home>/hermes-agent`), "
         "then re-run `hermes guide dashboard`.",
     ),
