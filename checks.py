@@ -3459,9 +3459,9 @@ def check_dashboard():
             "reason": f"PM node {installed_node} differs from lock {lock_node}",
             "detail": [f"installed: {installed_node}", f"lock: {lock_node}"],
         }
-    # OS floor: node >=26 official builds link libc++ 1900 (macOS 14+).
+    # OS floor: node >=25 official builds link libc++ 1900 (macOS 13.5+).
     # Node 24 (libc++ 1800, minos 13.5) still runs on 12.7.6 in practice,
-    # so only flag >=26. Darwin only; other platforms skip.
+    # so only flag >=25. Darwin only; other platforms skip.
     if sys.platform == "darwin" and lock_node:
         try:
             major = int(str(lock_node).split(".")[0])
@@ -3475,24 +3475,25 @@ def check_dashboard():
         except Exception:
             parts = []
         host_major = parts[0] if parts else 0
-        if major >= 26 and host_major < 14:
+        if major >= 25 and host_major < 13:
+            required = "14+" if major >= 26 else "13+"
             return {
                 "id": "DASHBOARD_NODE_OS_FLOOR_MISMATCH",
                 "status": "broken",
-                "reason": f"pinned node {lock_node} requires macOS 14+, host is {mac_ver or 'unknown'}",
+                "reason": f"pinned node {lock_node} requires macOS {required}, host is {mac_ver or 'unknown'}",
                 "detail": [f"host macOS: {mac_ver}", f"lock node: {lock_node}"],
             }
     # Engines vs installed
     engines_node = None
+    engines_npm = None
     try:
         with open(os.path.join(checkout, "package.json"), "r", encoding="utf-8") as f:
             pkg = json.load(f)
-        engines_node = pkg.get("engines", {}).get("node")
+        if isinstance(pkg, dict) and isinstance(pkg.get("engines"), dict):
+            engines_node = pkg["engines"].get("node")
+            engines_npm = pkg["engines"].get("npm")
     except Exception:
         pkg = None
-    engines_npm = None
-    if engines_node is not None and isinstance(pkg, dict):
-        engines_npm = pkg.get("engines", {}).get("npm") if isinstance(pkg.get("engines"), dict) else None
     for installed, req, label in ((installed_node, engines_node, "node"), (installed_npm, engines_npm, "npm")):
         if isinstance(req, str) and installed is not None:
             try:
@@ -3566,10 +3567,10 @@ def check_dashboard():
             with open(build_json, "r", encoding="utf-8") as f:
                 built = json.load(f)
             built_node = built.get("node") if isinstance(built, dict) else None
-            if not built_node:
+            if not isinstance(built_node, str) or not built_node.strip():
                 return {
                     "id": "DASHBOARD_WEBUI_STALE_BUILD",
-                    "status": "unknown",
+                    "status": "broken",
                     "reason": "web UI build receipt is empty or invalid",
                     "detail": build_json,
                 }
