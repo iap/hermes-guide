@@ -219,6 +219,24 @@ Hermes facts CI cannot see (`hermes config path`, TUI rendering, installer
 layouts) stay in the second and third tiers. Lean on CI for shared code; use
 dual checkouts for those Hermes-facing facts.
 
+### OS labels: verification and assist axes
+
+Two label axes answer different questions, and neither replaces the other.
+The **verification axis** claims what was checked: `macos`, `linux`,
+`windows`, `wsl`, `macos-legacy` (derived automatically from the PR
+`OS / shell:` line by `label-pr-metadata.yml`), plus manual
+`cross-platform`, `needs:os-verify`, `platform:windows-only`, and
+`platform:posix-only`. The **assist axis** names which device's agent
+should confirm next: `assist:windows-confirm`, `assist:linux-confirm`,
+`assist:macos-confirm` (palette owned by `labels-bootstrap.yml`). Use the
+assist axis when handing work across devices: add `needs:os-verify` plus
+the `assist:*` label for the target OS, document the exact commands to
+run, and the receiving agent removes `needs:os-verify` and adds its own
+verification label after running them. Do not add an `os:*` routing axis
+here: this repo's maintainers work from whichever device is available,
+and an assignment label would contradict the verification claim on the
+same PR.
+
 ### Host limitation register
 
 Facts verified on a live host that constrain what an agent session there may

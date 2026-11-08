@@ -34,7 +34,7 @@ tracked top-level path and every `.github/` file.
 | `.github/workflows/ci.yml` | Thin caller that triggers `reusable-ci.yml` and passes it `base-ref` / `run-full-gate` |
 | `.github/workflows/upstream-drift.yml` | Weekly watch; opens an issue when Hermes changes a watched file or drift-prone fact |
 | `.github/workflows/validate-claim.yml` | Re-runs the hermetic gates and machine-checks the PR's validation table |
-| `.github/workflows/label-prs.yml`, `label-pr-metadata.yml` | Auto-labelling (paths, then PR body) |
+| `.github/workflows/label-prs.yml`, `label-pr-metadata.yml`, `labels-bootstrap.yml` | Auto-labelling (paths, then PR body); bootstrap creates the `assist:*` palette |
 | `.github/workflows/release.yml` | Release on tag; compares the tag against `plugin.yaml` |
 | `.github/upstream-drift.baseline` | The pinned upstream revision that file/symbol citations resolve against |
 | `.github/allowed_signers` | Authorized release-tag SSH keys for release.yml signature verification |
