@@ -46,7 +46,10 @@ def _run_gh_graphql(query):
     )
     if result.returncode != 0:
         raise RuntimeError("gh GraphQL failed: " + result.stderr.strip())
-    return json.loads(result.stdout)
+    try:
+        return json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeError(f"gh returned invalid JSON: {exc}") from exc
 
 
 def _fetch_pr_threads(pr_number):
@@ -69,6 +72,16 @@ def _classify_bot(author_login):
 def _extract_severity(body):
     body_lower = body.lower()
     first_line = body_lower.split(chr(10))[0] if body_lower else ""
+    # Qodo uses emoji markers: red=high, orange=medium, yellow=low, green=minor
+    if "🔴" in first_line or "red" in first_line:
+        return "high"
+    if "🟠" in first_line or "orange" in first_line:
+        return "medium"
+    if "🟡" in first_line or "yellow" in first_line:
+        return "low"
+    if "🟢" in first_line or "green" in first_line:
+        return "minor"
+    # Text-based fallback
     if "high" in first_line:
         return "high"
     if "medium" in first_line:
@@ -77,22 +90,26 @@ def _extract_severity(body):
         return "low"
     if "trivial" in body_lower or "minor" in body_lower:
         return "minor"
-    if "red circle" in body_lower or "red_circle" in body_lower:
-        return "high"
     return "unknown"
 
 
 def _extract_title(body):
-    match = re.search(r"\*\*(.+?)\*\*", body)
-    if match:
+    # Qodo/CodeRabbit comments often start with a severity marker like
+    # "🔴 **High**" — skip those and find the actual finding title.
+    severity_words = {"high", "medium", "low", "minor", "trivial"}
+    for match in re.finditer(r"\*\*(.+?)\*\*", body):
         title = match.group(1).strip()
-        title = re.sub(r"[red|orange|yellow|green|white]_circle", "", title).strip()
-        if title:
+        title = re.sub(r"[🔴🟠🟡🟢⚪]", "", title).strip()
+        if title and title.lower() not in severity_words:
             return title[:120]
+    # Fall back to first non-empty, non-HTML-comment line that isn't just a severity
     for line in body.splitlines():
         line = line.strip()
         if line and not line.startswith("<!--"):
-            return line[:120]
+            # Skip lines that are just severity markers
+            cleaned = re.sub(r"[🔴🟠🟡🟢⚪]", "", line).strip().strip("*").strip()
+            if cleaned.lower() not in severity_words and cleaned:
+                return line[:120]
     return "untitled"
 
 
@@ -201,7 +218,7 @@ def main():
 
     try:
         threads, head_oid = _fetch_pr_threads(args.pr)
-    except (RuntimeError, KeyError, TypeError) as exc:
+    except (RuntimeError, KeyError, TypeError, ValueError) as exc:
         print("error: " + str(exc), file=sys.stderr)
         return 2
 
