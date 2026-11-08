@@ -3424,8 +3424,12 @@ def check_dashboard():
             "detail": None,
         }
     # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
-    # common relocation paths for PM-era installs.
+    # the same PM install dir as facts (not a different one).
     checkout = os.path.join(home, "hermes-agent")
+    if install_dir is not None:
+        candidate = os.path.join(install_dir, "hermes-agent")
+        if os.path.isdir(candidate):
+            checkout = candidate
     if not os.path.isdir(checkout):
         installs_dir = os.path.join(home, "installs")
         if os.path.isdir(installs_dir):
@@ -3435,14 +3439,17 @@ def check_dashboard():
                     checkout = candidate
                     break
     # PM-era installs store facts under installs/<key>/facts.json; fall back
-    # to the legacy tools/facts.json location.
+    # to the legacy tools/facts.json location. Track the install dir so
+    # checkout resolves from the same install (not a different one).
     facts_path = os.path.join(home, "tools", "facts.json")
+    install_dir = None
     installs_dir = os.path.join(home, "installs")
     if os.path.isdir(installs_dir):
         for entry in sorted(os.listdir(installs_dir)):
             candidate = os.path.join(installs_dir, entry, "facts.json")
             if os.path.isfile(candidate):
                 facts_path = candidate
+                install_dir = os.path.join(installs_dir, entry)
                 break
     lock_path = os.path.join(checkout, "pm", "lock.json")
     installed_node = None
@@ -3591,13 +3598,6 @@ def check_dashboard():
             "reason": "lazy installs disabled while PM node is missing",
             "detail": "security.allow_lazy_installs is false",
         }
-    if not lazy:
-        return {
-            "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
-            "status": "informational",
-            "reason": "lazy installs disabled (toolchain OK)",
-            "detail": "security.allow_lazy_installs is false",
-        }
     # Web UI freshness: dist present and built with installed node
     dist = os.path.join(checkout, "hermes_cli", "web_dist")
     build_json = os.path.join(dist, "hermes-build.json")
@@ -3641,7 +3641,7 @@ def check_dashboard():
                 return {
                     "id": "DASHBOARD_WEBUI_STALE_BUILD",
                     "status": "broken",
-                    "reason": "web UI dist missing index.html (build incomplete)",
+                    "reason": "web UI dist is incomplete (no entry page)",
                     "detail": dist,
                 }
         except Exception:  # nosec B110
@@ -3651,6 +3651,13 @@ def check_dashboard():
                 "reason": "web UI build receipt cannot be read",
                 "detail": build_json,
             }
+    if not lazy:
+        return {
+            "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
+            "status": "informational",
+            "reason": "lazy installs disabled (toolchain OK, web UI present)",
+            "detail": "security.allow_lazy_installs is false",
+        }
     return {
         "status": "healthy",
         "reason": "dashboard toolchain OK",
