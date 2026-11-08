@@ -33,7 +33,7 @@ Platform-specific code for an OS you cannot verify is not changed. If you are on
 - Run full test suite before pushing
 - Add `needs:os-verify` if you couldn't verify on all target platforms
 - CI runs on Ubuntu + Windows, but Windows skips mypy, the plugin doctor, the tap smoke test, the host-pressure probe, the CLI-resolution test, the isolated-home gateway health probe, and the citation/install-scan checks (Linux-gated per `reusable-ci.yml`; list is non-exhaustive); macOS Intel runs hermetic gates only on full-gate runs
-- `needs:os-verify` is required only when a change affects a Windows test path; a Linux-only change with no Windows path (for example `tools/test_checks_cli_resolution.py`) does not need it
+- `needs:os-verify` is required when any affected target still lacks behavioral verification, including macOS; a Linux-only change with no other affected target (for example `tools/test_checks_cli_resolution.py`) does not need it
 
 ### 4. Label your PR correctly
 Every PR MUST have at least one OS label. If you could only verify on one platform, add `needs:os-verify`.
