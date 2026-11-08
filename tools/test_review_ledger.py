@@ -60,7 +60,8 @@ def test_extract_severity_unknown():
 
 
 def test_parse_threads_empty():
-    assert rl._parse_threads([]) == []
+    findings, _ = rl._parse_threads([])
+    assert findings == []
 
 
 def test_parse_threads_qodo_resolved():
@@ -81,7 +82,7 @@ def test_parse_threads_qodo_resolved():
             },
         }
     ]
-    findings = rl._parse_threads(threads)
+    findings, _ = rl._parse_threads(threads)
     assert len(findings) == 1
     assert findings[0]["bot"] == "qodo"
     assert findings[0]["status"] == "resolved"
@@ -108,7 +109,7 @@ def test_parse_threads_coderabbit_open():
             },
         }
     ]
-    findings = rl._parse_threads(threads)
+    findings, _ = rl._parse_threads(threads)
     assert len(findings) == 1
     assert findings[0]["bot"] == "coderabbit"
     assert findings[0]["status"] == "open"
@@ -133,12 +134,14 @@ def test_parse_threads_skips_non_bot():
             },
         }
     ]
-    assert rl._parse_threads(threads) == []
+    findings, _ = rl._parse_threads(threads)
+    assert findings == []
 
 
 def test_parse_threads_empty_comments():
     threads = [{"id": "T4", "isResolved": False, "comments": {"nodes": []}}]
-    assert rl._parse_threads(threads) == []
+    findings, _ = rl._parse_threads(threads)
+    assert findings == []
 
 
 def test_unresolved_findings():
@@ -270,14 +273,16 @@ def test_integration_pr_448():
     """Fetch real PR 448 threads and verify structure."""
     try:
         threads, head_oid = rl._fetch_pr_threads(448)
-    except (RuntimeError, KeyError, TypeError):
-        print("SKIP: gh not available or network error")
-        return
+    except (RuntimeError, KeyError, TypeError, ValueError) as exc:
+        if "gh" in str(exc).lower() or "not found" in str(exc).lower():
+            print("SKIP: gh not available or not authenticated")
+            return
+        raise
     assert isinstance(threads, list)
     assert len(threads) > 0
     assert isinstance(head_oid, str)
     assert len(head_oid) == 40
-    findings = rl._parse_threads(threads)
+    findings, _ = rl._parse_threads(threads)
     assert len(findings) > 0
     bots = {f["bot"] for f in findings}
     assert "qodo" in bots or "coderabbit" in bots

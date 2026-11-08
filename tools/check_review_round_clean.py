@@ -119,7 +119,7 @@ def main() -> int:
 
     try:
         live_head = _get_pr_head(pr_number)
-    except (RuntimeError, KeyError, TypeError) as exc:
+    except (RuntimeError, KeyError, TypeError, ValueError) as exc:
         print(f"error: failed to fetch PR head: {exc}", file=sys.stderr)
         return 2
 
@@ -135,7 +135,7 @@ def main() -> int:
     if ledger is None:
         try:
             ledger = _fetch_fresh_ledger(pr_number)
-        except (RuntimeError, KeyError, TypeError) as exc:
+        except (RuntimeError, KeyError, TypeError, ValueError) as exc:
             print(f"error: failed to fetch review threads: {exc}", file=sys.stderr)
             return 2
 
@@ -159,7 +159,7 @@ def main() -> int:
                 failures.append(
                     f"Head changed during check: {live_head[:12]} -> {live_head2[:12]}"
                 )
-        except (RuntimeError, KeyError, TypeError) as exc:
+        except (RuntimeError, KeyError, TypeError, ValueError) as exc:
             print(f"warning: live check failed: {exc}", file=sys.stderr)
 
     if failures:
