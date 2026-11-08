@@ -3011,6 +3011,43 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "See `diagnosing-gateway` (keepalive/timeout section); reduce delegate "
         "context and retry the deep dive, then re-run `hermes guide gateway`.",
     ),
+    "DASHBOARD_NODE_OUTDATED": (
+        "dashboard node outdated",
+        "The PM-managed Node version differs from the lockfile pin, so the "
+        "dashboard Web UI build uses a toolchain the lock does not describe.",
+        "Ask the user to confirm before running `hermes pm install node` (explicit install bypasses the "
+        "lazy-install policy), then verify with `hermes guide dashboard`.",
+    ),
+    "DASHBOARD_NODE_OS_FLOOR_MISMATCH": (
+        "dashboard node OS floor mismatch",
+        "The pinned Node requires a newer macOS than this host provides, so "
+        "the staged binary fails dyld verification and the Web UI cannot build.",
+        "Pin Node to a host-compatible version (`hermes pm lock --bump node "
+        "<ver>` then `hermes pm install node`), or upgrade macOS. Workaround: "
+        "`hermes dashboard --skip-build`.",
+    ),
+    "DASHBOARD_NODE_ENGINES_MISMATCH": (
+        "dashboard node engines mismatch",
+        "The installed Node/npm does not satisfy package.json engines, so "
+        "`npm ci --engine-strict` fails during the Web UI build.",
+        "Bump the lock to a Node that satisfies engines (`hermes pm lock "
+        "--bump node <ver>` then `hermes pm install node`), then re-run "
+        "`hermes guide dashboard`.",
+    ),
+    "DASHBOARD_WEBUI_STALE_BUILD": (
+        "dashboard web UI stale",
+        "The built Web UI dist is stale relative to current sources, so the "
+        "dashboard serves an old UI or rebuilds on every launch.",
+        "Run `hermes dashboard` to rebuild the Web UI, or use "
+        "`hermes dashboard --skip-build` to serve the existing dist.",
+    ),
+    "DASHBOARD_LAZY_INSTALL_DISABLED": (
+        "dashboard lazy installs disabled",
+        "Lazy installs are disabled while Node is missing or outdated, so the "
+        "dashboard build refuses to fetch the toolchain it needs.",
+        "Run `hermes pm install` explicitly (it bypasses the lazy policy), "
+        "then re-run `hermes guide dashboard`.",
+    ),
 }
 
 _FINDING_STATUSES = ("broken", "unknown")
@@ -3360,6 +3397,273 @@ def check_gateway_health():
             "detail": detail + notes}
 
 
+def check_dashboard():
+    """Read-only audit of dashboard PM node/npm toolchain and Web UI freshness.
+
+    The dashboard build is the only surface that runs the PM-managed
+    Node/npm toolchain via `hermes_cli/source_build.py` (PM node only,
+    never PATH node). A lock/installed version skew, an OS floor above
+    the host, an engines mismatch, or a stale dist all fail the build
+    with messages that name neither the scope nor the fix. This check
+    reads only files (pm facts/lock, package.json engines, hermes-build.json,
+    config lazy policy) and never executes npm/node, so --fast is safe.
+    """
+    if _FAST_MODE.get():
+        return {
+            "id": "FAST_MODE_UNRESOLVED",
+            "status": "unknown",
+            "reason": "skipped in fast mode: dashboard toolchain not inspected",
+            "detail": None,
+        }
+    home = _hermes_home()
+    if not home:
+        return {
+            "id": "HOME_UNRESOLVED",
+            "status": "unknown",
+            "reason": "cannot resolve $HERMES_HOME",
+            "detail": None,
+        }
+    # PM-era installs store facts under installs/<key>/facts.json; fall back
+    # to the legacy tools/facts.json location. Track the install dir so
+    # checkout resolves from the same install (not a different one).
+    facts_path = os.path.join(home, "tools", "facts.json")
+    installs_dir = os.path.join(home, "installs")
+    install_dir = None
+    if os.path.isdir(installs_dir):
+        for entry in sorted(os.listdir(installs_dir)):
+            candidate = os.path.join(installs_dir, entry, "facts.json")
+            if os.path.isfile(candidate):
+                facts_path = candidate
+                install_dir = os.path.join(installs_dir, entry)
+                break
+    # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
+    # the same PM install dir as facts (not a different one).
+    checkout = os.path.join(home, "hermes-agent")
+    if install_dir is not None:
+        candidate = os.path.join(install_dir, "hermes-agent")
+        if os.path.isdir(candidate):
+            checkout = candidate
+    if not os.path.isdir(checkout):
+        if os.path.isdir(installs_dir):
+            for entry in sorted(os.listdir(installs_dir)):
+                candidate = os.path.join(installs_dir, entry, "hermes-agent")
+                if os.path.isdir(candidate):
+                    checkout = candidate
+                    break
+    lock_path = os.path.join(checkout, "pm", "lock.json")
+    installed_node = None
+    installed_npm = None
+    try:
+        with open(facts_path, "r", encoding="utf-8") as f:
+            facts = json.load(f)
+        pkgs = facts.get("packages", {}) if isinstance(facts, dict) else {}
+        if isinstance(pkgs.get("node"), dict):
+            node_entry = pkgs["node"].get("entry")
+            node_version = pkgs["node"].get("version")
+            # Verify the binary actually exists (facts.json may be stale).
+            facts_dir = os.path.dirname(facts_path)
+            if node_entry:
+                node_bin = os.path.join(facts_dir, node_entry,
+                                        "node.exe" if sys.platform == "win32" else "node")
+                if os.path.isfile(node_bin):
+                    installed_node = node_version
+                else:
+                    installed_node = None
+            else:
+                # No entry field: cannot verify binary, treat as unverified
+                installed_node = None
+        if isinstance(pkgs.get("npm"), dict):
+            installed_npm = pkgs["npm"].get("version")
+    except Exception:
+        facts = None
+    lock_node = None
+    try:
+        with open(lock_path, "r", encoding="utf-8") as f:
+            lock = json.load(f)
+        lock_node = lock.get("packages", {}).get("node", {}).get("version")
+    except Exception:
+        lock = None
+    if installed_node is None and lock_node is not None:
+        return {
+            "id": "DASHBOARD_NODE_OUTDATED",
+            "status": "broken",
+            "reason": f"PM node not installed (lock pins {lock_node})",
+            "detail": [facts_path, lock_path],
+        }
+    if installed_node and lock_node and installed_node != lock_node:
+        return {
+            "id": "DASHBOARD_NODE_OUTDATED",
+            "status": "broken",
+            "reason": f"PM node {installed_node} differs from lock {lock_node}",
+            "detail": [f"installed: {installed_node}", f"lock: {lock_node}"],
+        }
+    # OS floor: node >=25 official builds link libc++ 1900 (macOS 13.5+).
+    # Node 24 (libc++ 1800, minos 13.5) still runs on 12.7.6 in practice,
+    # so only flag >=25. Darwin only; other platforms skip.
+    if sys.platform == "darwin" and lock_node:
+        try:
+            major = int(str(lock_node).split(".")[0])
+        except Exception:
+            major = 0
+        import platform as _platform
+
+        mac_ver = _platform.mac_ver()[0]
+        try:
+            parts = [int(x) for x in mac_ver.split(".")[:2]]
+        except Exception:
+            parts = []
+        host_major = parts[0] if parts else 0
+        os_floor_violated = (major >= 26 and host_major < 14) or (major == 25 and host_major < 13)
+        if os_floor_violated:
+            required = "14+" if major >= 26 else "13+"
+            return {
+                "id": "DASHBOARD_NODE_OS_FLOOR_MISMATCH",
+                "status": "broken",
+                "reason": f"pinned node {lock_node} requires macOS {required}, host is {mac_ver or 'unknown'}",
+                "detail": [f"host macOS: {mac_ver}", f"lock node: {lock_node}"],
+            }
+    # Engines vs installed
+    engines_node = None
+    engines_npm = None
+    try:
+        with open(os.path.join(checkout, "package.json"), "r", encoding="utf-8") as f:
+            pkg = json.load(f)
+        if isinstance(pkg, dict) and isinstance(pkg.get("engines"), dict):
+            engines_node = pkg["engines"].get("node")
+            engines_npm = pkg["engines"].get("npm")
+    except Exception:
+        pkg = None
+    for installed, req, label in ((installed_node, engines_node, "node"), (installed_npm, engines_npm, "npm")):
+        if isinstance(req, str) and installed is None:
+            # engines.npm may be a message string (not a version range)
+            # e.g. "npm is not supported, use pnpm". Skip if not a version.
+            if label == "npm" and not re.search(r"\d", req):
+                continue
+            return {
+                "id": "DASHBOARD_NODE_ENGINES_MISMATCH",
+                "status": "broken",
+                "reason": f"{label} not installed but engines requires {req}",
+                "detail": [f"engines.{label}: {req}"],
+            }
+        if isinstance(req, str) and installed is not None:
+            # Skip non-version-range strings (e.g. npm refusal messages)
+            if label == "npm" and not re.search(r"\d", req):
+                continue
+            try:
+                have_t = tuple(int(x) for x in str(installed).split("."))
+            except Exception:
+                have_t = ()
+            def _parse(v):
+                parts=[]
+                for x in str(v).lstrip(" ^~>=<").split("."):
+                    try:
+                        parts.append(int(x))
+                    except Exception:
+                        parts.append(0)
+                return tuple(parts)
+            _m = re.search(r"(\d+(?:\.\d+)*)", req)
+            need_t = _parse(_m.group(1)) if _m else None
+            if need_t is None:
+                return {"id": "DASHBOARD_NODE_ENGINES_MISMATCH", "status": "unknown", "reason": f"engines.{label} range {req} cannot be evaluated", "detail": f"engines.{label}: {req}"}
+            # engines like ">=26.12.1" or "^24 || >=26": compare major; for simplicity, if installed major < need major, mismatch
+            if have_t and have_t[0] < need_t[0]:
+                return {
+                    "id": "DASHBOARD_NODE_ENGINES_MISMATCH",
+                    "status": "broken",
+                    "reason": f"{label} {installed} violates engines {req}",
+                    "detail": [f"installed {label}: {installed}", f"engines.{label}: {req}"],
+                }
+            # minor/patch boundary when the range pins a minor
+            if have_t and need_t and len(need_t) >= 2 and "||" not in req and have_t[0] == need_t[0] and len(have_t) >= 2 and have_t[1] < need_t[1]:
+                return {
+                    "id": "DASHBOARD_NODE_ENGINES_MISMATCH",
+                    "status": "broken",
+                    "reason": f"{label} {installed} violates engines {req}",
+                    "detail": [f"installed {label}: {installed}", f"engines.{label}: {req}"],
+                }
+    # Lazy policy: disabled while node is missing/outdated blocks the build
+    _, cfg = _read_config()
+    lazy = True
+    if isinstance(cfg, dict):
+        sec = cfg.get("security", {})
+        if isinstance(sec, dict) and "allow_lazy_installs" in sec:
+            lazy = sec["allow_lazy_installs"] is True
+    if os.environ.get("HERMES_DISABLE_LAZY_INSTALLS"):
+        lazy = False
+    if not lazy and (installed_node is None or lock_node is None or installed_node != lock_node):
+        return {
+            "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
+            "status": "broken",
+            "reason": "lazy installs disabled while PM node is missing",
+            "detail": "security.allow_lazy_installs is false",
+        }
+    # Web UI freshness: dist present and built with installed node
+    dist = os.path.join(checkout, "hermes_cli", "web_dist")
+    build_json = os.path.join(dist, "hermes-build.json")
+    # Indeterminate toolchain (no lock pin or no installed evidence) is never healthy.
+    if installed_node is None or lock_node is None:
+        return {
+            "id": "DASHBOARD_NODE_OUTDATED",
+            "status": "unknown",
+            "reason": "dashboard toolchain indeterminate (no lock pin or no PM facts)",
+            "detail": [facts_path, lock_path],
+        }
+    if not os.path.isfile(build_json):
+        return {
+            "id": "DASHBOARD_WEBUI_STALE_BUILD",
+            "status": "broken",
+            "reason": "web UI dist not built (dashboard will build on launch)",
+            "detail": dist,
+        }
+    if installed_node:
+        try:
+            with open(build_json, "r", encoding="utf-8") as f:
+                built = json.load(f)
+            built_node = built.get("node") if isinstance(built, dict) else None
+            if not isinstance(built_node, str) or not built_node.strip():
+                return {
+                    "id": "DASHBOARD_WEBUI_STALE_BUILD",
+                    "status": "broken",
+                    "reason": "web UI build receipt is empty or invalid",
+                    "detail": build_json,
+                }
+            if built_node and built_node != installed_node:
+                return {
+                    "id": "DASHBOARD_WEBUI_STALE_BUILD",
+                    "status": "broken",
+                    "reason": f"web UI built with node {built_node}, installed is {installed_node}",
+                    "detail": build_json,
+                }
+            # Verify the build output is present (not just the receipt).
+            index_html = os.path.join(dist, "index.html")
+            if not os.path.isfile(index_html):
+                return {
+                    "id": "DASHBOARD_WEBUI_STALE_BUILD",
+                    "status": "broken",
+                    "reason": "web UI dist is incomplete (no entry page)",
+                    "detail": dist,
+                }
+        except Exception:  # nosec B110
+            return {
+                "id": "DASHBOARD_WEBUI_STALE_BUILD",
+                "status": "unknown",
+                "reason": "web UI build receipt cannot be read",
+                "detail": build_json,
+            }
+    if not lazy:
+        return {
+            "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
+            "status": "informational",
+            "reason": "lazy installs disabled (toolchain OK, web UI present)",
+            "detail": "security.allow_lazy_installs is false",
+        }
+    return {
+        "status": "healthy",
+        "reason": "dashboard toolchain OK",
+        "detail": f"node {installed_node or 'unknown'} npm {installed_npm or 'unknown'}",
+    }
+
+
 # --- runner ---------------------------------------------------------------
 
 _CHECKS = [
@@ -3380,6 +3684,7 @@ _CHECKS = [
     # collision-safety reason as "memories" above.
     ("sessions", check_session_health),
     ("storage", check_storage),
+    ("dashboard", check_dashboard),
     # Label is "update" (the hermes-agent update lock audited for stale
     # dead-owner state) — "upgrade" is not a Hermes term, so no alias.
     ("update", check_update_lock),

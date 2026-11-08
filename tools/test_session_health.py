@@ -187,7 +187,8 @@ def test_sessions_label_registered():
     checks = _load_checks()
     assert "sessions" in checks.labels()
     assert "gateway" in checks.labels()
-    assert len(checks.labels()) == 11
+    assert "dashboard" in checks.labels()
+    assert len(checks.labels()) == 12
 
 
 def test_repair_signature_without_free_model():

@@ -249,7 +249,7 @@ and a weak model regenerates the same output.
 
 ## 2. Symptom → Skill mapping table
 
-The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 71 rows from specific symptoms to the target skill. Load the matched skill directly.
+The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 74 rows from specific symptoms to the target skill. Load the matched skill directly.
 
 ## 3. Clarifying questions
 

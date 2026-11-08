@@ -35,6 +35,9 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | npm errors on desktop | diagnosing-desktop |
 | Blank window on launch | diagnosing-desktop |
 | Electron crash | diagnosing-desktop |
+| Dashboard build failures | diagnosing-runtime |
+| PM node/npm toolchain errors | diagnosing-runtime |
+| Dashboard won't launch / blank dashboard | diagnosing-runtime |
 | Bot not responding on platform | diagnosing-gateway first (`hermes gateway status`); diagnosing-bot-mode only if the gateway is healthy |
 | Platform allowlist issues | diagnosing-gateway |
 | Token validation failures | diagnosing-gateway |
