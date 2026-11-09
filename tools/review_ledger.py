@@ -55,12 +55,31 @@ def _run_gh_graphql(query):
 
 
 def _fetch_pr_threads(pr_number):
-    query = f"""query {{ repository(owner: "iap", name: "hermes-guide") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100) {{ nodes {{ id isResolved comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} }} }} }}"""
+    query = f"""query {{ repository(owner: "iap", name: "hermes-guide") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100) {{ nodes {{ id isResolved comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state }} }} }} }} }}"""
     data = _run_gh_graphql(query)
     pr = data["data"]["repository"]["pullRequest"]
     threads = pr["reviewThreads"]["nodes"]
     head_oid = pr["headRefOid"]
-    return threads, head_oid
+    reviews = pr.get("reviews", {}).get("nodes", [])
+    return threads, head_oid, reviews
+
+
+def compute_reviewed(reviews):
+    """Whether Qodo / CodeRabbit completed a review (independent of findings).
+
+    Qodo #12: a bot that reviews with zero inline findings must count as
+    reviewed, so its clean state is not conflated with a bot that has
+    not reviewed at all.
+    """
+    qodo_reviewed = any(
+        "qodo-code-review" in ((r.get("author") or {}).get("login") or "").lower()
+        for r in reviews
+    )
+    coderabbit_reviewed = any(
+        "coderabbit" in ((r.get("author") or {}).get("login") or "").lower()
+        for r in reviews
+    )
+    return qodo_reviewed, coderabbit_reviewed
 
 
 def _classify_bot(author_login):
@@ -151,20 +170,15 @@ def unresolved_findings(findings):
     return [f for f in findings if f["status"] == "open"]
 
 
-def build_ledger(pr_number, head_oid, findings):
+def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_reviewed=False):
     qodo_findings = [f for f in findings if f["bot"] == "qodo"]
     cr_findings = [f for f in findings if f["bot"] == "coderabbit"]
 
     qodo_open = [f for f in qodo_findings if f["status"] == "open"]
     cr_open = [f for f in cr_findings if f["status"] == "open"]
 
-    qodo_clean = len(qodo_findings) > 0 and len(qodo_open) == 0
-    coderabbit_clean = len(cr_findings) > 0 and len(cr_open) == 0
-
-    if len(qodo_findings) == 0:
-        qodo_clean = False
-    if len(cr_findings) == 0:
-        coderabbit_clean = False
+    qodo_clean = qodo_reviewed and len(qodo_open) == 0
+    coderabbit_clean = coderabbit_reviewed and len(cr_open) == 0
 
     same_head = True
     merge_ready = (
@@ -181,6 +195,8 @@ def build_ledger(pr_number, head_oid, findings):
         "findings": findings,
         "qodo_clean": qodo_clean,
         "coderabbit_clean": coderabbit_clean,
+        "qodo_reviewed": qodo_reviewed,
+        "coderabbit_reviewed": coderabbit_reviewed,
         "same_head": same_head,
         "merge_ready": merge_ready,
         "summary": {
@@ -225,13 +241,14 @@ def main():
     args = parser.parse_args()
 
     try:
-        threads, head_oid = _fetch_pr_threads(args.pr)
+        threads, head_oid, reviews = _fetch_pr_threads(args.pr)
     except (RuntimeError, KeyError, TypeError, ValueError) as exc:
         print("error: " + str(exc), file=sys.stderr)
         return 2
 
-    findings, human_open_count = _parse_threads(threads)
-    ledger = build_ledger(args.pr, head_oid, findings, human_open_count)
+    findings, _human_open_count = _parse_threads(threads)
+    qodo_reviewed, coderabbit_reviewed = compute_reviewed(reviews)
+    ledger = build_ledger(args.pr, head_oid, findings, qodo_reviewed, coderabbit_reviewed)
 
     if args.write:
         if args.output:

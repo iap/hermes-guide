@@ -177,7 +177,7 @@ def test_build_ledger_merge_ready():
             "created_at": None,
         },
     ]
-    ledger = rl.build_ledger(42, "abc123", findings)
+    ledger = rl.build_ledger(42, "abc123", findings, True, True)
     assert ledger["merge_ready"] is True
     assert ledger["rounds"][0]["qodo_clean"] is True
     assert ledger["rounds"][0]["coderabbit_clean"] is True
@@ -209,17 +209,36 @@ def test_build_ledger_not_merge_ready_open_findings():
             "created_at": None,
         },
     ]
-    ledger = rl.build_ledger(42, "abc123", findings)
+    ledger = rl.build_ledger(42, "abc123", findings, True, True)
     assert ledger["merge_ready"] is False
     assert ledger["rounds"][0]["qodo_clean"] is False
     assert ledger["rounds"][0]["coderabbit_clean"] is True
 
 
 def test_build_ledger_no_findings():
-    ledger = rl.build_ledger(42, "abc123", [])
+    ledger = rl.build_ledger(42, "abc123", [], False, False)
     assert ledger["merge_ready"] is False
     assert ledger["rounds"][0]["qodo_clean"] is False
     assert ledger["rounds"][0]["coderabbit_clean"] is False
+
+
+def test_build_ledger_no_findings_clean_when_reviewed():
+    ledger = rl.build_ledger(42, "abc123", [], True, True)
+    assert ledger["merge_ready"] is True
+    assert ledger["rounds"][0]["qodo_clean"] is True
+    assert ledger["rounds"][0]["coderabbit_clean"] is True
+
+
+def test_compute_reviewed():
+    q, c = rl.compute_reviewed(
+        [
+            {"author": {"login": "qodo-code-review[bot]"}},
+            {"author": {"login": "coderabbitai[bot]"}},
+        ]
+    )
+    assert q is True and c is True
+    q2, c2 = rl.compute_reviewed([{"author": {"login": "human"}}])
+    assert q2 is False and c2 is False
 
 
 def test_build_ledger_only_qodo():
@@ -235,7 +254,7 @@ def test_build_ledger_only_qodo():
             "created_at": None,
         },
     ]
-    ledger = rl.build_ledger(42, "abc123", findings)
+    ledger = rl.build_ledger(42, "abc123", findings, True, False)
     assert ledger["merge_ready"] is False
     assert ledger["rounds"][0]["qodo_clean"] is True
     assert ledger["rounds"][0]["coderabbit_clean"] is False
@@ -272,7 +291,7 @@ def test_extract_title_fallback():
 def test_integration_pr_448():
     """Fetch real PR 448 threads and verify structure."""
     try:
-        threads, head_oid = rl._fetch_pr_threads(448)
+        threads, head_oid, _reviews = rl._fetch_pr_threads(448)
     except (RuntimeError, KeyError, TypeError, ValueError) as exc:
         if "gh" in str(exc).lower() or "not found" in str(exc).lower():
             print("SKIP: gh not available or not authenticated")
