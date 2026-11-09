@@ -61,6 +61,7 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | Path / venv confusion | diagnosing-path |
 | Dual-venv layout issues | diagnosing-path |
 | Wrong Python interpreter | diagnosing-path |
+| `No module named <pkg>` after a mise/pyenv/Homebrew shim; `hermes` resolves outside its install | diagnosing-path (foreign-shim section; verify launcher provenance before naming upstream) |
 | Plugin not loading | diagnosing-plugins |
 | Plugin not enabled | diagnosing-plugins |
 | plugins.enabled gate blocking | diagnosing-plugins |
