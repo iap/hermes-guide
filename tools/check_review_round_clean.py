@@ -88,9 +88,9 @@ def _check_ledger(ledger: dict, pr_number: int, live_head: str) -> list[str]:
 def _fetch_fresh_ledger(pr_number: int) -> dict:
     """Fetch fresh threads and build a ledger (no disk write)."""
     threads, head_oid, reviews = rl._fetch_pr_threads(pr_number)
-    findings, _ = rl._parse_threads(threads)
+    findings, human_open_count = rl._parse_threads(threads)
     qodo_reviewed, coderabbit_reviewed = rl.compute_reviewed(reviews)
-    return rl.build_ledger(pr_number, head_oid, findings, qodo_reviewed, coderabbit_reviewed)
+    return rl.build_ledger(pr_number, head_oid, findings, qodo_reviewed, coderabbit_reviewed, human_open_count)
 
 
 def main() -> int:

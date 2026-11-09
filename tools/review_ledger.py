@@ -138,11 +138,11 @@ def _parse_threads(threads):
     findings = []
     human_open_count = 0
     for thread in threads:
-        comments = thread.get("comments", {}).get("nodes", [])
+        comments = (thread.get("comments") or {}).get("nodes") or []
         if not comments:
             continue
         first = comments[0]
-        author = first.get("author", {}).get("login", "")
+        author = (first.get("author") or {}).get("login", "")
         bot = _classify_bot(author)
         is_resolved = thread.get("isResolved", False)
         if bot is None:
@@ -170,7 +170,7 @@ def unresolved_findings(findings):
     return [f for f in findings if f["status"] == "open"]
 
 
-def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_reviewed=False):
+def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_reviewed=False, human_open_count=0):
     qodo_findings = [f for f in findings if f["bot"] == "qodo"]
     cr_findings = [f for f in findings if f["bot"] == "coderabbit"]
 
@@ -205,6 +205,7 @@ def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_
             "qodo_open": len(qodo_open),
             "coderabbit_total": len(cr_findings),
             "coderabbit_open": len(cr_open),
+            "human_open": human_open_count,
         },
     }
 
@@ -246,9 +247,9 @@ def main():
         print("error: " + str(exc), file=sys.stderr)
         return 2
 
-    findings, _human_open_count = _parse_threads(threads)
+    findings, human_open_count = _parse_threads(threads)
     qodo_reviewed, coderabbit_reviewed = compute_reviewed(reviews)
-    ledger = build_ledger(args.pr, head_oid, findings, qodo_reviewed, coderabbit_reviewed)
+    ledger = build_ledger(args.pr, head_oid, findings, qodo_reviewed, coderabbit_reviewed, human_open_count)
 
     if args.write:
         if args.output:

@@ -229,6 +229,29 @@ def test_build_ledger_no_findings_clean_when_reviewed():
     assert ledger["rounds"][0]["coderabbit_clean"] is True
 
 
+def test_parse_threads_deleted_author():
+    threads = [
+        {
+            "id": "T5",
+            "isResolved": False,
+            "comments": {
+                "nodes": [
+                    {
+                        "author": None,
+                        "body": "ghost comment",
+                        "path": "a.py",
+                        "line": 1,
+                        "createdAt": "2026-11-08T00:00:00Z",
+                    }
+                ]
+            },
+        }
+    ]
+    findings, human_open_count = rl._parse_threads(threads)
+    assert findings == []
+    assert human_open_count == 1
+
+
 def test_compute_reviewed():
     q, c = rl.compute_reviewed(
         [
