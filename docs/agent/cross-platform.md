@@ -15,7 +15,16 @@
 | `cross-platform` | Affects multiple operating systems |
 | `platform:windows-only` | Windows-only changes |
 | `platform:posix-only` | POSIX-only changes |
-| `needs:os-verify` | Needs verification on a different OS |
+| `needs:os-verify` | Needs verification by an agent on another device |
+| `assist:windows-confirm` | Request Windows-agent confirmation on another Windows device |
+| `assist:linux-confirm` | Request Linux-agent confirmation on another Linux device |
+| `assist:macos-confirm` | Request macOS-agent confirmation on another macOS device |
+| `assist:wsl-confirm` | Request WSL-agent confirmation on another WSL device |
+
+Environment labels alone do not prove a check; record which checks ran,
+passed, failed, or were not run in the PR body. See
+[deep-ops.md — OS labels](deep-ops.md#os-labels-environment-and-assist-axes)
+for the two-axis model and label ownership.
 
 ## Rules
 
@@ -39,12 +48,12 @@ Platform-specific code for an OS you cannot verify is not changed. If you are on
 Every PR MUST have at least one OS label. If you could only verify on one platform, add `needs:os-verify`.
 
 ### 5. Agent handoff protocol
-When handing off to an agent on a different OS:
+When handing off to an agent on another device:
 1. Document what was changed and what needs verification
 2. List specific test commands to run
 3. Note OS-specific assumptions
-4. Add `needs:os-verify` label
-5. Receiving agent runs tests, checks for regressions, removes `needs:os-verify`, adds their OS label
+4. Add `needs:os-verify` plus the `assist:*` label for the target OS
+5. Receiving agent runs the commands and records failures or `not run` checks in the PR. If all requested checks pass, it adds its OS label and removes its own `assist:*` label; otherwise it leaves the `assist:*` label in place. It removes `needs:os-verify` only when no other `assist:*` label remains: one device confirming does not clear another device's outstanding request
 
 ### 6. Common pitfalls
 - `python3` not on PATH on Windows — use `python` or `uv run python`
