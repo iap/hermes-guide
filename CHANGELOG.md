@@ -46,7 +46,7 @@ All notable changes to hermes-guide are documented here.
 - **agent**: add cross-platform development rules and OS labels
 - **skills**: clarify spinner detection gating
 - **skills**: address CodeRabbit spinner-flood findings
-- **skills**: merge Cursor/VS Code spinner-flood playbook into diagnosing-cli-tui (v1.1.23)
+- **skills**: merge Cursor/VS Code spinner-flood playbook into diagnosing-cli-tui (v1.1.24)
 - **review**: distinguish conversation-gate BLOCKED from review failure ([#441](https://github.com/iap/hermes-guide/pull/441))
 - **path**: document PM-managed node warning on git installs ([#440](https://github.com/iap/hermes-guide/pull/440))
 - **agents**: require annotated signed release tags ([#439](https://github.com/iap/hermes-guide/pull/439))
