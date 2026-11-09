@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.1.7
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -254,7 +254,7 @@ and a weak model regenerates the same output.
 
 ## 2. Symptom → Skill mapping table
 
-The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 75 rows from specific symptoms to the target skill. Load the matched skill directly.
+The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 77 rows from specific symptoms to the target skill. Load the matched skill directly.
 
 ## 3. Clarifying questions
 
