@@ -78,7 +78,7 @@ dependencies (declared for `python_version >= '3.14'`) then crash on first use,
 even though `hermes --version` works. After any install, verify the resolution
 chain with `type -a hermes` and `which hermes`: the winner must be
 `~/.local/bin/hermes` (the durable launcher) or the checkout's `.venv/bin/hermes`,
-never a version manager's `python` install bin. If a shim wins, it is not part of
+never a version manager's `python` install bin. On native Windows the equivalents are `Get-Command hermes -All` and `where hermes`; the venv launcher is `.venv\Scripts\hermes.exe`. If a shim wins, it is not part of
 the install — remove or override it; do not install Hermes deps into the shim's
 interpreter. See `diagnosing-path` ("Foreign shim interpreter") for the full
 diagnosis.
