@@ -227,7 +227,9 @@ def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_
     qodo_clean = qodo_reviewed and len(qodo_open) == 0
     coderabbit_clean = coderabbit_reviewed and len(cr_open) == 0
 
-    same_head = True
+    # Both flags are already head-scoped by compute_reviewed(); deriving this
+    # from them keeps the field honest when a bot reviewed an older commit.
+    same_head = bool(qodo_reviewed and coderabbit_reviewed)
     merge_ready = (
         qodo_clean
         and coderabbit_clean

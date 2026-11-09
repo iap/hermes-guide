@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -184,6 +185,30 @@ def test_parse_threads_skips_non_bot():
     ]
     findings, _ = rl._parse_threads(threads)
     assert findings == []
+
+
+def test_parse_threads_null_author():
+    threads = [
+        {
+            "id": "T-null-author",
+            "isResolved": False,
+            "isOutdated": False,
+            "comments": {
+                "nodes": [
+                    {
+                        "author": None,
+                        "body": "deleted account",
+                        "path": None,
+                        "line": None,
+                        "createdAt": "2026-11-08T00:00:00Z",
+                    }
+                ]
+            },
+        }
+    ]
+    findings, human = rl._parse_threads(threads)
+    assert findings == []
+    assert human == 1
 
 
 def test_parse_threads_empty_comments():
@@ -482,6 +507,9 @@ def test_extract_title_fallback():
 
 
 def test_integration_pr_448():
+    if not os.environ.get("HERMES_REVIEW_INTEGRATION"):
+        print("SKIP: set HERMES_REVIEW_INTEGRATION=1 for the live PR-448 check")
+        return
     """Fetch real PR 448 threads and verify structure."""
     try:
         threads, head_oid, _reviews = rl._fetch_pr_threads(448)
