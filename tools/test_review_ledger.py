@@ -310,6 +310,38 @@ def test_compute_reviewed_changes_requested():
     assert q is False
 
 
+def test_compute_reviewed_cr_chronology():
+    # Later COMMENTED must not clear CHANGES_REQUESTED; only APPROVED does.
+    blocked = [
+        {
+            "author": {"login": "coderabbitai[bot]"},
+            "state": "COMMENTED",
+            "commit": {"oid": "abc123"},
+        },
+        {
+            "author": {"login": "coderabbitai[bot]"},
+            "state": "CHANGES_REQUESTED",
+            "commit": {"oid": "abc123"},
+        },
+        {
+            "author": {"login": "coderabbitai[bot]"},
+            "state": "COMMENTED",
+            "commit": {"oid": "abc123"},
+        },
+    ]
+    _q, cr = rl.compute_reviewed(blocked, "abc123")
+    assert cr is False
+    approved = blocked + [
+        {
+            "author": {"login": "coderabbitai[bot]"},
+            "state": "APPROVED",
+            "commit": {"oid": "abc123"},
+        }
+    ]
+    _q2, cr2 = rl.compute_reviewed(approved, "abc123")
+    assert cr2 is True
+
+
 def test_compute_reviewed_stale_head():
     q, _c = rl.compute_reviewed(
         [

@@ -94,7 +94,8 @@ def compute_reviewed(reviews, head_oid=None):
         # Qodo #5: a review for an older head does not clear a new commit.
         # Qodo #21: PENDING/DISMISSED are not a completed review; any
         # CHANGES_REQUESTED on the head blocks even if earlier COMMENTED exists.
-        latest = None
+        saw_request = False
+        saw_ok = False
         for r in reviews:
             if _login(r) not in logins:
                 continue
@@ -102,17 +103,21 @@ def compute_reviewed(reviews, head_oid=None):
                 commit = (r.get("commit") or {}).get("oid")
                 if commit and commit != head_oid:
                     continue
-            if r.get("state") in ("PENDING", "DISMISSED"):
-                # Unsubmitted/dismissed reviews never count as reviewed,
-                # and do not override a prior completed state.
-                if r.get("state") == "DISMISSED":
-                    continue
+            state = r.get("state")
+            if state in ("PENDING", "DISMISSED"):
+                # Unsubmitted/dismissed reviews never count as reviewed.
                 continue
-            if r.get("state") is not None:
-                latest = r.get("state")
-            elif latest is None:
-                latest = "COMMENTED"
-        return latest is not None and latest != "CHANGES_REQUESTED"
+            if state == "CHANGES_REQUESTED":
+                saw_request = True
+                saw_ok = False
+            elif state == "APPROVED":
+                saw_request = False
+                saw_ok = True
+            elif state in (None, "COMMENTED"):
+                # Bare comment never clears an outstanding request.
+                if not saw_request:
+                    saw_ok = True
+        return saw_ok and not saw_request
 
     return _reviewed("qodo"), _reviewed("coderabbit")
 

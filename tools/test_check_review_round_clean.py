@@ -391,6 +391,59 @@ def test_cli_live_clean_passes():
         argparse.ArgumentParser.parse_args = orig_parse
 
 
+def test_cli_live_no_reviews_blocks():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_get_head = gate._get_pr_head
+    orig_fetch = gate.rl._fetch_pr_threads
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate.rl._fetch_pr_threads = lambda _pr: ([], "abc123", [])
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            p = _live_ledger(td)
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=p, no_live_check=False
+            )
+            assert gate.main() == 1
+    finally:
+        gate._get_pr_head = orig_get_head
+        gate.rl._fetch_pr_threads = orig_fetch
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
+def test_cli_live_old_head_blocks():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_get_head = gate._get_pr_head
+    orig_fetch = gate.rl._fetch_pr_threads
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate.rl._fetch_pr_threads = lambda _pr: (
+            [],
+            "abc123",
+            [
+                {"author": {"login": "qodo-code-review[bot]"}, "state": "COMMENTED", "commit": {"oid": "old"}},
+                {"author": {"login": "coderabbitai[bot]"}, "state": "COMMENTED", "commit": {"oid": "old"}},
+            ],
+        )
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            p = _live_ledger(td)
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=p, no_live_check=False
+            )
+            assert gate.main() == 1
+    finally:
+        gate._get_pr_head = orig_get_head
+        gate.rl._fetch_pr_threads = orig_fetch
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
 def test_main_callable():
     assert callable(gate.main)
 
