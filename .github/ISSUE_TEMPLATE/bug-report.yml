@@ -65,6 +65,14 @@ body:
     validations:
       required: false
   - type: input
+    id: shim-interpreter
+    attributes:
+      label: Shim interpreter (python that runs hermes)
+      description: "`which hermes` plus the shim shebang's python and its version — the discriminating fact for runtime-resolution bugs (third-party shims like mise/pyenv execute hermes_cli under a different interpreter than its dependency environment). On PM-era installs the shebang names a durable launcher, not the PM-store interpreter: paste the `hermes --version` output and, for POSIX source installs, the Python version from the launcher's `exec` line instead. Include the startup traceback when the failure surfaces one."
+      placeholder: "mise python3.12 shim; .venv is 3.14 (or: PM install, hermes --version output)"
+    validations:
+      required: false
+  - type: input
     id: modified
     attributes:
       label: What was modified during diagnosis
