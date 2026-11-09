@@ -234,17 +234,21 @@ On a PM-era install (2026-09 onward) there is no in-tree `venv/` and no `python`
 
 Symptom: `hermes` launches but dies with `No module named <pkg>` for a package the checkout's `.venv` clearly has — e.g. `No module named snowballstemmer` on a search-feature path while `.venv/bin/python -c "import snowballstemmer"` succeeds.
 
-Cause: a third-party version manager's shim (mise, pyenv, Homebrew) exec's `hermes_cli` under **its own** interpreter — on this host, a mise Python 3.12 script importing the checkout directly — while the dependency environment was provisioned for another interpreter (uv `.venv`, Python 3.14). The checkout still imports (it is on the path), but marker-gated dependencies are absent: upstream declares `snowballstemmer==3.1.1; python_version >= '3.14'`, so a 3.12 runtime never receives it, and `tools/tool_search_catalog.py` imports it unconditionally. This is the interpreter class of #449; upstream tracks the sync side as #97340 (deps into `venv/` only, shim serves stale env) and the crash side as #147946 (stem lookup with the package unavailable).
+Cause: a third-party version manager's shim (mise, pyenv, Homebrew) exec's `hermes_cli` under **its own** interpreter — on this host, a mise Python 3.12 script importing the checkout directly — while the dependency environment was provisioned for another interpreter (uv `.venv`, Python 3.14). The checkout still imports (it is on the path), but marker-gated dependencies are absent: upstream declares `snowballstemmer==3.1.1; python_version >= '3.14'` (verified against upstream at `38135cc7`, the rev reported by the local `hermes --version`), so a 3.12 runtime never receives it, and `tools/tool_search_catalog.py` imports it unconditionally. This is the interpreter class of #449; upstream tracks the sync side as #97340 (deps into `venv/` only, shim serves stale env) and the crash side as #147946 (stem lookup with the package unavailable).
 
-Diagnosis:
+Diagnosis — compare the two *interpreters*, not two launches of `hermes` (the same shim answers both, so comparing invocations can never show a mismatch):
 
 ```bash
 HERMES_BIN=$(command -v hermes)
-head -1 "$HERMES_BIN"                       # shim shebang: whose python?
-"$(head -1 "$HERMES_BIN" | tr -d '#!')" --version   # shim interpreter version
-"$HERMES_HOME/hermes-agent/.venv/bin/python" --version 2>/dev/null || true  # env python
-diff <("$HERMES_BIN" --version 2>&1) <(hermes --version 2>&1)  # same install?
+head -5 "$HERMES_BIN"      # shebang may be a wrapper (#!/bin/sh, env python3); find the python token
+SHIM_PY=$(head -1 "$HERMES_BIN" | awk '{for(i=1;i<=NF;i++) if ($i ~ /python/) print $i}')
+"$SHIM_PY" --version       # shim interpreter (if the shebang names none, read it as the durable launcher case below)
+INSTALL_DIR=$(dirname "$(hermes config path)")          # ground truth for $HERMES_HOME
+ls "$INSTALL_DIR/hermes-agent/.venv/bin/python" && "$INSTALL_DIR/hermes-agent/.venv/bin/python" --version
+# PM store interpreter instead: hermes --version prints install dir + method; probe the committed env there
 ```
+
+On PM-era installs the shebang names a durable launcher, not the PM-store interpreter — the shim-python version is then irrelevant; use the committed environment's python (see PM-era section above) and treat a marker-gated import failure there as #147946-shaped. If the env probe path does not exist, say so explicitly — a missing `.venv` is a finding, not a silent pass.
 
 Fix: run Hermes through its own environment — `<checkout>/.venv/bin/hermes` for uv checkouts, or the durable launcher on PM-era installs. Do not install the missing package into the shim's interpreter (it re-breaks on the next interpreter bump and the shim then shadows the supported runtime), and do not rewrite the shim shebang to a system Python (ABI mismatch class above). If the shim is your only entry point, report it as #97340-shaped: the fix belongs in how the shim resolves deps, not in user Python.
 
