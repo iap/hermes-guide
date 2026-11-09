@@ -20,13 +20,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-REPO = "iap/hermes-guide"
+REPO = os.environ.get("GITHUB_REPOSITORY", "iap/hermes-guide")
 LEDGER_DIR = Path(".hermes")
 LEDGER_FILE = "review-rounds.json"
 
@@ -58,12 +59,13 @@ def _fetch_pr_threads(pr_number):
     threads = []
     head_oid = None
     after = ""
+    owner, name = REPO.split("/", 1)
     # Qodo #19: first:100 truncates long histories and false-cleans PRs
     # whose unresolved threads live past page one. Page threads until
     # exhausted; reviews are fetched once (bots review early on a PR).
     # Qodo #20: no fixed page cap (PRs can exceed 500 threads).
     for _ in range(20):
-        query = f"""query {{ repository(owner: "iap", name: "hermes-guide") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100, after: "{after}") {{ pageInfo {{ hasNextPage endCursor }} nodes {{ id isResolved comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state commit {{ oid }} }} }} }} }} }}"""
+        query = f"""query {{ repository(owner: "{owner}", name: "{name}") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100, after: "{after}") {{ pageInfo {{ hasNextPage endCursor }} nodes {{ id isResolved isOutdated comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state commit {{ oid }} }} }} }} }} }}"""
         data = _run_gh_graphql(query)
         pr = data["data"]["repository"]["pullRequest"]
         head_oid = pr["headRefOid"]
@@ -187,8 +189,9 @@ def _parse_threads(threads):
         author = (first.get("author") or {}).get("login", "")
         bot = _classify_bot(author)
         is_resolved = thread.get("isResolved", False)
+        is_outdated = bool(thread.get("isOutdated", False))
         if bot is None:
-            if not is_resolved:
+            if not is_resolved and not is_outdated:
                 human_open_count += 1
             continue
         body = first.get("body", "")
@@ -200,7 +203,9 @@ def _parse_threads(threads):
             "title": _extract_title(body),
             "file": first.get("path"),
             "line": first.get("line"),
-            "status": "resolved" if is_resolved else "open",
+            "status": (
+                "resolved" if is_resolved else ("outdated" if is_outdated else "open")
+            ),
             "resolved_commit": None,
             "created_at": first.get("createdAt"),
         }

@@ -10,6 +10,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_review_round_clean as gate
 
 
+def test_is_bot_author():
+    assert gate._is_bot_author("dependabot[bot]")
+    assert not gate._is_bot_author("iap")
+    assert not gate._is_bot_author("bot")
+
+
 def test_check_ledger_pass():
     ledger = {
         "pr": 42,
@@ -441,6 +447,25 @@ def test_cli_live_old_head_blocks():
     finally:
         gate._get_pr_head = orig_get_head
         gate.rl._fetch_pr_threads = orig_fetch
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
+def test_cli_bot_author_skips():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_head = gate._get_pr_head
+    orig_author = gate._get_pr_author
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: "dependabot[bot]"
+        argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+            pr=42, ledger="does-not-exist.json", no_live_check=True
+        )
+        assert gate.main() == 0
+    finally:
+        gate._get_pr_head = orig_head
+        gate._get_pr_author = orig_author
         argparse.ArgumentParser.parse_args = orig_parse
 
 

@@ -116,6 +116,54 @@ def test_parse_threads_coderabbit_open():
     assert findings[0]["severity"] == "low"
 
 
+def test_parse_threads_outdated_not_open():
+    threads = [
+        {
+            "id": "T-outdated",
+            "isResolved": False,
+            "isOutdated": True,
+            "comments": {
+                "nodes": [
+                    {
+                        "author": {"login": "qodo-code-review"},
+                        "body": "## High\nAlready fixed",
+                        "path": "checks.py",
+                        "line": 10,
+                        "createdAt": "2026-11-08T00:00:00Z",
+                    }
+                ]
+            },
+        }
+    ]
+    findings, human = rl._parse_threads(threads)
+    assert findings[0]["status"] == "outdated"
+    assert rl.unresolved_findings(findings) == []
+    assert human == 0
+
+
+def test_parse_threads_outdated_human_not_counted():
+    threads = [
+        {
+            "id": "T-human-outdated",
+            "isResolved": False,
+            "isOutdated": True,
+            "comments": {
+                "nodes": [
+                    {
+                        "author": {"login": "human-user"},
+                        "body": "old question",
+                        "path": None,
+                        "line": None,
+                        "createdAt": "2026-11-08T00:00:00Z",
+                    }
+                ]
+            },
+        }
+    ]
+    _findings, human = rl._parse_threads(threads)
+    assert human == 0
+
+
 def test_parse_threads_skips_non_bot():
     threads = [
         {

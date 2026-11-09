@@ -36,10 +36,31 @@ LEDGER_DIR = Path(".hermes")
 LEDGER_FILE = "review-rounds.json"
 
 
+def _get_pr_author(pr_number: int) -> str:
+    """Fetch the PR author login; empty on API failure (head check still gates)."""
+    owner, name = rl.REPO.split("/", 1)
+    query = (
+        f'query {{ repository(owner: "{owner}", name: "{name}") {{ '
+        f"pullRequest(number: {pr_number}) {{ author {{ login }} }} }} }}"
+    )
+    try:
+        data = rl._run_gh_graphql(query)
+        pr = data["data"]["repository"]["pullRequest"]
+        return ((pr.get("author") or {}).get("login") or "")
+    except (RuntimeError, KeyError, TypeError, ValueError):
+        return ""
+
+
+def _is_bot_author(login: str) -> bool:
+    """Bot-authored PRs have no human reviewer to satisfy the bot gate."""
+    return (login or "").lower().endswith("[bot]")
+
+
 def _get_pr_head(pr_number: int) -> str:
     """Fetch the current head commit SHA for a PR."""
+    owner, name = rl.REPO.split("/", 1)
     query = (
-        f'query {{ repository(owner: "iap", name: "hermes-guide") {{ '
+        f'query {{ repository(owner: "{owner}", name: "{name}") {{ '
         f"pullRequest(number: {pr_number}) {{ headRefOid }} }} }}"
     )
     data = rl._run_gh_graphql(query)
@@ -120,9 +141,14 @@ def main() -> int:
 
     try:
         live_head = _get_pr_head(pr_number)
+        pr_author = _get_pr_author(pr_number)
     except (RuntimeError, KeyError, TypeError, ValueError) as exc:
         print(f"error: failed to fetch PR head: {exc}", file=sys.stderr)
         return 2
+
+    if _is_bot_author(pr_author):
+        print(f"REVIEW ROUND GATE: SKIP (bot-authored PR: {pr_author})")
+        return 0
 
     ledger = None
     if ledger_path.exists():
