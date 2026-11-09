@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli
 description: "Diagnose and fix Hermes Agent classic CLI issues (prompt_toolkit REPL, cli.py HermesCLI): rendering artifacts, themes/skins, busy indicators, encoding, and launch/resume. Use for hermes --cli, piped input, and the classic spinner."
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, cli, prompt_toolkit, windows, troubleshooting, diagnosing]
@@ -67,7 +67,7 @@ User env vars: `EDITOR=code --wait`, `HERMES_TUI_THEME=dark`.
 
 ### Stale update lock wedges every launch
 
-Every `hermes` invocation hanging on `an update is still running` / `finishing an interrupted source update` with no update in progress means a leftover checkout lock (`hermes_cli/update_lock.py::read_live_update` judges it; `hermes_cli/update_lock.py::describe_holder` explains refusals). Read the holder record at `<git common dir>/hermes-update.lock` (or `<install root>/.hermes-update.lock` for a ZIP install with no `.git`) — `pid`, `started_at`, `ct:` creation time — then judge liveness the way upstream does: the owner counts live only while its pid runs **and** its recorded creation time still matches (2 s tolerance), so a dead pid is suggestive but a reused pid proves nothing. Three verdicts: live owner → wait (watch `hermes logs`), never touch the lock; dead owner **and** no surviving updater child (`Get-Process` shows no hermes update/python holdouts) → stale, safe to remove with human confirmation, then `hermes --version` must exit 0; dead owner **but** an updater-started process still runs → it holds the checkout (`held`) — wait, never delete. Deletion is the only write in this flow and stays human-confirmed. `hermes guide update` automates the PID-liveness verdict where the install can still launch (fully wedged installs start here by hand). Observed live 2026-10-16: timeout-killed plugin install, owner PID dead 6+ min, CLI recovered after removal. When probing liveness by hand, never use `os.kill(pid, 0)` on Windows — it terminates the target there (POSIX-only idiom); use `Get-Process` instead. POSIX reverses the rule: `ps -p <pid>` shows a live owner, and `kill -0 <pid>` exits 0 only while it runs — a probe there, never a signal.
+Every `hermes` invocation hanging on `an update is still running` / `finishing an interrupted source update` with no update in progress means a leftover checkout lock (`hermes_cli/update_lock.py::read_live_update` judges it; `hermes_cli/update_lock.py::describe_holder` explains refusals). Read the holder record at `<git common dir>/hermes-update.lock` (or `<install root>/.hermes-update.lock` for a ZIP install with no `.git`) — `pid`, `started_at`, `ct:` creation time — then judge liveness the way upstream does: the owner counts live only while its pid runs **and** its recorded creation time still matches (2 s tolerance), so a dead pid is suggestive but a reused pid proves nothing. Three verdicts: live owner → wait (watch the active profile's `logs/update.log` for ongoing update output; `hermes logs` only prints an `agent.log` snapshot and exits), never touch the lock; dead owner **and** no surviving updater child (`Get-Process` shows no hermes update/python holdouts) → stale, safe to remove with human confirmation, then `hermes --version` must exit 0; dead owner **but** an updater-started process still runs → it holds the checkout (`held`) — wait, never delete. Deletion is the only write in this flow and stays human-confirmed. `hermes guide update` automates the PID-liveness verdict where the install can still launch (fully wedged installs start here by hand). Observed live 2026-10-16: timeout-killed plugin install, owner PID dead 6+ min, CLI recovered after removal. When probing liveness by hand, never use `os.kill(pid, 0)` on Windows — it terminates the target there (POSIX-only idiom); use `Get-Process` instead. POSIX reverses the rule: `ps -p <pid>` shows a live owner, and `kill -0 <pid>` exits 0 only while it runs — a probe there, never a signal. Probe errors are unknown — never read them as proof that no child holds the lock.
 
 ## 2. How the classic CLI talks to the agent
 
@@ -104,7 +104,11 @@ logs debug and retains cached rows.
 > `TimeoutError` conversion already sits, because every other
 > gateway verb shares that path.
 
-## 3. In-TUI slash commands that fix rendering
+## 3. Slash commands that fix rendering (Node TUI unless noted)
+
+These persist to the TUI `display:` block. `/indicator` entered in the
+classic CLI still writes `display.tui_status_indicator` — the TUI setting
+— even though no TUI is running in that session.
 
 | Command | Effect |
 |---|---|

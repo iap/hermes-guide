@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-desktop
 description: "Diagnose Hermes desktop app failures — launch or build fails, Node/npm resolution errors, 'Access is denied' on Hermes.exe, blank window or backend never ready, Electron download stuck. Build/launch pipeline, backend resolution order, and the desktop.* config block."
-version: 1.1.13
+version: 1.1.14
 metadata:
   hermes:
     tags: [hermes, desktop, electron, gui, troubleshooting, diagnosing]
@@ -12,7 +12,7 @@ metadata:
 
 Goal: reduce any `hermes desktop` failure — build error, launch failure, wrong backend, or blank window — to one concrete fix: a missing dependency, a stale/locked build artifact, an env override, or a config field.
 
-> **Disambiguation**: if the classic CLI misrenders on native Windows, see `diagnosing-cli`; if the Node TUI misrenders, see `diagnosing-tui` — that is a frontend problem, not a desktop-app problem. If the wrong Python interpreter is active or the dual-venv layout is confusing, see `diagnosing-path`.
+> **Disambiguation**: if the classic CLI misrenders (any platform), see `diagnosing-cli`; if the Node TUI misrenders, see `diagnosing-tui` — that is a frontend problem, not a desktop-app problem. If the wrong Python interpreter is active or the dual-venv layout is confusing, see `diagnosing-path`.
 
 > [!NOTE]
 > `hermes gui` is a **deprecated alias** of `hermes desktop` (same command). `hermes doctor` covers the desktop only on **macOS** (TCC signing identity) — on Windows/Linux this skill is the diagnostic layer. Desktop *plugins* (the SDK, `$HERMES_HOME/desktop-plugins/`) are a separate surface and out of scope here.

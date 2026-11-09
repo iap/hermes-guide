@@ -18,7 +18,9 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | Playwright errors | diagnosing-browser |
 | agent-browser not working | diagnosing-browser |
 | CLI glitches / rendering artifacts (native Windows) | diagnosing-cli |
-| Themes / skins not applying (native Windows) | diagnosing-cli |
+| Themes / skins not applying — classic CLI (any platform) | diagnosing-cli |
+| Themes / skins not applying — Node TUI | diagnosing-tui |
+| Theme report, frontend unclear | identify the active frontend first, then route as above |
 | Busy indicators unreadable (native Windows) | diagnosing-cli |
 | Mouse modes not working (native Windows) | diagnosing-tui |
 | Encoding / mojibake issues (native Windows) | diagnosing-cli |
