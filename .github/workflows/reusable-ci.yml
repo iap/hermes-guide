@@ -631,6 +631,10 @@ jobs:
         # Hermetic unit tests for the ledger parsing/build logic.
         run: python tools/test_review_ledger.py
 
+      - name: Review gate CI wiring guard
+        # Fails if the gate step above is ever removed from the workflow.
+        run: python tools/test_review_gate_ci.py
+
       - name: Scope validation regression
         if: inputs.run-full-gate
         run: python tools/test_scope_validation.py

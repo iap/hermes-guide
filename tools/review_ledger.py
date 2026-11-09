@@ -62,7 +62,7 @@ def _fetch_pr_threads(pr_number):
     # whose unresolved threads live past page one. Page threads until
     # exhausted; reviews are fetched once (bots review early on a PR).
     for _ in range(5):
-        query = f"""query {{ repository(owner: "iap", name: "hermes-guide") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100, after: "{after}") {{ pageInfo {{ hasNextPage endCursor }} nodes {{ id isResolved comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state }} }} }} }} }}"""
+        query = f"""query {{ repository(owner: "iap", name: "hermes-guide") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100, after: "{after}") {{ pageInfo {{ hasNextPage endCursor }} nodes {{ id isResolved comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state commit {{ oid }} }} }} }} }} }}"""
         data = _run_gh_graphql(query)
         pr = data["data"]["repository"]["pullRequest"]
         head_oid = pr["headRefOid"]
@@ -77,7 +77,7 @@ def _fetch_pr_threads(pr_number):
     return threads, head_oid, reviews
 
 
-def compute_reviewed(reviews):
+def compute_reviewed(reviews, head_oid=None):
     """Whether Qodo / CodeRabbit completed a review (independent of findings).
 
     Qodo #12: a bot that reviews with zero inline findings must count as
@@ -90,10 +90,18 @@ def compute_reviewed(reviews):
     def _reviewed(bot):
         logins = BOT_LOGINS[bot]
         # Qodo #18: CHANGES_REQUESTED must not count as a clean review.
-        return any(
-            _login(r) in logins and r.get("state") not in ("CHANGES_REQUESTED",)
-            for r in reviews
-        )
+        # Qodo #5: a review for an older head does not clear a new commit.
+        for r in reviews:
+            if _login(r) not in logins:
+                continue
+            if r.get("state") == "CHANGES_REQUESTED":
+                continue
+            if head_oid:
+                commit = (r.get("commit") or {}).get("oid")
+                if commit and commit != head_oid:
+                    continue
+            return True
+        return False
 
     return _reviewed("qodo"), _reviewed("coderabbit")
 
@@ -266,7 +274,7 @@ def main():
         return 2
 
     findings, human_open_count = _parse_threads(threads)
-    qodo_reviewed, coderabbit_reviewed = compute_reviewed(reviews)
+    qodo_reviewed, coderabbit_reviewed = compute_reviewed(reviews, head_oid)
     ledger = build_ledger(args.pr, head_oid, findings, qodo_reviewed, coderabbit_reviewed, human_open_count)
 
     if args.write:

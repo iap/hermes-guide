@@ -273,6 +273,20 @@ def test_compute_reviewed_changes_requested():
     assert q is False
 
 
+def test_compute_reviewed_stale_head():
+    q, _c = rl.compute_reviewed(
+        [
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "COMMENTED",
+                "commit": {"oid": "oldhead"},
+            }
+        ],
+        "newhead",
+    )
+    assert q is False
+
+
 def test_run_gh_graphql_utf8():
     import json as _json
     import subprocess as _sp

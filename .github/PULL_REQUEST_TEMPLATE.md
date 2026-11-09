@@ -70,6 +70,10 @@ a merged PR claiming pending work misleads the next reader. -->
      Fill in after Qodo and CodeRabbit reviews are complete. -->
 - [ ] Qodo review clean (all findings resolved)
 - [ ] CodeRabbit review clean (all findings resolved)
+- [ ] Qodo review triggered on this head
+- [ ] CodeRabbit full review triggered on this head
+- [ ] Green CI on this head
+- [ ] Commits verified (G signature)
 - [ ] Round ledger written (`.hermes/review-rounds.json`)
 - [ ] Both bots clean on same head commit
 
