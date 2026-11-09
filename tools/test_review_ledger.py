@@ -252,6 +252,45 @@ def test_parse_threads_deleted_author():
     assert human_open_count == 1
 
 
+def test_classify_bot_exact_only():
+    assert rl._classify_bot("qodo-code-review") == "qodo"
+    assert rl._classify_bot("qodo-code-review[bot]") == "qodo"
+    assert rl._classify_bot("coderabbitai[bot]") == "coderabbit"
+    assert rl._classify_bot("notcoderabbit") is None
+    assert rl._classify_bot("iamqodo-code-review") is None
+    assert rl._classify_bot("human-user") is None
+
+
+def test_compute_reviewed_changes_requested():
+    q, _c = rl.compute_reviewed(
+        [
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "CHANGES_REQUESTED",
+            }
+        ]
+    )
+    assert q is False
+
+
+def test_run_gh_graphql_utf8():
+    import json as _json
+    import subprocess as _sp
+
+    class Fake:
+        returncode = 0
+        stdout = _json.dumps({"data": {"x": "caf\u00e9 \U0001f600"}}, ensure_ascii=False)
+        stderr = ""
+
+    orig = _sp.run
+    try:
+        _sp.run = lambda *a, **k: Fake()
+        data = rl._run_gh_graphql("query {}")
+        assert data["data"]["x"] == "caf\u00e9 \U0001f600"
+    finally:
+        _sp.run = orig
+
+
 def test_compute_reviewed():
     q, c = rl.compute_reviewed(
         [

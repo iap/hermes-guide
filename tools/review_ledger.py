@@ -30,9 +30,9 @@ REPO = "iap/hermes-guide"
 LEDGER_DIR = Path(".hermes")
 LEDGER_FILE = "review-rounds.json"
 
-BOT_PATTERNS = {
-    "qodo": "qodo-code-review",
-    "coderabbit": "coderabbit",
+BOT_LOGINS = {
+    "qodo": {"qodo-code-review", "qodo-code-review[bot]"},
+    "coderabbit": {"coderabbitai", "coderabbitai[bot]", "coderabbit"},
 }
 
 
@@ -55,12 +55,25 @@ def _run_gh_graphql(query):
 
 
 def _fetch_pr_threads(pr_number):
-    query = f"""query {{ repository(owner: "iap", name: "hermes-guide") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100) {{ nodes {{ id isResolved comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state }} }} }} }} }}"""
-    data = _run_gh_graphql(query)
-    pr = data["data"]["repository"]["pullRequest"]
-    threads = pr["reviewThreads"]["nodes"]
-    head_oid = pr["headRefOid"]
-    reviews = pr.get("reviews", {}).get("nodes", [])
+    threads = []
+    head_oid = None
+    after = ""
+    # Qodo #19: first:100 truncates long histories and false-cleans PRs
+    # whose unresolved threads live past page one. Page threads until
+    # exhausted; reviews are fetched once (bots review early on a PR).
+    for _ in range(5):
+        query = f"""query {{ repository(owner: "iap", name: "hermes-guide") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100, after: "{after}") {{ pageInfo {{ hasNextPage endCursor }} nodes {{ id isResolved comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state }} }} }} }} }}"""
+        data = _run_gh_graphql(query)
+        pr = data["data"]["repository"]["pullRequest"]
+        head_oid = pr["headRefOid"]
+        threads.extend(pr["reviewThreads"]["nodes"])
+        reviews = pr.get("reviews", {}).get("nodes", [])
+        t_page = pr["reviewThreads"].get("pageInfo") or {}
+        if not t_page.get("hasNextPage"):
+            break
+        after = t_page.get("endCursor") or ""
+        if not after:
+            break
     return threads, head_oid, reviews
 
 
@@ -71,21 +84,26 @@ def compute_reviewed(reviews):
     reviewed, so its clean state is not conflated with a bot that has
     not reviewed at all.
     """
-    qodo_reviewed = any(
-        "qodo-code-review" in ((r.get("author") or {}).get("login") or "").lower()
-        for r in reviews
-    )
-    coderabbit_reviewed = any(
-        "coderabbit" in ((r.get("author") or {}).get("login") or "").lower()
-        for r in reviews
-    )
-    return qodo_reviewed, coderabbit_reviewed
+    def _login(r):
+        return ((r.get("author") or {}).get("login") or "").lower()
+
+    def _reviewed(bot):
+        logins = BOT_LOGINS[bot]
+        # Qodo #18: CHANGES_REQUESTED must not count as a clean review.
+        return any(
+            _login(r) in logins and r.get("state") not in ("CHANGES_REQUESTED",)
+            for r in reviews
+        )
+
+    return _reviewed("qodo"), _reviewed("coderabbit")
 
 
 def _classify_bot(author_login):
-    login_lower = author_login.lower()
-    for bot_key, pattern in BOT_PATTERNS.items():
-        if pattern in login_lower:
+    # Exact match only (Qodo #3): substring matching let lookalike users
+    # (e.g. "notcoderabbit") count as review bots.
+    login_lower = (author_login or "").lower()
+    for bot_key, logins in BOT_LOGINS.items():
+        if login_lower in logins:
             return bot_key
     return None
 

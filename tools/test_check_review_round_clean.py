@@ -130,6 +130,59 @@ def test_fetch_fresh_ledger():
     assert len(ledger["rounds"]) == 1
 
 
+def test_cli_live_failure_fails_closed(monkey=None):
+    # Qodo #2: live fetch raising must fail the gate, never PASS on a ledger.
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_get_head = gate._get_pr_head
+    orig_fetch = gate.rl._fetch_pr_threads
+
+    def _raise(*a, **k):
+        raise RuntimeError("simulated gh failure")
+
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate.rl._fetch_pr_threads = _raise
+        # Ledger says merge-ready but live fetch raises -> must be gate failure.
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "ledger.json"
+            p.write_text(
+                json.dumps(
+                    {
+                        "pr": 42,
+                        "head_commit": "abc123",
+                        "rounds": [
+                            {
+                                "round": 1,
+                                "head_commit": "abc123",
+                                "qodo_clean": True,
+                                "coderabbit_clean": True,
+                                "qodo_reviewed": True,
+                                "coderabbit_reviewed": True,
+                                "same_head": True,
+                                "merge_ready": True,
+                                "summary": {"total_findings": 0, "qodo_open": 0, "coderabbit_open": 0},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=str(p), no_live_check=False
+            )
+            assert gate.main() == 1
+    finally:
+        gate._get_pr_head = orig_get_head
+        gate.rl._fetch_pr_threads = orig_fetch
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
 def test_main_callable():
     assert callable(gate.main)
 

@@ -161,7 +161,10 @@ def main() -> int:
                     f"Head changed during check: {live_head[:12]} -> {live_head2[:12]}"
                 )
         except (RuntimeError, KeyError, TypeError, ValueError) as exc:
-            print(f"warning: live check failed: {exc}", file=sys.stderr)
+            # Fail closed (Qodo #2): a live fetch failure must block the gate,
+            # not pass on a possibly stale ledger.
+            print(f"error: live check failed: {exc}", file=sys.stderr)
+            failures.append(f"Live check failed closed: {exc}")
 
     if failures:
         print("REVIEW ROUND GATE: FAIL")
