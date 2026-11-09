@@ -212,7 +212,7 @@ Verify on a PR after the configuration is available to CodeRabbit:
 
 ## Reviewer-bot threads
 
-A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. Triage each thread before replying: reproduce it against the repo guards and cited code, then fix or decline with file:line evidence. Prefer the bot's accept/decline (Qodo Dismiss / CodeRabbit resolve); bots never auto-resolve, so when the bot stays silent on the current head the owner may resolve via GraphQL after posting evidence (required_review_thread_resolution otherwise deadlocks a fixed finding).
+A bot finding (CodeRabbit or similar) is a claim to verify, not a task to obey. Triage each thread before replying: reproduce it against the repo guards and cited code, then fix or decline with file:line evidence. Never resolve a thread to unblock a merge; only the reviewer bot's accept/decline can close it.
 
 The REST comments view lists findings but not resolution state, and that
 state is GraphQL-only. Read the authoritative inventory first: 
