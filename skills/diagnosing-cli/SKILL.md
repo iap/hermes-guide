@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli
 description: "Diagnose and fix Hermes Agent classic CLI issues (prompt_toolkit REPL, cli.py HermesCLI): rendering artifacts, themes/skins, busy indicators, encoding, and launch/resume. Use for hermes --cli, piped input, and the classic spinner."
-version: 1.0.1
+version: 1.0.0
 metadata:
   hermes:
     tags: [hermes, cli, prompt_toolkit, windows, troubleshooting, diagnosing]
@@ -47,10 +47,11 @@ hermes -z "prompt"  # one-shot (--oneshot): run a single prompt with tools, prin
                     #   interpreter should a script in the checkout use?"). Exits non-zero on failure.
 ```
 
-`hermes` with `display.interface: tui`, with `--tui`, or with
-`HERMES_TUI=1` on a TTY launches the Node TUI and replaces the
-process. On a non-TTY it stays classic. Piped
-hermes chat with a query always stays classic.
+Frontmatter flags that select the Node TUI are documented
+in `diagnosing-tui` section 1. With no overriding frontend flag,
+a non-TTY stays classic. Piped hermes chat with a query and
+no TUI flag always stays classic. Explicit --tui still routes
+to the Node TUI even when input is redirected.
 
 Applied on the origin machine (config.yaml, backup: `config.yaml.bak-20260824-0457`):
 
@@ -80,7 +81,9 @@ The spinner thread is `cli_tui_mixin.py` `_tui_spinner_loop` at
 line 412. It calls `monitor.tick()` at
 `hermes_cli/cli_subagent_monitor.py:127`, which calls `refresh` at line 83,
 which calls `subagent_rows` at `hermes_cli/gateway_tools.py:154`. That
-method calls `connection.call("subagent.list", timeout=5)`.
+method calls `connection.call` at `hermes_cli/gateway_connection.py:401`,
+which calls `call_tagged` at line 497, which waits on
+`future.result`. The send itself is `connection.call("subagent.list", timeout=5)`.
 
 ### Worked example: spinner keepalive leak
 
@@ -163,7 +166,7 @@ permanent fixes are **outside Hermes entirely** — do not report those as Herme
 | Tofu / unreadable busy face on conhost | `/indicator ascii` (or persist `display.tui_status_indicator: ascii`) | Install **Windows Terminal** (winget: `Microsoft.WindowsTerminal`) + Cascadia Mono, set it as the default terminal — a **non-Hermes** fix for a conhost/PowerShell-5.1 limitation; Hermes itself is fine |
 | Garbled tool output from the Git Bash backend | `LANG=C.UTF-8 LC_ALL=C.UTF-8` for that shell | Leave `configure_windows_stdio()` enabled — never set `HERMES_DISABLE_WINDOWS_UTF8`; PS 5.1 pipes: `$OutputEncoding = [Text.UTF8Encoding]::new()` |
 | Editor silent on `/edit` | one-off `EDITOR=code --wait` in that session | Persist `EDITOR` in config/env with the same `--wait` |
-| `hermes config set` warns on a TUI key | ignore the notice (the value still saves and is read) | Report upstream if a key the classic CLI honors stays unrecognized long-term |
+| `hermes config set` warns on a TUI key such as `display.mouse_tracking` | ignore the notice (the value still saves and is read for the TUI) | Report upstream if a TUI key stays unrecognized long-term; see `diagnosing-tui` for `/mouse` |
 | Cursor/VS Code spinner flood + clipped `> ` prompt in classic CLI | `hermes --tui` avoids the flood for one run | Persist `display.interface: tui` + `display.tui_status_indicator: ascii` + `display.details_mode: collapsed` + `display.mouse_tracking: wheel` + `HERMES_TUI_INLINE=1` (see §5.9) |
 
 When a workaround is temporary, say what "done" looks like: the upstream issue to watch, or
@@ -195,7 +198,9 @@ host finding; not an upstream source recheck.)
 
 ```powershell
 hermes --version; hermes doctor
+hermes config path
 hermes config get display
+hermes guide update
 hermes skills list
 # in classic CLI: /indicator ascii; /skin slate; /exit
 ```

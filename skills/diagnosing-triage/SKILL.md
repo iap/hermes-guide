@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.1.4
+version: 1.1.5
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -156,9 +156,9 @@ Is the problem about the DESKTOP APP (Electron) not launching,
 Is the problem about the CLI/TUI — rendering, themes, busy indicators,
   mouse modes, encoding, garbled output, launch/resume?
   └─ YES on native Windows, classic CLI → diagnosing-cli; Node TUI → diagnosing-tui
-  └─ YES on POSIX/WSL → `hermes doctor` + the `display:` block of `config.yaml`
-     (POSIX is covered by diagnosing-cli and diagnosing-tui,
-     it documents the Windows console stack only)
+  └─ YES on POSIX/WSL, classic CLI → diagnosing-cli;
+     Node TUI → diagnosing-tui (start with `hermes doctor`
+     and the `display:` block of `config.yaml` as baseline)
   └─ NO ↓
 
 Is the problem about PATHS, VENVS, or the wrong Python interpreter (including `No module named ...` after a mise/pyenv/Homebrew shim)?

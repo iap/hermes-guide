@@ -1,7 +1,7 @@
 ---
 name: diagnosing-tui
 description: "Diagnose and fix Hermes Agent Node TUI issues (ui-tui Ink app): themes, mouse modes, launch/resume, and rendering on Windows and POSIX. Use for hermes --tui and display.interface: tui."
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, tui, ink, node, windows, troubleshooting, diagnosing]
@@ -56,13 +56,19 @@ shell-visible epilogue on exit codes 0 and 130, and exits with
 42 to relaunch as `hermes update`.
 
 If the checkout is inconsistent, the launcher reports the
-missing workspace and recovery is:
+missing workspace. Save local tracked edits first, because
+restoring discards them. Only restore when the user approves:
 
 ```powershell
+git status --porcelain -- ui-tui
+git diff -- ui-tui > $env:TEMP\ui-tui-local.patch
 git restore -- ui-tui
-npm install --silent --no-fund --no-audit --progress=false
 hermes --tui
 ```
+
+The launcher rebuilds the workspace through PM source build
+when it is missing or stale. Do not use a bare npm from PATH on
+a PM-era install; the launcher resolves Node through PM.
 
 For a still inconsistent checkout, run `hermes update --force`.
 
@@ -91,13 +97,29 @@ Light/dark detection order (upstream `ui-tui/src/theme.ts`, verified 2026-09-14)
 5. `TERM_PROGRAM` light-default allow-list (currently `Apple_Terminal`).
    Anything undecidable stays **dark**. There is **no OSC 11 probe** — the hex env var is named `HERMES_TUI_BACKGROUND` so a future OSC 11 client could feed it, nothing more. Note `hermes_cli/tips.py` advertises `HERMES_TUI_THEME=light|dark|<hex>`, which the TUI code does not implement; trust the code, and set hex via `HERMES_TUI_BACKGROUND`.)
 
-## 4. Windows-specific troubleshooting
+## 4. Build, install, and resize
+
+- Prebuilt bundle: `HERMES_TUI_DIR` with `dist/entry.js` runs
+  directly, with no workspace build.
+- Source build: the launcher calls PM source build. Do not use a
+  host npm that is not PM-resolved.
+- Heap: the launcher sets a generous Node heap below the
+  container limit. A flat 8 GB heap past a smaller cgroup limit
+  is reaped by OOM with no breadcrumb.
+- Resize corruption: a closed upstream issue tracks layout
+  corruption on resize. Stable row keys are the proposed fix
+  shape; check the linked issue state before re-reporting.
+
+## 5. Windows-specific troubleshooting
 
 1. **WinError 193 (%1 is not a valid Win32 application)**: invoking an extensionless shebang script. Always use the `.cmd` shim (`npx.cmd`, not `npx`).
 2. **Config schema drift**: `hermes config set` flags `display.mouse_tracking` and `display.details_mode` as unrecognized - they ARE valid TUI keys (documented); values save and are read anyway. Do not delete them.
-3. **ConPTY mouse/selection loss (Windows Terminal)**: Windows Terminal uses ConPTY, which never delivers DEC mouse sequences (confirmed by MSFT maintainer Dustin Howett, microsoft/terminal#376). The TUI's AlternateScreen + mouse tracking swallows the wheel and native text selection. PR #97663 defaults `hermes --tui` to inline mode (primary buffer) on native Windows ConPTY — the same fallback Termux uses. Git Bash/MSYS mintty outside WT is unaffected. Workaround until merge: `HERMES_TUI_INLINE=1`. Opt out with `HERMES_TUI_INLINE=0`. WSL2-in-WT is intentionally excluded (WSL reports `platform === 'linux'`, mouse sequences DO reach the Linux PTY). **Additional risk**: microsoft/terminal#19674 documents console mode corruption when mouse tracking + `SetConsoleMode` are combined — no confirmed workaround beyond inline mode.
+3. **ConPTY mouse/selection loss (Windows Terminal)**: Windows Terminal uses ConPTY, which never delivers DEC mouse sequences (confirmed by MSFT maintainer Dustin Howett, microsoft/terminal#376). The TUI's AlternateScreen + mouse tracking swallows the wheel and native text selection. PR #97663 defaults `hermes --tui` to inline mode (primary buffer) on native Windows ConPTY — the same fallback Termux uses. Git Bash/MSYS mintty outside WT is unaffected. Workaround until merge: `HERMES_TUI_INLINE=1`. Opt out with `HERMES_TUI_INLINE=0`. **Additional risk**: microsoft/terminal#19674 documents console mode corruption when mouse tracking + `SetConsoleMode` are combined — no confirmed workaround beyond inline mode.
+4. **Ink inline mode**: `HERMES_TUI_INLINE=1` forces the primary buffer. Use it when AlternateScreen plus mouse tracking breaks wheel or selection. Opt out with `HERMES_TUI_INLINE=0`.
+5. **Washed-out colors**: chalk falls back to 256-color when `COLORTERM` is unset. Export a truthful `COLORTERM` such as `truecolor`.
+6. **WSL2 differences**: WSL reports `platform === 'linux'`, so mouse sequences do reach the Linux PTY. The ConPTY workaround is for native Windows only. Do not apply it inside WSL.
 
-## 5. Known upstream issues (check state before re-reporting)
+## 6. Known upstream issues (check state before re-reporting)
 
 States verified 2026-10-08. `closed` means fixed or declined upstream — check the issue before reinstalling. A linked PR proposes a fix; check its review and release status before relying on it.
 
@@ -112,7 +134,7 @@ States verified 2026-10-08. `closed` means fixed or declined upstream — check 
 | #96372 | #96410 | open (PR) | TUI chat history clears on terminal resize — fix: stable row keys independent of `cols` |
 | #67151 | #128225 | open (PR) | Unicode glyphs render as tofu on conhost/Consolas — fix: degrade glyphs safely on legacy Windows console |
 
-## 5b. Temporary workaround vs permanent fix
+## 6b. Temporary workaround vs permanent fix
 
 | Symptom | Temporary (until a proper fix) | Permanent |
 |---|---|---|
@@ -123,7 +145,7 @@ States verified 2026-10-08. `closed` means fixed or declined upstream — check 
 When a workaround is temporary, say what "done" looks like: the upstream issue to watch, or
 the version that carries the fix.
 
-## 6. Cross-platform guardrails
+## 7. Cross-platform guardrails
 
 - Prefer config/env fixes (work identically on POSIX); keep path logic runtime-resolved via `HERMES_HOME`
 - Never hardcode `C:\...` paths in skills/plugins - use `%LOCALAPPDATA%\hermes` on Windows, `~/.hermes` elsewhere
@@ -135,10 +157,17 @@ the version that carries the fix.
 
 ```powershell
 hermes --version; hermes doctor
+hermes config path
 hermes config get display
+hermes --tui
 hermes skills list
 # in TUI: /mouse wheel; /details collapsed; /usage; /exit
 ```
+
+Exit code 42 from the TUI means the launcher hands off to
+`hermes update`. A missing or out-of-sync Node install is the
+other launch failure: the launcher prints the PM pointer and
+exits, do not expect a prompt.
 
 ## Report
 
