@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli
 description: "Diagnose and fix Hermes Agent classic CLI issues (prompt_toolkit REPL, cli.py HermesCLI): rendering artifacts, themes/skins, busy indicators, encoding, and launch/resume. Use for hermes --cli, piped input, and the classic spinner."
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, cli, prompt_toolkit, windows, troubleshooting, diagnosing]
@@ -49,8 +49,8 @@ hermes -z "prompt"  # one-shot (--oneshot): run a single prompt with tools, prin
 
 `hermes` with `display.interface: tui`, with `--tui`, or with
 `HERMES_TUI=1` on a TTY launches the Node TUI and replaces the
-process. On a non-TTY it stays classic. Piped `hermes chat -q`
-always stays classic.
+process. On a non-TTY it stays classic. Piped
+hermes chat with a query always stays classic.
 
 Applied on the origin machine (config.yaml, backup: `config.yaml.bak-20260824-0457`):
 
