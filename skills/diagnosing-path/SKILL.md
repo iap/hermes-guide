@@ -1,7 +1,7 @@
 ﻿---
 name: diagnosing-path
 description: "Diagnose Hermes Agent path issues — the dual-venv layout (.venv/venv), how to detect which venv is active, the canonical resolution order, and best practices for code, scripts, and documentation that reference paths, including the PM-era no-in-tree-venv case."
-version: 1.5.19
+version: 1.5.20
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
@@ -239,16 +239,18 @@ Cause: a third-party version manager's shim (mise, pyenv, Homebrew) exec's `herm
 Diagnosis — compare the two *interpreters*, not two launches of `hermes` (the same shim answers both, so comparing invocations can never show a mismatch):
 
 ```bash
-HERMES_BIN=$(command -v hermes)
-head -5 "$HERMES_BIN"      # shebang may be a wrapper (#!/bin/sh, env python3); find the python token
-SHIM_PY=$(head -1 "$HERMES_BIN" | awk '{for(i=1;i<=NF;i++) if ($i ~ /python/) print $i}')
-"$SHIM_PY" --version       # shim interpreter (if the shebang names none, read it as the durable launcher case below)
-INSTALL_DIR=$(dirname "$(hermes config path)")          # ground truth for $HERMES_HOME
-ls "$INSTALL_DIR/hermes-agent/.venv/bin/python" && "$INSTALL_DIR/hermes-agent/.venv/bin/python" --version
-# PM store interpreter instead: hermes --version prints install dir + method; probe the committed env there
+HERMES_BIN=$(command -v hermes || type -P hermes)   # command -v can return a function/alias; resolve the executable
+type -a hermes; head -5 "$HERMES_BIN"   # shebang may be a wrapper (#!/bin/sh, env python3); find the python token
+# pyenv/mise: also run `pyenv which hermes` (or `mise which hermes`) to see the selected executable
+SHIM_TOK=$(head -1 "$HERMES_BIN" | awk '{for(i=1;i<=NF;i++) if ($i ~ /python/) print $i}')
+[ -n "$SHIM_TOK" ] && "$SHIM_TOK" --version   # shim interpreter (empty token = wrapper/durable launcher case below)
+INSTALL_DIR=$(dirname "$(hermes config path)" 2>/dev/null) && [ -n "$INSTALL_DIR" ] || { echo "hermes config path failed; probe the checkout path directly"; }
+ls "$INSTALL_DIR/hermes-agent/.venv/bin/python" 2>/dev/null && "$INSTALL_DIR/hermes-agent/.venv/bin/python" --version
+# launchers per interpreter: POSIX <checkout>/.venv/bin/hermes; Windows <checkout>/.venv/Scripts/python.exe -m hermes_cli
+# env with deps but no hermes launcher on PATH: run the entry point with that env's python
 ```
 
-On PM-era installs the shebang names a durable launcher, not the PM-store interpreter — the shim-python version is then irrelevant; use the committed environment's python (see PM-era section above) and treat a marker-gated import failure there as #147946-shaped. If the env probe path does not exist, say so explicitly — a missing `.venv` is a finding, not a silent pass.
+On PM-era installs the shebang names a durable launcher, not the PM-store interpreter — the shim-python version is then irrelevant; resolve the committed environment first (`committed_venv()`), fall back to `project_python()`, verify the resolved path exists, and treat a `RuntimeError` from PM as corrupt state, not a missing venv (see PM-era section above) and treat a marker-gated import failure there as #147946-shaped. If the env probe path does not exist, say so explicitly — a missing `.venv` is a finding, not a silent pass.
 
 Fix: run Hermes through its own environment — `<checkout>/.venv/bin/hermes` for uv checkouts, or the durable launcher on PM-era installs. Do not install the missing package into the shim's interpreter (it re-breaks on the next interpreter bump and the shim then shadows the supported runtime), and do not rewrite the shim shebang to a system Python (ABI mismatch class above). If the shim is your only entry point, report it as #97340-shaped: the fix belongs in how the shim resolves deps, not in user Python.
 
