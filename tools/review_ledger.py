@@ -61,7 +61,8 @@ def _fetch_pr_threads(pr_number):
     # Qodo #19: first:100 truncates long histories and false-cleans PRs
     # whose unresolved threads live past page one. Page threads until
     # exhausted; reviews are fetched once (bots review early on a PR).
-    for _ in range(5):
+    # Qodo #20: no fixed page cap (PRs can exceed 500 threads).
+    for _ in range(20):
         query = f"""query {{ repository(owner: "iap", name: "hermes-guide") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100, after: "{after}") {{ pageInfo {{ hasNextPage endCursor }} nodes {{ id isResolved comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state commit {{ oid }} }} }} }} }} }}"""
         data = _run_gh_graphql(query)
         pr = data["data"]["repository"]["pullRequest"]
@@ -91,6 +92,8 @@ def compute_reviewed(reviews, head_oid=None):
         logins = BOT_LOGINS[bot]
         # Qodo #18: a later CHANGES_REQUESTED overrides an earlier review.
         # Qodo #5: a review for an older head does not clear a new commit.
+        # Qodo #21: PENDING/DISMISSED are not a completed review; any
+        # CHANGES_REQUESTED on the head blocks even if earlier COMMENTED exists.
         latest = None
         for r in reviews:
             if _login(r) not in logins:
@@ -99,6 +102,12 @@ def compute_reviewed(reviews, head_oid=None):
                 commit = (r.get("commit") or {}).get("oid")
                 if commit and commit != head_oid:
                     continue
+            if r.get("state") in ("PENDING", "DISMISSED"):
+                # Unsubmitted/dismissed reviews never count as reviewed,
+                # and do not override a prior completed state.
+                if r.get("state") == "DISMISSED":
+                    continue
+                continue
             if r.get("state") is not None:
                 latest = r.get("state")
             elif latest is None:
