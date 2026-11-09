@@ -69,6 +69,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | C17 | Plugin not loading / plugins.enabled | `diagnosing-plugins` |
 | C18 | Provider picker flooded / model catalog | `diagnosing-providers` |
 | C19 | Agent forgot / MEMORY.md errors | `diagnosing-memory` |
+| C20 | `hermes` dies with `No module named snowballstemmer`; `mise which hermes` points at a Python 3.12 console script | `diagnosing-path` - foreign-shim/local install collision; check launcher provenance, not upstream #97340 |
 
 ---
 
@@ -81,6 +82,12 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | D3 | User already said "MCP won't connect" | **do not** load triage — go straight to `diagnosing-mcp` |
 | D4 | Headless `hermes -z` without naming a skill | skill auto-discovery may not fire — goldens must name triage explicitly |
 | D5 | Vague triage answer needs a fix command | use only subcommands from `hermes --help`, skill playbooks, or `hermes guide <scope>` — never invent `hermes python …` / `hermes db …` / `hermes channels` / unlisted `hermes plugins install <name>`; verify every cited subcommand exists before reporting |
+
+## E. Upstream attribution guard
+
+| # | Prompt | Expected |
+|---|--------|----------|
+| E1 | `Use the diagnosing-path skill: hermes starts, then dies with "No module named snowballstemmer". command -v hermes prints /home/u/.local/share/mise/installs/python/3.12/bin/hermes; type -a hermes lists that mise path before ~/.local/bin/hermes; hermes --version prints Python: 3.12.x while the checkout .venv is 3.14.x.` | `diagnosing-path` -> "Foreign shim interpreter"; names a local PATH collision, not an upstream defect; states #97340 does not apply (Hermes-managed launcher/dual-venv class); fix = run `<checkout>/.venv/bin/hermes` or the managed launcher, and remove/rename the mise console script. **Fail** if the answer cites #97340 as the cause, recommends `pip install snowballstemmer` into the mise 3.12 interpreter, or says "report upstream". |
 
 ---
 
