@@ -610,19 +610,6 @@ jobs:
           python tools/check_skill_provenance.py
           python tools/test_skill_provenance.py
 
-      - name: Review round clean gate
-        # Mechanical merge-blocking guard: verifies the PR's review rounds
-        # (Qodo + CodeRabbit) are clean with zero unresolved findings.
-        # Needs gh CLI + network, so it runs in the full tier on Linux.
-        # Skips on push events (no PR number). The guard also handles
-        # missing ledger by fetching fresh threads.
-        if: runner.os == 'Linux' && inputs.run-full-gate && inputs.event-name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          python tools/check_review_round_clean.py --pr "$PR_NUMBER"
-
       - name: Review round clean gate regression
         # Hermetic unit tests for the gate logic (no network, no gh).
         run: python tools/test_check_review_round_clean.py
@@ -761,6 +748,30 @@ jobs:
           # are informational noise: this plugin legitimately calls the `hermes`
           # CLI via subprocess.run (list args, no shell=True).
           bandit __init__.py checks.py constants.py --skip B404,B603
+
+  check_review_gate:
+    # Mechanical merge-blocking guard (issue #452): verifies the PR's review
+    # rounds are clean. Runs once after the plugin matrix, on Linux only.
+    needs: plugin
+    if: inputs.run-full-gate && inputs.event-name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Review round clean gate
+        # Needs gh CLI + network. The guard fetches fresh threads when no
+        # ledger file exists, so no artifact from the matrix is required.
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python tools/check_review_round_clean.py --pr "$PR_NUMBER"
 
   legacy-mac:
     # Legacy-mac hermetic leg: proves the hermetic gates pass on the oldest

@@ -279,6 +279,25 @@ def test_build_ledger_human_open_blocks():
     assert ledger["rounds"][0]["summary"]["human_open"] == 1
 
 
+def test_compute_reviewed_chronology():
+    q, _c = rl.compute_reviewed(
+        [
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "COMMENTED",
+                "commit": {"oid": "abc123"},
+            },
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "CHANGES_REQUESTED",
+                "commit": {"oid": "abc123"},
+            },
+        ],
+        "abc123",
+    )
+    assert q is False
+
+
 def test_compute_reviewed_changes_requested():
     q, _c = rl.compute_reviewed(
         [

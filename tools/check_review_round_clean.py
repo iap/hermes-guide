@@ -144,8 +144,13 @@ def main() -> int:
 
     if not args.no_live_check and not failures:
         try:
-            threads, live_head2, _reviews = rl._fetch_pr_threads(pr_number)
+            threads, live_head2, live_reviews = rl._fetch_pr_threads(pr_number)
             findings, _human_live = rl._parse_threads(threads)
+            _lq, _lc = rl.compute_reviewed(live_reviews, live_head2)
+            if not _lq or not _lc:
+                failures.append(
+                    "Live check: a bot has no review record for the live head"
+                )
             open_findings = rl.unresolved_findings(findings)
             if _human_live:
                 failures.append(

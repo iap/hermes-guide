@@ -89,19 +89,21 @@ def compute_reviewed(reviews, head_oid=None):
 
     def _reviewed(bot):
         logins = BOT_LOGINS[bot]
-        # Qodo #18: CHANGES_REQUESTED must not count as a clean review.
+        # Qodo #18: a later CHANGES_REQUESTED overrides an earlier review.
         # Qodo #5: a review for an older head does not clear a new commit.
+        latest = None
         for r in reviews:
             if _login(r) not in logins:
-                continue
-            if r.get("state") == "CHANGES_REQUESTED":
                 continue
             if head_oid:
                 commit = (r.get("commit") or {}).get("oid")
                 if commit and commit != head_oid:
                     continue
-            return True
-        return False
+            if r.get("state") is not None:
+                latest = r.get("state")
+            elif latest is None:
+                latest = "COMMENTED"
+        return latest is not None and latest != "CHANGES_REQUESTED"
 
     return _reviewed("qodo"), _reviewed("coderabbit")
 

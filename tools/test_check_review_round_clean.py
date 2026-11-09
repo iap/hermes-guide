@@ -250,6 +250,147 @@ def test_cli_head_error_returns_two():
         argparse.ArgumentParser.parse_args = orig_parse
 
 
+def _live_ledger(tmpdir, head="abc123"):
+    import json
+    from pathlib import Path
+
+    p = Path(tmpdir) / "ledger.json"
+    p.write_text(
+        json.dumps(
+            {
+                "pr": 42,
+                "head_commit": head,
+                "merge_ready": True,
+                "rounds": [
+                    {
+                        "round": 1,
+                        "head_commit": head,
+                        "qodo_clean": True,
+                        "coderabbit_clean": True,
+                        "qodo_reviewed": True,
+                        "coderabbit_reviewed": True,
+                        "same_head": True,
+                        "merge_ready": True,
+                        "summary": {"total_findings": 0, "qodo_open": 0, "coderabbit_open": 0},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return spath(p)
+
+
+def spath(p):
+    return str(p)
+
+
+def test_cli_live_human_thread_blocks():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_get_head = gate._get_pr_head
+    orig_fetch = gate.rl._fetch_pr_threads
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate.rl._fetch_pr_threads = lambda _pr: (
+            [
+                {
+                    "id": "TH",
+                    "isResolved": False,
+                    "comments": {
+                        "nodes": [
+                            {
+                                "author": {"login": "human.user"},
+                                "body": "please check",
+                                "path": "a.py",
+                                "line": 1,
+                                "createdAt": "2026-11-08T00:00:00Z",
+                            }
+                        ]
+                    },
+                }
+            ],
+            "abc123",
+            [
+                {"author": {"login": "qodo-code-review[bot]"}, "state": "COMMENTED", "commit": {"oid": "abc123"}},
+                {"author": {"login": "coderabbitai[bot]"}, "state": "COMMENTED", "commit": {"oid": "abc123"}},
+            ],
+        )
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            p = _live_ledger(td)
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=p, no_live_check=False
+            )
+            assert gate.main() == 1
+    finally:
+        gate._get_pr_head = orig_get_head
+        gate.rl._fetch_pr_threads = orig_fetch
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
+def test_cli_live_head_mismatch_blocks():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_get_head = gate._get_pr_head
+    orig_fetch = gate.rl._fetch_pr_threads
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate.rl._fetch_pr_threads = lambda _pr: (
+            [],
+            "def456",
+            [
+                {"author": {"login": "qodo-code-review[bot]"}, "state": "COMMENTED", "commit": {"oid": "def456"}},
+                {"author": {"login": "coderabbitai[bot]"}, "state": "COMMENTED", "commit": {"oid": "def456"}},
+            ],
+        )
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            p = _live_ledger(td)
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=p, no_live_check=False
+            )
+            assert gate.main() == 1
+    finally:
+        gate._get_pr_head = orig_get_head
+        gate.rl._fetch_pr_threads = orig_fetch
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
+def test_cli_live_clean_passes():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_get_head = gate._get_pr_head
+    orig_fetch = gate.rl._fetch_pr_threads
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate.rl._fetch_pr_threads = lambda _pr: (
+            [],
+            "abc123",
+            [
+                {"author": {"login": "qodo-code-review[bot]"}, "state": "COMMENTED", "commit": {"oid": "abc123"}},
+                {"author": {"login": "coderabbitai[bot]"}, "state": "COMMENTED", "commit": {"oid": "abc123"}},
+            ],
+        )
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            p = _live_ledger(td)
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=p, no_live_check=False
+            )
+            assert gate.main() == 0
+    finally:
+        gate._get_pr_head = orig_get_head
+        gate.rl._fetch_pr_threads = orig_fetch
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
 def test_main_callable():
     assert callable(gate.main)
 

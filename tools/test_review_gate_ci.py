@@ -13,6 +13,8 @@ def test_review_gate_wired():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "Review round clean gate" in text
     assert "tools/check_review_round_clean.py" in text
+    assert "check_review_gate:" in text
+    assert "needs: plugin" in text
     assert "Review round clean gate regression" in text
     assert "tools/test_check_review_round_clean.py" in text
     assert "Review ledger regression" in text
