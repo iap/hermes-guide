@@ -220,6 +220,44 @@ Verify any cross-platform skill on BOTH environments. Document the verifying
 host in the PR Environment block. NixOS WSL standard install is mutable: the
 plugin is at `~/.hermes/plugins/<name>/` (NOT `/nix/store/`).
 
+## Platform ownership and OS labels
+
+Every PR carries at least one OS label. The labels already exist:
+
+| Label | Meaning |
+|---|---|
+| `windows` | Verified on Windows 10/11 |
+| `macos` | Verified on macOS |
+| `linux` | Verified on native Linux |
+| `wsl` | Verified on WSL |
+| `macos-legacy` | Verified on legacy Intel macOS |
+| `cross-platform` | Affects more than one operating system |
+| `platform:windows-only` | Windows-only; must not touch POSIX paths |
+| `platform:posix-only` | POSIX-only; must not touch Windows paths |
+| `needs:os-verify` | Needs verification on another OS by another agent |
+
+Rules:
+
+1. **Never change code for an OS you cannot test.** On Windows do not edit
+   POSIX-only paths, shell scripts, or Unix permission logic; on POSIX do not
+   edit Windows path or `sys.platform` branches. Add `needs:os-verify`, name the
+   target host, and list the exact commands the receiver must run.
+2. **Use platform-agnostic patterns.** `pathlib.Path` or `os.path.join`;
+   `sys.platform == "win32"` for Windows; `subprocess.run([...])` without
+   `shell=True`; `*.sh text eol=lf` in `.gitattributes`; `os.makedirs(...,
+   exist_ok=True)` before nested writes.
+3. **Verify on your host, then hand off.** CI covers Ubuntu and Windows; WSL
+   work is checked with `wsl -d nixos`. A change that cannot be checked on a
+   target OS is not done — mark it and request the missing host.
+4. **Handoff is explicit.** The sender documents changed files, target OS,
+   commands, and assumptions. The receiver runs them, replaces
+   `needs:os-verify` with its OS label, and comments confirmation.
+
+Common pitfalls: `python3` is often absent on Windows; CRLF breaks `.sh`;
+MSYS `/c/Users/...` paths do not work with native Windows tools; Node is
+`<entry>/bin/node` on POSIX but `<entry>/node.exe` on Windows; PM-era facts
+live in `installs/<key>/facts.json`, not the legacy `tools/facts.json`.
+
 ## Before you finish
 
 State plainly what you checked, what passed, and what you skipped. A validation
