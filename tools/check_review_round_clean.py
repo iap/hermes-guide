@@ -145,8 +145,12 @@ def main() -> int:
     if not args.no_live_check and not failures:
         try:
             threads, live_head2, _reviews = rl._fetch_pr_threads(pr_number)
-            findings, _ = rl._parse_threads(threads)
+            findings, _human_live = rl._parse_threads(threads)
             open_findings = rl.unresolved_findings(findings)
+            if _human_live:
+                failures.append(
+                    f"Live check: { _human_live } unresolved human thread(s) found"
+                )
             if open_findings:
                 failures.append(
                     f"Live check: {len(open_findings)} unresolved finding(s) found"

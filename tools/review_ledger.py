@@ -212,6 +212,7 @@ def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_
         and coderabbit_clean
         and same_head
         and len(unresolved_findings(findings)) == 0
+        and human_open_count == 0
     )
 
     round_data = {
@@ -283,7 +284,8 @@ def main():
         else:
             out_path = LEDGER_DIR / LEDGER_FILE
         write_ledger(ledger, out_path)
-        print("Ledger written to " + str(out_path))
+        if not args.json:
+            print("Ledger written to " + str(out_path))
 
     if args.json or not args.write:
         print(json.dumps(ledger, indent=2, ensure_ascii=False))

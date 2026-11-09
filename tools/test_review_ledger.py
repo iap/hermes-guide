@@ -261,6 +261,24 @@ def test_classify_bot_exact_only():
     assert rl._classify_bot("human-user") is None
 
 
+def test_build_ledger_human_open_blocks():
+    findings = [
+        {
+            "thread_id": "T1",
+            "bot": "qodo",
+            "severity": "low",
+            "title": "t",
+            "file": "a.py",
+            "line": 1,
+            "status": "resolved",
+            "created_at": None,
+        }
+    ]
+    ledger = rl.build_ledger(42, "abc123", findings, True, True, 1)
+    assert ledger["merge_ready"] is False
+    assert ledger["rounds"][0]["summary"]["human_open"] == 1
+
+
 def test_compute_reviewed_changes_requested():
     q, _c = rl.compute_reviewed(
         [
