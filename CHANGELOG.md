@@ -2,6 +2,75 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.4 (2026-11-09)
+
+### Features
+
+- **ci**: add assist:* OS-handoff labels and bootstrap workflow
+- add dashboard scope for PM node/npm toolchain ([#443](https://github.com/iap/hermes-guide/pull/443))
+- **gateway**: add keepalive health check and skill playbooks
+
+### Bug Fixes
+
+- **ci**: needs:os-verify covers same-OS cross-device confirmation
+- **ci,docs**: bootstrap manual env labels; correct unlabeled reapply
+- **ci,docs**: address CodeRabbit findings on assist labels
+- **docs**: handoff removes own assist label; needs:os-verify only when none remain
+- **checks,docs**: correct dashboard scope drift and stale prose ([#448](https://github.com/iap/hermes-guide/pull/448))
+- **skills**: guard storage home resolution and category probe path
+- **skills**: custom-home storage path and category install probe
+- address Qodo findings on host-pressure and storage mapping
+- **constants**: map storage scope to diagnosing-storage
+- **host-pressure**: measured pressure beats inconclusive
+- **gateway**: track gateway-note category explicitly
+- **gateway**: report standalone timeouts as informational
+- **gateway**: classify keepalive before delegate timeouts
+- **gateway**: address Qodo and CodeRabbit incremental findings
+- **gateway**: address CodeRabbit review findings
+- **ci**: run gateway probe on Linux only
+- **tests**: skip unreadable-log case on Windows
+- **tests**: expect eleven scopes in fast-mode test
+- **gateway**: address Qodo keepalive findings
+- **tests**: expect eleven scopes after gateway addition
+- **ci**: wire gateway health probes into reusable-ci
+- **checks**: annotate gateway health lists for mypy
+
+### Documentation
+
+- **agent**: use host-pressure probe as Linux-only example
+- **agent**: require verify label for any unverified target
+- **agent**: list full Windows CI exclusions, scope verify need
+- **agent**: allow pre-PR change, label when PR exists
+- **agent**: address Qodo findings on cross-platform rules
+- **agent**: reword verified claim to gate-pass description
+- **agent**: add cross-platform development rules and OS labels
+- **skills**: clarify spinner detection gating
+- **skills**: address CodeRabbit spinner-flood findings
+- **skills**: merge Cursor/VS Code spinner-flood playbook into diagnosing-cli-tui (v1.1.24)
+- **review**: distinguish conversation-gate BLOCKED from review failure ([#441](https://github.com/iap/hermes-guide/pull/441))
+- **path**: document PM-managed node warning on git installs ([#440](https://github.com/iap/hermes-guide/pull/440))
+- **agents**: require annotated signed release tags ([#439](https://github.com/iap/hermes-guide/pull/439))
+- **review**: correct REST resolution claim; cover silent-bot step 2 ([#435](https://github.com/iap/hermes-guide/pull/435))
+- **review**: make bot triggering idempotent and head-bound ([#432](https://github.com/iap/hermes-guide/pull/432))
+
+### CI
+
+- **release**: require annotated signed release tags ([#438](https://github.com/iap/hermes-guide/pull/438))
+
+### Chores
+
+- Merge pull request #454 from iap/docs/cross-platform-agent-rules
+- Merge pull request #459 from iap/feat/os-assist-labels
+- Merge pull request #457 from iap/fix/dashboard-test-hermetic
+- Merge pull request #444 from iap/feat/cursor-spinner-flood-playbook
+- Merge pull request #445 from iap/fix/host-pressure-verdict-precedence
+- Merge pull request #446 from iap/feat/gateway-keepalive-skill
+- **drift**: bump upstream baseline to 84a0301 ([#437](https://github.com/iap/hermes-guide/pull/437))
+
+### Tests
+
+- **dashboard**: make node 26 tests hermetic on legacy macOS
+
 ## v0.9.3 (2026-11-05)
 
 ### Features

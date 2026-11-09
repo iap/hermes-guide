@@ -1,5 +1,5 @@
 name: hermes-guide
-version: 0.9.3
+version: 0.9.4
 description: >-
   Hermes checks across `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`,
   `memories`, `sessions`, `storage`, `gateway`, `dashboard`, and `update`, plus tap playbooks; read-only.
