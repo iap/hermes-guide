@@ -53,7 +53,7 @@ When handing off to an agent on another device:
 2. List specific test commands to run
 3. Note OS-specific assumptions
 4. Add `needs:os-verify` plus the `assist:*` label for the target OS
-5. Receiving agent runs the commands and records failures or `not run` checks in the PR. If all requested checks pass, it adds its OS label and removes its own `assist:*` label; otherwise it leaves the `assist:*` label in place. It removes `needs:os-verify` only when no other `assist:*` label remains: one device confirming does not clear another device's outstanding request
+5. Receiving agent runs the commands and records failures or `not run` checks in the PR. If all requested checks pass, it adds its OS label and removes its own `assist:*` label; otherwise it leaves the `assist:*` label in place. Remove `needs:os-verify` only after a passing confirmation removes the last `assist:*` label: one device confirming does not clear another device's outstanding request, and a failed run clears neither label
 
 ### 6. Common pitfalls
 - `python3` not on PATH on Windows — use `python` or `uv run python`

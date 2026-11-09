@@ -239,9 +239,10 @@ the `assist:*` label for the target OS and document the exact commands to
 run. The receiving agent runs those commands and records failures or
 `not run` checks in the PR. If all requested checks pass, the agent adds
 its own OS label and removes its own `assist:*` label. Otherwise, leave
-the `assist:*` label in place. Remove `needs:os-verify` only when no
-other `assist:*` label remains on the PR: one OS confirming does not
-clear another OS's outstanding request. Do not add an `os:*` routing axis
+the `assist:*` label in place. Remove `needs:os-verify` only after a
+passing confirmation removes the last `assist:*` label: one OS confirming
+does not clear another OS's outstanding request, and a failed run clears
+neither label. Do not add an `os:*` routing axis
 here: this repo's maintainers work from whichever device is available.
 
 ### Host limitation register
