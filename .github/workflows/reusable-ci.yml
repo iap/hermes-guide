@@ -61,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Pinned, not floating: ubuntu-latest migrates to Ubuntu 26 on
+        # Ubuntu pinned, not floating: ubuntu-latest migrates to Ubuntu 26 on
         # 2026-10-19 (actions/runner-images#14748) and a surprise image
         # bump under a green tree is indistinguishable from a real
         # regression. Same philosophy as the macos-15-intel pin below.

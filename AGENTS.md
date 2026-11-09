@@ -36,7 +36,7 @@ Hermes source and is not a fork of `hermes-agent`.
 
 <!-- BEGIN GENERATED: inventory -->
 - **Plugin** — `plugin.yaml` + `__init__.py` / `checks.py` / `constants.py`. Registers `/hermes-doctor` and `hermes guide` (twelve read-only health checks: config, mcp, skills, commands, hooks, plugins, memories, sessions, storage, dashboard, update, gateway).
-- **Skills** — `thirty-one` `skills/<name>/SKILL.md` files: one install guide (`installing-hermes`), one configuration map (`hermes-configuration-guide`), twenty-seven `diagnosing-*` playbooks, two other skills (`hermes-post-update`, `plugin-authoring`). They install separately, through the skills tap.
+- **Skills** — `thirty-two` `skills/<name>/SKILL.md` files: one install guide (`installing-hermes`), one configuration map (`hermes-configuration-guide`), twenty-eight `diagnosing-*` playbooks, two other skills (`hermes-post-update`, `plugin-authoring`). They install separately, through the skills tap.
 <!-- END GENERATED: inventory -->
 
 Catalog install: `hermes plugins install hermes-guide`. Skills: `hermes skills
@@ -60,7 +60,7 @@ Repo layout encyclopedia: [docs/agent/layout.md](docs/agent/layout.md).
 ## Run this before you claim done
 
 ```bash
-python tools/check_gates.py          # hermetic tier — no network/Hermes; count via --list (four gates read the git index: test_skill_counts, check_doc_style, check_eol_contract, check_scope_enumeration)
+python tools/check_gates.py          # hermetic tier — no network/Hermes; count via --list (three gates read the git index: test_skill_counts, check_doc_style, check_eol_contract; gen_changelog reads git tags; check_scope_enumeration is a pure ast plus file read)
 python -m py_compile __init__.py checks.py constants.py
 hermes plugins doctor . --ci         # needs a local Hermes; if it times out on a degraded host, record `not run` with cause
 ```

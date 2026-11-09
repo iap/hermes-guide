@@ -25,7 +25,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | A6 | Baseline shows `?` (unknown) | treat as unmeasured — resolve home/config via configuration guide; never call unknown "healthy" |
 | A7 | Baseline all `+` healthy; user still vague | continue symptom flowchart / §3 clarify — do not invent a broken surface |
 | A8 | Baseline shows `x sessions` (runaway signature) | §1b runaway branch — fresh session + model-tier check, NOT more interrupts of the same session |
-| A9 | Baseline shows `x update` (stale lock) | diagnosing-cli-tui §1 stale-lock note — verify owner-PID liveness before touching the lock |
+| A9 | Baseline shows `x update` (stale lock) | diagnosing-cli §1 stale-lock note — verify owner-PID liveness before touching the lock |
 
 ---
 
@@ -54,8 +54,8 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | C2 | Need to reinstall / upgrade Hermes itself | `installing-hermes` |
 | C3 | High load, OOM, plugins discarded after load timeout | `diagnosing-host-pressure` |
 | C4 | Desktop app blank window / won't launch | `diagnosing-desktop` |
-| C5 | TUI garbled on **native Windows** | `diagnosing-cli-tui` |
-| C6 | TUI issues on **Linux/WSL** | `hermes doctor` + `display:` in config — **not** `diagnosing-cli-tui` |
+| C5 | TUI garbled on **native Windows** | `diagnosing-tui` |
+| C6 | TUI issues on **Linux/WSL** | `diagnosing-tui` |
 | C7 | Wrong venv / wrong Python | `diagnosing-path` |
 | C8 | Bot not responding on Telegram/Discord (platform implied) | `diagnosing-gateway` first |
 | C9 | Gateway healthy; bot profiles/conflicts only | `diagnosing-bot-mode` |

@@ -272,7 +272,7 @@ agent what it must not assume.
 
 | Surface | Verifying host |
 |---|---|
-| `diagnosing-cli-tui` | Native Windows only (do not load it for POSIX/WSL CLI issues) |
+| `diagnosing-cli` / `diagnosing-tui` | Classic CLI vs Node TUI split; Windows slices inside each |
 | Windows sides of `diagnosing-path` / `diagnosing-desktop` | Native Windows |
 | POSIX `$HERMES_HOME` / `~/.hermes` behavior | POSIX |
 | WSL path / home / console quirks | WSL (state `wsl` in the PR Environment line) |

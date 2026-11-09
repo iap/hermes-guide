@@ -1,11 +1,11 @@
 ﻿---
 name: hermes-configuration-guide
 description: Map of Hermes Agent configuration — where MCP servers, skills, commands, hooks, plugins, and credential pools live on disk. For breakage routing ("something is wrong"), prefer diagnosing-triage.
-version: 1.4.6
+version: 1.4.7
 metadata:
   hermes:
     tags: [hermes, configuration, troubleshooting]
-    related_skills: [installing-hermes, diagnosing-runtime, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli-tui, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, diagnosing-config, diagnosing-storage, diagnosing-sessions, diagnosing-update, diagnosing-memories, diagnosing-backup, diagnosing-profiles, diagnosing-secrets]
+    related_skills: [installing-hermes, diagnosing-runtime, diagnosing-mcp, diagnosing-skills, diagnosing-commands, diagnosing-hooks, diagnosing-plugins, diagnosing-path, diagnosing-cli, diagnosing-tui, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, diagnosing-config, diagnosing-storage, diagnosing-sessions, diagnosing-update, diagnosing-memories, diagnosing-backup, diagnosing-profiles, diagnosing-secrets]
 ---
 
 # Hermes Configuration Guide
@@ -126,10 +126,10 @@ Notes:
 - Secret and credential management issues — secret sources not resolving, vault locked, egress firewall blocking, credential pool failures → **`diagnosing-secrets`**
 - Auth/API failures on hub installs (`Could not fetch from any source`, GitHub 401, rate-limit 403) → **`diagnosing-auth`**; model-provider credential pool issues (OpenAI/Anthropic/OpenRouter key failures, exhaustion, cooldown) → **`diagnosing-providers`** Step 5
 - Memory not persisting ("it forgot"), an external memory provider silently unavailable, or `MEMORY.md`/`USER.md` errors → **`diagnosing-memory`**
-- Desktop app build/launch failures, wrong backend, or blank window → **`diagnosing-desktop`**; terminal/TUI rendering issues are `diagnosing-cli-tui`, not desktop
+- Desktop app build/launch failures, wrong backend, or blank window → **`diagnosing-desktop`**; terminal issues are `diagnosing-cli`, TUI issues are `diagnosing-tui`, not desktop
 - Model provider issues — custom endpoints flooding the picker with hundreds of models, `discover_models` misbehaving, persisted catalogs bloating `config.yaml`, or provider/auth failures → **`diagnosing-providers`**
 - Script/path/venv problems (wrong interpreter — on PM-era installs the launcher runs the PM-store Python, not the shell's; on older checkouts `venv/bin/python` missing or the dual `.venv`/`venv` layout) → **`diagnosing-path`**
-- Terminal/TUI issues on **native Windows** (misrendering, themes, indicators, launch failures) → **`diagnosing-cli-tui`**; on POSIX/WSL there is no dedicated skill yet — start with `hermes doctor` and the `display:` block of `config.yaml`
+- Terminal/TUI issues on **native Windows** (misrendering, themes, indicators, launch failures) → **`diagnosing-cli`** for the classic CLI, **`diagnosing-tui`** for the Node TUI; on POSIX/WSL start with `hermes doctor` and the `display:` block of `config.yaml`
 - A bot/agent profile not answering, a per-bot `config.yaml` problem, or a routine not firing for a bot → **`diagnosing-bot-mode`**
 - Browser automation not connecting, Chrome/CDP version problems, or a missing Playwright → **`diagnosing-browser`**
 - A scheduled job not firing, running at the wrong time, or failing to deliver → **`diagnosing-cron`**
@@ -153,7 +153,7 @@ matched first.
 - **Wrong interpreter or confusing venv layout**: load `diagnosing-path` before any feature skill — path issues cascade into feature-looking failures.
 - **Hermes itself broken (won't start, crashes on launch)**: load `installing-hermes` before any `diagnosing-*` skill — a broken install cannot be diagnosed.
 - **Bot not responding**: load `diagnosing-gateway` before `diagnosing-bot-mode` — gateway connectivity is a prerequisite for bot profiles.
-- **Launch/UI failure vs command surface vs app build**: if the desktop app fails to launch or shows a blank window, see `diagnosing-desktop`; if the TUI misrenders or shows unreadable indicators on native Windows, see `diagnosing-cli-tui`; if a `/command` is missing or overridden, see `diagnosing-commands`.
+- **Launch/UI failure vs command surface vs app build**: if the desktop app fails to launch or shows a blank window, see `diagnosing-desktop`; if the classic CLI misrenders on native Windows, see `diagnosing-cli`; if the Node TUI misrenders, see `diagnosing-tui`; if a `/command` is missing or overridden, see `diagnosing-commands`.
 - **Which venv/home applies where**: if the wrong Python interpreter is active or the dual-venv layout is confusing, see `diagnosing-path`; if the desktop app's backend resolution is wrong, see `diagnosing-desktop`; if the install itself is broken, see `installing-hermes`.
 
 ## Verification

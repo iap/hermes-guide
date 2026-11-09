@@ -86,6 +86,7 @@ _WORDS = [
     "twenty-nine",
     "thirty",
     "thirty-one",
+    "thirty-two",
 ]
 
 

@@ -5,7 +5,7 @@ version: 1.5.21
 metadata:
   hermes:
     tags: [hermes, path, venv, python, troubleshooting, guide]
-    related_skills: [hermes-configuration-guide, diagnosing-cli-tui, installing-hermes]
+    related_skills: [hermes-configuration-guide, diagnosing-cli, diagnosing-tui, installing-hermes]
 ---
 
 # Hermes Agent Path Diagnostics

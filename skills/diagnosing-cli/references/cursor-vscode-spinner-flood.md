@@ -1,6 +1,6 @@
 # Cursor / VS Code spinner flood + prompt clip (classic CLI)
 
-Detailed playbook for §4.11 of `diagnosing-cli-tui`.
+Detailed playbook for section 5.9 of `diagnosing-cli`.
 
 ## Detection
 
