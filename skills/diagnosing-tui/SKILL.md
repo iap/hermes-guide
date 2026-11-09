@@ -1,7 +1,7 @@
 ---
 name: diagnosing-tui
 description: "Diagnose and fix Hermes Agent Node TUI issues (ui-tui Ink app): themes, mouse modes, launch/resume, and rendering on Windows and POSIX. Use for hermes --tui and display.interface: tui."
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, tui, ink, node, windows, troubleshooting, diagnosing]
@@ -60,14 +60,19 @@ missing workspace. Save local tracked edits first, because
 restoring discards them. Only restore when the user approves:
 
 ```powershell
-git status --porcelain -- ui-tui
-git diff -- ui-tui > $env:TEMP\ui-tui-local.patch
-git restore -- ui-tui
+git -C <hermes-checkout> status --porcelain -- ui-tui
+git -C <hermes-checkout> diff --binary -- ui-tui > $env:TEMP\ui-tui-local.patch
+if (-not (Test-Path $env:TEMP\ui-tui-local.patch)) { throw 'backup patch missing' }
+git -C <hermes-checkout> restore -- ui-tui
 hermes --tui
 ```
 
 The launcher rebuilds the workspace through PM source build
-when it is missing or stale. Do not use a bare npm from PATH on
+when it is missing or stale. Git restoration is best-effort
+repair of tracked sources: if the restore leaves the directory
+still missing, the launcher stops with recovery steps before
+the PM build, so a failed restore does not rebuild missing
+sources. Do not use a bare npm from PATH on
 a PM-era install; the launcher resolves Node through PM.
 
 For a still inconsistent checkout, run `hermes update --force`.
@@ -116,7 +121,7 @@ Light/dark detection order (upstream `ui-tui/src/theme.ts`, verified 2026-09-14)
 2. **Config schema drift**: `hermes config set` flags `display.mouse_tracking` and `display.details_mode` as unrecognized - they ARE valid TUI keys (documented); values save and are read anyway. Do not delete them.
 3. **ConPTY mouse/selection loss (Windows Terminal)**: Windows Terminal uses ConPTY, which never delivers DEC mouse sequences (confirmed by MSFT maintainer Dustin Howett, microsoft/terminal#376). The TUI's AlternateScreen + mouse tracking swallows the wheel and native text selection. PR #97663 defaults `hermes --tui` to inline mode (primary buffer) on native Windows ConPTY — the same fallback Termux uses. Git Bash/MSYS mintty outside WT is unaffected. Workaround until merge: `HERMES_TUI_INLINE=1`. Opt out with `HERMES_TUI_INLINE=0`. **Additional risk**: microsoft/terminal#19674 documents console mode corruption when mouse tracking + `SetConsoleMode` are combined — no confirmed workaround beyond inline mode.
 4. **Ink inline mode**: `HERMES_TUI_INLINE=1` forces the primary buffer. Use it when AlternateScreen plus mouse tracking breaks wheel or selection. Opt out with `HERMES_TUI_INLINE=0`.
-5. **Washed-out colors**: chalk falls back to 256-color when `COLORTERM` is unset. Export a truthful `COLORTERM` such as `truecolor`.
+5. **Washed-out colors**: chalk falls back to 256-color when `COLORTERM` is unset. Only when the terminal supports truecolor, set it and relaunch (PowerShell: `$env:COLORTERM="truecolor"; hermes --tui`). Do not claim truecolor on a terminal that does not support it.
 6. **WSL2 differences**: WSL reports `platform === 'linux'`, so mouse sequences do reach the Linux PTY. The ConPTY workaround is for native Windows only. Do not apply it inside WSL.
 
 ## 6. Known upstream issues (check state before re-reporting)

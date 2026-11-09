@@ -1,7 +1,7 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.1.5
+version: 1.1.6
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
@@ -129,9 +129,10 @@ Is the agent LOOPING — repeating the same answer or tool calls turn after
            split generate-then-verify into separate turns. Details in §1b.
   └─ NO ↓
 
-Is the CLI itself broken — `hermes guide` prints nothing, commands hang,
+Is the CLI itself broken — `hermes guide` prints nothing, all commands hang,
   or `hermes --version` is empty?
-  └─ YES → diagnosing-runtime
+  └─ YES, but only `hermes --tui` hangs while `hermes --version` works → diagnosing-tui
+  └─ YES, broader → diagnosing-runtime
   └─ NO ↓
 
 Is a `hermes skills` / `hermes plugins install` failing with not-found/401/403?
@@ -158,7 +159,10 @@ Is the problem about the CLI/TUI — rendering, themes, busy indicators,
   └─ YES on native Windows, classic CLI → diagnosing-cli; Node TUI → diagnosing-tui
   └─ YES on POSIX/WSL, classic CLI → diagnosing-cli;
      Node TUI → diagnosing-tui (start with `hermes doctor`
-     and the `display:` block of `config.yaml` as baseline)
+     and the `display:` block of `config.yaml` as baseline;
+     if you updated this skill alone, first install the route with
+     `hermes skills install iap/hermes-guide/skills/diagnosing-tui`,
+     then `/reload-skills`)
   └─ NO ↓
 
 Is the problem about PATHS, VENVS, or the wrong Python interpreter (including `No module named ...` after a mise/pyenv/Homebrew shim)?

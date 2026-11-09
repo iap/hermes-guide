@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli
 description: "Diagnose and fix Hermes Agent classic CLI issues (prompt_toolkit REPL, cli.py HermesCLI): rendering artifacts, themes/skins, busy indicators, encoding, and launch/resume. Use for hermes --cli, piped input, and the classic spinner."
-version: 1.0.0
+version: 1.0.1
 metadata:
   hermes:
     tags: [hermes, cli, prompt_toolkit, windows, troubleshooting, diagnosing]
@@ -200,7 +200,7 @@ host finding; not an upstream source recheck.)
 hermes --version; hermes doctor
 hermes config path
 hermes config get display
-hermes guide update
+hermes guide update  # only if the hermes-guide plugin is enabled; tap-only installs cannot run it — use the manual stale-lock checks in §1 instead
 hermes skills list
 # in classic CLI: /indicator ascii; /skin slate; /exit
 ```

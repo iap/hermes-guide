@@ -1,7 +1,7 @@
 ---
 name: diagnosing-browser
 description: Diagnose Hermes browser automation issues — CDP connection failures, attach problems, agent-browser/build-gate history, and browser tool errors across the pre-v52 built-in tools and the v52 browser_exec surface.
-version: 1.1.4
+version: 1.1.5
 metadata:
   hermes:
     tags: [hermes, browser, cdp, playwright, troubleshooting]
@@ -83,7 +83,7 @@ browser:
 
 - `hermes-configuration-guide` — for $HERMES_HOME resolution and config.yaml structure
 - `diagnosing-plugins` — for plugin loading and capability issues
-- Browser tool failures are tool-level, not frontend-level. For frontend rendering around the browser, see `diagnosing-cli` or `diagnosing-tui`; for runtime failures, see `diagnosing-runtime`.
+- Browser tool failures are tool-level, not frontend-level. For frontend rendering around the browser, see `diagnosing-cli` or `diagnosing-tui` (install first with `hermes skills install iap/hermes-guide/skills/diagnosing-cli` or `hermes skills install iap/hermes-guide/skills/diagnosing-tui`, then `/reload-skills`); for runtime failures, see `diagnosing-runtime`.
 
 ## Verification
 
