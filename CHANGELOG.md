@@ -2,6 +2,27 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.5 (2026-11-10)
+
+### Bug Fixes
+
+- **diagnosing-path**: separate foreign shim from upstream bug ([#472](https://github.com/iap/hermes-guide/pull/472))
+- **verify-plugin**: allow a renamed checkout via --dir-name ([#466](https://github.com/iap/hermes-guide/pull/466))
+- **docs**: address CodeRabbit findings on shim diagnosis (v1.5.20)
+- **docs**: address Qodo findings on shim diagnosis
+
+### Documentation
+
+- **diagnosing-triage**: record E1 live run ([#475](https://github.com/iap/hermes-guide/pull/475))
+- **skills**: split diagnosing-cli-tui into cli and tui ([#470](https://github.com/iap/hermes-guide/pull/470))
+- **agents**: codify OS labels and cross-platform rules ([#465](https://github.com/iap/hermes-guide/pull/465))
+- **skills**: note version-manager shims in installing-hermes (v1.1.7) ([#464](https://github.com/iap/hermes-guide/pull/464))
+- **skills**: cover foreign shim interpreter in diagnosing-path (v1.5.19) ([#463](https://github.com/iap/hermes-guide/pull/463))
+
+### Tests
+
+- **version**: preserve pyproject.toml bytes on Windows ([#474](https://github.com/iap/hermes-guide/pull/474))
+
 ## v0.9.4 (2026-11-09)
 
 ### Features
