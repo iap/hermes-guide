@@ -1,7 +1,7 @@
 ---
 name: diagnosing-cli
 description: "Diagnose and fix Hermes Agent classic CLI issues (prompt_toolkit REPL, cli.py HermesCLI): rendering artifacts, themes/skins, busy indicators, encoding, and launch/resume. Use for hermes --cli, piped input, and the classic spinner."
-version: 1.0.2
+version: 1.0.0
 metadata:
   hermes:
     tags: [hermes, cli, prompt_toolkit, windows, troubleshooting, diagnosing]
@@ -77,13 +77,23 @@ an agent from `gateway_agent.py`. The agent forwards the turn to
 the gateway owner over websocket JSON-RPC via
 `gateway_client.py` `rpc` and `gateway_connection.py` `call`.
 
-The spinner thread is `cli_tui_mixin.py` `_tui_spinner_loop` at
-line 412. It calls `monitor.tick()` at
-`hermes_cli/cli_subagent_monitor.py:127`, which calls `refresh` at line 83,
-which calls `subagent_rows` at `hermes_cli/gateway_tools.py:154`. That
-method calls `connection.call` at `hermes_cli/gateway_connection.py:401`,
-which calls `call_tagged` at line 497, which waits on
+The spinner thread is `hermes_cli/cli_tui_mixin.py::_tui_spinner_loop`
+(line 412). It calls `monitor.tick()`
+(`hermes_cli/cli_subagent_monitor.py::tick`, line 127), which calls `refresh`
+(`hermes_cli/cli_subagent_monitor.py::refresh`, line 83), which calls
+`subagent_rows` (`hermes_cli/gateway_tools.py::subagent_rows`, line 154). That
+method calls `connection.call`
+(`hermes_cli/gateway_connection.py::call`, line 401), which calls `call_tagged`
+(`hermes_cli/gateway_connection.py::call_tagged`, line 497), which waits on
 `future.result`. The send itself is `connection.call("subagent.list", timeout=5)`.
+
+Track this path by symbol, not by line number. Every number here is pinned to
+`.github/upstream-drift.baseline` (commit `84a0301`), and upstream moves them
+between releases: at the pinned revision
+`hermes_cli/cli_subagent_monitor.py:83` is `def refresh` and `:85` is its
+`subagent_rows` call, while a later revision puts that same `def` at line 80 and
+the call at 82. Read the numbers as pointers into the pinned revision, never into
+whichever checkout is failing.
 
 ### Worked example: spinner keepalive leak
 

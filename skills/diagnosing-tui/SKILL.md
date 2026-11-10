@@ -1,7 +1,7 @@
 ---
 name: diagnosing-tui
 description: "Diagnose and fix Hermes Agent Node TUI issues (ui-tui Ink app): themes, mouse modes, launch/resume, and rendering on Windows and POSIX. Use for hermes --tui and display.interface: tui."
-version: 1.0.3
+version: 1.0.0
 metadata:
   hermes:
     tags: [hermes, tui, ink, node, windows, troubleshooting, diagnosing]
@@ -187,7 +187,7 @@ Your TUI shows washed-out colors because `COLORTERM` is unset and chalk falls ba
 | LOW | Washed-out colors on Windows Terminal | `COLORTERM` is unset; chalk falls back to 256-color (issue #53301) |
 
 ### Recommended Fix
-Exit the running TUI, set `COLORTERM=truecolor` in the launch environment, then restart the TUI so the new process receives it.
+Exit the running TUI, set `COLORTERM=truecolor` in the launch environment — only when the terminal actually supports truecolor, never claiming a capability it lacks — then restart the TUI so the new process receives it.
 
 ### References
 - `$HERMES_HOME/config.yaml` — the `display:` block
