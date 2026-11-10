@@ -102,6 +102,11 @@ Light/dark detection order (upstream `ui-tui/src/theme.ts`, verified 2026-09-14)
 5. `TERM_PROGRAM` light-default allow-list (currently `Apple_Terminal`).
    Anything undecidable stays **dark**. There is **no OSC 11 probe** — the hex env var is named `HERMES_TUI_BACKGROUND` so a future OSC 11 client could feed it, nothing more. Note `hermes_cli/tips.py` advertises `HERMES_TUI_THEME=light|dark|<hex>`, which the TUI code does not implement; trust the code, and set hex via `HERMES_TUI_BACKGROUND`.)
 
+Skins: the TUI builds its palette from skins (`ui-tui/src/theme.ts`), but the
+file-level checks — `display.skin`, `$HERMES_HOME/skins/<name>.yaml`, UTF-8
+without BOM, and unknown-skin fallback to `default` — live in `diagnosing-cli`
+§4. Route a skin that does not apply there.
+
 ## 4. Build, install, and resize
 
 - Prebuilt bundle: `HERMES_TUI_DIR` with `dist/entry.js` runs
