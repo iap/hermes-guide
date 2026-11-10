@@ -1,11 +1,11 @@
 ﻿---
 name: installing-hermes
 description: Install, reinstall, upgrade, and uninstall Hermes Agent — the four install routes (Standard POSIX/WSL2 including NixOS, Desktop app, Nix flake, PyPI), what each creates on disk, config bootstrap, and the gotchas that bite.
-version: 1.1.7
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, installation, wsl2, nixos, upgrade]
-    related_skills: [hermes-configuration-guide, diagnosing-path, diagnosing-cli-tui]
+    related_skills: [hermes-configuration-guide, diagnosing-path, diagnosing-cli, diagnosing-tui]
 ---
 
 # Installing Hermes

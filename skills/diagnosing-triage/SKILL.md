@@ -1,11 +1,11 @@
 ---
 name: diagnosing-triage
 description: "Route 'something is wrong / slow / crashed / stopped working / not responding / won't launch / not firing' to the right diagnosing-* playbook — triage layer mapping symptoms to skills."
-version: 1.1.4
+version: 1.1.8
 metadata:
   hermes:
     tags: [hermes, triage, routing, diagnostics]
-    related_skills: [hermes-configuration-guide, diagnosing-runtime, diagnosing-cli-tui, diagnosing-path, diagnosing-host-pressure, diagnosing-commands, diagnosing-mcp, diagnosing-skills, diagnosing-plugins, diagnosing-hooks, diagnosing-auth, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, installing-hermes]
+    related_skills: [hermes-configuration-guide, diagnosing-runtime, diagnosing-cli, diagnosing-tui, diagnosing-path, diagnosing-host-pressure, diagnosing-commands, diagnosing-mcp, diagnosing-skills, diagnosing-plugins, diagnosing-hooks, diagnosing-auth, diagnosing-memory, diagnosing-desktop, diagnosing-providers, diagnosing-bot-mode, diagnosing-browser, diagnosing-cron, diagnosing-gateway, diagnosing-voice, installing-hermes]
 ---
 
 # Diagnosing Triage
@@ -42,7 +42,7 @@ Route its `~`/`x`/`?` lines first:
 |---|---|
 | `~ commands` (e.g. a skill slug shadowing a builtin) | diagnosing-commands |
 | `~ memories` (store near/over limit, undated entries) | diagnosing-memory |
-| `~ update` (lock owner alive, or dead owner with a free checkout) | diagnosing-cli-tui §1 stale-lock note |
+| `~ update` (lock owner alive, or dead owner with a free checkout) | diagnosing-cli §1 stale-lock note |
 | `x config` | hermes-configuration-guide Step 0, then re-run the scope |
 | `x mcp` | diagnosing-mcp |
 | `x skills` | diagnosing-skills |
@@ -51,10 +51,10 @@ Route its `~`/`x`/`?` lines first:
 | `x plugins` | diagnosing-plugins |
 | `x memories` | diagnosing-memory |
 | `x sessions` (runaway loop signature) | stay here — §1b runaway branch below |
-| `x update` (stale update lock) | diagnosing-cli-tui §1 stale-lock note |
+| `x update` (stale update lock) | diagnosing-cli §1 stale-lock note |
 | `?` (unknown — home unresolvable, doctor output unrecognized) | hermes-configuration-guide Step 0 (resolve home/config), then re-run the scope; unknown means unmeasured, never healthy; `2 bad scope` for a documented scope means the installed hermes-guide predates the docs — run `hermes plugins update hermes-guide`, then re-run |
 
-Exception — no baseline possible: when every `hermes` invocation hangs (e.g. on `an update is still running`), the baseline cannot run. Load the diagnosing-cli-tui stale-lock note directly and follow its manual steps; run `hermes guide update` after the CLI recovers as confirmation, not as the entry point. Minutes-long launches that keep retrying update completion are a different shape — route to diagnosing-path (retry-loop note), not here.
+Exception — no baseline possible: when every `hermes` invocation hangs (e.g. on `an update is still running`), the baseline cannot run. Load the diagnosing-cli stale-lock note directly and follow its manual steps; run `hermes guide update` after the CLI recovers as confirmation, not as the entry point. Minutes-long launches that keep retrying update completion are a different shape — route to diagnosing-path (retry-loop note), not here.
 
 Then continue with symptom routing below for whatever the baseline did not explain.
 
@@ -129,9 +129,10 @@ Is the agent LOOPING — repeating the same answer or tool calls turn after
            split generate-then-verify into separate turns. Details in §1b.
   └─ NO ↓
 
-Is the CLI itself broken — `hermes guide` prints nothing, commands hang,
+Is the CLI itself broken — `hermes guide` prints nothing, all commands hang,
   or `hermes --version` is empty?
-  └─ YES → diagnosing-runtime
+  └─ YES, but only `hermes --tui` hangs while `hermes --version` works → diagnosing-tui
+  └─ YES, broader → diagnosing-runtime
   └─ NO ↓
 
 Is a `hermes skills` / `hermes plugins install` failing with not-found/401/403?
@@ -155,10 +156,14 @@ Is the problem about the DESKTOP APP (Electron) not launching,
 
 Is the problem about the CLI/TUI — rendering, themes, busy indicators,
   mouse modes, encoding, garbled output, launch/resume?
-  └─ YES on native Windows → diagnosing-cli-tui
-  └─ YES on POSIX/WSL → `hermes doctor` + the `display:` block of `config.yaml`
-     (no dedicated skill covers POSIX CLI/TUI — do NOT load diagnosing-cli-tui,
-     it documents the Windows console stack only)
+  └─ YES on native Windows, classic CLI → diagnosing-cli; Node TUI → diagnosing-tui
+  └─ YES on POSIX/WSL, classic CLI → diagnosing-cli;
+     Node TUI → diagnosing-tui (start with `hermes doctor`
+     and the `display:` block of `config.yaml` as baseline;
+     if you updated this skill alone, first install the route with
+     `hermes skills install iap/hermes-guide/skills/diagnosing-cli` or
+     `hermes skills install iap/hermes-guide/skills/diagnosing-tui`,
+     then `/reload-skills`)
   └─ NO ↓
 
 Is the problem about PATHS, VENVS, or the wrong Python interpreter (including `No module named ...` after a mise/pyenv/Homebrew shim)?
@@ -249,7 +254,7 @@ and a weak model regenerates the same output.
 
 ## 2. Symptom → Skill mapping table
 
-The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 75 rows from specific symptoms to the target skill. Load the matched skill directly.
+The flowchart above resolves most reports. When it doesn't match, grep the full symptom table in `references/symptom_map.md` — 77 rows from specific symptoms to the target skill. Load the matched skill directly.
 
 ## 3. Clarifying questions
 
@@ -258,7 +263,7 @@ When the description is too vague to route with confidence, ask these questions 
 ### Scope questions
 
 - **"Is this about the CLI/TUI, the desktop app, or a messaging platform?"**
-  - CLI/TUI (native Windows) → diagnosing-cli-tui; POSIX/WSL → `hermes doctor`
+  - CLI/TUI (native Windows) → diagnosing-cli for classic, diagnosing-tui for Node TUI; POSIX/WSL → diagnosing-cli or diagnosing-tui, else `hermes doctor`
   - Desktop app → diagnosing-desktop
   - Messaging platform → diagnosing-gateway (or diagnosing-bot-mode if it's about bot profiles)
 
@@ -329,4 +334,4 @@ When the triage skill routes to a diagnostic skill, the model reports findings u
 - **Reason**: "High load + idle CPU + plugin load timeouts = host pressure, not Hermes config"
 - **Next step**: "Run `bash skills/diagnosing-host-pressure/scripts/host_pressure_probe.sh` and follow the resolution order in that skill."
 
-*Facts re-verified 2026-10-23 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id). `x update` row + symptom-map stale-lock row point at the diagnosing-cli-tui §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py; rows re-checked 2026-10-16). §4 escalation rules moved to the canonical config-map list 2026-10-16 (verbatim move, pointer left behind). Routing additions verified 2026-10-16 (retry-loop vs wedge split to diagnosing-path; outdated-plugin `2 bad scope` → `hermes plugins update hermes-guide`). `~ update` row, the `--fast` degraded-host clause, and the row count (re-counted: 70) added 2026-10-17. §0c finding-id decision table added 2026-10-23 (JSON contract consumed per #334): all 32 finding ids tabulated against this repo's `docs/findings.md` catalog (PR-head `tools/render_docs.py` render, cross-checked against `checks.FINDING_IDS`); commands verified live on Hermes Agent v0.22.2+1915.gdd519c7.dirty (upstream `dd519c74`): `hermes --version`, `hermes doctor --fix`/`--live`, `hermes setup --help`, `hermes config path` (`/Users/iap/.hermes/config.yaml`), `hermes skills` (install/tap/inspect subcommands), `hermes plugins` (install/update/list subcommands), `hermes hooks doctor`, `hermes gateway status`; `--json` fallback wording keyed off the flag erroring (argparse exit `2`, observed on this host because hermes-guide 0.8.7 predates #336), not off a hard version number. Review-round corrections 2026-10-23 (semantic re-checks against the repo source, no new live facts): `SESSIONS_RUNAWAY` no longer implies `model:` is part of the sanctioned fix for every finding; `PLUGINS_MISSING_OR_BROKEN` carries the concrete reinstall commands (`hermes plugins install <name>` from the catalog, `hermes plugins update <name>` for an installed one); `CONFIG_UNREADABLE` verifies against the scope that reported it (mcp or plugins); `UPDATE_LOCK_HELD` row reworded to the check's semantics (this repo's `check_update_lock` in `checks.py` — a live owner renders as the informational update-in-progress line, while this id means the owner PID is dead and a process it started still holds the checkout). Re-verify before reuse. Foreign-shim routing case (C20, symptom-map row) and content-sensitive E1 added 2026-11-09; no live run yet.*
+*Facts re-verified 2026-10-23 against upstream source at commit `50035ef63c5536757e63bc1c1ffe4e5c19ac7fad` and this repo's `skills/` directory (every mapped skill resolves; no renames); routing behavior verified live on Hermes v0.21.7 (Windows native) — unnamed headless runs do not auto-load triage (D4), and free-style answers invented 8 `hermes` subcommands (D5). Runaway-session branch (§1b, §0b row, symptom-map row, goldens A8/B5b) verified against a live runaway in `$HERMES_HOME/logs/agent.log` (session `20261016_021208_97c585`; agent.log timestamps read 2026-10-16 local, matching the session id). `x update` row + symptom-map stale-lock row point at the diagnosing-cli §1 stale-lock note with a no-baseline exception (update-lock check verified by tools/test_update_lock.py; rows re-checked 2026-10-16). §4 escalation rules moved to the canonical config-map list 2026-10-16 (verbatim move, pointer left behind). Routing additions verified 2026-10-16 (retry-loop vs wedge split to diagnosing-path; outdated-plugin `2 bad scope` → `hermes plugins update hermes-guide`). `~ update` row, the `--fast` degraded-host clause, and the row count (re-counted: 70) added 2026-10-17. §0c finding-id decision table added 2026-10-23 (JSON contract consumed per #334): all 32 finding ids tabulated against this repo's `docs/findings.md` catalog (PR-head `tools/render_docs.py` render, cross-checked against `checks.FINDING_IDS`); commands verified live on Hermes Agent v0.22.2+1915.gdd519c7.dirty (upstream `dd519c74`): `hermes --version`, `hermes doctor --fix`/`--live`, `hermes setup --help`, `hermes config path` (`/Users/iap/.hermes/config.yaml`), `hermes skills` (install/tap/inspect subcommands), `hermes plugins` (install/update/list subcommands), `hermes hooks doctor`, `hermes gateway status`; `--json` fallback wording keyed off the flag erroring (argparse exit `2`, observed on this host because hermes-guide 0.8.7 predates #336), not off a hard version number. Review-round corrections 2026-10-23 (semantic re-checks against the repo source, no new live facts): `SESSIONS_RUNAWAY` no longer implies `model:` is part of the sanctioned fix for every finding; `PLUGINS_MISSING_OR_BROKEN` carries the concrete reinstall commands (`hermes plugins install <name>` from the catalog, `hermes plugins update <name>` for an installed one); `CONFIG_UNREADABLE` verifies against the scope that reported it (mcp or plugins); `UPDATE_LOCK_HELD` row reworded to the check's semantics (this repo's `check_update_lock` in `checks.py` — a live owner renders as the informational update-in-progress line, while this id means the owner PID is dead and a process it started still holds the checkout). Re-verify before reuse. Foreign-shim routing case (C20, symptom-map row) and content-sensitive E1 added 2026-11-09; no live run yet.*

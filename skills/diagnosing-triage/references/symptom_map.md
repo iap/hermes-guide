@@ -5,7 +5,7 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | Symptom | Target skill |
 |---|---|
 | Agent keeps repeating itself / "looping again" / same tool calls every turn | diagnosing-triage (§1b runaway branch) |
-| Every hermes command hangs on "an update is still running" | diagnosing-cli-tui (§1 stale-lock note; no baseline needed — the CLI cannot run one) |
+| Every hermes command hangs on "an update is still running" | diagnosing-cli (§1 stale-lock note; no baseline needed — the CLI cannot run one) |
 | "Could not fetch from any source" / "Could not find … in any source" | diagnosing-auth |
 | GitHub 401 on hub installs | diagnosing-auth |
 | Rate-limit 403 during installs | diagnosing-auth |
@@ -17,12 +17,14 @@ Comprehensive mapping from specific symptoms to the target diagnostic skill. Whe
 | Chrome 144+ compatibility | diagnosing-browser |
 | Playwright errors | diagnosing-browser |
 | agent-browser not working | diagnosing-browser |
-| CLI glitches / rendering artifacts (native Windows) | diagnosing-cli-tui |
-| Themes / skins not applying (native Windows) | diagnosing-cli-tui |
-| Busy indicators unreadable (native Windows) | diagnosing-cli-tui |
-| Mouse modes not working (native Windows) | diagnosing-cli-tui |
-| Encoding / mojibake issues (native Windows) | diagnosing-cli-tui |
-| CLI/TUI issues on POSIX/WSL | `hermes doctor` + the `display:` block of `config.yaml` (no dedicated skill yet — do not load diagnosing-cli-tui) |
+| CLI glitches / rendering artifacts (native Windows) | diagnosing-cli |
+| Themes / skins not applying — classic CLI (any platform) | diagnosing-cli |
+| Themes / skins not applying — Node TUI | diagnosing-tui |
+| Theme report, frontend unclear | identify the active frontend first, then route as above |
+| Busy indicators unreadable (native Windows) | diagnosing-cli |
+| Mouse modes not working (native Windows) | diagnosing-tui |
+| Encoding / mojibake issues (native Windows) | diagnosing-cli |
+| CLI issues on POSIX/WSL | diagnosing-cli |
 | Missing slash commands | diagnosing-commands |
 | Overridden slash commands | diagnosing-commands |
 | Skills-as-commands not appearing | diagnosing-commands |

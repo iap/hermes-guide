@@ -1,11 +1,11 @@
 ---
 name: diagnosing-voice
 description: Diagnose Hermes voice mode issues — STT/TTS provider failures, audio device problems, latency, ffmpeg missing, and voice message transcription.
-version: 1.0.12
+version: 1.0.13
 metadata:
   hermes:
     tags: [hermes, voice, tts, stt, troubleshooting]
-    related_skills: [hermes-configuration-guide, diagnosing-cli-tui]
+    related_skills: [hermes-configuration-guide, diagnosing-cli]
 ---
 
 # Diagnosing Voice Mode
@@ -80,7 +80,7 @@ Spoken turns run on a voice route (`agent/voice_turn_route.py`) that may select 
 ## 5. Cross-references
 
 - `hermes-configuration-guide` — for $HERMES_HOME resolution and config.yaml structure
-- `diagnosing-cli-tui` — for Windows CLI/TUI rendering and encoding issues
+- `diagnosing-cli` — for Windows CLI rendering and encoding issues
 - `diagnosing-auth` — for provider API key and token issues
 
 ## Verification

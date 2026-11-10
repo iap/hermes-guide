@@ -19,7 +19,8 @@ body:
         - diagnosing-path
         - diagnosing-auth
         - diagnosing-memory
-        - diagnosing-cli-tui
+        - diagnosing-cli
+        - diagnosing-tui
         - diagnosing-triage
         - diagnosing-desktop
         - diagnosing-providers
