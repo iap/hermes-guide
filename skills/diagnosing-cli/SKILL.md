@@ -114,11 +114,14 @@ logs debug and retains cached rows.
 > `TimeoutError` conversion already sits, because every other
 > gateway verb shares that path.
 
-## 3. Slash commands that fix rendering (Node TUI unless noted)
+## 3. Slash commands that fix rendering
 
-These persist to the TUI `display:` block. `/indicator` entered in the
-classic CLI still writes `display.tui_status_indicator` — the TUI setting
-— even though no TUI is running in that session.
+All three are handled by the classic CLI (`/indicator` and `/skin` are declared
+`cli_only=True` in the command registry; `/exit` is `_cmd_exit` in `cli.py`), and
+they persist to the shared `display:` block that the Node TUI also reads — so a
+choice made here survives a switch of frontends. `/indicator` in particular
+writes `display.tui_status_indicator`, the key the TUI reads on its next render,
+even though no TUI is running in that session.
 
 | Command | Effect |
 |---|---|
