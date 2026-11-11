@@ -2,6 +2,16 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.6 (2026-11-11)
+
+### Bug Fixes
+
+- **skills**: complete staged-node recovery guidance
+- **diagnosing-path**: correct staged Node OS-floor recovery
+- **skills**: correct git-install node-warning cause
+- **drift**: watch the plugin-context modules the skills now cite
+- **skills**: re-anchor citations for dcfbaf06 re-baseline ([#473](https://github.com/iap/hermes-guide/pull/473))
+
 ## v0.9.5 (2026-11-10)
 
 ### Bug Fixes
