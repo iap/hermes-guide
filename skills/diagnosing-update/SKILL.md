@@ -1,7 +1,7 @@
 ---
 name: diagnosing-update
 description: Diagnose Hermes update issues — stale update lock, dead owner PID, wedged checkout, and update failures.
-version: 1.0.1
+version: 1.0.2
 metadata:
   hermes:
     tags: [hermes, update, troubleshooting]
@@ -78,9 +78,10 @@ ls ~/.hermes/installs/       # identify the install root
 **Cause:** Node v25+ requires `__libcpp_verbose_abort` which Monterey doesn't export.
 
 **Fix:**
-- Keep node pinned to 24.x in pm/lock.json
-- Use `--without cua-driver`
-- See AGENTS.md "Traps" section for full details
+- Pin node to a host-compatible 24.x build in `pm/lock.json` using the official nodejs.org SHASUMS256 digests; keep `--without cua-driver` only for the separate CUA-driver failure.
+- Then run `hermes pm install node`.
+- If the update tail has already hit its six-attempt cap, clear `~/.hermes/installs/<install-id>/source-completion-pending` and `source-completion-attempts`, then run one uninterrupted `hermes` command. Do not run a full `hermes update` as the resume step: its re-resolution can replace the pin.
+- See `docs/agent/deep-ops.md` (macOS < 13 host limitation) and AGENTS.md "Traps" for details.
 
 ### Pending update tail
 
@@ -129,4 +130,4 @@ Fail: update check shows broken — check for stale locks or layout issues.
 - `installing-hermes` — install/reinstall procedures
 - `diagnosing-path` — path resolution issues
 
-*Facts re-verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_update_lock), `hermes_cli/plugins_cmd_update.py`. Re-verify before reuse.*
+*Facts re-verified 2026-10-31 against upstream source at commit `cedf4a3d78675283fa93e4e6ea2d6212bf414667`: `hermes_cli/checks.py` (check_update_lock), `hermes_cli/plugins_cmd_update.py`. Staged-Node recovery cross-checked 2026-11-11 against upstream `dcfbaf06` and `docs/agent/deep-ops.md`: the macOS < 13 fix is a hand-set `pm/lock.json` pin plus clearing `source-completion-{pending,attempts}` before one uninterrupted `hermes` run; `--without cua-driver` only addresses the separate CUA-driver failure. Re-verify before reuse.*
