@@ -98,5 +98,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — D4 holds | B1-general ×2, P1, P2-attempt-1, all unnamed headless: triage not auto-loaded; free-style answers (8 invented subcommands once, 0 once; P1 answered model_catalog, missed discover_models contract; P2 attempt timed out with no output) |
 | 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — B1 | named invocation: §0b baseline drove `x plugins` routing; 0 invented subcommands; grade A, docked from S only for missing explicit triage citation |
 | 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — C16 with latency note | P2 hook-prompt retry (unnamed): enumerated all 4 hook systems, correct empty-hooks diagnosis, read-only close; 112s first-byte latency, first attempt's timeout was transient |
+| 2026-11-09 | v0.21.7+279.g9bda154 | Windows native | Pass - E1 | manual golden; first attempt used stale global 1.5.18 and failed the #97340 clause; second passed after global sync: named the mise shim/PATH collision, said #97340 does not apply, rejected installing into the shim |
+| 2026-11-09 | v0.21.3+15327.gd0b4924 | NixOS WSL | Pass - E1 | manual golden; run in interactive TUI because hermes -z ignored the prompt; same content pass |
 
 Failed rows → fix `SKILL.md` flowchart/table (and bump skill version), or document an intentional Expected change in the same PR.
