@@ -1988,6 +1988,7 @@ def check_plugins(manifests=None):
     broken = []
     bundled_only = []
     notes = []
+    skipped_ids = None  # scanned on first unresolved id, not on every run
     for name in sorted(enabled):
         if name in skip and name not in user_known:
             # A bare sub-category name is not a plugin id. A user manifest with
@@ -2000,7 +2001,18 @@ def check_plugins(manifests=None):
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
         if name not in known:
-            broken.append(f"`{name}` is enabled but no matching plugin manifest was found")
+            if skipped_ids is None:
+                skipped_ids = _skipped_category_ids(_bundled_plugins_dir())
+            category = skipped_ids.get(name)
+            if category:
+                broken.append(
+                    f"`{name}` is a plugin under `plugins/{category}/`; it activates "
+                    "via that category's selection key, not plugins.enabled"
+                )
+            else:
+                broken.append(
+                    f"`{name}` is enabled but no matching plugin manifest was found"
+                )
         elif name not in user_known:
             # Resolves via the bundled dir only: absent from the user plugins
             # dir by design. Named explicitly so neither users nor models

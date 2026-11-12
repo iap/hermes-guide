@@ -267,6 +267,20 @@ def main(argv: list[str]) -> int:
             failures.append(f"skipped-category plugin verdict wrong: {result!r}")
         checks._bundled_plugins_dir = lambda: None
 
+        # (8a) a path-qualified entry under a skipped provider dir names its
+        # category in the fallback scan too, matching the upstream path.
+        _write(bundled / "config_backends" / "remote" / "plugin.yaml", "name: remote\n")
+        checks._bundled_plugins_dir = lambda: str(bundled)
+        _write(config, "plugins:\n  enabled: [config_backends/remote]\n  disabled: []\n")
+        checks._store().clear()
+        result = checks.check_plugins(manifests=[])
+        joined = " | ".join(str(d) for d in (result.get("detail") or []))
+        if result.get("status") != "broken" or "config_backends" not in joined:
+            failures.append(
+                f"path-qualified skipped-category verdict wrong: {result!r}"
+            )
+        checks._bundled_plugins_dir = lambda: None
+
         # (8b) delegation is scanned by upstream discovery, not a skipped
         # category: a bundled backend key under it must resolve in the
         # fallback scan instead of being reported missing.
