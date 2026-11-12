@@ -109,12 +109,11 @@ PLUGIN_SUBCATEGORY_DIRS = (
     "computer_use",
     # config_backends: upstream holds the remote config backend under
     # `plugins/config_backends/remote/`; it is selected by
-    # HERMES_CONFIG_BACKEND, never discovered as a plugins.enabled plugin.
+    # HERMES_CONFIG_BACKEND and never discovered through the general plugin
+    # loader. (`delegation/` is intentionally not listed here: upstream does
+    # scan it as a backend manifest, so the guide must keep seeing
+    # `delegation/default` in the fallback path.)
     "config_backends",
-    # delegation: upstream holds the default delegation backend under
-    # `plugins/delegation/default/` (kind: backend); it is selected by the
-    # delegation config key, not plugins.enabled.
-    "delegation",
 )
 
 # Filesystem names owned by the Hermes layout (rename upstream -> edit here).

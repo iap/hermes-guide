@@ -173,6 +173,25 @@ def main(argv: list[str]) -> int:
         if result.get("status") == "broken":
             failures.append(f"bare sub-category name reported broken: {result!r}")
 
+        # (6b1) a bare skipped provider dir gets a note naming the activation
+        # path; delegation is not in the skip set because upstream scans it.
+        _write(config, "plugins:\n  enabled: [config_backends]\n  disabled: []\n")
+        checks._store().clear()
+        result = checks.check_plugins(manifests=[])
+        joined = " | ".join(str(d) for d in (result.get("detail") or []))
+        if result.get("status") == "broken":
+            failures.append(f"bare config_backends reported broken: {result!r}")
+        elif "config_backends" not in joined or "selection key" not in joined:
+            failures.append(f"bare config_backends not noted correctly: {result!r}")
+
+        # (6b1b) delegation remains outside the skip set, so a bare entry is
+        # still reported as an invalid plugins.enabled key.
+        _write(config, "plugins:\n  enabled: [delegation]\n  disabled: []\n")
+        checks._store().clear()
+        result = checks.check_plugins(manifests=[])
+        if result.get("status") != "broken":
+            failures.append(f"bare delegation was not flagged: {result!r}")
+
         # (6b2) a user manifest that happens to share a sub-category name is a
         # real plugin: it must be judged, not swallowed by the bare-name skip.
         collide = SimpleNamespace(
