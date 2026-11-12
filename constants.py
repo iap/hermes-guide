@@ -107,6 +107,14 @@ PLUGIN_SUBCATEGORY_DIRS = (
     # `computer_use/cua` as a discoverable plugin id, so a stale
     # `plugins.enabled: [cua]` resolved as valid instead of being flagged.
     "computer_use",
+    # config_backends: upstream holds the remote config backend under
+    # `plugins/config_backends/remote/`; it is selected by
+    # HERMES_CONFIG_BACKEND, never discovered as a plugins.enabled plugin.
+    "config_backends",
+    # delegation: upstream holds the default delegation backend under
+    # `plugins/delegation/default/` (kind: backend); it is selected by the
+    # delegation config key, not plugins.enabled.
+    "delegation",
 )
 
 # Filesystem names owned by the Hermes layout (rename upstream -> edit here).
