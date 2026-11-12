@@ -272,10 +272,18 @@ def main(argv: list[str]) -> int:
         _write(bundled / "config_backends" / "remote" / "plugin.yaml", "name: remote\n")
         checks._bundled_plugins_dir = lambda: str(bundled)
         _write(config, "plugins:\n  enabled: [config_backends/remote]\n  disabled: []\n")
+        checks._upstream_manifests = lambda home: None
         checks._store().clear()
-        result = checks.check_plugins(manifests=[])
+        try:
+            result = checks.check_plugins()
+        finally:
+            checks._upstream_manifests = original_upstream
         joined = " | ".join(str(d) for d in (result.get("detail") or []))
-        if result.get("status") != "broken" or "config_backends" not in joined:
+        if (
+            result.get("status") != "broken"
+            or "config_backends" not in joined
+            or "selection key" not in joined
+        ):
             failures.append(
                 f"path-qualified skipped-category verdict wrong: {result!r}"
             )
