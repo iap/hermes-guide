@@ -60,7 +60,9 @@ _PLUGIN_VERSION_RE = re.compile(r"^\s*version:\s*['\"]?([^'\"\s]+)", re.MULTILIN
 _GUIDE_KEYS = ["schema_version", "scope", "fast", "status", "checks"]
 
 
-def _run_hermes(args: list[str], timeout: int = 30) -> tuple[int, str, str]:
+def _run_hermes(
+    args: list[str], timeout: int = 30, env: dict[str, str] | None = None
+) -> tuple[int, str, str]:
     """Run `hermes <args>` and return (returncode, stdout, stderr)."""
     exe = shutil.which("hermes")
     if not exe:
@@ -69,7 +71,7 @@ def _run_hermes(args: list[str], timeout: int = 30) -> tuple[int, str, str]:
         proc = subprocess.run(
             [exe, *args],
             capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=timeout,
+            errors="replace", timeout=timeout, env=env,
         )
         return proc.returncode, proc.stdout or "", proc.stderr or ""
     except subprocess.TimeoutExpired:
@@ -167,6 +169,29 @@ def _installed_version(home: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _load_check_labels() -> list[str]:
+    """Load `checks.labels()` through a package shim.
+
+    ``checks.py`` uses ``from . import constants``, so importing it as a
+    top-level module fails outside the package. Copy the three plugin modules
+    into a temporary package and import them there; no Hermes install or
+    network is involved.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        pkg = Path(td) / "hermes_guide"
+        pkg.mkdir()
+        for name in ("__init__.py", "checks.py", "constants.py"):
+            shutil.copy(REPO / name, pkg / name)
+        sys.path.insert(0, td)
+        try:
+            import hermes_guide.checks as checks  # noqa: E402
+            return list(checks.labels())
+        finally:
+            sys.path.remove(td)
+
+
 def _valid_guide_document(text: str, scope: str | None = None) -> list[str]:
     """Validate the locked `hermes guide --json` document contract."""
     try:
@@ -219,10 +244,8 @@ def _release_dogfood(args: argparse.Namespace) -> int:
         )
         return 2
 
-    sys.path.insert(0, str(REPO))
     try:
-        import checks  # noqa: E402
-        scopes = [label for label, _ in checks.labels()]
+        scopes = _load_check_labels()
     except Exception as exc:  # noqa: BLE001
         print(f"FAIL: cannot read check labels: {exc}", file=sys.stderr)
         return 2
@@ -234,10 +257,14 @@ def _release_dogfood(args: argparse.Namespace) -> int:
         (scope, ["guide", scope, "--fast", "--json"]) for scope in scopes
     )
 
+    env = os.environ.copy()
+    env["HERMES_HOME"] = str(home)
+    env["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
+
     rows: list[tuple[str, int, str, int, str]] = []
     failures: list[str] = []
     for scope, command in commands:
-        rc, stdout, stderr = _run_hermes(command, timeout=args.timeout)
+        rc, stdout, stderr = _run_hermes(command, timeout=args.timeout, env=env)
         errors = _valid_guide_document(stdout, scope)
         if rc not in (0, 1):
             errors.append(f"exit {rc}")
@@ -249,12 +276,17 @@ def _release_dogfood(args: argparse.Namespace) -> int:
             doc = json.loads(stdout)
             status = str(doc.get("status", "-"))
             count = len(doc.get("checks", {}))
+            expected_exit = 0 if status == "healthy" else 1
+            if rc != expected_exit:
+                errors.append(f"exit {rc} contradicts status {status}")
         result = "PASS" if not errors else "FAIL: " + "; ".join(errors)
         rows.append((scope or "(all)", rc, status, count, result))
         if errors:
             failures.append(f"{scope or '(all)'}: {result}")
 
-    version_rc, version_out, _ = _run_hermes(["--version"], timeout=min(args.timeout, 20))
+    version_rc, version_out, _ = _run_hermes(
+        ["--version"], timeout=min(args.timeout, 20), env=env
+    )
     version_line = version_out.strip().splitlines()[0] if version_rc == 0 and version_out.strip() else "unknown"
     report = (
         Path(args.report)
@@ -315,7 +347,16 @@ def _selftest() -> int:
             if token in ("install", "update", "uninstall", "write", "edit"):
                 failures.append(f"mutating token in command: {cmd}")
 
-    # Test 4: the JSON document contract accepts a valid document and rejects
+    # Test 4: release scope enumeration imports the package correctly.
+    try:
+        labels = _load_check_labels()
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"cannot load check labels: {exc}")
+    else:
+        if not labels or "config" not in labels:
+            failures.append(f"unexpected check labels: {labels!r}")
+
+    # Test 5: the JSON document contract accepts a valid document and rejects
     # the failure shapes that caused #479 (bare Path/date detail is the
     # runtime crash; here we lock the document envelope shape).
     valid = {
