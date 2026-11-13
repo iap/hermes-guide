@@ -361,7 +361,7 @@ def frontmatter(path):
     try:
         # PyYAML's SafeLoader is pure Python; the C loader is materially
         # faster across a large skills tree and is still a safe loader.
-        fm = yaml.load(
+        fm = yaml.load(  # nosec B506 - CSafeLoader/SafeLoader are safe loaders
             parts[1], Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader)
         )
     except Exception:
