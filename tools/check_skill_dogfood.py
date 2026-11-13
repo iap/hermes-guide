@@ -133,6 +133,8 @@ def _guide_unavailable(rc: int, stderr: str) -> bool:
         "unknown command" in text
         or "invalid choice" in text
         or "no such command" in text
+        or "not a `hermes` command" in text
+        or "not a hermes command" in text
         or "not found" in text
     )
 
