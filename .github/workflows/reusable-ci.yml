@@ -235,6 +235,12 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/check_skill_dogfood.py
 
+      - name: Dogfood harness selftest
+        # No live Hermes needed: exercises the JSON-document validator and
+        # read-only command safety. The release mode itself is run pre-tag.
+        if: inputs.run-full-gate
+        run: python tools/test_check_skill_dogfood.py
+
       - name: MCP shape regression test
         # Copies the plugin into a temp dir and imports it, so it needs PyYAML
         # from the install above. Its own import block hides that: every
