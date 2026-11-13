@@ -8,7 +8,7 @@ in [deep-ops.md](deep-ops.md).
 Before merging, both facts must be true on the current head:
 
 - Qodo has a review verdict on the current head with no open findings.
-- CodeRabbit has a **review record** on the current head with a clean verdict.
+- CodeRabbit has a **review record** on the current head with a clean verdict, unless the release-only exception applies.
 
 `mergeStateStatus: CLEAN` does not satisfy either fact. A CodeRabbit check with
 `conclusion: skipped` is **not a review**; treat it as "no review on this head"
@@ -18,7 +18,7 @@ and run the trigger gate.
 
 A release PR that changes only the five version sites and `CHANGELOG.md` is
 exempt from the CodeRabbit second review; Qodo and CI are still required. Any
-code, test, skill, tooling, or docs change is not release-only.
+code, test, skill, tooling, or docs change outside the five version sites and `CHANGELOG.md` is not release-only.
 
 ## Review sequence
 
@@ -32,7 +32,7 @@ with file:line evidence, not implemented.
 | 2. Second reviewer | Primary is clean on the current head | Post `@coderabbitai full review` **once** for this PR. Wait for the review record; a trigger comment is not a review. |
 | 3. Second findings | CodeRabbit reports findings | Verify each against the code. Fix real findings; decline false positives/negatives with evidence. After new commits, use `@coderabbitai review` (incremental), never a second full review. |
 | 4. Re-check second reviewer | Any second-review fix created a new head | The primary's resolved findings stand — Qodo auto-reviews each head, and once it has reviewed the PR with no open findings, do not manually re-trigger it per head. Request CodeRabbit's incremental review of the new head and proceed until CodeRabbit's check completes clean on that head. Repeat for each new head with CodeRabbit alone. |
-| 5. Merge gate | CodeRabbit clean on the current head; Qodo has a no-open-findings verdict on the current head | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo's automatic review covers each head — a new head does not merge on an older Qodo review alone, so require Qodo's no-open-findings verdict on the current head (reached by its automatic review, never by a manual trigger; a silent Qodo on the current head is "not heard" and needs explicit authorization) alongside CodeRabbit's clean completion on the current head. |
+| 5. Merge gate | CodeRabbit clean on the current head (unless release-only); Qodo has a no-open-findings verdict on the current head | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo's automatic review covers each head — a new head does not merge on an older Qodo review alone, so require Qodo's no-open-findings verdict on the current head (reached by its automatic review, never by a manual trigger; a silent Qodo on the current head is "not heard" and needs explicit authorization) alongside CodeRabbit's clean completion on the current head (or the release-only exception). |
 
 - **False positives are first-class.** A bot recommendation can be stale,
   miscited, or wrong for this repo. Cite the guard, test, or source that
@@ -431,7 +431,7 @@ Never merge on green CI alone. For the normal merge path, immediately before
 merging a PR, verify: all checks pass (not pending), every review thread
 resolved by the bot after a reply that fixes or declines the finding with
 evidence (never human-resolved to unblock), CodeRabbit clean on the current
-head, and Qodo has a no-open-findings verdict on the current head (Qodo auto-reviews
+head (or the release-only exception applies), and Qodo has a no-open-findings verdict on the current head (Qodo auto-reviews
 each head; do not manually re-trigger it per head — a bot silent on a PR it
 never reviewed is not a clean reviewer), `mergeStateStatus` is `CLEAN`, and
 the merge is explicitly authorized. A recorded maintainer-authorized bypass is
@@ -485,8 +485,8 @@ merge decision time, on the current head:
    audit trail. A follow-up issue is the right home for a defect in already
    merged code, never for unmerged code.
 4. **Verdict.** Report: checks (all pass, none pending), threads
-   (N unresolved, classified), CodeRabbit (clean on this head), Qodo (verdict
-   on this head or not heard), `mergeStateStatus`, and the authorization. If
+   (N unresolved, classified), CodeRabbit (clean on this head, or release-only
+   exception), Qodo (verdict on this head or not heard), `mergeStateStatus`, and the authorization. If
    any element is missing, the verdict is "blocked" — name the element, do
    not average past it.
 
