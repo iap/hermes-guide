@@ -33,6 +33,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import datetime
 import json
 import os
@@ -135,8 +136,7 @@ def _guide_unavailable(rc: int, stderr: str) -> bool:
         "unknown command" in text
         or "invalid choice" in text
         or "no such command" in text
-        or "not a `hermes` command" in text
-        or "not a hermes command" in text
+        or ("is not a" in text and "command" in text)
         or "not found" in text
     )
 
@@ -170,29 +170,38 @@ def _installed_version(home: Path) -> str | None:
 
 
 def _load_check_labels() -> list[str]:
-    """Load `checks.labels()` through a package shim.
+    """Read the literal labels from ``checks.py``'s ``_CHECKS`` declaration.
 
-    ``checks.py`` uses ``from . import constants``, so importing it as a
-    top-level module fails outside the package. Copy the three plugin modules
-    into a temporary package and import them there; no Hermes install or
-    network is involved.
+    The dogfood script may run under a different Python environment than the
+    installed Hermes (which owns PyYAML). Parsing the AST keeps scope discovery
+    standard-library-only and fails explicitly if the declaration changes
+    shape.
     """
-    import tempfile
+    tree = ast.parse((REPO / "checks.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "_CHECKS" for t in node.targets):
+            continue
+        if not isinstance(node.value, ast.List):
+            raise RuntimeError("_CHECKS is not a list literal")
+        labels: list[str] = []
+        for elt in node.value.elts:
+            if not isinstance(elt, ast.Tuple) or len(elt.elts) != 2:
+                raise RuntimeError("_CHECKS entry is not a (label, check) pair")
+            label = elt.elts[0]
+            if not isinstance(label, ast.Constant) or not isinstance(label.value, str):
+                raise RuntimeError("_CHECKS label is not a string literal")
+            labels.append(label.value)
+        return labels
+    raise RuntimeError("_CHECKS declaration not found")
 
-    with tempfile.TemporaryDirectory() as td:
-        pkg = Path(td) / "hermes_guide"
-        pkg.mkdir()
-        for name in ("__init__.py", "checks.py", "constants.py"):
-            shutil.copy(REPO / name, pkg / name)
-        sys.path.insert(0, td)
-        try:
-            import hermes_guide.checks as checks  # noqa: E402
-            return list(checks.labels())
-        finally:
-            sys.path.remove(td)
 
-
-def _valid_guide_document(text: str, scope: str | None = None) -> list[str]:
+def _valid_guide_document(
+    text: str,
+    scope: str | None = None,
+    expected_scopes: list[str] | None = None,
+) -> list[str]:
     """Validate the locked `hermes guide --json` document contract."""
     try:
         doc = json.loads(text)
@@ -211,13 +220,24 @@ def _valid_guide_document(text: str, scope: str | None = None) -> list[str]:
     checks = doc.get("checks")
     if not isinstance(checks, dict) or not checks:
         return ["checks is not a non-empty object"]
+    if expected_scopes is not None and set(checks) != set(expected_scopes):
+        return [
+            f"checks keys are {sorted(checks)!r}, expected {sorted(expected_scopes)!r}"
+        ]
+    valid_statuses = {"healthy", "informational", "broken", "unknown"}
+    check_statuses: list[str] = []
     for label, envelope in checks.items():
         if not isinstance(label, str) or not isinstance(envelope, dict):
             return [f"checks[{label!r}] is not an envelope object"]
-        if not isinstance(envelope.get("status"), str) or not isinstance(
-            envelope.get("reason"), str
-        ):
-            return [f"checks[{label!r}] lacks status/reason strings"]
+        status = envelope.get("status")
+        if status not in valid_statuses:
+            return [f"checks[{label!r}] has invalid status {status!r}"]
+        if not isinstance(envelope.get("reason"), str):
+            return [f"checks[{label!r}] lacks a reason string"]
+        check_statuses.append(status)
+    derived = "broken" if any(s in {"broken", "unknown"} for s in check_statuses) else "healthy"
+    if doc.get("status") != derived:
+        return [f"status is {doc.get('status')!r}, expected {derived!r}"]
     return []
 
 
@@ -265,7 +285,8 @@ def _release_dogfood(args: argparse.Namespace) -> int:
     failures: list[str] = []
     for scope, command in commands:
         rc, stdout, stderr = _run_hermes(command, timeout=args.timeout, env=env)
-        errors = _valid_guide_document(stdout, scope)
+        expected_scopes = scopes if scope is None else [scope]
+        errors = _valid_guide_document(stdout, scope, expected_scopes)
         if rc not in (0, 1):
             errors.append(f"exit {rc}")
         if stderr.strip():
@@ -368,13 +389,19 @@ def _selftest() -> int:
             "dashboard": {"status": "healthy", "reason": "ok", "detail": None}
         },
     }
-    if _valid_guide_document(json.dumps(valid), "dashboard"):
+    if _valid_guide_document(json.dumps(valid), "dashboard", ["dashboard"]):
         failures.append("valid guide document rejected")
     bad = dict(valid)
     bad["checks"] = {"dashboard": "not-an-envelope"}
-    if not _valid_guide_document(json.dumps(bad), "dashboard"):
+    if not _valid_guide_document(json.dumps(bad), "dashboard", ["dashboard"]):
         failures.append("malformed envelope accepted")
-    if not _valid_guide_document("not json", "dashboard"):
+    bad_status = dict(valid)
+    bad_status["checks"] = {
+        "dashboard": {"status": "banana", "reason": "ok", "detail": None}
+    }
+    if not _valid_guide_document(json.dumps(bad_status), "dashboard", ["dashboard"]):
+        failures.append("invalid check status accepted")
+    if not _valid_guide_document("not json", "dashboard", ["dashboard"]):
         failures.append("non-JSON document accepted")
 
     if failures:
