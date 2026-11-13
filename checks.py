@@ -359,7 +359,11 @@ def frontmatter(path):
     if len(parts) < 3:
         return {}
     try:
-        fm = yaml.safe_load(parts[1])
+        # PyYAML's SafeLoader is pure Python; the C loader is materially
+        # faster across a large skills tree and is still a safe loader.
+        fm = yaml.load(  # nosec B506 - CSafeLoader/SafeLoader are safe loaders
+            parts[1], Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+        )
     except Exception:
         # Mirror Hermes' parse_frontmatter fallback: recover key:value lines
         # from malformed YAML so a recoverable `name:` is not lost.
