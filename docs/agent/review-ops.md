@@ -3,6 +3,23 @@
 Review and merge lifecycle for pull requests. Maintenance and runtime rules are
 in [deep-ops.md](deep-ops.md).
 
+## Merge stop rule
+
+Before merging, both facts must be true on the current head:
+
+- Qodo has a review verdict on the current head with no open findings.
+- CodeRabbit has a **review record** on the current head with a clean verdict.
+
+`mergeStateStatus: CLEAN` does not satisfy either fact. A CodeRabbit check with
+`conclusion: skipped` is **not a review**; treat it as "no review on this head"
+and run the trigger gate.
+
+## Release-only exception
+
+A release PR that changes only the five version sites and `CHANGELOG.md` is
+exempt from the CodeRabbit second review; Qodo and CI are still required. Any
+code, test, skill, tooling, or docs change is not release-only.
+
 ## Review sequence
 
 A bot finding is a claim, not an instruction. Verify it against the live code and
@@ -117,6 +134,7 @@ way to decide "should I trigger?". Run it before posting any trigger command.
    | `/agentic_review` | trigger ONLY if the PR-wide history shows Qodo has never reviewed (silent) AND no trigger is already pending | do not trigger | do not trigger — head already reviewed |
    | `@coderabbitai full review` | trigger ONCE, only if the PR-wide history shows no full review yet AND Qodo's findings are resolved | do not trigger | do not trigger |
    | `@coderabbitai review` (incremental) | trigger once if a full review completed on an earlier head and no request for this head is in flight | do not trigger | trigger after fixes land a NEW head; proceed when its check completes clean |
+   | CodeRabbit check `skipped` | **No review** — trigger the full or incremental pass above; `skipped` is never a clean verdict | — | — |
 
 4. Spam rules (the reason PR #429 collected five `/agentic_review` posts on one
    head):
