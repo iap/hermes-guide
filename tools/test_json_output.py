@@ -225,6 +225,7 @@ def main() -> int:
         "dict": ({"lock": lock}, {"lock": str(lock)}),
         "nested": ({"a": {"b": home}}, {"a": {"b": str(home)}}),
         "list": ([home], [str(home)]),
+        "tuple": ((home, lock), [str(home), str(lock)]),
     }
     for name, (value, expected) in shapes.items():
         got = plugin._jsonify_detail(value)

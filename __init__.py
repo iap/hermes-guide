@@ -97,13 +97,15 @@ def _jsonify_detail(value):
 
     The envelope contract prefers a string or a list of strings, but checks
     also emit the paths they inspected (`Path`) and YAML can hand back a
-    `datetime.date`. Coerce every non-JSON-native leaf to the text the text
-    renderer would print (`str()`), recurse through lists and dicts, leave
-    native values and `None` untouched, and mutate nothing in place.
+    `datetime.date`. Coerce every non-JSON-native leaf to `str()`, keep lists
+    and tuples as arrays and dicts as objects (recursively), leave native
+    values and `None` untouched, and mutate nothing in place. Container
+    details therefore keep their JSON shape rather than the text renderer's
+    repr; no current check emits one.
     """
     if value is None or isinstance(value, _DETAIL_NATIVE):
         return value
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [_jsonify_detail(v) for v in value]
     if isinstance(value, dict):
         return {str(k): _jsonify_detail(v) for k, v in value.items()}
