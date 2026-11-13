@@ -215,8 +215,8 @@ def main() -> int:
 
     # 3c. Non-list `detail`: dashboard/update emit a bare Path (home, lock,
     # checkout) and YAML can emit a bare date. The guard used to return any
-    # non-list unchanged, so these aborted `--json` (issue #479). Coerce to
-    # the text renderer's form, recursively, without mutating the caller.
+    # non-list unchanged, so these aborted `--json` (issue #479). Coerce leaves
+    # to `str()`, recursively, keeping container shape and the caller's value.
     home = Path("/tmp/hermes")
     lock = Path("/tmp/lock.json")
     shapes = {
