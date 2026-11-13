@@ -65,6 +65,10 @@ a merged PR claiming pending work misleads the next reader. -->
 - [ ] `.github/upstream-drift.baseline` bumped if this absorbs upstream drift
 - [ ] Anything I could NOT verify is listed above, not omitted
 
+## Review gate
+- [ ] Qodo reviewed the current head; no open findings.
+- [ ] CodeRabbit reviewed the current head; clean — or this is a release-only PR.
+
 ## Notes for reviewers
 <!-- Anything a reviewer should check by hand: judgement calls, facts that depend
 on a specific upstream revision, or a check you expect to behave differently on
