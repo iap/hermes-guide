@@ -95,21 +95,21 @@ _DETAIL_NATIVE = (str, int, float, bool)
 def _jsonify_detail(value):
     """Return a `detail` value that survives `json.dumps`, deterministically.
 
-    The envelope contract makes this a no-op for the shapes checks actually
-    emit (a string, or a list of strings). The one real escape hatch comes
-    from YAML itself: an unquoted date-like `mcp_servers:` key parses as
-    `datetime.date`, so a server name can reach `detail` as a non-JSON-native
-    scalar — the MCP shape check prints parsed names verbatim. Coerce exactly
-    those leaf scalars to the text they would get in the text renderer
-    (`str()`), leave JSON-native values untouched, and mutate nothing in
-    place.
+    The envelope contract prefers a string or a list of strings, but checks
+    also emit the paths they inspected (`Path`) and YAML can hand back a
+    `datetime.date`. Coerce every non-JSON-native leaf to `str()`, keep lists
+    and tuples as arrays and dicts as objects (recursively), leave native
+    values and `None` untouched, and mutate nothing in place. Container
+    details therefore keep their JSON shape rather than the text renderer's
+    repr; no current check emits one.
     """
-    if not isinstance(value, list):
+    if value is None or isinstance(value, _DETAIL_NATIVE):
         return value
-    return [
-        v if v is None or isinstance(v, _DETAIL_NATIVE) else str(v)
-        for v in value
-    ]
+    if isinstance(value, (list, tuple)):
+        return [_jsonify_detail(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _jsonify_detail(v) for k, v in value.items()}
+    return str(value)
 
 
 def _build_json_payload(results, scope, fast):

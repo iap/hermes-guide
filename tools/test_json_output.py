@@ -213,6 +213,57 @@ def main() -> int:
     if date_case["mcp"]["detail"][0] != datetime.date(2026, 10, 5):
         failures.append("caller's envelope was mutated in place")
 
+    # 3c. Non-list `detail`: dashboard/update emit a bare Path (home, lock,
+    # checkout) and YAML can emit a bare date. The guard used to return any
+    # non-list unchanged, so these aborted `--json` (issue #479). Coerce leaves
+    # to `str()`, recursively, keeping container shape and the caller's value.
+    home = Path("/tmp/hermes")
+    lock = Path("/tmp/lock.json")
+    shapes = {
+        "path": (home, str(home)),
+        "date": (datetime.date(2026, 11, 12), "2026-11-12"),
+        "dict": ({"lock": lock}, {"lock": str(lock)}),
+        "nested": ({"a": {"b": home}}, {"a": {"b": str(home)}}),
+        "list": ([home], [str(home)]),
+        "tuple": ((home, lock), [str(home), str(lock)]),
+    }
+    for name, (value, expected) in shapes.items():
+        got = plugin._jsonify_detail(value)
+        if got != expected:
+            failures.append(f"_jsonify_detail({name}) = {got!r}, expected {expected!r}")
+        try:
+            json.dumps(got)
+        except TypeError as exc:
+            failures.append(f"_jsonify_detail({name}) not serializable: {exc}")
+    original = {"lock": lock}
+    plugin._jsonify_detail(original)
+    if not isinstance(original["lock"], Path):
+        failures.append("_jsonify_detail mutated the caller's dict")
+
+    # 3d. Scope-independent: every label must survive a non-native detail.
+    for label in checks_mod.labels():
+        envelope = {
+            label: {"status": "unknown", "reason": "probe", "detail": Path("/tmp/x")},
+        }
+        try:
+            json.dumps(
+                plugin._build_json_payload(envelope, label, False),
+                ensure_ascii=False,
+            )
+        except TypeError as exc:
+            failures.append(f"label {label}: non-native detail not serializable: {exc}")
+
+    # 3e. End-to-end: a bare Path detail must not abort the document.
+    _run_expect(
+        plugin,
+        checks_mod,
+        {"dashboard": {"status": "unknown", "reason": "no checkout",
+                       "detail": Path("/tmp/hermes")}},
+        1,
+        "bare Path detail -> exit 1, document survives",
+        scope="dashboard",
+    )
+
     # 4. Notice suppression + no bonus subprocesses: _version_check must not
     # fire in JSON mode; the module owns exactly one subprocess surface
     # (its git ls-remote), so count that call directly.
@@ -270,7 +321,7 @@ def main() -> int:
             print(f"FAIL: {f}", file=sys.stderr)
         return 1
     print("OK: --json contract holds (key order, passthrough, derivation, "
-          "exit 0/1/2, notice suppressed, no extra subprocess)")
+          "detail coercion, exit 0/1/2, notice suppressed, no extra subprocess)")
     return 0
 
 
