@@ -396,6 +396,12 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    and commits since the last tag. It must run here — after the new version and
    section exist — not before the bump, where it would only re-verify the
    previous release.
+   Before tagging, run the release dogfood gate against a candidate install:
+   `python tools/check_skill_dogfood.py --release --require-live --report
+   reports/dogfood-<version>.md`. It checks that the installed candidate matches
+   the repo version, runs every scope through `hermes guide --fast --json`, and
+   writes the report. A failing report blocks the tag.
+
    Advisory only — the tag stays a human decision. Before tagging, audit the one
    drift direction the guard cannot see: compare
    `git ls-tree -d --name-only <upstream-head>:plugins/` against
