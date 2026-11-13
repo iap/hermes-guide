@@ -184,6 +184,23 @@ def main(argv: list[str]) -> int:
         elif "config_backends" not in joined or "selection key" not in joined:
             failures.append(f"bare config_backends not noted correctly: {result!r}")
 
+        # (6b1a) the fallback path also notes a bare skipped name.
+        _write(config, "plugins:\n  enabled: [config_backends]\n  disabled: []\n")
+        saved_upstream = checks._upstream_manifests
+        checks._upstream_manifests = lambda home: None
+        checks._store().clear()
+        try:
+            result = checks.check_plugins()
+        finally:
+            checks._upstream_manifests = saved_upstream
+        joined = " | ".join(str(d) for d in (result.get("detail") or []))
+        if (
+            result.get("status") == "broken"
+            or "config_backends" not in joined
+            or "selection key" not in joined
+        ):
+            failures.append(f"fallback bare config_backends not noted: {result!r}")
+
         # (6b1b) delegation remains outside the skip set, so a bare entry is
         # still reported as an invalid plugins.enabled key.
         _write(config, "plugins:\n  enabled: [delegation]\n  disabled: []\n")
@@ -281,7 +298,7 @@ def main(argv: list[str]) -> int:
         joined = " | ".join(str(d) for d in (result.get("detail") or []))
         if (
             result.get("status") != "broken"
-            or "config_backends" not in joined
+            or "plugins/config_backends/" not in joined
             or "selection key" not in joined
         ):
             failures.append(
