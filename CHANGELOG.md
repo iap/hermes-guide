@@ -2,6 +2,12 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.7 (2026-11-13)
+
+### Bug Fixes
+
+- **json**: serialize Path/date details in --json ([#481](https://github.com/iap/hermes-guide/pull/481))
+
 ## v0.9.6 (2026-11-13)
 
 ### Bug Fixes
