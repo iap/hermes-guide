@@ -16,6 +16,10 @@ Guards:
    from the bundled-directory scan, so a bundled plugin inside a subcategory
    dir (which resolves by its own provider key, not ``plugins.enabled``) is
    never collected as a discoverable id.
+4. Regression: the upstream ``config_backends`` provider dir remains in the
+   pinned set; it is never discovered through the general plugin loader.
+   ``delegation`` is intentionally not pinned because upstream scans it as a
+   backend manifest.
 
 Run: python3 tools/test_plugin_skip_source.py
 """
@@ -53,6 +57,15 @@ def main(argv: list[str]) -> int:
 
     subcategories = set(constants.PLUGIN_SUBCATEGORY_DIRS)
     checks_source = (REPO / "checks.py").read_text(encoding="utf-8")
+
+    # (4) provider dirs added upstream after the original pin must stay listed
+    required_provider_dirs = {"config_backends"}
+    missing = sorted(required_provider_dirs - subcategories)
+    if missing:
+        failures.append(
+            "PLUGIN_SUBCATEGORY_DIRS is missing upstream provider dir(s): "
+            f"{missing}"
+        )
 
     # (1) no subcategory name may be hardcoded in checks.py
     literals = _string_literals(checks_source)

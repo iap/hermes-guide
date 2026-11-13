@@ -1787,7 +1787,12 @@ def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_
             # A bare sub-category name is not a plugin id — those dirs use
             # their own selection keys. But a *user* manifest may legitimately
             # carry that name (e.g. a plugin called `delegation`), so only skip
-            # when no user manifest defines it.
+            # when no user manifest defines it. Note the correct activation
+            # path instead of letting the entry look healthy.
+            notes.append(
+                f"`{name}` is a sub-category directory; it activates via its "
+                "own selection key, not plugins.enabled"
+            )
             continue
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
@@ -1982,22 +1987,38 @@ def check_plugins(manifests=None):
 
     broken = []
     bundled_only = []
+    notes = []
+    skipped_ids = None  # scanned on first unresolved id, not on every run
     for name in sorted(enabled):
         if name in skip and name not in user_known:
             # A bare sub-category name is not a plugin id. A user manifest with
             # that name is a real plugin and must still be judged.
+            notes.append(
+                f"`{name}` is a sub-category directory; it activates via its "
+                "own selection key, not plugins.enabled"
+            )
             continue
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
         if name not in known:
-            broken.append(f"`{name}` is enabled but no matching plugin manifest was found")
+            if skipped_ids is None:
+                skipped_ids = _skipped_category_ids(_bundled_plugins_dir())
+            category = skipped_ids.get(name)
+            if category:
+                broken.append(
+                    f"`{name}` is a plugin under `plugins/{category}/`; it activates "
+                    "via that category's selection key, not plugins.enabled"
+                )
+            else:
+                broken.append(
+                    f"`{name}` is enabled but no matching plugin manifest was found"
+                )
         elif name not in user_known:
             # Resolves via the bundled dir only: absent from the user plugins
             # dir by design. Named explicitly so neither users nor models
             # misdiagnose it as missing.
             bundled_only.append(name)
 
-    notes = []
     if os.path.isdir(plugins_root):
         for entry in sorted(os.listdir(plugins_root)):
             if entry.startswith(".") or entry == "__pycache__":
