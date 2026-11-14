@@ -141,6 +141,30 @@ def _guide_unavailable(rc: int, stderr: str) -> bool:
     )
 
 
+_FATAL_STDERR_RE = re.compile(
+    r"(^Traceback \(most recent call last\):|(?:^|\s)[\w.]*(?:Error|Exception):|^ERROR(?:\s|:)|^FAIL:)",
+    re.MULTILINE,
+)
+
+
+def _classify_stderr(text: str) -> tuple[list[str], list[str]]:
+    """Split stderr into fatal errors and benign warnings.
+
+    Hermes emits actionable environment warnings (for example "install out of
+    sync — run hermes pm install") on every command. Those belong in the report
+    but do not invalidate a valid JSON document. Tracebacks and Python/CLI
+    errors still fail the gate.
+    """
+    fatal: list[str] = []
+    warnings: list[str] = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        (fatal if _FATAL_STDERR_RE.search(line) else warnings).append(line)
+    return fatal, warnings
+
+
 def _check_guide_json() -> list[str]:
     """Run the plugin's live machine-readable command surface."""
     rc, stdout, stderr = _run_hermes(["guide", "--fast", "--json"])
@@ -151,8 +175,11 @@ def _check_guide_json() -> list[str]:
     errors = _valid_guide_document(stdout)
     if errors:
         return [f"FAIL: guide --fast --json {error}" for error in errors]
-    if stderr.strip():
-        return [f"FAIL: guide --fast --json wrote stderr: {stderr.strip()}"]
+    fatal, warnings = _classify_stderr(stderr)
+    if fatal:
+        return [f"FAIL: guide --fast --json wrote stderr: {'; '.join(fatal)}"]
+    if warnings:
+        return [f"OK: guide --fast --json (warnings: {'; '.join(warnings)[:200]})"]
     return ["OK: guide --fast --json"]
 
 
@@ -241,6 +268,15 @@ def _valid_guide_document(
     return []
 
 
+def _warning_lines(rows: list[tuple[str, int, str, int, list[str], str]]) -> list[str]:
+    """Render per-scope warning text for the Markdown report."""
+    return [
+        f"- `{scope}`: {warning}"
+        for scope, _rc, _status, _count, warnings, _result in rows
+        for warning in warnings
+    ]
+
+
 def _release_dogfood(args: argparse.Namespace) -> int:
     """Run the pre-tag dogfood gate against the installed candidate."""
     home = Path(
@@ -281,7 +317,7 @@ def _release_dogfood(args: argparse.Namespace) -> int:
     env["HERMES_HOME"] = str(home)
     env["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
 
-    rows: list[tuple[str, int, str, int, str]] = []
+    rows: list[tuple[str, int, str, int, list[str], str]] = []
     failures: list[str] = []
     for scope, command in commands:
         rc, stdout, stderr = _run_hermes(command, timeout=args.timeout, env=env)
@@ -289,8 +325,9 @@ def _release_dogfood(args: argparse.Namespace) -> int:
         errors = _valid_guide_document(stdout, scope, expected_scopes)
         if rc not in (0, 1):
             errors.append(f"exit {rc}")
-        if stderr.strip():
-            errors.append(f"stderr: {stderr.strip()[:120]}")
+        fatal, warnings = _classify_stderr(stderr)
+        if fatal:
+            errors.append(f"stderr: {'; '.join(fatal)[:120]}")
         status = "-"
         count = 0
         if not errors:
@@ -301,7 +338,7 @@ def _release_dogfood(args: argparse.Namespace) -> int:
             if rc != expected_exit:
                 errors.append(f"exit {rc} contradicts status {status}")
         result = "PASS" if not errors else "FAIL: " + "; ".join(errors)
-        rows.append((scope or "(all)", rc, status, count, result))
+        rows.append((scope or "(all)", rc, status, count, warnings, result))
         if errors:
             failures.append(f"{scope or '(all)'}: {result}")
 
@@ -326,17 +363,24 @@ def _release_dogfood(args: argparse.Namespace) -> int:
         f"- HERMES_HOME: {home}",
         f"- Installed plugin: {installed_version}",
         "",
-        "| Scope | Exit | Status | Checks | Result |",
-        "|---|---|---|---|---|",
+        "| Scope | Exit | Status | Checks | Warnings | Result |",
+        "|---|---|---|---|---|---|",
     ]
     lines.extend(
-        f"| `{scope}` | {rc} | {status} | {count} | {result} |"
-        for scope, rc, status, count, result in rows
+        f"| `{scope}` | {rc} | {status} | {count} | "
+        f"{len(warnings)} | {result} |"
+        for scope, rc, status, count, warnings, result in rows
     )
+    warning_lines = _warning_lines(rows)
+    if warning_lines:
+        lines.extend(["", "## Warnings", "", *warning_lines])
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    for scope, rc, status, count, result in rows:
-        print(f"{result:8} {scope:12} exit={rc} status={status} checks={count}")
+    for scope, rc, status, count, warnings, result in rows:
+        print(
+            f"{result:8} {scope:12} exit={rc} status={status} "
+            f"checks={count} warnings={len(warnings)}"
+        )
     print(f"Report: {report}")
     if failures:
         print(f"{len(failures)} dogfood failure(s)", file=sys.stderr)
@@ -361,12 +405,35 @@ def _selftest() -> int:
     if not _COMMANDS:
         failures.append("_COMMANDS is empty")
 
-    # Test 3: all commands are read-only (no install/update/write)
+    # Test 3a: stderr warnings are recorded but not fatal; tracebacks are.
+    fatal, warnings = _classify_stderr(
+        "⚠ install out of sync — run `hermes pm install`\n"
+        "dependency lock still held after 10.0s; continuing without it"
+    )
+    if fatal or len(warnings) != 2:
+        failures.append(f"warning classifier wrong: fatal={fatal!r} warnings={warnings!r}")
+    for fatal_line in (
+        "Traceback (most recent call last):",
+        "ValueError: bad value",
+        "ERROR tui_gateway.ws: ws receive failed peer=127.0.0.1:61582",
+    ):
+        fatal, _ = _classify_stderr(fatal_line)
+        if not fatal:
+            failures.append(f"fatal classifier missed: {fatal_line!r}")
+
+    # Test 3b: all commands are read-only (no install/update/write)
     for cmd, _ in _COMMANDS:
         tokens = cmd.split()
         for token in tokens:
             if token in ("install", "update", "uninstall", "write", "edit"):
                 failures.append(f"mutating token in command: {cmd}")
+
+    # Test 3c: report rendering keeps warning text, not just the count.
+    warning_rows = [
+        ("skills", 0, "healthy", 1, ["dependency lock still held"], "PASS")
+    ]
+    if "dependency lock still held" not in "\n".join(_warning_lines(warning_rows)):
+        failures.append("report warning text was dropped")
 
     # Test 4: release scope enumeration imports the package correctly.
     try:
