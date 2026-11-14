@@ -142,7 +142,7 @@ def _guide_unavailable(rc: int, stderr: str) -> bool:
 
 
 _FATAL_STDERR_RE = re.compile(
-    r"(^Traceback \(most recent call last\):|(?:^|\s)[\w.]*(?:Error|Exception):|^ERROR:|^FAIL:)",
+    r"(^Traceback \(most recent call last\):|(?:^|\s)[\w.]*(?:Error|Exception):|^ERROR(?:\s|:)|^FAIL:)",
     re.MULTILINE,
 )
 
@@ -412,7 +412,11 @@ def _selftest() -> int:
     )
     if fatal or len(warnings) != 2:
         failures.append(f"warning classifier wrong: fatal={fatal!r} warnings={warnings!r}")
-    for fatal_line in ("Traceback (most recent call last):", "ValueError: bad value"):
+    for fatal_line in (
+        "Traceback (most recent call last):",
+        "ValueError: bad value",
+        "ERROR tui_gateway.ws: ws receive failed peer=127.0.0.1:61582",
+    ):
         fatal, _ = _classify_stderr(fatal_line)
         if not fatal:
             failures.append(f"fatal classifier missed: {fatal_line!r}")
