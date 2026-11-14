@@ -175,9 +175,11 @@ def _check_guide_json() -> list[str]:
     errors = _valid_guide_document(stdout)
     if errors:
         return [f"FAIL: guide --fast --json {error}" for error in errors]
-    fatal, _warnings = _classify_stderr(stderr)
+    fatal, warnings = _classify_stderr(stderr)
     if fatal:
         return [f"FAIL: guide --fast --json wrote stderr: {'; '.join(fatal)}"]
+    if warnings:
+        return [f"OK: guide --fast --json (warnings: {'; '.join(warnings)[:200]})"]
     return ["OK: guide --fast --json"]
 
 
@@ -360,6 +362,13 @@ def _release_dogfood(args: argparse.Namespace) -> int:
         f"{len(warnings)} | {result} |"
         for scope, rc, status, count, warnings, result in rows
     )
+    warning_lines = [
+        f"- `{scope}`: {warning}"
+        for scope, _rc, _status, _count, warnings, _result in rows
+        for warning in warnings
+    ]
+    if warning_lines:
+        lines.extend(["", "## Warnings", "", *warning_lines])
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     for scope, rc, status, count, warnings, result in rows:
