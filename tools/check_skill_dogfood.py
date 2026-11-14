@@ -268,6 +268,15 @@ def _valid_guide_document(
     return []
 
 
+def _warning_lines(rows: list[tuple[str, int, str, int, list[str], str]]) -> list[str]:
+    """Render per-scope warning text for the Markdown report."""
+    return [
+        f"- `{scope}`: {warning}"
+        for scope, _rc, _status, _count, warnings, _result in rows
+        for warning in warnings
+    ]
+
+
 def _release_dogfood(args: argparse.Namespace) -> int:
     """Run the pre-tag dogfood gate against the installed candidate."""
     home = Path(
@@ -362,11 +371,7 @@ def _release_dogfood(args: argparse.Namespace) -> int:
         f"{len(warnings)} | {result} |"
         for scope, rc, status, count, warnings, result in rows
     )
-    warning_lines = [
-        f"- `{scope}`: {warning}"
-        for scope, _rc, _status, _count, warnings, _result in rows
-        for warning in warnings
-    ]
+    warning_lines = _warning_lines(rows)
     if warning_lines:
         lines.extend(["", "## Warnings", "", *warning_lines])
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -418,6 +423,13 @@ def _selftest() -> int:
         for token in tokens:
             if token in ("install", "update", "uninstall", "write", "edit"):
                 failures.append(f"mutating token in command: {cmd}")
+
+    # Test 3c: report rendering keeps warning text, not just the count.
+    warning_rows = [
+        ("skills", 0, "healthy", 1, ["dependency lock still held"], "PASS")
+    ]
+    if "dependency lock still held" not in "\n".join(_warning_lines(warning_rows)):
+        failures.append("report warning text was dropped")
 
     # Test 4: release scope enumeration imports the package correctly.
     try:
