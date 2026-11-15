@@ -2,6 +2,35 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.8 (2026-11-16)
+
+### Features
+
+- **dogfood**: add release JSON gate ([#483](https://github.com/iap/hermes-guide/pull/483))
+
+### Bug Fixes
+
+- **dogfood**: treat ERROR-level logs as fatal ([#487](https://github.com/iap/hermes-guide/pull/487))
+- **dogfood**: preserve warning messages
+- **dogfood**: separate warnings from fatal stderr
+- **checks**: silence safe-loader bandit false positive
+- **dogfood**: harden JSON contract validation
+- **dogfood**: load scopes and bind HERMES_HOME
+- **dogfood**: skip unregistered guide command
+
+### Performance
+
+- **checks**: use PyYAML C loader for frontmatter ([#485](https://github.com/iap/hermes-guide/pull/485))
+
+### Documentation
+
+- **review**: align release-only exception ([#484](https://github.com/iap/hermes-guide/pull/484))
+- **review**: add merge stop rule
+
+### Tests
+
+- **dogfood**: assert report warning text
+
 ## v0.9.7 (2026-11-13)
 
 ### Bug Fixes
