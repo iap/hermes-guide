@@ -41,10 +41,12 @@ def _assert_finding(
     result: dict,
     expected_id: str,
     expected_status: str,
+    reason_needle: str,
     detail_needle: str,
 ) -> None:
     actual_id = result.get("id")
     actual_status = result.get("status")
+    reason = str(result.get("reason") or "")
     detail = " ".join(
         str(item) for item in (result.get("detail") or [])
     ) if isinstance(result.get("detail"), list) else str(result.get("detail") or "")
@@ -53,6 +55,10 @@ def _assert_finding(
     if actual_status != expected_status:
         failures.append(
             f"{name}: status {actual_status!r}, expected {expected_status!r}: {result!r}"
+        )
+    if reason_needle not in reason:
+        failures.append(
+            f"{name}: reason missing {reason_needle!r}: {reason!r}"
         )
     if detail_needle not in detail:
         failures.append(
@@ -82,6 +88,7 @@ def main() -> int:
             checks.check_config_parses(),
             "CONFIG_MISSING",
             "broken",
+            "config file missing",
             str(home / "config.yaml"),
         )
 
@@ -96,6 +103,7 @@ def main() -> int:
             checks.check_config_parses(),
             "CONFIG_UNPARSEABLE",
             "broken",
+            "does not parse",
             str(home / "config.yaml"),
         )
 
@@ -113,6 +121,7 @@ def main() -> int:
             checks.check_mcp_servers_shape(),
             "MCP_SERVER_MALFORMED",
             "broken",
+            "MCP issue",
             "mcp_servers.bad",
         )
 
@@ -131,7 +140,8 @@ def main() -> int:
             checks.check_skills(),
             "SKILLS_ISSUES",
             "broken",
-            "bad",
+            "skill issue",
+            str(home / "skills" / "bad"),
         )
 
         # 5. Malformed update-lock record -> UPDATE_LOCK_MALFORMED / unknown.
@@ -146,6 +156,7 @@ def main() -> int:
             checks.check_update_lock(),
             "UPDATE_LOCK_MALFORMED",
             "unknown",
+            "unreadable update lock",
             str(home / "hermes-agent" / ".hermes-update.lock"),
         )
 
@@ -160,23 +171,50 @@ def main() -> int:
             checks.check_plugins(manifests=[]),
             "PLUGINS_CONFIG_SHAPE",
             "broken",
+            "must be a mapping",
             str(home / "config.yaml"),
         )
 
-        # 7. Clean fixture: no false positives for config + MCP.
+        # 7. Clean fixture: no false positives across every sampled scope.
         home = Path(td) / "clean"
         home.mkdir()
+        (home / "hermes-agent").mkdir()
         _write(
             home / "config.yaml",
+            "plugins:\n  enabled: []\n  disabled: []\n"
             "mcp_servers:\n  filesystem:\n    command: npx\n",
         )
+        _write(
+            home / "skills" / "good" / "SKILL.md",
+            "---\nname: good\ndescription: a valid skill\n---\n",
+        )
         _reset(checks, home)
+        # The guide-skill adoption nudge belongs to a different contract; it
+        # must not mask a clean skill-tree result in this scope test.
+        checks._plugin_skill_names = lambda: set()
+        checks._store().clear()
+
         config = checks.check_config_parses()
         mcp = checks.check_mcp_servers_shape()
-        if config.get("status") != "healthy":
-            failures.append(f"clean config: {config!r}")
-        if mcp.get("status") != "healthy":
-            failures.append(f"clean mcp: {mcp!r}")
+        skills = checks.check_skills()
+        update = checks.check_update_lock()
+        plugins = checks.check_plugins(manifests=[])
+
+        for name, result, reason_needle in (
+            ("clean config", config, "config.yaml parses"),
+            ("clean mcp", mcp, "MCP servers well-formed"),
+            ("clean skills", skills, "valid frontmatter"),
+            ("clean update lock", update, "no update lock present"),
+            ("clean plugins", plugins, "plugins consistent"),
+        ):
+            if result.get("status") != "healthy":
+                failures.append(f"{name}: expected healthy: {result!r}")
+            if reason_needle not in str(result.get("reason") or ""):
+                failures.append(
+                    f"{name}: reason missing {reason_needle!r}: {result.get('reason')!r}"
+                )
+        if "filesystem" not in str(mcp.get("detail") or ""):
+            failures.append(f"clean mcp: detail missing filesystem: {mcp!r}")
 
     if failures:
         print("Diagnostic truth FAILED:", file=sys.stderr)
