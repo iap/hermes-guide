@@ -65,7 +65,7 @@ def main() -> int:
     if r.returncode not in (0, 1):
         failures.append(f"bare exited {r.returncode}: {(r.stdout + r.stderr)[:300]}")
     if "gate(s) failed" in r.stderr and "gen_changelog" not in r.stderr:
-        failures.append(f"unexpected gate failure: {combined[:300]}")
+        failures.append(f"unexpected gate failure: {(r.stdout + r.stderr)[:300]}")
 
     if failures:
         for f in failures:

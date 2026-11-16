@@ -266,9 +266,30 @@ def _version_check() -> str | None:
             return (int(parts[0]), int(parts[1]), int(parts[2]))
 
         if parse_ver(latest) > parse_ver(__version__):
+            # Pinned installs (the common case for `--ref` installs and
+            # catalog pins) cannot move via `hermes plugins update`; tell
+            # them the command that actually works instead of one that
+            # refuses.
+            try:
+                meta_path = plugin_dir.parent / ".install-metadata.json"
+                pinned = False
+                if meta_path.is_file():
+                    import json as _json
+
+                    _meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+                    pinned = bool((_meta.get("hermes-guide") or {}).get("pinned"))
+            except Exception:
+                pinned = False
+            if pinned:
+                cmd = (
+                    "hermes plugins install https://github.com/iap/hermes-guide.git "
+                    "--force --ref <40-character commit SHA>"
+                )
+            else:
+                cmd = "hermes plugins update hermes-guide"
             return (
                 f"hermes-guide update available: {__version__} → {latest}. "
-                "Run: hermes plugins update hermes-guide"
+                f"Run: {cmd}"
             )
     except Exception:
         pass  # nosec B110 - version check is best-effort; never fail a session
