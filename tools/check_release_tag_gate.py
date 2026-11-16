@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import unittest.mock
 from release_gate_shared import (
     plugin_version,
     duplicate_version,
@@ -110,7 +111,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _selftest() -> int:
-    import unittest.mock as mock
 
     bad = 0
 
