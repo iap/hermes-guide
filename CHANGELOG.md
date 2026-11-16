@@ -2,6 +2,48 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.8 (2026-11-16)
+
+### Features
+
+- add 'hermes guide --update' read-only update report ([#496](https://github.com/iap/hermes-guide/pull/496))
+- **dogfood**: add release JSON gate
+
+### Bug Fixes
+
+- Qodo/CodeRabbit follow-ups for dashboard checkout and gate test ([#497](https://github.com/iap/hermes-guide/pull/497))
+- dashboard checkout fallback, lazy detail, and gate/test noise ([#495](https://github.com/iap/hermes-guide/pull/495))
+- **dogfood**: treat ERROR-level logs as fatal
+- **dogfood**: preserve warning messages
+- **dogfood**: separate warnings from fatal stderr
+- **checks**: silence safe-loader bandit false positive
+- **dogfood**: harden JSON contract validation
+- **dogfood**: load scopes and bind HERMES_HOME
+- **dogfood**: skip unregistered guide command
+
+### Performance
+
+- **checks**: use PyYAML C loader for frontmatter
+
+### Documentation
+
+- **review**: align release-only exception
+- **review**: add merge stop rule
+
+### Chores
+
+- Merge pull request #492 from iap/feat/diagnostic-truth-harness
+- Merge pull request #487 from iap/fix/dogfood-warnings
+- Merge pull request #485 from iap/perf/skill-frontmatter-loader
+- Merge pull request #484 from iap/docs/review-gate
+- Merge pull request #483 from iap/feat/release-dogfood
+
+### Tests
+
+- **diagnostic**: assert reasons and full clean surface
+- **diagnostic**: add fixture-driven truth harness
+- **dogfood**: assert report warning text
+
 ## v0.9.7 (2026-11-13)
 
 ### Bug Fixes
