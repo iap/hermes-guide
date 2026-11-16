@@ -143,6 +143,26 @@ def _run_cli(args):
     fast = getattr(args, "fast", False)
     deep = getattr(args, "deep", False)
     json_mode = getattr(args, "json", False)
+    update = getattr(args, "update", False)
+    if update:
+        # On-demand plugin update report (read-only: prints the command,
+        # never executes it). Bypasses the scope machinery so no check
+        # enumeration or generated-doc churn is required.
+        if fast:
+            tok = checks._FAST_MODE.set(True)
+            try:
+                result = checks.check_plugin_update()
+            finally:
+                checks._FAST_MODE.reset(tok)
+        else:
+            result = checks.check_plugin_update()
+        if json_mode:
+            payload = _build_json_payload({"plugin-update": result}, None, fast)
+            print(json.dumps(payload, ensure_ascii=False))
+            sys.exit(0 if payload["status"] == "healthy" else 1)
+        exit_ok, text = _format_result({"plugin-update": result})
+        print(text)
+        sys.exit(0 if exit_ok else 1)
     try:
         call: dict = {"scope": scope}
         if fast:
@@ -199,6 +219,13 @@ def _setup_cli(subparser):
         action="store_true",
         help="run `hermes hooks doctor` for the hooks scope; it executes each "
         "approved shell hook once. Default hooks inspection is in-process",
+    )
+    subparser.add_argument(
+        "--update",
+        action="store_true",
+        help="report whether a newer hermes-guide release is available and "
+        "print the exact update command for this install type (read-only; "
+        "never runs it)",
     )
     subparser.add_argument(
         "--json",

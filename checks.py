@@ -3826,6 +3826,161 @@ _CHECKS = [
     ("gateway", check_gateway_health),
 ]
 
+def check_plugin_update():
+    """Report whether a newer hermes-guide release is available and how to
+    apply it (read-only: prints the command, never runs it).
+
+    Complements `_version_check()` in `__init__.py` (the notice shown after
+    every non-fast run) with an explicit, on-demand surface: install type,
+    current vs. latest version, the exact update command for that install type
+    (pinned installs cannot use `hermes plugins update`), and guide-skill
+    adoption. Never mutates config or the filesystem; `--fast` skips the
+    network probe.
+    """
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    plugins_dir = os.path.dirname(plugin_dir)
+
+    # Current version from the shipped manifest (no import of __init__).
+    current = None
+    try:
+        manifest_path = os.path.join(plugin_dir, "plugin.yaml")
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"^version:\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)", line.strip())
+                if m:
+                    current = m.group(1)
+                    break
+    except Exception:
+        current = None
+
+    # Install type from Hermes' install metadata, plus git-clone detection.
+    meta_path = os.path.join(plugins_dir, ".install-metadata.json")
+    pinned = False
+    source = None
+    if os.path.isfile(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            entry = meta.get("hermes-guide") if isinstance(meta, dict) else None
+            if isinstance(entry, dict):
+                pinned = bool(entry.get("pinned"))
+                source = entry.get("source")
+        except Exception:  # nosec B110
+            pass
+    is_git = os.path.isdir(os.path.join(plugin_dir, ".git")) or os.path.isfile(
+        os.path.join(plugin_dir, ".git")
+    )
+
+    if is_git and pinned:
+        install_type = "pinned git"
+    elif is_git:
+        install_type = "git (unpinned)"
+    elif source:
+        install_type = "catalog"
+    else:
+        install_type = "copied"
+
+    # Latest version via git ls-remote (best effort, never raises).
+    # Skipped under --fast: no subprocess/network on the degraded-host path.
+    # For git installs, probe `origin`; otherwise probe the recorded (or
+    # official) source so copied/catalog installs can also detect releases.
+    latest = None
+    if not _FAST_MODE.get():
+        remote = "origin" if is_git else (source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git")
+        try:
+            proc = subprocess.run(
+                ["git", "ls-remote", "--tags", "--sort=v:refname", remote],  # nosec B607
+                capture_output=True, text=True, timeout=10, cwd=plugin_dir if is_git else None,
+            )
+            if proc.returncode == 0:
+                import re as _re
+
+                tag_re = _re.compile(r"refs/tags/v(\d+\.\d+\.\d+)$")
+                versions = []
+                for line in proc.stdout.splitlines():
+                    m = tag_re.search(line)
+                    if m:
+                        versions.append(m.group(1))
+                if versions:
+                    latest = versions[-1]
+        except Exception:
+            latest = None
+
+    # Update command tailored to the install type. Prefer the recorded
+    # source (supports forks) and fall back to the official repo.
+    repo = source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git"
+    if pinned:
+        cmd = (
+            f"hermes plugins install {repo} "
+            "--force --yes-deps --ref <40-character commit SHA>"
+        )
+    elif is_git:
+        cmd = "hermes plugins update hermes-guide"
+    else:
+        cmd = f"hermes plugins install {repo} --force --yes-deps --enable"
+
+    # Version comparison (best effort).
+    update_available = False
+    if current and latest:
+        try:
+            def _pv(v):
+                return tuple(int(x) for x in v.split("."))
+
+            update_available = _pv(latest) > _pv(current)
+        except Exception:
+            update_available = False
+
+    # Guide-skill adoption (reuse the same nudge as check_skills).
+    # Only report missing when Hermes home could actually be inspected;
+    # an unresolved home yields an empty skill list, which would otherwise
+    # masquerade as "every guide skill missing".
+    home = _hermes_home()
+    if home and os.path.isdir(os.path.join(home, "skills")):
+        guide_names = _plugin_skill_names()
+        installed = set()
+        for _dirpath, fm in _iter_skills():
+            raw = (fm or {}).get("name")
+            name = raw if isinstance(raw, str) and raw else os.path.basename(_dirpath.rstrip(os.sep))
+            installed.add(name)
+        missing = sorted(guide_names - installed) if guide_names else []
+        adoption_unknown = False
+    else:
+        missing = []
+        adoption_unknown = True
+
+    if update_available:
+        status = "informational"
+        reason = f"hermes-guide update available: {current} -> {latest}"
+    elif current and latest and not update_available:
+        status = "healthy"
+        reason = f"hermes-guide is up to date ({current})"
+    else:
+        status = "healthy"
+        if _FAST_MODE.get():
+            reason = f"hermes-guide {current or 'unknown'} (fast mode: network skipped)"
+        else:
+            reason = f"hermes-guide {current or 'unknown'} (latest unknown)"
+
+    detail = [f"install type: {install_type}"]
+    if latest:
+        detail.append(f"latest: {latest}")
+    detail.append(f"update: {cmd}")
+    if missing:
+        detail.append(
+            "guide skills missing: " + ", ".join(missing)
+            + "  (hermes skills install iap/hermes-guide/skills/<name>)"
+        )
+    if adoption_unknown:
+        detail.append("guide skills adoption: unknown (Hermes home not resolvable)")
+    detail.append("skills tap update: hermes skills tap update iap/hermes-guide")
+
+    return {
+        "status": status,
+        "reason": reason,
+        "detail": detail,
+    }
+
+
 
 def labels():
     """Return the valid check labels in report order (scope validation + CLI help)."""
