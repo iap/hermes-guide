@@ -15,6 +15,14 @@ generated from it plus the `_CHECKS` call graph. Do not edit the table by hand:
   edit, or a report target when the finding is a hermes-guide defect.
 - IDs are public API once released: add entries, never rename one.
 
+## Machine-readable status (`--json`)
+
+The document schema is **`2`**. Top-level `status` precedence is
+**`broken` > `unknown` > `healthy`**: `broken` if any check is broken,
+`unknown` if none is broken but at least one could not be measured, otherwise
+`healthy`. The CLI exits `0` only for `healthy`, `1` for both `broken` and
+`unknown`, and `2` for a bad scope.
+
 <!-- BEGIN GENERATED: findings-catalog -->
 | id | scope | meaning | impact | fix |
 |---|---|---|---|---|

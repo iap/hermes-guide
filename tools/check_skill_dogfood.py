@@ -480,6 +480,18 @@ def _selftest() -> int:
     }
     if _valid_guide_document(json.dumps(unknown_doc), "dashboard", ["dashboard"]):
         failures.append("unknown-only document rejected")
+    mixed_doc = dict(unknown_doc)
+    mixed_doc["status"] = "broken"
+    mixed_doc["checks"] = {
+        "dashboard": {"status": "unknown", "reason": "not measured", "detail": None},
+        "config": {"status": "broken", "reason": "bad config", "detail": None},
+    }
+    if _valid_guide_document(json.dumps(mixed_doc), None, ["dashboard", "config"]):
+        failures.append("mixed broken+unknown document rejected")
+    wrong_mixed = dict(mixed_doc)
+    wrong_mixed["status"] = "unknown"
+    if not _valid_guide_document(json.dumps(wrong_mixed), None, ["dashboard", "config"]):
+        failures.append("mixed document with top-level unknown accepted")
     if not _valid_guide_document("not json", "dashboard", ["dashboard"]):
         failures.append("non-JSON document accepted")
 

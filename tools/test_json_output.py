@@ -176,6 +176,20 @@ def main() -> int:
         cap.stop()
     if cap.json_out()["status"] != "unknown":
         failures.append("unknown envelope must derive top-level status unknown")
+    mixed = dict(unknown)
+    mixed["plugins"] = broken["plugins"]
+    _run_expect(plugin, checks_mod, mixed, 1, "broken + unknown -> exit 1")
+    checks_mod.run_all = lambda *a, **k: mixed
+    cap = _Capture()
+    cap.start()
+    try:
+        plugin._run_cli(_args())
+    except SystemExit:
+        pass
+    finally:
+        cap.stop()
+    if cap.json_out()["status"] != "broken":
+        failures.append("broken must win over unknown in top-level status")
 
     # 3. Bad scope: JSON error document on stdout, exit 2, stderr clean.
     checks_mod.run_all = lambda *a, **k: (_ for _ in ()).throw(ValueError("unknown scope"))
