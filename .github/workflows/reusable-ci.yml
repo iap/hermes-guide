@@ -241,6 +241,12 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_check_skill_dogfood.py
 
+      - name: Diagnostic truth harness
+        # Fixture-driven known-broken states -> exact finding IDs/reasons.
+        # Shim-loads the plugin in temp homes; no Hermes, no network.
+        if: inputs.run-full-gate
+        run: python tools/test_diagnostic_truth.py
+
       - name: MCP shape regression test
         # Copies the plugin into a temp dir and imports it, so it needs PyYAML
         # from the install above. Its own import block hides that: every
