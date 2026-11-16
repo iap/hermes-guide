@@ -86,9 +86,9 @@ as a plugin.
 ## Use the plugin
 
 - **In a session:** `/hermes-doctor` for every surface, or `/hermes-doctor mcp` for one.
-- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy. On a degraded host — where every `hermes` launch replays a minutes-long update tail — `hermes guide --fast` runs all twelve checks in-process with no subprocess.
+- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy. The JSON top-level `status` is `broken` when a check is broken, `unknown` when the only non-healthy checks could not be measured, and `healthy` otherwise. On a degraded host — where every `hermes` launch replays a minutes-long update tail — `hermes guide --fast` runs all twelve checks in-process with no subprocess.
 - **Deep hooks:** `hermes guide hooks --deep` (or `/hermes-doctor hooks --deep`) runs `hermes hooks doctor`, which executes each approved hook once. The default hooks check runs nothing.
-- **Machine-readable:** `hermes guide mcp --json` prints one JSON document instead of the report — envelopes unchanged, top-level `status` derived, update notice suppressed (exit codes above still apply). Agents and scripts parse that document; plain `grep`-style consumers keep the text output.
+- **Machine-readable:** `hermes guide mcp --json` prints one JSON document instead of the report — schema `2`, envelopes unchanged, top-level `status` derived (`broken` > `unknown` > `healthy`), update notice suppressed (exit codes above still apply). Agents and scripts parse that document; plain `grep`-style consumers keep the text output.
 - **Finding ids:** every broken or unknown result carries a stable `id`, `impact`, and `fix`; the [finding catalog](docs/findings.md) lists scope separately, and `--json` emits those keys in each finding envelope under its scope key.
 
 ### Proactive mode (opt-in)
