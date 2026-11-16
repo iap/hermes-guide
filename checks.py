@@ -3882,12 +3882,15 @@ def check_plugin_update():
 
     # Latest version via git ls-remote (best effort, never raises).
     # Skipped under --fast: no subprocess/network on the degraded-host path.
+    # For git installs, probe `origin`; otherwise probe the recorded (or
+    # official) source so copied/catalog installs can also detect releases.
     latest = None
-    if is_git and not _FAST_MODE.get():
+    if not _FAST_MODE.get():
+        remote = "origin" if is_git else (source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git")
         try:
             proc = subprocess.run(
-                ["git", "ls-remote", "--tags", "--sort=v:refname", "origin"],  # nosec B607
-                capture_output=True, text=True, timeout=10, cwd=plugin_dir,
+                ["git", "ls-remote", "--tags", "--sort=v:refname", remote],  # nosec B607
+                capture_output=True, text=True, timeout=10, cwd=plugin_dir if is_git else None,
             )
             if proc.returncode == 0:
                 import re as _re
@@ -3903,16 +3906,18 @@ def check_plugin_update():
         except Exception:
             latest = None
 
-    # Update command tailored to the install type.
+    # Update command tailored to the install type. Prefer the recorded
+    # source (supports forks) and fall back to the official repo.
+    repo = source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git"
     if pinned:
         cmd = (
-            "hermes plugins install https://github.com/iap/hermes-guide.git "
-            "--force --ref <40-character commit SHA>"
+            f"hermes plugins install {repo} "
+            "--force --yes-deps --ref <40-character commit SHA>"
         )
     elif is_git:
         cmd = "hermes plugins update hermes-guide"
     else:
-        cmd = "hermes plugins install https://github.com/iap/hermes-guide.git --force --yes-deps --enable"
+        cmd = f"hermes plugins install {repo} --force --yes-deps --enable"
 
     # Version comparison (best effort).
     update_available = False
@@ -3926,11 +3931,22 @@ def check_plugin_update():
             update_available = False
 
     # Guide-skill adoption (reuse the same nudge as check_skills).
-    guide_names = _plugin_skill_names()
-    installed = set()
-    for _dirpath, fm in _iter_skills():
-        installed.add((fm or {}).get("name") or os.path.basename(_dirpath.rstrip(os.sep)))
-    missing = sorted(guide_names - installed) if guide_names else []
+    # Only report missing when Hermes home could actually be inspected;
+    # an unresolved home yields an empty skill list, which would otherwise
+    # masquerade as "every guide skill missing".
+    home = _hermes_home()
+    if home and os.path.isdir(os.path.join(home, "skills")):
+        guide_names = _plugin_skill_names()
+        installed = set()
+        for _dirpath, fm in _iter_skills():
+            raw = (fm or {}).get("name")
+            name = raw if isinstance(raw, str) and raw else os.path.basename(_dirpath.rstrip(os.sep))
+            installed.add(name)
+        missing = sorted(guide_names - installed) if guide_names else []
+        adoption_unknown = False
+    else:
+        missing = []
+        adoption_unknown = True
 
     if update_available:
         status = "informational"
@@ -3954,8 +3970,9 @@ def check_plugin_update():
             "guide skills missing: " + ", ".join(missing)
             + "  (hermes skills install iap/hermes-guide/skills/<name>)"
         )
-    if not is_git:
-        detail.append("skills tap update: hermes skills tap update iap/hermes-guide")
+    if adoption_unknown:
+        detail.append("guide skills adoption: unknown (Hermes home not resolvable)")
+    detail.append("skills tap update: hermes skills tap update iap/hermes-guide")
 
     return {
         "status": status,

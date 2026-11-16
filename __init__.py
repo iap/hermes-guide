@@ -157,9 +157,9 @@ def _run_cli(args):
         else:
             result = checks.check_plugin_update()
         if json_mode:
-            payload = {"schema_version": "1", "update": _jsonify_detail(result)}
+            payload = _build_json_payload({"plugin-update": result}, None, fast)
             print(json.dumps(payload, ensure_ascii=False))
-            sys.exit(0)
+            sys.exit(0 if payload["status"] == "healthy" else 1)
         exit_ok, text = _format_result({"plugin-update": result})
         print(text)
         sys.exit(0 if exit_ok else 1)
