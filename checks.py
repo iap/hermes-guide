@@ -3074,10 +3074,12 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
     ),
     "DASHBOARD_CHECKOUT_UNRESOLVED": (
         "dashboard checkout unresolved",
-        "No `hermes-agent` checkout was found under $HERMES_HOME, so the "
-        "dashboard check could not read the lock pin, the package.json "
-        "engines, or the built Web UI receipt. It reports unknown rather "
-        "than guessing at a different install.",
+        "No unambiguous `hermes-agent` checkout could be selected under "
+        "$HERMES_HOME (either none was found, or several installs had "
+        "checkouts without paired facts), so the dashboard check could not "
+        "read the lock pin, the package.json engines, or the built Web UI "
+        "receipt. It reports unknown rather than guessing at a different "
+        "install.",
         "With explicit user confirmation, place the Hermes source checkout at "
         "`hermes-agent` inside the Hermes home (the directory containing the "
         "path printed by `hermes config path`; for example `git clone "
