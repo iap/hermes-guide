@@ -51,6 +51,7 @@ _GATES: dict[str, str] = {
 # scripts default to their bare invocation, which is already read-only.
 _GATE_ARGS: dict[str, tuple[str, ...]] = {
     "gen_changelog.py": ("--check",),
+    "verify_plugin.py": ("--dir-name", "hermes-guide"),
 }
 
 _QUICK = ("test_skill_counts.py", "render_docs.py", "check_skill_provenance.py")

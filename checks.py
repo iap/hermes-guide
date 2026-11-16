@@ -1355,7 +1355,6 @@ def _redact_hook_output(text):
         d = m.groupdict()
         key = d.get("key") or ""
         sep = d.get("sep") or ""
-        val = d.get("val") or ""
         if not key:
             return m.group(0)
         # Keep the separator's shape: `:` and `=` keep theirs, a whitespace
@@ -3075,10 +3074,12 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
     ),
     "DASHBOARD_CHECKOUT_UNRESOLVED": (
         "dashboard checkout unresolved",
-        "No `hermes-agent` checkout was found under $HERMES_HOME, so the "
-        "dashboard check could not read the lock pin, the package.json "
-        "engines, or the built Web UI receipt. It reports unknown rather "
-        "than guessing at a different install.",
+        "No unambiguous `hermes-agent` checkout could be selected under "
+        "$HERMES_HOME (either none was found, or several installs had "
+        "checkouts without paired facts), so the dashboard check could not "
+        "read the lock pin, the package.json engines, or the built Web UI "
+        "receipt. It reports unknown rather than guessing at a different "
+        "install.",
         "With explicit user confirmation, place the Hermes source checkout at "
         "`hermes-agent` inside the Hermes home (the directory containing the "
         "path printed by `hermes config path`; for example `git clone "
@@ -3562,16 +3563,22 @@ def check_dashboard():
         # otherwise we would pair a lock pin with the wrong toolchain.
         if len(candidates) == 1:
             checkout = candidates[0]
-        for entry in sorted(os.listdir(installs_dir)):
-            candidate = os.path.join(installs_dir, entry, "hermes-agent")
-            if os.path.isdir(candidate):
-                checkout = candidate
-                break
+        ambiguous_checkouts = len(candidates) > 1
+    else:
+        ambiguous_checkouts = False
     if checkout is None:
+        if ambiguous_checkouts:
+            reason = (
+                "multiple hermes-agent checkouts found under "
+                "$HERMES_HOME/installs; cannot select one without paired "
+                "facts (avoid pairing a lock pin with the wrong toolchain)"
+            )
+        else:
+            reason = "no hermes-agent checkout found under $HERMES_HOME"
         return {
             "id": "DASHBOARD_CHECKOUT_UNRESOLVED",
             "status": "unknown",
-            "reason": "no hermes-agent checkout found under $HERMES_HOME",
+            "reason": reason,
             "detail": home,
         }
     lock_path = os.path.join(checkout, "pm", "lock.json")
@@ -3712,14 +3719,15 @@ def check_dashboard():
         sec = cfg.get("security", {})
         if isinstance(sec, dict) and "allow_lazy_installs" in sec:
             lazy = sec["allow_lazy_installs"] is True
-    if os.environ.get("HERMES_DISABLE_LAZY_INSTALLS"):
+    env_disabled = bool(os.environ.get("HERMES_DISABLE_LAZY_INSTALLS"))
+    if env_disabled:
         lazy = False
     if not lazy and (installed_node is None or lock_node is None or installed_node != lock_node):
         return {
             "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
             "status": "broken",
             "reason": "lazy installs disabled while PM node is missing",
-            "detail": "security.allow_lazy_installs is false",
+            "detail": "HERMES_DISABLE_LAZY_INSTALLS is set" if env_disabled else "security.allow_lazy_installs is false",
         }
     # Web UI freshness: dist present and built with installed node
     dist = os.path.join(checkout, "hermes_cli", "web_dist")
@@ -3779,7 +3787,7 @@ def check_dashboard():
             "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
             "status": "informational",
             "reason": "lazy installs disabled (toolchain OK, web UI present)",
-            "detail": "security.allow_lazy_installs is false",
+            "detail": "HERMES_DISABLE_LAZY_INSTALLS is set" if env_disabled else "security.allow_lazy_installs is false",
         }
     return {
         "status": "healthy",

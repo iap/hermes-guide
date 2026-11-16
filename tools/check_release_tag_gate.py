@@ -32,22 +32,18 @@ from __future__ import annotations
 
 import argparse
 import sys
+import unittest.mock
 from release_gate_shared import (
-    REPO,
-    PLUGIN_YAML,
     plugin_version,
     duplicate_version,
     version_gap,
     active_release,
     get_latest_stable_tag,
     get_latest_tag,
-    _git_tags,
     print_ok,
     print_latest,
     parse_version,
 )
-
-import unittest.mock
 
 
 def check_release_tag_gate(version: str | None, window_hours: int = 48) -> tuple[int, list[str]]:
@@ -65,7 +61,6 @@ def check_release_tag_gate(version: str | None, window_hours: int = 48) -> tuple
         return 2, [f"malformed version {version!r}"]
 
     latest_stable = get_latest_stable_tag()
-    latest_any = get_latest_tag()
 
     # 1) Duplicate check
     dup, det = duplicate_version(version)
@@ -116,7 +111,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _selftest() -> int:
-    import unittest.mock as mock
 
     bad = 0
 
