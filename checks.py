@@ -3562,16 +3562,22 @@ def check_dashboard():
         # otherwise we would pair a lock pin with the wrong toolchain.
         if len(candidates) == 1:
             checkout = candidates[0]
-        for entry in sorted(os.listdir(installs_dir)):
-            candidate = os.path.join(installs_dir, entry, "hermes-agent")
-            if os.path.isdir(candidate):
-                checkout = candidate
-                break
+        ambiguous_checkouts = len(candidates) > 1
+    else:
+        ambiguous_checkouts = False
     if checkout is None:
+        if ambiguous_checkouts:
+            reason = (
+                "multiple hermes-agent checkouts found under "
+                "$HERMES_HOME/installs; cannot select one without paired "
+                "facts (avoid pairing a lock pin with the wrong toolchain)"
+            )
+        else:
+            reason = "no hermes-agent checkout found under $HERMES_HOME"
         return {
             "id": "DASHBOARD_CHECKOUT_UNRESOLVED",
             "status": "unknown",
-            "reason": "no hermes-agent checkout found under $HERMES_HOME",
+            "reason": reason,
             "detail": home,
         }
     lock_path = os.path.join(checkout, "pm", "lock.json")
