@@ -174,8 +174,8 @@ def test_check_dashboard_unknown_when_multiple_unpaired_checkouts():
     for name in ("aaa-install", "zzz-install"):
         os.makedirs(os.path.join(home, "installs", name, "hermes-agent"), exist_ok=True)
     os.makedirs(os.path.join(home, "tools"), exist_ok=True)
-    checks = _load_checks()
-    with patch.object(checks, "_hermes_home", return_value=home),          patch.object(checks, "_read_config", return_value=(None, {})):
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
         os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
         result = checks.run_all(scope="dashboard")["dashboard"]
     assert result["status"] == "unknown"
