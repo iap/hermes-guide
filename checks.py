@@ -3865,7 +3865,7 @@ def check_plugin_update():
             if isinstance(entry, dict):
                 pinned = bool(entry.get("pinned"))
                 source = entry.get("source")
-        except Exception:
+        except Exception:  # nosec B110
             pass
     is_git = os.path.isdir(os.path.join(plugin_dir, ".git")) or os.path.isfile(
         os.path.join(plugin_dir, ".git")
@@ -3886,7 +3886,7 @@ def check_plugin_update():
     if is_git and not _FAST_MODE.get():
         try:
             proc = subprocess.run(
-                ["git", "ls-remote", "--tags", "--sort=v:refname", "origin"],
+                ["git", "ls-remote", "--tags", "--sort=v:refname", "origin"],  # nosec B607
                 capture_output=True, text=True, timeout=10, cwd=plugin_dir,
             )
             if proc.returncode == 0:
