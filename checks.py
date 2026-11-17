@@ -4042,7 +4042,7 @@ def check_plugin_update():
     detail = [f"install type: {install_type}"]
     if latest:
         detail.append(f"latest: {latest}")
-    if update_available or not latest:
+    if update_available or not latest or not current:
         detail.append(f"update: {cmd}")
     else:
         detail.append("update: no update needed (already at latest)")
