@@ -607,8 +607,6 @@ def test_timeout_does_not_fall_through():
 
 def test_run_maps_timeout_to_sentinel():
     """_run names TimeoutExpired distinctly from crashes."""
-    real = subprocess.run
-    sentinel = []
 
     def _timeout(*args, **kwargs):
         raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout"))

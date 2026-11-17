@@ -16,7 +16,6 @@ import argparse
 import os
 import sys
 from release_gate_shared import (
-    REPO,
     _git_tags,
     parse_version,
     is_prerelease,

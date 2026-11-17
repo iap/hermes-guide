@@ -33,9 +33,7 @@ def _minimal_yaml_parse(text: str) -> dict:
     current_key = None
     current_list = None
     current_map = None
-    current_sub_key = None
     current_sub_map = None
-    indent_stack = []
 
     for line in text.splitlines():
         if not line.strip() or line.strip().startswith("#"):
@@ -53,7 +51,6 @@ def _minimal_yaml_parse(text: str) -> dict:
                     current_key = key
                     current_list = None
                     current_map = {}
-                    current_sub_key = None
                     current_sub_map = None
                     result[key] = current_map
                 elif val.startswith("[") and val.endswith("]"):
@@ -62,28 +59,24 @@ def _minimal_yaml_parse(text: str) -> dict:
                     current_key = None
                     current_list = None
                     current_map = None
-                    current_sub_key = None
                     current_sub_map = None
                 elif val.lower() in ("true", "false"):
                     result[key] = val.lower() == "true"
                     current_key = None
                     current_list = None
                     current_map = None
-                    current_sub_key = None
                     current_sub_map = None
                 elif val.isdigit():
                     result[key] = int(val)
                     current_key = None
                     current_list = None
                     current_map = None
-                    current_sub_key = None
                     current_sub_map = None
                 else:
                     result[key] = val.strip('"').strip("'")
                     current_key = None
                     current_list = None
                     current_map = None
-                    current_sub_key = None
                     current_sub_map = None
             continue
 
@@ -99,7 +92,6 @@ def _minimal_yaml_parse(text: str) -> dict:
                     result[current_key] = current_list
                     current_map = None
                 current_list.append(stripped[2:].strip().strip('"').strip("'"))
-                current_sub_key = None
                 current_sub_map = None
                 continue
             if ":" in stripped:
@@ -107,25 +99,20 @@ def _minimal_yaml_parse(text: str) -> dict:
                 k = k.strip()
                 v = v.strip().strip('"').strip("'")
                 if v == "" or v is None:
-                    current_sub_key = k
                     current_sub_map = {}
                     current_map[k] = current_sub_map
                 elif v.lower() in ("true", "false"):
                     current_map[k] = v.lower() == "true"
-                    current_sub_key = None
                     current_sub_map = None
                 elif v.isdigit():
                     current_map[k] = int(v)
-                    current_sub_key = None
                     current_sub_map = None
                 elif v.startswith("[") and v.endswith("]"):
                     items = [x.strip().strip('"').strip("'") for x in v[1:-1].split(",") if x.strip()]
                     current_map[k] = items
-                    current_sub_key = None
                     current_sub_map = None
                 else:
                     current_map[k] = v
-                    current_sub_key = None
                     current_sub_map = None
             continue
 
