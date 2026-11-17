@@ -3987,11 +3987,6 @@ def check_plugin_update():
                 f"hermes plugins install '{repo}' "
                 f"--force --yes-deps --ref {latest_sha}"
             )
-        elif latest_sha:
-            cmd = (
-                f"hermes plugins install '{repo}' "
-                "--force --yes-deps --ref <40-character commit SHA>"
-            )
         else:
             cmd = (
                 f"hermes plugins install '{repo}' "
@@ -4047,7 +4042,10 @@ def check_plugin_update():
     detail = [f"install type: {install_type}"]
     if latest:
         detail.append(f"latest: {latest}")
-    detail.append(f"update: {cmd}")
+    if update_available or not latest or not current:
+        detail.append(f"update: {cmd}")
+    else:
+        detail.append("update: no update needed (already at latest)")
     if missing:
         detail.append(
             "guide skills missing: " + ", ".join(missing)
