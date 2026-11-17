@@ -3870,6 +3870,19 @@ def check_plugin_update():
     is_git = os.path.isdir(os.path.join(plugin_dir, ".git")) or os.path.isfile(
         os.path.join(plugin_dir, ".git")
     )
+    # For pinned git installs, the release probe runs against `origin`, so the
+    # reinstall command must target the same repository the SHA came from.
+    origin_url = None
+    if is_git and pinned:
+        try:
+            proc = subprocess.run(
+                ["git", "remote", "get-url", "origin"],  # nosec B607
+                capture_output=True, text=True, timeout=5, cwd=plugin_dir,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                origin_url = proc.stdout.strip()
+        except Exception:
+            origin_url = None
 
     if is_git and pinned:
         install_type = "pinned git"
@@ -3897,34 +3910,70 @@ def check_plugin_update():
                 import re as _re
 
                 tag_re = _re.compile(r"refs/tags/v(\d+\.\d+\.\d+)(\^\{\})?$")
+                # Collect (version, tag_obj_sha, peeled_sha) per tag. Tags
+                # arrive sorted by ref name, and a peeled ref (^{}) follows
+                # its tag, so we can fold as we go.
                 latest = None
                 latest_sha = None
+                current_tag = None
+                current_obj = None
+                current_peeled = None
+                def _flush():
+                    nonlocal latest, latest_sha, current_tag, current_obj, current_peeled
+                    if current_tag is None:
+                        return
+                    latest = current_tag
+                    latest_sha = current_peeled if current_peeled else current_obj
+                    current_tag = None
+                    current_obj = None
+                    current_peeled = None
                 for line in proc.stdout.splitlines():
                     parts = line.split()
                     if len(parts) < 2:
                         continue
                     sha, ref = parts[0], parts[1]
                     m = tag_re.search(ref)
-                    if m:
-                        # Prefer the peeled commit SHA (^{}) for annotated
-                        # tags; fall back to the tag object SHA otherwise.
-                        if ref.endswith("^{}"):
-                            latest = m.group(1)
-                            latest_sha = sha
-                        elif latest is None or latest_sha is None:
-                            latest = m.group(1)
-                            latest_sha = sha
+                    if not m:
+                        continue
+                    ver = m.group(1)
+                    peeled = ref.endswith("^{}")
+                    if ver != current_tag:
+                        _flush()
+                        current_tag = ver
+                    if peeled:
+                        current_peeled = sha
+                    else:
+                        current_obj = sha
+                _flush()
         except Exception:
             latest = None
 
     # Update command tailored to the install type. Prefer the recorded
-    # source (supports forks) and fall back to the official repo.
-    repo = source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git"
+    # source (supports forks) and fall back to the official repo. For pinned
+    # git installs, prefer origin's URL since the SHA came from there.
+    if pinned and origin_url:
+        repo = origin_url
+    else:
+        repo = source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git"
     if pinned:
-        if latest_sha:
+        # Only offer a concrete SHA when it is actually newer than the
+        # installed version; otherwise a fork whose newest tag is older
+        # would hand the user a downgrade command.
+        newer_available = False
+        if current and latest:
+            try:
+                newer_available = tuple(int(x) for x in latest.split(".")) > tuple(int(x) for x in current.split("."))
+            except Exception:
+                newer_available = False
+        if latest_sha and newer_available:
             cmd = (
                 f"hermes plugins install {repo} "
                 f"--force --yes-deps --ref {latest_sha}"
+            )
+        elif latest_sha:
+            cmd = (
+                f"hermes plugins install {repo} "
+                "--force --yes-deps --ref <40-character commit SHA>"
             )
         else:
             cmd = (
