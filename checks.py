@@ -3870,6 +3870,36 @@ def check_plugin_update():
     is_git = os.path.isdir(os.path.join(plugin_dir, ".git")) or os.path.isfile(
         os.path.join(plugin_dir, ".git")
     )
+    # For pinned git installs, the release probe runs against `origin`, so the
+    # reinstall command must target the same repository the SHA came from.
+    origin_url = None
+    if is_git and pinned and not _FAST_MODE.get():
+        try:
+            proc = subprocess.run(
+                ["git", "remote", "get-url", "origin"],  # nosec B607
+                capture_output=True, text=True, timeout=5, cwd=plugin_dir,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                raw = proc.stdout.strip()
+                # Redact embedded credentials (user:pass@) and resolve
+                # relative paths against plugin_dir so the copied command
+                # works from any working directory.
+                if raw.startswith(("http://", "https://")):
+                    # Strip userinfo from https://user:pass@host/... only;
+                    # SSH URLs (ssh://git@host or git@host:path) keep their
+                    # required username.
+                    import re as _re
+                    raw = _re.sub(r"(://)[^/@]*@", r"\1", raw)
+                elif raw.startswith("git@"):
+                    pass  # SCP-like SSH form carries no inline credentials
+                elif raw.startswith("ssh://"):
+                    pass  # SSH form keeps its required username
+                elif not raw.startswith("/") and not raw.startswith("~"):
+                    # Relative local path: resolve against plugin_dir.
+                    raw = os.path.normpath(os.path.join(plugin_dir, raw))
+                origin_url = raw
+        except Exception:
+            origin_url = None
 
     if is_git and pinned:
         install_type = "pinned git"
@@ -3885,6 +3915,7 @@ def check_plugin_update():
     # For git installs, probe `origin`; otherwise probe the recorded (or
     # official) source so copied/catalog installs can also detect releases.
     latest = None
+    latest_sha = None
     if not _FAST_MODE.get():
         remote = "origin" if is_git else (source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git")
         try:
@@ -3895,29 +3926,81 @@ def check_plugin_update():
             if proc.returncode == 0:
                 import re as _re
 
-                tag_re = _re.compile(r"refs/tags/v(\d+\.\d+\.\d+)$")
-                versions = []
+                tag_re = _re.compile(r"refs/tags/v(\d+\.\d+\.\d+)(\^\{\})?$")
+                # Collect (version, tag_obj_sha, peeled_sha) per tag. Tags
+                # arrive sorted by ref name, and a peeled ref (^{}) follows
+                # its tag, so we can fold as we go.
+                latest = None
+                latest_sha = None
+                current_tag = None
+                current_obj = None
+                current_peeled = None
+                def _flush():
+                    nonlocal latest, latest_sha, current_tag, current_obj, current_peeled
+                    if current_tag is None:
+                        return
+                    latest = current_tag
+                    latest_sha = current_peeled if current_peeled else current_obj
+                    current_tag = None
+                    current_obj = None
+                    current_peeled = None
                 for line in proc.stdout.splitlines():
-                    m = tag_re.search(line)
-                    if m:
-                        versions.append(m.group(1))
-                if versions:
-                    latest = versions[-1]
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+                    sha, ref = parts[0], parts[1]
+                    m = tag_re.search(ref)
+                    if not m:
+                        continue
+                    ver = m.group(1)
+                    peeled = ref.endswith("^{}")
+                    if ver != current_tag:
+                        _flush()
+                        current_tag = ver
+                    if peeled:
+                        current_peeled = sha
+                    else:
+                        current_obj = sha
+                _flush()
         except Exception:
             latest = None
 
     # Update command tailored to the install type. Prefer the recorded
-    # source (supports forks) and fall back to the official repo.
-    repo = source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git"
+    # source (supports forks) and fall back to the official repo. For pinned
+    # git installs, prefer origin's URL since the SHA came from there.
+    if pinned and origin_url:
+        repo = origin_url
+    else:
+        repo = source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git"
     if pinned:
-        cmd = (
-            f"hermes plugins install {repo} "
-            "--force --yes-deps --ref <40-character commit SHA>"
-        )
+        # Only offer a concrete SHA when it is actually newer than the
+        # installed version; otherwise a fork whose newest tag is older
+        # would hand the user a downgrade command.
+        newer_available = False
+        if current and latest:
+            try:
+                newer_available = tuple(int(x) for x in latest.split(".")) > tuple(int(x) for x in current.split("."))
+            except Exception:
+                newer_available = False
+        if latest_sha and newer_available:
+            cmd = (
+                f"hermes plugins install '{repo}' "
+                f"--force --yes-deps --ref {latest_sha}"
+            )
+        elif latest_sha:
+            cmd = (
+                f"hermes plugins install '{repo}' "
+                "--force --yes-deps --ref <40-character commit SHA>"
+            )
+        else:
+            cmd = (
+                f"hermes plugins install '{repo}' "
+                "--force --yes-deps --ref <40-character commit SHA>"
+            )
     elif is_git:
         cmd = "hermes plugins update hermes-guide"
     else:
-        cmd = f"hermes plugins install {repo} --force --yes-deps --enable"
+        cmd = f"hermes plugins install '{repo}' --force --yes-deps --enable"
 
     # Version comparison (best effort).
     update_available = False
@@ -3939,8 +4022,8 @@ def check_plugin_update():
         guide_names = _plugin_skill_names()
         installed = set()
         for _dirpath, fm in _iter_skills():
-            raw = (fm or {}).get("name")
-            name = raw if isinstance(raw, str) and raw else os.path.basename(_dirpath.rstrip(os.sep))
+            fm_name = (fm or {}).get("name")
+            name = fm_name if isinstance(fm_name, str) and fm_name else os.path.basename(_dirpath.rstrip(os.sep))
             installed.add(name)
         missing = sorted(guide_names - installed) if guide_names else []
         adoption_unknown = False
