@@ -3,7 +3,7 @@
 
 Locked here (Phase 4 / #331): stdout is exactly one JSON document —
 schema keys in contract order, envelopes passed through unchanged, top-level
-`status` derived as `broken` iff any check is broken or unknown, exit codes
+`status` derived as broken > unknown > healthy, exit codes
 0 / 1 / 2 matching the text path, the update notice suppressed, and no
 subprocess call the text path would not already owe (here: zero, because the
 only notice-bearing call lives in `_version_check`).
@@ -135,7 +135,7 @@ def main() -> int:
         failures.append("document must end with one newline")
     if list(doc) != ["schema_version", "scope", "fast", "status", "checks"]:
         failures.append(f"key order drifted: {list(doc)}")
-    if doc["schema_version"] != "1" or doc["scope"] != "mcp" or doc["fast"] is not True:
+    if doc["schema_version"] != "2" or doc["scope"] != "mcp" or doc["fast"] is not True:
         failures.append(f"header fields wrong: {doc['schema_version']}/{doc['scope']}/{doc['fast']}")
     if doc["status"] != "healthy":
         failures.append("all-healthy/informational envelope must derive status healthy")
@@ -145,7 +145,7 @@ def main() -> int:
     if sent != healthy:
         failures.append(f"envelopes not passed through unchanged:\n{json.dumps(sent, ensure_ascii=False)}")
 
-    # 2. status derivation: broken and unknown both poison the document.
+    # 2. status derivation: broken wins, then unknown, then healthy.
     broken = dict(healthy)
     broken["plugins"] = {"status": "broken", "reason": "1 plugin(s) missing",
                          "detail": ["`pstack` enabled but no manifest"]}
@@ -165,6 +165,31 @@ def main() -> int:
     unknown["hooks"] = {"status": "unknown", "reason": "cannot resolve $HERMES_HOME",
                         "detail": None}
     _run_expect(plugin, checks_mod, unknown, 1, "one unknown -> exit 1")
+    checks_mod.run_all = lambda *a, **k: unknown
+    cap = _Capture()
+    cap.start()
+    try:
+        plugin._run_cli(_args())
+    except SystemExit:
+        pass
+    finally:
+        cap.stop()
+    if cap.json_out()["status"] != "unknown":
+        failures.append("unknown envelope must derive top-level status unknown")
+    mixed = dict(unknown)
+    mixed["plugins"] = broken["plugins"]
+    _run_expect(plugin, checks_mod, mixed, 1, "broken + unknown -> exit 1")
+    checks_mod.run_all = lambda *a, **k: mixed
+    cap = _Capture()
+    cap.start()
+    try:
+        plugin._run_cli(_args())
+    except SystemExit:
+        pass
+    finally:
+        cap.stop()
+    if cap.json_out()["status"] != "broken":
+        failures.append("broken must win over unknown in top-level status")
 
     # 3. Bad scope: JSON error document on stdout, exit 2, stderr clean.
     checks_mod.run_all = lambda *a, **k: (_ for _ in ()).throw(ValueError("unknown scope"))
@@ -184,7 +209,7 @@ def main() -> int:
     except json.JSONDecodeError:
         failures.append(f"bad-scope stdout is not JSON: {cap.text()!r}")
         err_doc = {}
-    if err_doc != {"schema_version": "1", "error": "unknown scope: bogus"}:
+    if err_doc != {"schema_version": "2", "error": "unknown scope: bogus"}:
         failures.append(f"bad-scope document wrong: {err_doc!r}")
     if cap.text("err").strip():
         failures.append(f"bad-scope stderr must stay empty, got: {cap.text('err')!r}")

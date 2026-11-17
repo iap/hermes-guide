@@ -238,7 +238,7 @@ def _valid_guide_document(
         return [f"is not a JSON object: {type(doc).__name__}"]
     if list(doc) != _GUIDE_KEYS:
         return [f"key order drifted: {list(doc)}"]
-    if doc.get("schema_version") != "1":
+    if doc.get("schema_version") != "2":
         return [f"schema_version is {doc.get('schema_version')!r}"]
     if doc.get("fast") is not True:
         return ["fast is not true in a --fast document"]
@@ -262,7 +262,12 @@ def _valid_guide_document(
         if not isinstance(envelope.get("reason"), str):
             return [f"checks[{label!r}] lacks a reason string"]
         check_statuses.append(status)
-    derived = "broken" if any(s in {"broken", "unknown"} for s in check_statuses) else "healthy"
+    if any(status == "broken" for status in check_statuses):
+        derived = "broken"
+    elif any(status == "unknown" for status in check_statuses):
+        derived = "unknown"
+    else:
+        derived = "healthy"
     if doc.get("status") != derived:
         return [f"status is {doc.get('status')!r}, expected {derived!r}"]
     return []
@@ -448,7 +453,7 @@ def _selftest() -> int:
     # the failure shapes that caused #479 (bare Path/date detail is the
     # runtime crash; here we lock the document envelope shape).
     valid = {
-        "schema_version": "1",
+        "schema_version": "2",
         "scope": "dashboard",
         "fast": True,
         "status": "healthy",
@@ -468,6 +473,25 @@ def _selftest() -> int:
     }
     if not _valid_guide_document(json.dumps(bad_status), "dashboard", ["dashboard"]):
         failures.append("invalid check status accepted")
+    unknown_doc = dict(valid)
+    unknown_doc["status"] = "unknown"
+    unknown_doc["checks"] = {
+        "dashboard": {"status": "unknown", "reason": "not measured", "detail": None}
+    }
+    if _valid_guide_document(json.dumps(unknown_doc), "dashboard", ["dashboard"]):
+        failures.append("unknown-only document rejected")
+    mixed_doc = dict(unknown_doc)
+    mixed_doc["status"] = "broken"
+    mixed_doc["checks"] = {
+        "dashboard": {"status": "unknown", "reason": "not measured", "detail": None},
+        "config": {"status": "broken", "reason": "bad config", "detail": None},
+    }
+    if _valid_guide_document(json.dumps(mixed_doc), None, ["dashboard", "config"]):
+        failures.append("mixed broken+unknown document rejected")
+    wrong_mixed = dict(mixed_doc)
+    wrong_mixed["status"] = "unknown"
+    if not _valid_guide_document(json.dumps(wrong_mixed), None, ["dashboard", "config"]):
+        failures.append("mixed document with top-level unknown accepted")
     if not _valid_guide_document("not json", "dashboard", ["dashboard"]):
         failures.append("non-JSON document accepted")
 

@@ -36,7 +36,7 @@ Learn these from the guard, not from memory — each one names its own script.
 
 #### The `hermes guide --json` document (Phase 4 contract)
 
-- **stdout is exactly one JSON document**: `schema_version` (`"1"`), `scope`,
+- **stdout is exactly one JSON document**: `schema_version` (`"2"`), `scope`,
   `fast`, top-level `status`, and `checks` with the envelopes passed through
   unchanged, in `run_all()` order. Envelope keys stay `status` / `reason` /
   `detail` — additive envelope fields may appear; existing ones are never
@@ -45,10 +45,11 @@ Learn these from the guard, not from memory — each one names its own script.
   date-like `mcp_servers:` name, i.e. `datetime.date`) prints as the same
   text the renderer would show (`str()`); JSON-native values pass through
   untouched and the caller's envelopes stay unmutated.
-- **Exit codes match the text path**: `0` when the derived top-level `status`
-  is `healthy`, `1` when it is `broken` (derived as: any check `broken` or
-  `unknown`), `2` for a bad scope. The `2` path prints
-  `{"schema_version": "1", "error": "unknown scope: <scope>"}` on stdout and
+- **Status and exit codes**: `status` is `broken` when any check is `broken`,
+  `unknown` when no check is broken but at least one is `unknown`, and `healthy`
+  otherwise. The exit is `0` only for `healthy` and `1` for both `broken` and
+  `unknown`; `2` is a bad scope. The `2` path prints
+  `{"schema_version": "2", "error": "unknown scope: <scope>"}` on stdout and
   keeps stderr empty — the JSON consumer still gets one and only one stdout
   document.
 - **The update notice is suppressed** in JSON mode (its `git ls-remote`

@@ -116,20 +116,30 @@ def _build_json_payload(results, scope, fast):
     """Assemble the `--json` machine contract from check envelopes.
 
     Envelopes pass through unchanged (and in `run_all()` order); the only
-    derived field is the top-level `status`, which is `broken` when any
-    check is `broken` or `unknown`, else `healthy` — the same derivation
-    the text renderer applies for its exit code. `detail` goes through
+    derived field is the top-level `status`:
+
+    - `broken` when any check is `broken`;
+    - `unknown` when no check is `broken` but at least one is `unknown`;
+    - `healthy` otherwise.
+
+    `unknown` means the run could not measure that surface — it is not proof of
+    breakage. The text renderer and exit code still treat it as non-healthy
+    (exit 1), matching the documented CLI contract. `detail` goes through
     `_jsonify_detail` so the document is always serializable.
     """
     checks_payload = {
         label: {**r, "detail": _jsonify_detail(r.get("detail"))}
         for label, r in dict(results).items()
     }
-    status = "broken" if any(
-        r.get("status") in ("broken", "unknown") for r in checks_payload.values()
-    ) else "healthy"
+    statuses = [r.get("status") for r in checks_payload.values()]
+    if any(status == "broken" for status in statuses):
+        status = "broken"
+    elif any(status == "unknown" for status in statuses):
+        status = "unknown"
+    else:
+        status = "healthy"
     return {
-        "schema_version": "1",
+        "schema_version": "2",
         "scope": scope,
         "fast": fast,
         "status": status,
@@ -177,7 +187,7 @@ def _run_cli(args):
             # only one stdout JSON value.
             print(
                 json.dumps(
-                    {"schema_version": "1", "error": f"unknown scope: {scope}"},
+                    {"schema_version": "2", "error": f"unknown scope: {scope}"},
                     ensure_ascii=False,
                 )
             )
