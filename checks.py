@@ -3885,6 +3885,7 @@ def check_plugin_update():
     # For git installs, probe `origin`; otherwise probe the recorded (or
     # official) source so copied/catalog installs can also detect releases.
     latest = None
+    latest_sha = None
     if not _FAST_MODE.get():
         remote = "origin" if is_git else (source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git")
         try:
@@ -3895,14 +3896,24 @@ def check_plugin_update():
             if proc.returncode == 0:
                 import re as _re
 
-                tag_re = _re.compile(r"refs/tags/v(\d+\.\d+\.\d+)$")
-                versions = []
+                tag_re = _re.compile(r"refs/tags/v(\d+\.\d+\.\d+)(\^\{\})?$")
+                latest = None
+                latest_sha = None
                 for line in proc.stdout.splitlines():
-                    m = tag_re.search(line)
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+                    sha, ref = parts[0], parts[1]
+                    m = tag_re.search(ref)
                     if m:
-                        versions.append(m.group(1))
-                if versions:
-                    latest = versions[-1]
+                        # Prefer the peeled commit SHA (^{}) for annotated
+                        # tags; fall back to the tag object SHA otherwise.
+                        if ref.endswith("^{}"):
+                            latest = m.group(1)
+                            latest_sha = sha
+                        elif latest is None or latest_sha is None:
+                            latest = m.group(1)
+                            latest_sha = sha
         except Exception:
             latest = None
 
@@ -3910,10 +3921,16 @@ def check_plugin_update():
     # source (supports forks) and fall back to the official repo.
     repo = source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git"
     if pinned:
-        cmd = (
-            f"hermes plugins install {repo} "
-            "--force --yes-deps --ref <40-character commit SHA>"
-        )
+        if latest_sha:
+            cmd = (
+                f"hermes plugins install {repo} "
+                f"--force --yes-deps --ref {latest_sha}"
+            )
+        else:
+            cmd = (
+                f"hermes plugins install {repo} "
+                "--force --yes-deps --ref <40-character commit SHA>"
+            )
     elif is_git:
         cmd = "hermes plugins update hermes-guide"
     else:
