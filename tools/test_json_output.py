@@ -10,10 +10,8 @@ only notice-bearing call lives in `_version_check`).
 """
 
 import argparse
-import io
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path

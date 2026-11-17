@@ -16,7 +16,6 @@ Run: python tools/test_check_eol_contract.py
 from __future__ import annotations
 
 import importlib.util
-import subprocess
 import sys
 import tempfile
 from pathlib import Path

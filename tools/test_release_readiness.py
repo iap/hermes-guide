@@ -286,7 +286,7 @@ def test_catalog_pin_prerelease_difference_is_indeterminate():
 
 def test_catalog_pin_enforces_dotted_ordering():
     mod = _load()
-    stubs = _healthy({("gh", "api"): (0, _entry("9.9.9", "a" * 40))})
+    _healthy({("gh", "api"): (0, _entry("9.9.9", "a" * 40))})
     assert mod._dotted("9.9.9") > mod._dotted("0.8.7")
     assert mod._dotted("0.9.0rc1") is None
 

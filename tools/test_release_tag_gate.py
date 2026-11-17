@@ -48,7 +48,6 @@ def test_window_hours_passed():
     mod = _load_gate()
     rg = sys.modules['release_gate_shared']
     calls = []
-    orig = rg.active_release
     def wrapped(*args, **kwargs):
         calls.append(args)
         return (False, '')

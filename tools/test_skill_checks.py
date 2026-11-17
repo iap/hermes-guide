@@ -399,13 +399,11 @@ def main(argv: list[str]) -> int:
         except (OSError, NotImplementedError):
             pass
         # Dangling SKILL.md symlink is still a file entry in Hermes' walk.
-        dangling_created = False
         try:
             dangling_dir = disc_home / "skills" / "danglingskill"
             dangling_dir.mkdir(parents=True, exist_ok=True)
             os.symlink(str(dangling_dir / "missing-target"),
                        str(dangling_dir / "SKILL.md"))
-            dangling_created = True
             expect.add("danglingskill")
         except (OSError, NotImplementedError):
             pass
