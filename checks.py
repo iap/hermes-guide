@@ -4018,8 +4018,8 @@ def check_plugin_update():
         guide_names = _plugin_skill_names()
         installed = set()
         for _dirpath, fm in _iter_skills():
-            raw = (fm or {}).get("name")
-            name = raw if isinstance(raw, str) and raw else os.path.basename(_dirpath.rstrip(os.sep))
+            fm_name = (fm or {}).get("name")
+            name = fm_name if isinstance(fm_name, str) and fm_name else os.path.basename(_dirpath.rstrip(os.sep))
             installed.add(name)
         missing = sorted(guide_names - installed) if guide_names else []
         adoption_unknown = False
