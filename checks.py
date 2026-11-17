@@ -3873,14 +3873,27 @@ def check_plugin_update():
     # For pinned git installs, the release probe runs against `origin`, so the
     # reinstall command must target the same repository the SHA came from.
     origin_url = None
-    if is_git and pinned:
+    if is_git and pinned and not _FAST_MODE.get():
         try:
             proc = subprocess.run(
                 ["git", "remote", "get-url", "origin"],  # nosec B607
                 capture_output=True, text=True, timeout=5, cwd=plugin_dir,
             )
             if proc.returncode == 0 and proc.stdout.strip():
-                origin_url = proc.stdout.strip()
+                raw = proc.stdout.strip()
+                # Redact embedded credentials (user:pass@) and resolve
+                # relative paths against plugin_dir so the copied command
+                # works from any working directory.
+                if "://" in raw:
+                    # Strip userinfo from https://user:pass@host/...
+                    import re as _re
+                    raw = _re.sub(r"(://)[^/@]*@", r"\1", raw)
+                elif raw.startswith("git@"):
+                    pass  # SSH form carries no inline credentials
+                elif not raw.startswith("/") and not raw.startswith("~"):
+                    # Relative local path: resolve against plugin_dir.
+                    raw = os.path.normpath(os.path.join(plugin_dir, raw))
+                origin_url = raw
         except Exception:
             origin_url = None
 
@@ -3967,23 +3980,23 @@ def check_plugin_update():
                 newer_available = False
         if latest_sha and newer_available:
             cmd = (
-                f"hermes plugins install {repo} "
+                f"hermes plugins install '{repo}' "
                 f"--force --yes-deps --ref {latest_sha}"
             )
         elif latest_sha:
             cmd = (
-                f"hermes plugins install {repo} "
+                f"hermes plugins install '{repo}' "
                 "--force --yes-deps --ref <40-character commit SHA>"
             )
         else:
             cmd = (
-                f"hermes plugins install {repo} "
+                f"hermes plugins install '{repo}' "
                 "--force --yes-deps --ref <40-character commit SHA>"
             )
     elif is_git:
         cmd = "hermes plugins update hermes-guide"
     else:
-        cmd = f"hermes plugins install {repo} --force --yes-deps --enable"
+        cmd = f"hermes plugins install '{repo}' --force --yes-deps --enable"
 
     # Version comparison (best effort).
     update_available = False
