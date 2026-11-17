@@ -3884,12 +3884,16 @@ def check_plugin_update():
                 # Redact embedded credentials (user:pass@) and resolve
                 # relative paths against plugin_dir so the copied command
                 # works from any working directory.
-                if "://" in raw:
-                    # Strip userinfo from https://user:pass@host/...
+                if raw.startswith(("http://", "https://")):
+                    # Strip userinfo from https://user:pass@host/... only;
+                    # SSH URLs (ssh://git@host or git@host:path) keep their
+                    # required username.
                     import re as _re
                     raw = _re.sub(r"(://)[^/@]*@", r"\1", raw)
                 elif raw.startswith("git@"):
-                    pass  # SSH form carries no inline credentials
+                    pass  # SCP-like SSH form carries no inline credentials
+                elif raw.startswith("ssh://"):
+                    pass  # SSH form keeps its required username
                 elif not raw.startswith("/") and not raw.startswith("~"):
                     # Relative local path: resolve against plugin_dir.
                     raw = os.path.normpath(os.path.join(plugin_dir, raw))
