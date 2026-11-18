@@ -7,11 +7,11 @@ silently break the degraded-host path users rely on. This test generates a
 200-skill fixture in a temp HERMES_HOME (no real skills, no network) and
 asserts the measured elapsed time stays inside the budget.
 
-Budget: 60 s. Current measurement on the maintainer's macOS 12.7.6 box
+Budget: 30 s. Current measurement on the maintainer's macOS 12.7.6 box
 (4 cores, heavily loaded) is ~21 s for run_all(fast=True) with 205 real
-skills. The budget is generous to absorb runner variance while still catching
-an order-of-magnitude regression (e.g. reverting to the pure-Python
-SafeLoader, which took 36.7 s for 205 skills).
+skills. The 30 s limit is ~40x the current measurement and still below the
+36.7 s the pure-Python SafeLoader took for 205 real skills, so reverting
+the C-loader fix fails this test.
 
 Run: python3 tools/test_fast_budget.py
 Exit codes: 0 clean, 1 budget exceeded or fixture failure.
@@ -68,12 +68,13 @@ def main() -> int:
 
     os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
     with patch.object(checks, "_hermes_home", return_value=str(home)), \
+         patch.object(checks, "_hermes_home_from_library", return_value=str(home)), \
          patch.object(checks, "_read_config", return_value=(None, {})):
         start = time.monotonic()
         results = checks.run_all(fast=True)
         elapsed = time.monotonic() - start
 
-    budget = 60.0
+    budget = 30.0
     skills_result = results.get("skills", {})
     print(f"fast budget: {elapsed:.2f}s / {budget:.0f}s "
           f"(skills: {skills_result.get('status')})")
@@ -83,6 +84,10 @@ def main() -> int:
         return 1
     if skills_result.get("status") not in ("healthy", "informational"):
         print(f"FAIL: unexpected skills status {skills_result.get('status')!r}",
+              file=sys.stderr)
+        return 1
+    if "200 skill(s)" not in skills_result.get("reason", ""):
+        print(f"FAIL: skills check did not scan 200 files: {skills_result.get('reason')!r}",
               file=sys.stderr)
         return 1
     print("OK: fast-mode budget holds")
