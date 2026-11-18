@@ -3046,9 +3046,10 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
         "dashboard node OS floor mismatch",
         "The pinned Node requires a newer macOS than this host provides, so "
         "the staged binary fails dyld verification and the Web UI cannot build.",
-        "Pin Node to a host-compatible version (`hermes pm lock --bump node "
-        "<ver>` then `hermes pm install node`), or upgrade macOS. Workaround: "
-        "`hermes dashboard --skip-build`.",
+        "Pin Node to a host-compatible version by editing pm/lock.json with "
+        "the official nodejs.org SHASUMS256 digests (see "
+        "docs/agent/deep-ops.md), then `hermes pm install node`; or upgrade "
+        "macOS. Workaround: `hermes dashboard --skip-build`.",
     ),
     "DASHBOARD_NODE_ENGINES_MISMATCH": (
         "dashboard node engines mismatch",
