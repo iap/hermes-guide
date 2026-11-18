@@ -320,6 +320,10 @@ jobs:
         if: inputs.run-full-gate
         run: python tools/test_venv_detection_patterns.py
 
+      - name: Fast-mode performance budget test
+        if: inputs.run-full-gate
+        run: python tools/test_fast_budget.py
+
       - name: Upstream drift helper regression test
         if: inputs.run-full-gate
         run: python tools/test_upstream_drift.py
