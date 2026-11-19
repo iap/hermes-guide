@@ -577,13 +577,26 @@ CI: <pass | fail>. Threads: <N unresolved>.
 accept/decline decision and the thread state. A plain reply — Fixed or
 Declined — never resolves a thread; only the bot's actions do:
 
-- **Qodo:** a plain decline reply is discussion only and does not dismiss. To
-  dismiss, reply in the thread starting with `@qodo` stating the reason
-  ("this is a false positive — ..."), or use the finding's portal Dismiss link
-  (irreversible; portal access required). A re-review updates each finding's
-  status — Qodo marks Outdated/Resolved only when the code changed enough
-  that the finding no longer applies. Wait for the finding to be marked
-  resolved; a reply alone is not acceptance. (#434)
+- **Qodo — two distinct reply paths (word them correctly):**
+  - **Fixed** (code changed): reply in the thread as plain text **starting with
+    `Fixed in <sha>: ...` and do NOT tag `@qodo`.** Qodo's attribution engine
+    detects the fix from the pushed code and marks the finding *implemented*;
+    tagging `@qodo` on a fixed finding instead routes the reply to the chat
+    agent, which records a dismissal reason (e.g. "Dismissed — rejected") and
+    closes the thread with the wrong audit reason. State what changed and the
+    commit sha. Verified 2026-11-19 from Qodo's chat docs (dismissal reasons) and
+    Qodo skills guidance (fixed-finding attribution): the four dismissal
+    reasons (false positive / rejected / deferred / intentional) are for
+    findings closed *without* a code change.
+  - **Closed without a code change** (false positive / by design / deferred):
+    start the reply with `@qodo` and use canonical wording so the chat agent
+    records the matching reason — `@qodo this is a false positive — ...`,
+    `@qodo this is intentional — ...`, `@qodo deferring — ...`, or
+    `@qodo not fixing this — ...`. The portal Dismiss link is the alternative
+    (irreversible; portal access required).
+  A re-review updates each finding's status — Qodo marks Outdated/Resolved only
+  when the code changed enough that the finding no longer applies. Wait for the
+  finding to be marked resolved; a reply alone is not acceptance. (#434)
 - **CodeRabbit:** on a new head, check the thread state — a finding the
   re-review no longer reports may resolve, but do not assume it. If the
   thread remains open after the bot's re-review of the evidence, post
