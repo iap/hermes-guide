@@ -457,8 +457,8 @@ def _skill_index_paths(skills_root):
             from agent.skill_utils import iter_skill_index_files  # type: ignore
 
             return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
-        except Exception:
-            pass  # nosec B110
+        except Exception:  # nosec B110 - best-effort fallthrough
+            pass
     found: list[str] = []
     root_real = os.path.realpath(skills_root)
     try:
@@ -850,8 +850,8 @@ def _skill_matches_platform(fm):
         from agent.skill_utils import skill_matches_platform
 
         return bool(skill_matches_platform(fm))
-    except Exception:
-        pass  # nosec B110
+    except Exception:  # nosec B110 - best-effort fallthrough
+        pass
     platforms = fm.get(constants.SKILL_PLATFORMS_KEY)
     if not platforms:
         return True
@@ -3544,8 +3544,8 @@ def check_dashboard():
                 )
                 if os.path.isfile(node_bin):
                     facts_path = legacy_facts
-        except Exception:
-            pass  # nosec B110
+        except Exception:  # nosec B110 - best-effort fallthrough
+            pass
     # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
     # the same PM install dir as facts (not a different one).
     if checkout is None:
@@ -3868,8 +3868,8 @@ def check_plugin_update():
             if isinstance(entry, dict):
                 pinned = bool(entry.get("pinned"))
                 source = entry.get("source")
-        except Exception:
-            pass  # nosec B110
+        except Exception:  # nosec B110 - best-effort fallthrough
+            pass
     is_git = os.path.isdir(os.path.join(plugin_dir, ".git")) or os.path.isfile(
         os.path.join(plugin_dir, ".git")
     )
