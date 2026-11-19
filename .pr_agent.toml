@@ -1,36 +1,31 @@
-# Qodo review tuning for iap/hermes-guide.
+# Qodo repository-specific review guidance for iap/hermes-guide.
 #
-# Qodo is the automatic primary reviewer here (CodeRabbit stays manual via
-# `@coderabbitai review`). This file gives Qodo the repo context its raw
-# defaults lack — every instruction below pins a past false positive or a
-# contract Qodo should enforce. Keep it specific and short; Qodo docs ask
-# for extra_instructions that are clear and concise, not a handbook.
+# Scope: concrete, verifiable repository contracts and known false-positive traps.
+# Keep it specific and short — Qodo expects clear, concise extra_instructions,
+# not a handbook. AGENTS.md and CONTRIBUTING.md own the full rules; point to the
+# relevant docs/agent/ section instead of restating them.
+# The Qodo portal owns general review priorities, agent effort, and noise policy.
 
 [pr_reviewer]
 require_tests_review = true
 
 [review_agent]
-issues_user_guidelines = """This repo is a READ-ONLY diagnostics plugin for Hermes agent (plugin + skills tap). Plugin Python must never write config or filesystem (enforced by tools/check_no_mutation.py) — flag any write-mode open, dump, or mutating subprocess in plugin sources.
+issues_user_guidelines = """This repo is hermes-guide: a READ-ONLY Hermes diagnostics plugin plus a separately installed skills tap, not Hermes core. Verify claims against current PR code and the relevant docs/agent/ section before alleging a violation.
 
-check scopes: checks.py _CHECKS labels must mirror tools/check_cli_surface.py PLUGIN_COMMANDS guide scopes — flag any scope present in one but not the other.
+Read-only: plugin sources must not write config/filesystem, auto-fix, or request unjustified capabilities (check_no_mutation.py is an AST guard, not a runtime proof). Default check_hooks_readonly() executes nothing; --deep may run `hermes hooks doctor` and execute approved hooks — keep the modes distinct.
 
-Labels: release-blocking priority is the P1 label. There is NO priority:high label — never suggest querying it; verify any label you reference exists via `gh label list`.
+Interfaces: checks.py `_CHECKS` labels must match guide scopes in tools/check_cli_surface.py `PLUGIN_COMMANDS`. FINDING_IDS is public API: add entries, never rename. Keep raw Hermes CLI output, plugin check envelopes, and harness `OK:`/`FAIL` text distinct; `hermes guide --json` is one stdout document with no update notice, `/hermes-doctor` stays text.
 
-Dates: CHANGELOG sections stamp the UTC day (HERMES_CHANGELOG_DATE override exists for tests). Skill provenance footers carry evidence dates tied to log/source timestamps — challenge any date that contradicts its cited evidence.
+Upstream accuracy: drift-prone names belong in constants.py. For changed SKILL.md, verify commands, flags, YAML keys, paths, platform distinctions and fixes against a named Hermes revision or installed source. Never assume Claude Code/Cursor commands or plugin.json conventions; WSL is distinct from native Windows/Linux; a missing in-tree venv may be a valid PM-era install — inspect resolution code first.
 
-Generated blocks (AGENTS.md / README.md inventory, scopes) come from `python tools/render_docs.py --write` — never suggest hand-editing inside them.
+Skills/provenance: enforce CONTRIBUTING.md rules, version bump, citations and dated provenance — a valid footer does not prove the body. check_skill_provenance.py, check_skill_version_bump.py and check_citation_integrity.py have distinct jobs; demand a fresh date only when facts were reverified.
 
-Version lives in five sites (plugin.yaml, __init__.py, SECURITY.md policy sentence + supported table, pyproject.toml) — flag a bump that misses one.
+Generated/releases: AGENTS.md and README.md inventory/scope blocks come from `python tools/render_docs.py --write` — never suggest hand-edits inside them. A version bump touches five sites: plugin.yaml, __init__.py, SECURITY.md policy sentence + supported table, pyproject.toml. CHANGELOG sections use the UTC day (HERMES_CHANGELOG_DATE override exists for tests).
 
-Behavioral changes under tools/ need tools/test_*.py coverage wired into .github/workflows/reusable-ci.yml — flag behavior without a wired test.
+Tests: changed tools/ behavior needs tools/test_*.py regression coverage wired into .github/workflows/reusable-ci.yml when required; skills/*/scripts/ need behavioral tests, not just text guards. Before claiming missing coverage, read the whole test module, fixtures, self-tests and CI wiring; name the exact untested behavior. Never suggest loosening validators or skipping tests.
 
-Ground factual claims in this repo's source or the installed Hermes agent; say explicitly when a claim needs live verification instead of asserting it.
+Finding quality: for regex/parser/fallback/diagnostic findings cite current file:line, a reachable triggering input, expected vs actual, and the guard/test considered. Assess false acceptance and false rejection separately. If the path is outside the diff, call it cross-file; if evidence is thin, ask a verification question. Never import or execute untrusted plugin code for static checks.
 
-For regex, parser, and fallback-path findings: name the exact line in the reviewed revision and a concrete input that triggers the claimed failure. Check `constants.py` and `tools/test_*.py` for an existing guard before reporting. If the triggering code is not in the current diff, say the finding is cross-file rather than asserting a regression; if no triggering input can be named, report it as a question, not a bug.
+Workflow: the release-blocking label is `P1`, not `priority:high` — verify labels exist before suggesting queries. For GitHub Actions inspect token permissions, fork PR trust, untrusted-code execution, job conditions and required status contexts.
 
-Testability: Before reporting missing coverage, inspect the complete test module and the target tool's self-test and fixture paths. Identify the exact behavior not exercised; do not report an existing test path as missing.
-
-Static verification: Assess false acceptance and false rejection separately. Never import or execute untrusted plugin code. Treat dynamic behavior as indeterminate when static evidence is insufficient.
-
-GitHub Actions: Check event-specific token permissions, fork pull-request restrictions, untrusted-code execution, job conditions, and the current required status contexts."""
-
+Report only demonstrated, actionable violations of applicable contracts; do not duplicate findings for the same cause. Explain uncertainty when upstream or runtime evidence is unavailable."""
