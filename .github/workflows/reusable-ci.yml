@@ -211,14 +211,14 @@ jobs:
         # Enforces the lint config in pyproject.toml. Cross-platform: `python`,
         # no shell, no Hermes needed. tools/ and tests/ are excluded by config.
         run: |
-          pip install ruff
+          python -m pip install ruff==0.16.4
           python -m ruff check __init__.py checks.py constants.py
 
       - name: Pytest regression suite
         # Parametrised bridges over the standalone case functions; the shared
         # fixtures live in conftest.py. The scripts above still run directly.
         run: |
-          pip install pytest
+          python -m pip install pytest==9.1.1 "PyYAML>=6.0,<7"
           python -m pytest tests/test_envelopes_pytest.py tests/test_finding_ids_pytest.py -q
 
       - name: Tool coverage guard

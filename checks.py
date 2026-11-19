@@ -457,7 +457,7 @@ def _skill_index_paths(skills_root):
             from agent.skill_utils import iter_skill_index_files  # type: ignore
 
             return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
-        except Exception:  # noqa: S110 - fall through to the local mirror
+        except Exception:
             pass  # nosec B110
     found: list[str] = []
     root_real = os.path.realpath(skills_root)
@@ -850,7 +850,7 @@ def _skill_matches_platform(fm):
         from agent.skill_utils import skill_matches_platform
 
         return bool(skill_matches_platform(fm))
-    except Exception:  # noqa: S110 - fall through to the local platform mirror
+    except Exception:
         pass  # nosec B110
     platforms = fm.get(constants.SKILL_PLATFORMS_KEY)
     if not platforms:
@@ -1577,7 +1577,7 @@ def _bundled_plugins_dir():
     runs when imported outside a live Hermes process (e.g. in a unit test).
     """
     try:
-        resolver = getattr(importlib.import_module("hermes_cli.plugins"), "get_bundled_plugins_dir")  # noqa: B009
+        resolver = getattr(importlib.import_module("hermes_cli.plugins"), "get_bundled_plugins_dir")
         return str(resolver())
     except Exception:
         return None
@@ -2537,9 +2537,9 @@ def _checkout_lock_free(path):
             import msvcrt
             # getattr, not attribute access: typeshed guards msvcrt members
             # to win32, so mypy on POSIX sees none of them.
-            _locking = getattr(msvcrt, "locking")  # noqa: B009
-            _NBLCK = getattr(msvcrt, "LK_NBLCK")  # noqa: B009
-            _UNLCK = getattr(msvcrt, "LK_UNLCK")  # noqa: B009
+            _locking = getattr(msvcrt, "locking")
+            _NBLCK = getattr(msvcrt, "LK_NBLCK")
+            _UNLCK = getattr(msvcrt, "LK_UNLCK")
             fd = os.open(path, os.O_RDWR | getattr(os, "O_BINARY", 0))
         except OSError:
             return None
@@ -2567,9 +2567,9 @@ def _checkout_lock_free(path):
         import fcntl
         # getattr, not attribute access: typeshed guards fcntl members
         # to POSIX, so mypy on Windows sees none of them.
-        _flock = getattr(fcntl, "flock")  # noqa: B009
-        _EX = getattr(fcntl, "LOCK_EX")  # noqa: B009
-        _NB = getattr(fcntl, "LOCK_NB")  # noqa: B009
+        _flock = getattr(fcntl, "flock")
+        _EX = getattr(fcntl, "LOCK_EX")
+        _NB = getattr(fcntl, "LOCK_NB")
         try:
             # Writable first: NFS grants exclusive locks only on
             # writable descriptors; read-only is the fallback for
@@ -3544,7 +3544,7 @@ def check_dashboard():
                 )
                 if os.path.isfile(node_bin):
                     facts_path = legacy_facts
-        except Exception:  # noqa: S110 - legacy facts unreadable is not a verdict; stay on the install dir
+        except Exception:
             pass  # nosec B110
     # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
     # the same PM install dir as facts (not a different one).
@@ -3868,7 +3868,7 @@ def check_plugin_update():
             if isinstance(entry, dict):
                 pinned = bool(entry.get("pinned"))
                 source = entry.get("source")
-        except Exception:  # noqa: S110
+        except Exception:
             pass  # nosec B110
     is_git = os.path.isdir(os.path.join(plugin_dir, ".git")) or os.path.isfile(
         os.path.join(plugin_dir, ".git")

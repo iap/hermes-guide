@@ -311,8 +311,9 @@ def _version_check() -> str | None:
                 pinned = False
                 if meta_path.is_file():
                     _meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                    pinned = bool((_meta.get("hermes-guide") or {}).get("pinned"))
-            except (OSError, ValueError, KeyError) as exc:
+                    entry = _meta.get("hermes-guide") if isinstance(_meta, dict) else None
+                    pinned = bool(entry.get("pinned")) if isinstance(entry, dict) else False
+            except (OSError, ValueError) as exc:
                 logger.debug("pinned-install metadata unreadable: %s", exc)
                 pinned = False
             if pinned:
