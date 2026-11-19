@@ -30,3 +30,10 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [commit-msg, pre-commit, pre-push]
+      - id: ruff-plugin-source
+        name: ruff (plugin source)
+        entry: python -m ruff check __init__.py checks.py constants.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-push]

@@ -463,23 +463,26 @@ def case_plugins_bundled_only_noted(checks):
     print("OK: bundled-only resolution is named, not silent")
 
 
+CASES = (
+    case_version_label,
+    case_collision_message,
+    case_hooks_merges_doctor_findings,
+    case_hooks_allowlist_alone_when_doctor_healthy,
+    case_hooks_unaffected_when_allowlist_fine,
+    case_hooks_marker_beats_healthy_summary,
+    case_hooks_redact_credentials,
+    case_hooks_redact_bearer_edges,
+    case_allowlist_reuses_caller_home,
+    case_plugins_disabled_wins_over_bundled,
+    case_plugins_nested_user_key_not_bundled,
+    case_plugins_bundled_only_noted,
+)
+
+
 def main() -> int:
     checks = _load_checks()
     failures: list[str] = []
-    for case in (
-        case_version_label,
-        case_collision_message,
-        case_hooks_merges_doctor_findings,
-        case_hooks_allowlist_alone_when_doctor_healthy,
-        case_hooks_unaffected_when_allowlist_fine,
-        case_hooks_marker_beats_healthy_summary,
-        case_hooks_redact_credentials,
-        case_hooks_redact_bearer_edges,
-        case_allowlist_reuses_caller_home,
-        case_plugins_disabled_wins_over_bundled,
-        case_plugins_nested_user_key_not_bundled,
-        case_plugins_bundled_only_noted,
-    ):
+    for case in CASES:
         try:
             case(checks)
         except Exception as exc:  # noqa: BLE001
