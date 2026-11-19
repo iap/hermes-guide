@@ -176,18 +176,21 @@ def case_crash_is_populated(checks):
     print("OK: crashed check carries id/impact/fix")
 
 
+CASES = (
+    case_registry_shape,
+    case_static_coverage,
+    case_attach_expands_contract,
+    case_run_all_unknown_fixture,
+    case_run_all_broken_fixture,
+    case_run_all_healthy_untouched,
+    case_crash_is_populated,
+)
+
+
 def main() -> int:
     checks = _load_checks()
     failures: list[str] = []
-    for case in (
-        case_registry_shape,
-        case_static_coverage,
-        case_attach_expands_contract,
-        case_run_all_unknown_fixture,
-        case_run_all_broken_fixture,
-        case_run_all_healthy_untouched,
-        case_crash_is_populated,
-    ):
+    for case in CASES:
         try:
             case(checks)
         except Exception as exc:  # noqa: BLE001

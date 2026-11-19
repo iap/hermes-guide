@@ -22,3 +22,17 @@ warn_redundant_casts = true
 # envelopes are heterogeneous dicts. Requiring full annotations would add noise
 # without value at this size; enable stricter flags later if desired.
 disallow_untyped_defs = false
+strict_equality = true
+
+[tool.ruff]
+target-version = "py311"
+required-version = "0.16.4"
+line-length = 100
+extend-exclude = ["tools", "tests", ".mypy_cache", ".pytest_cache", ".ruff_cache"]
+
+[tool.ruff.lint]
+select = ["F", "I", "UP", "SIM", "RUF", "DTZ", "ISC", "PLW", "N"]
+ignore = ["N999", "E501", "PLW0603", "PLW2901"]
+
+[tool.ruff.lint.per-file-ignores]
+"checks.py" = ["N806", "RUF001", "RUF005", "SIM108", "UP015"]

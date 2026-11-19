@@ -31,9 +31,9 @@ import io
 import json
 import os
 import pathlib
-import stat
 import re
 import shlex
+import stat
 import subprocess
 import sys
 import time
@@ -110,7 +110,7 @@ def _run(cmd, timeout=20):
     try:
         out = subprocess.run(  # nosec B607
             cmd, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=timeout,
+            errors="replace", timeout=timeout, check=False,
         )
         return out.returncode, out.stdout or "", out.stderr or ""
     except FileNotFoundError:
@@ -457,8 +457,8 @@ def _skill_index_paths(skills_root):
             from agent.skill_utils import iter_skill_index_files  # type: ignore
 
             return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
-        except Exception:
-            pass  # nosec B110 - fall through to the local mirror
+        except Exception:  # nosec B110 - best-effort fallthrough
+            pass
     found: list[str] = []
     root_real = os.path.realpath(skills_root)
     try:
@@ -850,8 +850,8 @@ def _skill_matches_platform(fm):
         from agent.skill_utils import skill_matches_platform
 
         return bool(skill_matches_platform(fm))
-    except Exception:
-        pass  # nosec B110 - fall through to the local platform mirror
+    except Exception:  # nosec B110 - best-effort fallthrough
+        pass
     platforms = fm.get(constants.SKILL_PLATFORMS_KEY)
     if not platforms:
         return True
@@ -1713,7 +1713,7 @@ def _upstream_manifests(home):
     standalone plugin.
     """
     try:
-        from hermes_cli.plugins_discovery import collect_directory_manifests  # type: ignore[import-not-found]
+        from hermes_cli.plugins_discovery import collect_directory_manifests  # type: ignore[import-not-found]  # noqa: I001
         from hermes_constants import get_hermes_home
 
         if os.path.realpath(str(get_hermes_home())) != os.path.realpath(home):
@@ -1843,8 +1843,8 @@ def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_
         names = ", ".join(f"`{n}`" for n in bundled_only)
         verb = "resolves" if len(bundled_only) == 1 else "resolve"
         bundled_note = [
-            f"{names} {verb} via the bundled plugins dir "
-            "(absent from the user plugins dir — expected)"
+            (f"{names} {verb} via the bundled plugins dir "
+            "(absent from the user plugins dir — expected)")
         ]
     else:
         bundled_note = []
@@ -2050,8 +2050,8 @@ def check_plugins(manifests=None):
         names = ", ".join(f"`{n}`" for n in bundled_only)
         verb = "resolves" if len(bundled_only) == 1 else "resolve"
         bundled_note = [
-            f"{names} {verb} via the bundled plugins dir "
-            "(absent from the user plugins dir — expected)"
+            (f"{names} {verb} via the bundled plugins dir "
+            "(absent from the user plugins dir — expected)")
         ]
     else:
         bundled_note = []
@@ -2774,215 +2774,215 @@ def check_update_lock():
 FINDING_IDS: dict[str, tuple[str, str, str]] = {
     "CONFIG_PATH_UNRESOLVED": (
         "config path unresolved",
-        "Hermes cannot locate `config.yaml`, so custom providers, models, and "
-        "tools may silently fall back to defaults.",
+        ("Hermes cannot locate `config.yaml`, so custom providers, models, and "
+        "tools may silently fall back to defaults."),
         "Run `hermes config path`; if it fails, reinstall the Hermes CLI.",
     ),
     "CONFIG_MISSING": (
         "config file missing",
-        "Hermes runs on built-in defaults; any custom provider, model, or tool "
-        "choice is ignored.",
-        "Run `hermes setup` or restore the file to the reported path, then "
-        "re-run `hermes guide config`.",
+        ("Hermes runs on built-in defaults; any custom provider, model, or tool "
+        "choice is ignored."),
+        ("Run `hermes setup` or restore the file to the reported path, then "
+        "re-run `hermes guide config`."),
     ),
     "CONFIG_UNPARSEABLE": (
         "config.yaml does not parse",
-        "Hermes cannot load its settings, so affected features fall back or "
-        "fail at startup.",
-        "Fix the YAML at the reported path (indentation, quoting, duplicate "
-        "keys), then re-run `hermes guide config`.",
+        ("Hermes cannot load its settings, so affected features fall back or "
+        "fail at startup."),
+        ("Fix the YAML at the reported path (indentation, quoting, duplicate "
+        "keys), then re-run `hermes guide config`."),
     ),
     "CONFIG_UNREADABLE": (
         "config unreadable or unparsable",
-        "The affected surface cannot be inspected because the config could not "
-        "be loaded (unreadable file or invalid YAML).",
-        "Check read permissions on the reported path, and if the file is "
-        "readable fix its YAML, then re-run `hermes guide`.",
+        ("The affected surface cannot be inspected because the config could not "
+        "be loaded (unreadable file or invalid YAML)."),
+        ("Check read permissions on the reported path, and if the file is "
+        "readable fix its YAML, then re-run `hermes guide`."),
     ),
     "HOME_UNRESOLVED": (
         "Hermes home unresolved",
-        "The affected surface cannot be inspected because the Hermes home "
-        "directory could not be resolved.",
-        "Run `hermes config path` to confirm the profile resolves, then re-run "
-        "`hermes guide <scope>`.",
+        ("The affected surface cannot be inspected because the Hermes home "
+        "directory could not be resolved."),
+        ("Run `hermes config path` to confirm the profile resolves, then re-run "
+        "`hermes guide <scope>`."),
     ),
     "MCP_SERVER_MALFORMED": (
         "MCP server entry malformed",
-        "The listed MCP servers will not start, so their tools are unavailable "
-        "to the agent.",
-        "Move foreign keys such as `mcpServers` under the top-level "
+        ("The listed MCP servers will not start, so their tools are unavailable "
+        "to the agent."),
+        ("Move foreign keys such as `mcpServers` under the top-level "
         "`mcp_servers` mapping, make `mcp_servers` a mapping, and fix the "
         "listed entries (`command` for stdio, `url` for HTTP); then re-run "
-        "`hermes guide mcp`.",
+        "`hermes guide mcp`."),
     ),
     "SKILLS_ISSUES": (
         "skill issues",
-        "The listed skills will not load or will be shadowed, so their "
-        "instructions and slash commands are missing.",
-        "Fix the listed frontmatter, name, or path problems, then re-run "
-        "`hermes guide skills`.",
+        ("The listed skills will not load or will be shadowed, so their "
+        "instructions and slash commands are missing."),
+        ("Fix the listed frontmatter, name, or path problems, then re-run "
+        "`hermes guide skills`."),
     ),
     "COMMANDS_BUNDLE_MALFORMED": (
         "command bundle malformed",
         "Commands defined in the listed bundles will not resolve.",
-        "Fix or remove the listed bundle files, then re-run "
-        "`hermes guide commands`.",
+        ("Fix or remove the listed bundle files, then re-run "
+        "`hermes guide commands`."),
     ),
     "HOOKS_ALLOWLIST_INVALID": (
         "shell-hooks allowlist invalid",
-        "The shell-hook consent list cannot be read, so approved hooks may be "
+        ("The shell-hook consent list cannot be read, so approved hooks may be "
         "skipped or re-prompt, and any other hook problems are quoted in the "
-        "detail.",
-        "Repair or delete the reported `shell-hooks-allowlist.json`, then fix "
-        "the hook problems in the detail and re-run `hermes guide hooks`.",
+        "detail."),
+        ("Repair or delete the reported `shell-hooks-allowlist.json`, then fix "
+        "the hook problems in the detail and re-run `hermes guide hooks`."),
     ),
     "HOOKS_DOCTOR_FINDINGS": (
         "hooks doctor findings",
-        "One or more hooks fail or are misconfigured, so the events they guard "
-        "are unhandled.",
-        "Fix each hook reported by `hermes hooks doctor`, then re-run "
-        "`hermes guide hooks`.",
+        ("One or more hooks fail or are misconfigured, so the events they guard "
+        "are unhandled."),
+        ("Fix each hook reported by `hermes hooks doctor`, then re-run "
+        "`hermes guide hooks`."),
     ),
     "HOOKS_DOCTOR_UNAVAILABLE": (
         "hooks doctor unavailable",
-        "Hook health could not be verified, so a broken hook can fail silently "
-        "at runtime.",
+        ("Hook health could not be verified, so a broken hook can fail silently "
+        "at runtime."),
         "Run `hermes hooks doctor` manually and fix the error it reports.",
     ),
     "HOOKS_DOCTOR_OPAQUE": (
         "hooks doctor output unrecognized",
-        "Hook health could not be determined because the doctor output was not "
-        "recognized.",
-        "Run `hermes hooks doctor` manually and compare its output with the "
-        "installed Hermes version.",
+        ("Hook health could not be determined because the doctor output was not "
+        "recognized."),
+        ("Run `hermes hooks doctor` manually and compare its output with the "
+        "installed Hermes version."),
     ),
     "HOOKS_INSPECTION_UNAVAILABLE": (
         "hooks inspection unavailable",
-        "Hooks were skipped in this run, so hook failures surface only during "
-        "a session.",
-        "Hooks are inspected in-process by default and nothing was inspected "
+        ("Hooks were skipped in this run, so hook failures surface only during "
+        "a session."),
+        ("Hooks are inspected in-process by default and nothing was inspected "
         "here — add `--deep` (or run `hermes hooks doctor` directly) for the "
-        "live check that executes each approved hook once.",
+        "live check that executes each approved hook once."),
     ),
     "HOOKS_CONFIG_NOT_FOUND": (
         "hooks config missing",
-        "Hooks cannot be inspected because the profile's config file was not "
-        "found.",
+        ("Hooks cannot be inspected because the profile's config file was not "
+        "found."),
         "Run `hermes config path` and restore the profile's `config.yaml`.",
     ),
     "HOOKS_CONFIG_UNREADABLE": (
         "hooks config unreadable",
-        "Hooks cannot be inspected because the config file could not be "
-        "loaded.",
-        "Check read permissions on the profile's `config.yaml`, and if the "
-        "file is readable fix its YAML, then re-run `hermes guide hooks`.",
+        ("Hooks cannot be inspected because the config file could not be "
+        "loaded."),
+        ("Check read permissions on the profile's `config.yaml`, and if the "
+        "file is readable fix its YAML, then re-run `hermes guide hooks`."),
     ),
     "HOOKS_INSPECTION_FAILED": (
         "hook inspection failed",
-        "Hooks could not be inspected because the hook configuration raised an "
-        "error.",
-        "Re-run `hermes guide hooks`; if it repeats, report the exception type "
-        "shown in the reason.",
+        ("Hooks could not be inspected because the hook configuration raised an "
+        "error."),
+        ("Re-run `hermes guide hooks`; if it repeats, report the exception type "
+        "shown in the reason."),
     ),
     "HOOKS_FINDINGS": (
         "hook findings",
-        "One or more shell hooks are malformed, unreachable, or not "
-        "allowlisted, so the events they guard are unhandled.",
-        "Fix the listed hook entries in `config.yaml`, and approve each valid "
+        ("One or more shell hooks are malformed, unreachable, or not "
+        "allowlisted, so the events they guard are unhandled."),
+        ("Fix the listed hook entries in `config.yaml`, and approve each valid "
         "hook at the interactive prompt when the detail says it is not "
-        "allowlisted; then re-run `hermes guide hooks`.",
+        "allowlisted; then re-run `hermes guide hooks`."),
     ),
     "PLUGINS_CONFIG_SHAPE": (
         "plugins config malformed",
-        "The `plugins` section or its `enabled`/`disabled` keys have the wrong "
-        "shape, so Hermes ignores those settings and plugins may not load.",
-        "Rewrite `plugins` in `config.yaml` as a mapping with `enabled` and "
-        "`disabled` lists, then re-run `hermes guide plugins`.",
+        ("The `plugins` section or its `enabled`/`disabled` keys have the wrong "
+        "shape, so Hermes ignores those settings and plugins may not load."),
+        ("Rewrite `plugins` in `config.yaml` as a mapping with `enabled` and "
+        "`disabled` lists, then re-run `hermes guide plugins`."),
     ),
     "PLUGINS_MISSING_OR_BROKEN": (
         "plugin missing or broken",
-        "The listed enabled plugins are missing or failed to load, so their "
-        "commands, tools, and hooks are absent.",
-        "Run `hermes plugins list`; reinstall a missing plugin, and for an "
+        ("The listed enabled plugins are missing or failed to load, so their "
+        "commands, tools, and hooks are absent."),
+        ("Run `hermes plugins list`; reinstall a missing plugin, and for an "
         "exclusive provider select its category key (for example "
-        "`memory.provider`) instead of `plugins.enabled`.",
+        "`memory.provider`) instead of `plugins.enabled`."),
     ),
     "MEMORIES_ISSUES": (
         "memory issues",
-        "The listed memory files are inconsistent, so stored context may be "
-        "stale or ignored.",
-        "Fix the listed files under `$HERMES_HOME/memories/`, then re-run "
-        "`hermes guide memories`.",
+        ("The listed memory files are inconsistent, so stored context may be "
+        "stale or ignored."),
+        ("Fix the listed files under `$HERMES_HOME/memories/`, then re-run "
+        "`hermes guide memories`."),
     ),
     "SESSIONS_LOG_UNREADABLE": (
         "session log unreadable",
-        "Session activity cannot be analyzed, so runaway sessions stay "
-        "undetected.",
-        "Check read permissions on the reported agent log, then re-run "
-        "`hermes guide sessions`.",
+        ("Session activity cannot be analyzed, so runaway sessions stay "
+        "undetected."),
+        ("Check read permissions on the reported agent log, then re-run "
+        "`hermes guide sessions`."),
     ),
     "SESSIONS_LOG_UNPARSED": (
         "session log unparsed",
-        "Session activity cannot be analyzed because the log format was not "
-        "recognized.",
-        "Re-run `hermes guide sessions`; if it repeats, check the log format "
-        "written by the installed Hermes version.",
+        ("Session activity cannot be analyzed because the log format was not "
+        "recognized."),
+        ("Re-run `hermes guide sessions`; if it repeats, check the log format "
+        "written by the installed Hermes version."),
     ),
     "SESSIONS_RUNAWAY": (
         "runaway session",
-        "The listed sessions are burning API calls and context without "
-        "progress, which inflates cost and degrades answers.",
-        "Start a new session instead of resuming the listed one, and separate "
-        "generation from verification into distinct turns.",
+        ("The listed sessions are burning API calls and context without "
+        "progress, which inflates cost and degrades answers."),
+        ("Start a new session instead of resuming the listed one, and separate "
+        "generation from verification into distinct turns."),
     ),
     "UPDATE_CHECKOUT_UNRESOLVED": (
         "install checkout unresolved",
-        "The install checkout cannot be located, so update health cannot be "
-        "verified.",
-        "Run `hermes doctor` to confirm the install layout, then re-run "
-        "`hermes guide update`.",
+        ("The install checkout cannot be located, so update health cannot be "
+        "verified."),
+        ("Run `hermes doctor` to confirm the install layout, then re-run "
+        "`hermes guide update`."),
     ),
     "UPDATE_LAYOUT_UNRECOGNIZED": (
         "install layout unrecognized",
-        "The install layout was not recognized, so a stuck update lock cannot "
-        "be ruled out.",
-        "Run `hermes doctor` to confirm the install layout, then locate the "
-        "checkout and its update lock by hand.",
+        ("The install layout was not recognized, so a stuck update lock cannot "
+        "be ruled out."),
+        ("Run `hermes doctor` to confirm the install layout, then locate the "
+        "checkout and its update lock by hand."),
     ),
     "UPDATE_LOCK_UNREADABLE": (
         "update lock unreadable",
-        "A stale update lock may be blocking every `hermes` command, and it "
-        "could not be read.",
-        "Check read permissions on the reported lock file, then re-run "
-        "`hermes guide update`.",
+        ("A stale update lock may be blocking every `hermes` command, and it "
+        "could not be read."),
+        ("Check read permissions on the reported lock file, then re-run "
+        "`hermes guide update`."),
     ),
     "UPDATE_LOCK_MALFORMED": (
         "update lock malformed",
-        "The update lock does not name an owner, so update state cannot be "
-        "determined.",
-        "The lock must contain one PID; if no update is running, remove the "
-        "reported file with human confirmation.",
+        ("The update lock does not name an owner, so update state cannot be "
+        "determined."),
+        ("The lock must contain one PID; if no update is running, remove the "
+        "reported file with human confirmation."),
     ),
     "UPDATE_LOCK_HELD": (
         "update lock held",
-        "Every `hermes` invocation can wedge until the process holding the "
-        "checkout exits.",
-        "Wait for the process holding the checkout to exit (owner PID in the "
-        "reason); do not remove the lock while it is held.",
+        ("Every `hermes` invocation can wedge until the process holding the "
+        "checkout exits."),
+        ("Wait for the process holding the checkout to exit (owner PID in the "
+        "reason); do not remove the lock while it is held."),
     ),
     "UPDATE_LOCK_UNPROBEABLE": (
         "update lock unprobeable",
-        "A dead update owner may still be holding the checkout, and that "
-        "could not be verified.",
-        "Check for a running `hermes` or `git` process by hand before touching "
-        "the reported lock file.",
+        ("A dead update owner may still be holding the checkout, and that "
+        "could not be verified."),
+        ("Check for a running `hermes` or `git` process by hand before touching "
+        "the reported lock file."),
     ),
     "UPDATE_LOCK_INDETERMINATE": (
         "update lock indeterminate",
-        "Update ownership cannot be determined, so removing the lock could "
-        "interrupt a live update.",
-        "Check whether the owner PID in the reason is alive by hand before "
-        "touching the reported lock file.",
+        ("Update ownership cannot be determined, so removing the lock could "
+        "interrupt a live update."),
+        ("Check whether the owner PID in the reason is alive by hand before "
+        "touching the reported lock file."),
     ),
     "FAST_MODE_UNRESOLVED": (
         "fast mode skipped a surface",
@@ -2991,103 +2991,103 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
     ),
     "CHECK_CRASHED": (
         "check crashed",
-        "The affected check failed to run, so its surface was not inspected "
-        "(a defect in hermes-guide, not in your config).",
-        "Re-run `hermes guide <scope>`; if it repeats, file the exception type "
+        ("The affected check failed to run, so its surface was not inspected "
+        "(a defect in hermes-guide, not in your config)."),
+        ("Re-run `hermes guide <scope>`; if it repeats, file the exception type "
         "and `hermes --version` at "
-        "https://github.com/iap/hermes-guide/issues.",
+        "https://github.com/iap/hermes-guide/issues."),
     ),
     "STORAGE_UNREADABLE": (
         "state.db unreadable",
-        "The session database cannot be stat'd, so its size and health could "
-        "not be audited.",
-        "Check file permissions on the reported `state.db` path and re-run "
-        "`hermes guide storage`.",
+        ("The session database cannot be stat'd, so its size and health could "
+        "not be audited."),
+        ("Check file permissions on the reported `state.db` path and re-run "
+        "`hermes guide storage`."),
     ),
     "STORAGE_NOT_REGULAR": (
         "state.db not a regular file",
-        "The `state.db` path exists but is not a regular file (a directory, "
+        ("The `state.db` path exists but is not a regular file (a directory, "
         "FIFO, or symlink to a non-file), so no session database can be read "
-        "or measured there.",
-        "Inspect the reported `state.db` path; it is not a database. Remove or "
+        "or measured there."),
+        ("Inspect the reported `state.db` path; it is not a database. Remove or "
         "rename the directory/FIFO/symlink, then restart the session so Hermes "
-        "recreates a real `state.db`.",
+        "recreates a real `state.db`."),
     ),
     "STORAGE_LARGE": (
         "state.db large",
-        "A large session database takes longer to back up, uses more disk, and "
-        "makes `optimize-storage` slower to reclaim space.",
-        "Stop the gateway and all sessions, then run `hermes sessions "
+        ("A large session database takes longer to back up, uses more disk, and "
+        "makes `optimize-storage` slower to reclaim space."),
+        ("Stop the gateway and all sessions, then run `hermes sessions "
         "optimize-storage` (see `hermes sessions optimize-storage --help`). "
-        "Do not use `--force` while holders are live.",
+        "Do not use `--force` while holders are live."),
     ),
     "GATEWAY_LOG_UNREADABLE": (
         "gateway log unreadable",
-        "Gateway connection health cannot be audited because the agent log "
-        "could not be read.",
-        "Check read permissions on the reported agent log, then re-run "
-        "`hermes guide gateway`.",
+        ("Gateway connection health cannot be audited because the agent log "
+        "could not be read."),
+        ("Check read permissions on the reported agent log, then re-run "
+        "`hermes guide gateway`."),
     ),
     "GATEWAY_HEALTH_ISSUES": (
         "gateway connection failures",
-        "The listed gateway websocket disconnects mean subagent polling and "
-        "delegation status were lost during the affected sessions.",
-        "See `diagnosing-gateway` (keepalive/timeout section); reduce delegate "
-        "context and retry the deep dive, then re-run `hermes guide gateway`.",
+        ("The listed gateway websocket disconnects mean subagent polling and "
+        "delegation status were lost during the affected sessions."),
+        ("See `diagnosing-gateway` (keepalive/timeout section); reduce delegate "
+        "context and retry the deep dive, then re-run `hermes guide gateway`."),
     ),
     "DASHBOARD_NODE_OUTDATED": (
         "dashboard node outdated",
-        "The PM-managed Node version differs from the lockfile pin, so the "
-        "dashboard Web UI build uses a toolchain the lock does not describe.",
-        "Ask the user to confirm before running `hermes pm install node` (explicit install bypasses the "
-        "lazy-install policy), then verify with `hermes guide dashboard`.",
+        ("The PM-managed Node version differs from the lockfile pin, so the "
+        "dashboard Web UI build uses a toolchain the lock does not describe."),
+        ("Ask the user to confirm before running `hermes pm install node` (explicit install bypasses the "
+        "lazy-install policy), then verify with `hermes guide dashboard`."),
     ),
     "DASHBOARD_NODE_OS_FLOOR_MISMATCH": (
         "dashboard node OS floor mismatch",
-        "The pinned Node requires a newer macOS than this host provides, so "
-        "the staged binary fails dyld verification and the Web UI cannot build.",
-        "Pin Node to a host-compatible 24.x build: edit pm/lock.json's node "
+        ("The pinned Node requires a newer macOS than this host provides, so "
+        "the staged binary fails dyld verification and the Web UI cannot build."),
+        ("Pin Node to a host-compatible 24.x build: edit pm/lock.json's node "
         "entry (version + per-target sha256 from nodejs.org SHASUMS256.txt), "
         "then `hermes pm install node`. Do not use `hermes pm lock --bump` "
         "(it rehashes every target including Termux and can fail on missing "
         "archives). Full steps in the diagnosing-path skill. Or upgrade "
-        "macOS. Workaround: `hermes dashboard --skip-build`.",
+        "macOS. Workaround: `hermes dashboard --skip-build`."),
     ),
     "DASHBOARD_NODE_ENGINES_MISMATCH": (
         "dashboard node engines mismatch",
-        "The installed Node/npm does not satisfy package.json engines, so "
-        "`npm ci --engine-strict` fails during the Web UI build.",
-        "Bump the lock to a Node that satisfies engines (`hermes pm lock "
+        ("The installed Node/npm does not satisfy package.json engines, so "
+        "`npm ci --engine-strict` fails during the Web UI build."),
+        ("Bump the lock to a Node that satisfies engines (`hermes pm lock "
         "--bump node <ver>` then `hermes pm install node`), then re-run "
-        "`hermes guide dashboard`.",
+        "`hermes guide dashboard`."),
     ),
     "DASHBOARD_WEBUI_STALE_BUILD": (
         "dashboard web UI stale",
-        "The built Web UI dist is stale relative to current sources, so the "
-        "dashboard serves an old UI or rebuilds on every launch.",
-        "Run `hermes dashboard` to rebuild the Web UI, or use "
-        "`hermes dashboard --skip-build` to serve the existing dist.",
+        ("The built Web UI dist is stale relative to current sources, so the "
+        "dashboard serves an old UI or rebuilds on every launch."),
+        ("Run `hermes dashboard` to rebuild the Web UI, or use "
+        "`hermes dashboard --skip-build` to serve the existing dist."),
     ),
     "DASHBOARD_LAZY_INSTALL_DISABLED": (
         "dashboard lazy installs disabled",
-        "Lazy installs are disabled while Node is missing or outdated, so the "
-        "dashboard build refuses to fetch the toolchain it needs.",
-        "Run `hermes pm install` explicitly (it bypasses the lazy policy), "
-        "then re-run `hermes guide dashboard`.",
+        ("Lazy installs are disabled while Node is missing or outdated, so the "
+        "dashboard build refuses to fetch the toolchain it needs."),
+        ("Run `hermes pm install` explicitly (it bypasses the lazy policy), "
+        "then re-run `hermes guide dashboard`."),
     ),
     "DASHBOARD_CHECKOUT_UNRESOLVED": (
         "dashboard checkout unresolved",
-        "No unambiguous `hermes-agent` checkout could be selected under "
+        ("No unambiguous `hermes-agent` checkout could be selected under "
         "$HERMES_HOME (either none was found, or several installs had "
         "checkouts without paired facts), so the dashboard check could not "
         "read the lock pin, the package.json engines, or the built Web UI "
         "receipt. It reports unknown rather than guessing at a different "
-        "install.",
-        "With explicit user confirmation, place the Hermes source checkout at "
+        "install."),
+        ("With explicit user confirmation, place the Hermes source checkout at "
         "`hermes-agent` inside the Hermes home (the directory containing the "
         "path printed by `hermes config path`; for example `git clone "
         "https://github.com/NousResearch/hermes-agent <home>/hermes-agent`), "
-        "then re-run `hermes guide dashboard`.",
+        "then re-run `hermes guide dashboard`."),
     ),
 }
 
@@ -3245,7 +3245,7 @@ def _parse_log_timestamp(line: str):
     if not m:
         return None
     try:
-        return datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+        return datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007
     except ValueError:
         return None
 
@@ -3288,7 +3288,7 @@ def check_gateway_health():
     timeout_unparsed = False  # a matched timeout line whose seconds failed to parse
     keepalive_hits = []  # (index, timestamp_or_none) of gateway keepalive lines
     blocking = []  # (index, timestamp_or_none, seconds, kind)
-    now = datetime.datetime.now()
+    now = datetime.datetime.now()  # noqa: DTZ005
 
     for index, line in enumerate(tail):
         ts = _parse_log_timestamp(line)
@@ -3334,7 +3334,7 @@ def check_gateway_health():
         """A disconnect is recent by line position AND (when timestamped) not older than 7 days."""
         if index < recent_from:
             return False
-        if ts is not None and (now - ts).days > 7:
+        if ts is not None and (now - ts).days > 7:  # noqa: SIM103
             return False
         return True
 
@@ -3544,7 +3544,7 @@ def check_dashboard():
                 )
                 if os.path.isfile(node_bin):
                     facts_path = legacy_facts
-        except Exception:  # nosec B110 - legacy facts unreadable is not a verdict; stay on the install dir
+        except Exception:  # nosec B110 - best-effort fallthrough
             pass
     # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
     # the same PM install dir as facts (not a different one).
@@ -3868,7 +3868,7 @@ def check_plugin_update():
             if isinstance(entry, dict):
                 pinned = bool(entry.get("pinned"))
                 source = entry.get("source")
-        except Exception:  # nosec B110
+        except Exception:  # nosec B110 - best-effort fallthrough
             pass
     is_git = os.path.isdir(os.path.join(plugin_dir, ".git")) or os.path.isfile(
         os.path.join(plugin_dir, ".git")
@@ -3880,7 +3880,7 @@ def check_plugin_update():
         try:
             proc = subprocess.run(
                 ["git", "remote", "get-url", "origin"],  # nosec B607
-                capture_output=True, text=True, timeout=5, cwd=plugin_dir,
+                capture_output=True, text=True, timeout=5, cwd=plugin_dir, check=False,
             )
             if proc.returncode == 0 and proc.stdout.strip():
                 raw = proc.stdout.strip()
@@ -3924,7 +3924,7 @@ def check_plugin_update():
         try:
             proc = subprocess.run(
                 ["git", "ls-remote", "--tags", "--sort=v:refname", remote],  # nosec B607
-                capture_output=True, text=True, timeout=10, cwd=plugin_dir if is_git else None,
+                capture_output=True, text=True, timeout=10, cwd=plugin_dir if is_git else None, check=False,
             )
             if proc.returncode == 0:
                 import re as _re

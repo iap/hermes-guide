@@ -20,6 +20,7 @@ __version__ = "0.9.8"
 
 import json
 import logging
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -31,7 +32,7 @@ from . import checks
 logger = logging.getLogger(__name__)
 
 
-def _format_result(results):
+def _format_result(results: dict) -> tuple[bool, str]:
     """Render check envelopes as a compact, human-readable report."""
     lines = []
     exit_ok = True
@@ -58,7 +59,7 @@ def _format_result(results):
     return exit_ok, "\n".join(lines) if lines else "(no checks)"
 
 
-def _handle_doctor(raw_args):
+def _handle_doctor(raw_args: str) -> str:
     """`/hermes-doctor` handler — optional scope, e.g. `/hermes-doctor mcp`.
 
     A trailing ``--deep`` runs the doctor-backed hooks check, which executes
@@ -92,7 +93,7 @@ def _handle_doctor(raw_args):
 _DETAIL_NATIVE = (str, int, float, bool)
 
 
-def _jsonify_detail(value):
+def _jsonify_detail(value: object) -> object:
     """Return a `detail` value that survives `json.dumps`, deterministically.
 
     The envelope contract prefers a string or a list of strings, but checks
@@ -112,7 +113,7 @@ def _jsonify_detail(value):
     return str(value)
 
 
-def _build_json_payload(results, scope, fast):
+def _build_json_payload(results: dict, scope: str | None, fast: bool) -> dict:
     """Assemble the `--json` machine contract from check envelopes.
 
     Envelopes pass through unchanged (and in `run_all()` order); the only
@@ -147,7 +148,7 @@ def _build_json_payload(results, scope, fast):
     }
 
 
-def _run_cli(args):
+def _run_cli(args) -> int:
     """`hermes guide <scope>` handler."""
     scope = getattr(args, "scope", None)
     fast = getattr(args, "fast", False)
@@ -212,7 +213,7 @@ def _run_cli(args):
     sys.exit(0 if exit_ok else 1)
 
 
-def _setup_cli(subparser):
+def _setup_cli(subparser) -> None:
     subparser.add_argument(
         "scope",
         nargs="?",
@@ -267,13 +268,11 @@ def _version_check() -> str | None:
         return None
     _version_check_ran = True
     try:
-        import re
-
         plugin_dir = Path(__file__).resolve().parent
         # Verify this is the root of the plugin's own clone
         top_proc = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],  # nosec B607
-            capture_output=True, text=True, timeout=5, cwd=plugin_dir,
+            capture_output=True, text=True, timeout=5, cwd=plugin_dir, check=False,
         )
         if top_proc.returncode != 0:
             return None
@@ -283,7 +282,7 @@ def _version_check() -> str | None:
         # Read remote tags without writing local refs
         proc = subprocess.run(
             ["git", "ls-remote", "--tags", "--sort=v:refname", "origin"],  # nosec B607
-            capture_output=True, text=True, timeout=10, cwd=plugin_dir,
+            capture_output=True, text=True, timeout=10, cwd=plugin_dir, check=False,
         )
         if proc.returncode != 0:
             return None
@@ -311,11 +310,11 @@ def _version_check() -> str | None:
                 meta_path = plugin_dir.parent / ".install-metadata.json"
                 pinned = False
                 if meta_path.is_file():
-                    import json as _json
-
-                    _meta = _json.loads(meta_path.read_text(encoding="utf-8"))
-                    pinned = bool((_meta.get("hermes-guide") or {}).get("pinned"))
-            except Exception:
+                    _meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    entry = _meta.get("hermes-guide") if isinstance(_meta, dict) else None
+                    pinned = bool(entry.get("pinned")) if isinstance(entry, dict) else False
+            except (OSError, ValueError) as exc:
+                logger.debug("pinned-install metadata unreadable: %s", exc)
                 pinned = False
             if pinned:
                 cmd = (
@@ -328,8 +327,8 @@ def _version_check() -> str | None:
                 f"hermes-guide update available: {__version__} → {latest}. "
                 f"Run: {cmd}"
             )
-    except Exception:
-        pass  # nosec B110 - version check is best-effort; never fail a session
+    except Exception as exc:  # version check is best-effort; never fail a session
+        logger.debug("version check failed: %s", exc)
     return None
 
 
@@ -375,7 +374,7 @@ def _proactive_check_start(**kwargs):
 _START_SKILL_FILE = Path(__file__).resolve().parent / "plugin-skills" / "start" / "SKILL.md"
 
 
-def _read_frontmatter(path):
+def _read_frontmatter(path: Path) -> dict:
     """Parse the YAML frontmatter of a SKILL.md; ``{}`` when absent or malformed."""
     try:
         # utf-8-sig accepts both plain UTF-8 and a BOM-prefixed file. Without
@@ -399,7 +398,7 @@ def _read_frontmatter(path):
     return data if isinstance(data, dict) else {}
 
 
-def _register_start_skill(ctx, skill_file=None):
+def _register_start_skill(ctx, skill_file: Path | None = None) -> None:
     """Register the plugin-side router skill (``hermes-guide:start``).
 
     The tap installs separately; this router ships inside the plugin so a

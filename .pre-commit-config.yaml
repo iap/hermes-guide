@@ -30,3 +30,9 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [commit-msg, pre-commit, pre-push]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff
+        name: ruff (plugin source)
+        files: ^(__init__\.py|checks\.py|constants\.py)$
