@@ -584,7 +584,8 @@ Declined — never resolves a thread; only the bot's actions do:
     tagging `@qodo` on a fixed finding instead routes the reply to the chat
     agent, which records a dismissal reason (e.g. "Dismissed — rejected") and
     closes the thread with the wrong audit reason. State what changed and the
-    commit sha. Verified 2026-11-19 from Qodo's chat docs: the four dismissal
+    commit sha. Verified 2026-11-19 from Qodo's chat docs (dismissal reasons) and
+    Qodo skills guidance (fixed-finding attribution): the four dismissal
     reasons (false positive / rejected / deferred / intentional) are for
     findings closed *without* a code change.
   - **Closed without a code change** (false positive / by design / deferred):
