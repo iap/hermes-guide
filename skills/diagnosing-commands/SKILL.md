@@ -1,7 +1,7 @@
 ---
 name: diagnosing-commands
 description: Diagnose missing or overridden Hermes slash commands — skills as commands, skill bundles, plugin-registered commands, and per-platform admin/user permissions.
-version: 1.1.8
+version: 1.1.9
 metadata:
   hermes:
     tags: [hermes, commands, troubleshooting]
@@ -21,7 +21,7 @@ Hermes has **no standalone custom-command files** (no `commands/*.md` directory 
 | **Built-in registry** | Ships with Hermes (`/model`, `/skills`, `/reload-mcp`, …) | Case-insensitive; see `/help` |
 | **Skills** | Every installed skill is automatically `/<skill-name>` | The name comes from SKILL.md frontmatter, not the directory |
 | **Skill bundles** | `hermes bundles create <name> --skill a --skill b` → `$HERMES_HOME/skill-bundles/<slug>.yaml` | Loads several skills at once; **a bundle wins a slug collision with a skill** |
-| **Plugin commands** | `ctx.register_command(name, handler, description="", args_hint="")` in a plugin | Only while that plugin is enabled. A name that collides with a **built-in** command is warned and skipped (`resolve_command` check); a collision between two plugins is a **late-registration replace** — the last registrant wins (`hermes_cli/plugins.py::register_command`, `@_serialized_replacement`), which is why a command can silently change behaviour when another plugin loads |
+| **Plugin commands** | `ctx.register_command(name, handler, description="", args_hint="")` in a plugin | Only while that plugin is enabled. A name that collides with a **built-in** command is warned and skipped (`resolve_command` check); a collision between two plugins is a **late-registration replace** — the last registrant wins (`hermes_cli/plugins_context.py::register_command`, `@_serialized_replacement`), which is why a command can silently change behaviour when another plugin loads |
 
 Multiple leading `/skill` tokens stack in one message — the cap is **`_MAX_STACKED_SKILLS = 5`** (`agent/skill_commands.py`, verified 2026-09-14); parsing stops at the first token that isn't an installed skill, so argument paths like `/tmp/scan.pdf` are safe.
 
@@ -82,4 +82,4 @@ Add `/my-skill` to `user_allowed_commands` in the Telegram platform's `extra:` b
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: no standalone command files (no `commands/` tree); bundle path `<HERMES_HOME>/skill-bundles/` and bundle-over-skill precedence (`agent/skill_bundles.py`); the stacking cap `_MAX_STACKED_SKILLS = 5` (`agent/skill_commands.py`); `ctx.register_command(name, handler, description=..., args_hint=...)` (`plugins/context_engine/__init__.py`); all four platform gating keys (`gateway/config_loader.py`); alias pairs `new`←`reset` and `context`←`ctx` (`hermes_cli/commands.py`). Re-checked 2026-10-12 against the live install (upstream `e0734a66`): skill-slug-vs-builtin builtin-wins verdict via `hermes guide commands` (installed `skills/software-development/plan` shadows builtin `/plan`). Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: no standalone command files (no `commands/` tree); bundle path `<HERMES_HOME>/skill-bundles/` and bundle-over-skill precedence (`agent/skill_bundles.py`); the stacking cap `_MAX_STACKED_SKILLS = 5` (`agent/skill_commands.py`); `ctx.register_command(name, handler, description=..., args_hint=...)` (`plugins/context_engine/__init__.py`); all four platform gating keys (`gateway/config_loader.py`); alias pairs `new`←`reset` and `context`←`ctx` (`hermes_cli/commands.py`). Re-checked 2026-10-12 against the live install (upstream `e0734a66`): skill-slug-vs-builtin builtin-wins verdict via `hermes guide commands` (installed `skills/software-development/plan` shadows builtin `/plan`). Re-verified 2026-11-10 against upstream `dcfbaf06d708` (baseline re-pin): `register_command` moved to `hermes_cli/plugins_context.py` (built-in collisions still skipped via `resolve_command`; plugin-vs-plugin collisions still replace — last registrant wins — and unload restores the displaced entry); the `@_serialized_replacement` wrapper now imports from `hermes_cli/plugins_loader.py`. Re-verify before reuse.*

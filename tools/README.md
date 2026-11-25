@@ -42,7 +42,7 @@ gate.
 | `check_tool_coverage.py` | Every `tools/*.py` and `tests/*.py` is wired into a workflow `run:` block |
 | `check_eol_contract.py` | `.gitattributes` + `git ls-files --eol` LF contract |
 | `check_cli_surface.py` | CLI registry mirror sync + live CLI surface assertions |
-| `check_skill_dogfood.py` | Live-install read-only smoke test (CI only) |
+| `check_skill_dogfood.py` | Live-install smoke test; `--release` runs every scope with `--json` and writes a dogfood report |
 | `check_skill_malformed_name.py` | SKILL.md name syntax validation |
 | `check_plugin_skip_source.py` | Subcategory-dir constant regression |
 | `check_plugins_notes.py` | Plugin notes formatting regression |

@@ -14,10 +14,8 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 import sys
 from release_gate_shared import (
-    REPO,
     _git_tags,
     parse_version,
     is_prerelease,
@@ -33,7 +31,6 @@ def _is_stable_version_tag_local(tag: str) -> bool:
 
 def check_tag_version_gap(current_tag: str) -> int:
     """Return exit code: 0 = ok, 1 = gap, 2 = bad input."""
-    import re
     # Strip refs/tags/ prefix if present
     if current_tag.startswith("refs/tags/"):
         current_tag = current_tag[len("refs/tags/"):]

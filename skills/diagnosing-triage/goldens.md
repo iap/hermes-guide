@@ -25,7 +25,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | A6 | Baseline shows `?` (unknown) | treat as unmeasured — resolve home/config via configuration guide; never call unknown "healthy" |
 | A7 | Baseline all `+` healthy; user still vague | continue symptom flowchart / §3 clarify — do not invent a broken surface |
 | A8 | Baseline shows `x sessions` (runaway signature) | §1b runaway branch — fresh session + model-tier check, NOT more interrupts of the same session |
-| A9 | Baseline shows `x update` (stale lock) | diagnosing-cli-tui §1 stale-lock note — verify owner-PID liveness before touching the lock |
+| A9 | Baseline shows `x update` (stale lock) | diagnosing-cli §1 stale-lock note — verify owner-PID liveness before touching the lock |
 
 ---
 
@@ -54,8 +54,8 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | C2 | Need to reinstall / upgrade Hermes itself | `installing-hermes` |
 | C3 | High load, OOM, plugins discarded after load timeout | `diagnosing-host-pressure` |
 | C4 | Desktop app blank window / won't launch | `diagnosing-desktop` |
-| C5 | TUI garbled on **native Windows** | `diagnosing-cli-tui` |
-| C6 | TUI issues on **Linux/WSL** | `hermes doctor` + `display:` in config — **not** `diagnosing-cli-tui` |
+| C5 | TUI garbled on **native Windows** | `diagnosing-tui` |
+| C6 | TUI issues on **Linux/WSL** | `diagnosing-tui` |
 | C7 | Wrong venv / wrong Python | `diagnosing-path` |
 | C8 | Bot not responding on Telegram/Discord (platform implied) | `diagnosing-gateway` first |
 | C9 | Gateway healthy; bot profiles/conflicts only | `diagnosing-bot-mode` |
@@ -69,6 +69,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | C17 | Plugin not loading / plugins.enabled | `diagnosing-plugins` |
 | C18 | Provider picker flooded / model catalog | `diagnosing-providers` |
 | C19 | Agent forgot / MEMORY.md errors | `diagnosing-memory` |
+| C20 | `hermes` dies with `No module named snowballstemmer`; `mise which hermes` points at a Python 3.12 console script | `diagnosing-path` - foreign-shim/local install collision; check launcher provenance, not upstream #97340 |
 
 ---
 
@@ -82,6 +83,12 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | D4 | Headless `hermes -z` without naming a skill | skill auto-discovery may not fire — goldens must name triage explicitly |
 | D5 | Vague triage answer needs a fix command | use only subcommands from `hermes --help`, skill playbooks, or `hermes guide <scope>` — never invent `hermes python …` / `hermes db …` / `hermes channels` / unlisted `hermes plugins install <name>`; verify every cited subcommand exists before reporting |
 
+## E. Upstream attribution guard
+
+| # | Prompt | Expected |
+|---|--------|----------|
+| E1 | `Use the diagnosing-path skill: hermes starts, then dies with "No module named snowballstemmer". command -v hermes prints /home/u/.local/share/mise/installs/python/3.12/bin/hermes; type -a hermes lists that mise path before ~/.local/bin/hermes; hermes --version prints Python: 3.12.x while the checkout .venv is 3.14.x.` | `diagnosing-path` -> "Foreign shim interpreter"; names a local PATH collision, not an upstream defect; states #97340 does not apply (Hermes-managed launcher/dual-venv class); fix = run `<checkout>/.venv/bin/hermes` or the managed launcher, and remove/rename the mise console script. **Fail** if the answer cites #97340 as the cause, recommends `pip install snowballstemmer` into the mise 3.12 interpreter, or says "report upstream". |
+
 ---
 
 ## Run log (fill in when you execute)
@@ -91,5 +98,7 @@ Run `hermes guide` (or `/hermes-doctor`) **before** pure symptom routing when a 
 | 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — D4 holds | B1-general ×2, P1, P2-attempt-1, all unnamed headless: triage not auto-loaded; free-style answers (8 invented subcommands once, 0 once; P1 answered model_catalog, missed discover_models contract; P2 attempt timed out with no output) |
 | 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — B1 | named invocation: §0b baseline drove `x plugins` routing; 0 invented subcommands; grade A, docked from S only for missing explicit triage citation |
 | 2026-10-13 | v0.21.7+279.g9bda154 | Windows native | Pass — C16 with latency note | P2 hook-prompt retry (unnamed): enumerated all 4 hook systems, correct empty-hooks diagnosis, read-only close; 112s first-byte latency, first attempt's timeout was transient |
+| 2026-11-09 | v0.21.7+279.g9bda154 | Windows native | Pass - E1 | manual golden; first attempt used stale global 1.5.18 and failed the #97340 clause; second passed after global sync: named the mise shim/PATH collision, said #97340 does not apply, rejected installing into the shim |
+| 2026-11-09 | v0.21.3+15327.gd0b4924 | NixOS WSL | Pass - E1 | manual golden; run in interactive TUI because hermes -z ignored the prompt; same content pass |
 
 Failed rows → fix `SKILL.md` flowchart/table (and bump skill version), or document an intentional Expected change in the same PR.

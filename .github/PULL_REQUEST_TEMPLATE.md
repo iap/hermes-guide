@@ -51,7 +51,7 @@ a merged PR claiming pending work misleads the next reader. -->
 
 | Check | Command | Result | Notes |
 |---|---|---|---|
-| Hermetic gates | `python tools/check_gates.py` | [x/y] | [aggregates all 12 hermetic gates — paste the `OK: x/y` line] |
+| Hermetic gates | `python tools/check_gates.py` | [x/y] | [aggregates all 13 hermetic gates — paste the `OK: x/y` line] |
 | Generated doc blocks | `python tools/render_docs.py` | [x/y] | [add/removed a skill? run `--write` first] |
 | Version bump | `python tools/check_skill_version_bump.py <base-ref>` | [x/y] | [paste the line] |
 | Syntax | `python -m py_compile __init__.py checks.py constants.py` | [x/y] | [paste the line] |
@@ -65,17 +65,13 @@ a merged PR claiming pending work misleads the next reader. -->
 - [ ] `.github/upstream-drift.baseline` bumped if this absorbs upstream drift
 - [ ] Anything I could NOT verify is listed above, not omitted
 
-## Review Round Status
+## Review gate
 <!-- Machine-checked by tools/check_review_round_clean.py in CI.
      Fill in after Qodo and CodeRabbit reviews are complete. -->
-- [ ] Qodo review clean (all findings resolved)
-- [ ] CodeRabbit review clean (all findings resolved)
-- [ ] Qodo review triggered on this head
-- [ ] CodeRabbit full review triggered on this head
+- [ ] Qodo reviewed the current head; no open findings.
+- [ ] CodeRabbit reviewed the current head; no open findings.
 - [ ] Green CI on this head
 - [ ] Commits verified (G signature)
-- [ ] Round ledger written (`.hermes/review-rounds.json`)
-- [ ] Both bots clean on same head commit
 
 ## Notes for reviewers
 <!-- Anything a reviewer should check by hand: judgement calls, facts that depend

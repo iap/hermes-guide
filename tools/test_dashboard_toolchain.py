@@ -166,6 +166,24 @@ def test_check_dashboard_unknown_when_no_checkout():
     assert result.get("fix")
 
 
+def test_check_dashboard_unknown_when_multiple_unpaired_checkouts():
+    """Two or more installs/*/hermes-agent checkouts with no paired facts ->
+    unknown, with a reason that explains the ambiguity (not 'none found')."""
+    td = tempfile.mkdtemp()
+    home = os.path.join(td, "hermes")
+    for name in ("aaa-install", "zzz-install"):
+        os.makedirs(os.path.join(home, "installs", name, "hermes-agent"), exist_ok=True)
+    os.makedirs(os.path.join(home, "tools"), exist_ok=True)
+    with patch.object(checks, "_hermes_home", return_value=home), \
+         patch.object(checks, "_read_config", return_value=(None, {})):
+        os.environ.pop("HERMES_DISABLE_LAZY_INSTALLS", None)
+        result = checks.run_all(scope="dashboard")["dashboard"]
+    assert result["status"] == "unknown"
+    assert result["id"] == "DASHBOARD_CHECKOUT_UNRESOLVED"
+    assert "multiple" in result["reason"].lower()
+    assert "no hermes-agent checkout found" not in result["reason"]
+
+
 def _write_node_facts(dirpath, version="26.7.0"):
     """Write a facts.json with a node entry whose binary exists."""
     entry = f"node-{version}-win32-x64"

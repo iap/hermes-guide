@@ -2,6 +2,93 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.9.8 (2026-11-16)
+
+### Features
+
+- add 'hermes guide --update' read-only update report ([#496](https://github.com/iap/hermes-guide/pull/496))
+- **dogfood**: add release JSON gate
+
+### Bug Fixes
+
+- Qodo/CodeRabbit follow-ups for dashboard checkout and gate test ([#497](https://github.com/iap/hermes-guide/pull/497))
+- dashboard checkout fallback, lazy detail, and gate/test noise ([#495](https://github.com/iap/hermes-guide/pull/495))
+- **dogfood**: treat ERROR-level logs as fatal
+- **dogfood**: preserve warning messages
+- **dogfood**: separate warnings from fatal stderr
+- **checks**: silence safe-loader bandit false positive
+- **dogfood**: harden JSON contract validation
+- **dogfood**: load scopes and bind HERMES_HOME
+- **dogfood**: skip unregistered guide command
+
+### Performance
+
+- **checks**: use PyYAML C loader for frontmatter
+
+### Documentation
+
+- **review**: align release-only exception
+- **review**: add merge stop rule
+
+### Chores
+
+- Merge pull request #492 from iap/feat/diagnostic-truth-harness
+- Merge pull request #487 from iap/fix/dogfood-warnings
+- Merge pull request #485 from iap/perf/skill-frontmatter-loader
+- Merge pull request #484 from iap/docs/review-gate
+- Merge pull request #483 from iap/feat/release-dogfood
+
+### Tests
+
+- **diagnostic**: assert reasons and full clean surface
+- **diagnostic**: add fixture-driven truth harness
+- **dogfood**: assert report warning text
+
+## v0.9.7 (2026-11-13)
+
+### Bug Fixes
+
+- **json**: serialize Path/date details in --json ([#481](https://github.com/iap/hermes-guide/pull/481))
+
+## v0.9.6 (2026-11-13)
+
+### Bug Fixes
+
+- **plugins**: match fallback category verdicts ([#478](https://github.com/iap/hermes-guide/pull/478))
+- **plugins**: narrow provider skip to config_backends
+- **plugins**: pin config_backends and delegation dirs
+- **skills**: complete staged-node recovery guidance
+- **diagnosing-path**: correct staged Node OS-floor recovery
+- **skills**: correct git-install node-warning cause
+- **drift**: watch the plugin-context modules the skills now cite
+- **skills**: re-anchor citations for dcfbaf06 re-baseline ([#473](https://github.com/iap/hermes-guide/pull/473))
+
+### Tests
+
+- **plugins**: cover fallback note and exact category
+- **plugins**: exercise fallback category verdict
+
+## v0.9.5 (2026-11-10)
+
+### Bug Fixes
+
+- **diagnosing-path**: separate foreign shim from upstream bug ([#472](https://github.com/iap/hermes-guide/pull/472))
+- **verify-plugin**: allow a renamed checkout via --dir-name ([#466](https://github.com/iap/hermes-guide/pull/466))
+- **docs**: address CodeRabbit findings on shim diagnosis (v1.5.20)
+- **docs**: address Qodo findings on shim diagnosis
+
+### Documentation
+
+- **diagnosing-triage**: record E1 live run ([#475](https://github.com/iap/hermes-guide/pull/475))
+- **skills**: split diagnosing-cli-tui into cli and tui ([#470](https://github.com/iap/hermes-guide/pull/470))
+- **agents**: codify OS labels and cross-platform rules ([#465](https://github.com/iap/hermes-guide/pull/465))
+- **skills**: note version-manager shims in installing-hermes (v1.1.7) ([#464](https://github.com/iap/hermes-guide/pull/464))
+- **skills**: cover foreign shim interpreter in diagnosing-path (v1.5.19) ([#463](https://github.com/iap/hermes-guide/pull/463))
+
+### Tests
+
+- **version**: preserve pyproject.toml bytes on Windows ([#474](https://github.com/iap/hermes-guide/pull/474))
+
 ## v0.9.4 (2026-11-09)
 
 ### Features

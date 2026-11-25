@@ -15,7 +15,7 @@ It **complements — never replaces —** Hermes's own diagnostics (`hermes doct
 `config`, `mcp`, `skills`, `commands`, `hooks`, `plugins`, `memories`, `sessions`, `storage`, `dashboard`, `update`, `gateway`
 <!-- END GENERATED: intro-scopes --> — every one of those names is a valid scope.
 2. **A skills tap.** <!-- BEGIN GENERATED: intro-inventory -->
-**Thirty-one troubleshooting skills** — one install guide, one configuration map, twenty-seven per-surface `diagnosing-*` playbooks, two other skills (`hermes-post-update`, `plugin-authoring`).
+**Thirty-two troubleshooting skills** — one install guide, one configuration map, twenty-eight per-surface `diagnosing-*` playbooks, two other skills (`hermes-post-update`, `plugin-authoring`).
 <!-- END GENERATED: intro-inventory -->
 
 Enabling the plugin additionally registers one router skill (`hermes-guide:start`) in
@@ -86,9 +86,9 @@ as a plugin.
 ## Use the plugin
 
 - **In a session:** `/hermes-doctor` for every surface, or `/hermes-doctor mcp` for one.
-- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy. On a degraded host — where every `hermes` launch replays a minutes-long update tail — `hermes guide --fast` runs all twelve checks in-process with no subprocess.
+- **In a terminal:** `hermes guide`. Exits `1` if any surface is broken or unknown, `2` for an unrecognized scope name, `0` when healthy. The JSON top-level `status` is `broken` when a check is broken, `unknown` when the only non-healthy checks could not be measured, and `healthy` otherwise. On a degraded host — where every `hermes` launch replays a minutes-long update tail — `hermes guide --fast` runs all twelve checks in-process with no subprocess.
 - **Deep hooks:** `hermes guide hooks --deep` (or `/hermes-doctor hooks --deep`) runs `hermes hooks doctor`, which executes each approved hook once. The default hooks check runs nothing.
-- **Machine-readable:** `hermes guide mcp --json` prints one JSON document instead of the report — envelopes unchanged, top-level `status` derived, update notice suppressed (exit codes above still apply). Agents and scripts parse that document; plain `grep`-style consumers keep the text output.
+- **Machine-readable:** `hermes guide mcp --json` prints one JSON document instead of the report — schema `2`, envelopes unchanged, top-level `status` derived (`broken` > `unknown` > `healthy`), update notice suppressed (exit codes above still apply). Agents and scripts parse that document; plain `grep`-style consumers keep the text output.
 - **Finding ids:** every broken or unknown result carries a stable `id`, `impact`, and `fix`; the [finding catalog](docs/findings.md) lists scope separately, and `--json` emits those keys in each finding envelope under its scope key.
 
 ### Proactive mode (opt-in)
@@ -121,7 +121,7 @@ hermes skills install iap/hermes-guide/skills/diagnosing-mcp
 
 <!-- BEGIN GENERATED: install-all-loop -->
 ```bash
-for s in diagnosing-auth diagnosing-backup diagnosing-bot-mode diagnosing-browser diagnosing-cli-tui diagnosing-commands diagnosing-config diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memories diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-profiles diagnosing-providers diagnosing-runtime diagnosing-secrets diagnosing-sessions diagnosing-skills diagnosing-storage diagnosing-triage diagnosing-update diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes plugin-authoring; do hermes skills install "iap/hermes-guide/skills/$s"; done
+for s in diagnosing-auth diagnosing-backup diagnosing-bot-mode diagnosing-browser diagnosing-cli diagnosing-commands diagnosing-config diagnosing-cron diagnosing-desktop diagnosing-gateway diagnosing-hooks diagnosing-host-pressure diagnosing-mcp diagnosing-memories diagnosing-memory diagnosing-path diagnosing-plugins diagnosing-profiles diagnosing-providers diagnosing-runtime diagnosing-secrets diagnosing-sessions diagnosing-skills diagnosing-storage diagnosing-triage diagnosing-tui diagnosing-update diagnosing-voice hermes-configuration-guide hermes-post-update installing-hermes plugin-authoring; do hermes skills install "iap/hermes-guide/skills/$s"; done
 ```
 <!-- END GENERATED: install-all-loop -->
 
@@ -143,7 +143,8 @@ Each skill still passes its own scan and consent individually, so it stays indiv
 | `diagnosing-profiles` | Multi-profile issues — profile not found, config not isolated, profile switching failures, clone/sync-imports problems |
 | `diagnosing-path` | Path issues — the dual-venv layout on older checkouts, the PM-era no-in-tree-venv case, detection, canonical resolution order, cross-platform best practices |
 | `diagnosing-triage` | Route vague user descriptions to the correct diagnostic skill — a triage layer that maps symptoms to the right `diagnosing-*` playbook |
-| `diagnosing-cli-tui` | CLI/TUI issues on native Windows — rendering artifacts, themes, busy indicators, mouse modes, encoding, launch/resume |
+| `diagnosing-cli` | Classic prompt_toolkit CLI issues — rendering artifacts, themes, busy indicators, encoding, launch/resume |
+| `diagnosing-tui` | Modern Node Ink TUI issues — rendering artifacts, themes, mouse modes, launch/resume |
 | `diagnosing-backup` | Backup and restore issues — backup creation failures, restore errors, checkpoint corruption, import/export problems |
 | `diagnosing-auth` | Hub-install auth failures — dead/shadowing `GITHUB_TOKEN` in the profile `.env`, `gh-cli` fallback, 401 vs anonymous probes, rate-limit verdicts |
 | `diagnosing-memory` | Memory problems — built-in `MEMORY.md`/`USER.md` stores, external providers configured but silently unavailable, missing plugins/keys, char-limit and approval gates |

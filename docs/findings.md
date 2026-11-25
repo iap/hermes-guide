@@ -15,6 +15,14 @@ generated from it plus the `_CHECKS` call graph. Do not edit the table by hand:
   edit, or a report target when the finding is a hermes-guide defect.
 - IDs are public API once released: add entries, never rename one.
 
+## Machine-readable status (`--json`)
+
+The document schema is **`2`**. Top-level `status` precedence is
+**`broken` > `unknown` > `healthy`**: `broken` if any check is broken,
+`unknown` if none is broken but at least one could not be measured, otherwise
+`healthy`. The CLI exits `0` only for `healthy`, `1` for both `broken` and
+`unknown`, and `2` for a bad scope.
+
 <!-- BEGIN GENERATED: findings-catalog -->
 | id | scope | meaning | impact | fix |
 |---|---|---|---|---|
@@ -24,10 +32,10 @@ generated from it plus the `_CHECKS` call graph. Do not edit the table by hand:
 | `CONFIG_PATH_UNRESOLVED` | `config` | config path unresolved | Hermes cannot locate `config.yaml`, so custom providers, models, and tools may silently fall back to defaults. | Run `hermes config path`; if it fails, reinstall the Hermes CLI. |
 | `CONFIG_UNPARSEABLE` | `config` | config.yaml does not parse | Hermes cannot load its settings, so affected features fall back or fail at startup. | Fix the YAML at the reported path (indentation, quoting, duplicate keys), then re-run `hermes guide config`. |
 | `CONFIG_UNREADABLE` | `mcp`, `plugins` | config unreadable or unparsable | The affected surface cannot be inspected because the config could not be loaded (unreadable file or invalid YAML). | Check read permissions on the reported path, and if the file is readable fix its YAML, then re-run `hermes guide`. |
-| `DASHBOARD_CHECKOUT_UNRESOLVED` | `dashboard` | dashboard checkout unresolved | No `hermes-agent` checkout was found under $HERMES_HOME, so the dashboard check could not read the lock pin, the package.json engines, or the built Web UI receipt. It reports unknown rather than guessing at a different install. | With explicit user confirmation, place the Hermes source checkout at `hermes-agent` inside the Hermes home (the directory containing the path printed by `hermes config path`; for example `git clone https://github.com/NousResearch/hermes-agent <home>/hermes-agent`), then re-run `hermes guide dashboard`. |
+| `DASHBOARD_CHECKOUT_UNRESOLVED` | `dashboard` | dashboard checkout unresolved | No unambiguous `hermes-agent` checkout could be selected under $HERMES_HOME (either none was found, or several installs had checkouts without paired facts), so the dashboard check could not read the lock pin, the package.json engines, or the built Web UI receipt. It reports unknown rather than guessing at a different install. | With explicit user confirmation, place the Hermes source checkout at `hermes-agent` inside the Hermes home (the directory containing the path printed by `hermes config path`; for example `git clone https://github.com/NousResearch/hermes-agent <home>/hermes-agent`), then re-run `hermes guide dashboard`. |
 | `DASHBOARD_LAZY_INSTALL_DISABLED` | `dashboard` | dashboard lazy installs disabled | Lazy installs are disabled while Node is missing or outdated, so the dashboard build refuses to fetch the toolchain it needs. | Run `hermes pm install` explicitly (it bypasses the lazy policy), then re-run `hermes guide dashboard`. |
 | `DASHBOARD_NODE_ENGINES_MISMATCH` | `dashboard` | dashboard node engines mismatch | The installed Node/npm does not satisfy package.json engines, so `npm ci --engine-strict` fails during the Web UI build. | Bump the lock to a Node that satisfies engines (`hermes pm lock --bump node <ver>` then `hermes pm install node`), then re-run `hermes guide dashboard`. |
-| `DASHBOARD_NODE_OS_FLOOR_MISMATCH` | `dashboard` | dashboard node OS floor mismatch | The pinned Node requires a newer macOS than this host provides, so the staged binary fails dyld verification and the Web UI cannot build. | Pin Node to a host-compatible version (`hermes pm lock --bump node <ver>` then `hermes pm install node`), or upgrade macOS. Workaround: `hermes dashboard --skip-build`. |
+| `DASHBOARD_NODE_OS_FLOOR_MISMATCH` | `dashboard` | dashboard node OS floor mismatch | The pinned Node requires a newer macOS than this host provides, so the staged binary fails dyld verification and the Web UI cannot build. | Pin Node to a host-compatible 24.x build: edit pm/lock.json's node entry (version + per-target sha256 from nodejs.org SHASUMS256.txt), then `hermes pm install node`. Do not use `hermes pm lock --bump` (it rehashes every target including Termux and can fail on missing archives). Full steps in the diagnosing-path skill. Or upgrade macOS. Workaround: `hermes dashboard --skip-build`. |
 | `DASHBOARD_NODE_OUTDATED` | `dashboard` | dashboard node outdated | The PM-managed Node version differs from the lockfile pin, so the dashboard Web UI build uses a toolchain the lock does not describe. | Ask the user to confirm before running `hermes pm install node` (explicit install bypasses the lazy-install policy), then verify with `hermes guide dashboard`. |
 | `DASHBOARD_WEBUI_STALE_BUILD` | `dashboard` | dashboard web UI stale | The built Web UI dist is stale relative to current sources, so the dashboard serves an old UI or rebuilds on every launch. | Run `hermes dashboard` to rebuild the Web UI, or use `hermes dashboard --skip-build` to serve the existing dist. |
 | `FAST_MODE_UNRESOLVED` | `*`, `dashboard` | fast mode skipped a surface | The affected surface was skipped, so its real state is unknown. | Re-run `hermes guide <scope>` without `--fast`. |

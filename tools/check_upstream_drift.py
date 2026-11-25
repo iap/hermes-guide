@@ -42,7 +42,8 @@ from pathlib import Path
 UPSTREAM_REPO = os.environ.get("UPSTREAM_REPO", "NousResearch/hermes-agent")
 WATCH_FILES = os.environ.get(
     "WATCH_FILES",
-    "hermes_cli/plugins.py tools/skills_tool.py agent/skill_utils.py "
+    "hermes_cli/plugins.py hermes_cli/plugins_context.py hermes_cli/plugins_loader.py "
+    "tools/skills_tool.py agent/skill_utils.py "
     "agent/skill_bundles.py agent/skill_commands.py tools/skills_hub.py "
     "hermes_constants.py tools/memory_tool.py tools/memory_tool_store.py "
     "hermes_cli/config_defaults.py skills/autonomous-ai-agents/hermes-agent "

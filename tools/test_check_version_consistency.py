@@ -49,7 +49,8 @@ def main() -> int:
     # exercise version drift detection through the CLI
     import re
     pyproject = REPO / "pyproject.toml"
-    original = pyproject.read_text(encoding="utf-8")
+    original_bytes = pyproject.read_bytes()
+    original = original_bytes.decode("utf-8")
     m = re.search(r'^version\s*=\s*"([^"]+)"', original, re.MULTILINE)
     assert m, "could not parse version from pyproject.toml"
     current_ver = m.group(1)
@@ -57,18 +58,18 @@ def main() -> int:
     drifted = re.sub(r'^version\s*=\s*"([^"]+)"', f'version = "{drifted_ver}"', original, count=1, flags=re.MULTILINE)
     assert drifted != original
     try:
-        pyproject.write_text(drifted, encoding="utf-8")
+        pyproject.write_bytes(drifted.encode("utf-8"))
         r = run([])
         if r.returncode != 1:
             failures.append(f"checker exited with {r.returncode}, expected 1 for drift")
         if "pyproject.toml" not in (r.stdout + r.stderr):
             failures.append("checker diagnostic does not identify pyproject.toml")
     finally:
-        pyproject.write_text(original, encoding="utf-8")
+        pyproject.write_bytes(original_bytes)
     # verify restored
-    if pyproject.read_text(encoding="utf-8") != original:
+    if pyproject.read_bytes() != original_bytes:
         failures.append("failed to restore pyproject.toml")
-        pyproject.write_text(original, encoding="utf-8")
+        pyproject.write_bytes(original_bytes)
 
     if failures:
         for f in failures:

@@ -16,10 +16,11 @@ findings (observer-only; nothing is injected or modified — hooks are inspected
 in-process at those boundaries, never executed).
 """
 
-__version__ = "0.9.4"
+__version__ = "0.9.8"
 
 import json
 import logging
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -31,7 +32,7 @@ from . import checks
 logger = logging.getLogger(__name__)
 
 
-def _format_result(results):
+def _format_result(results: dict) -> tuple[bool, str]:
     """Render check envelopes as a compact, human-readable report."""
     lines = []
     exit_ok = True
@@ -58,7 +59,7 @@ def _format_result(results):
     return exit_ok, "\n".join(lines) if lines else "(no checks)"
 
 
-def _handle_doctor(raw_args):
+def _handle_doctor(raw_args: str) -> str:
     """`/hermes-doctor` handler — optional scope, e.g. `/hermes-doctor mcp`.
 
     A trailing ``--deep`` runs the doctor-backed hooks check, which executes
@@ -92,44 +93,54 @@ def _handle_doctor(raw_args):
 _DETAIL_NATIVE = (str, int, float, bool)
 
 
-def _jsonify_detail(value):
+def _jsonify_detail(value: object) -> object:
     """Return a `detail` value that survives `json.dumps`, deterministically.
 
-    The envelope contract makes this a no-op for the shapes checks actually
-    emit (a string, or a list of strings). The one real escape hatch comes
-    from YAML itself: an unquoted date-like `mcp_servers:` key parses as
-    `datetime.date`, so a server name can reach `detail` as a non-JSON-native
-    scalar — the MCP shape check prints parsed names verbatim. Coerce exactly
-    those leaf scalars to the text they would get in the text renderer
-    (`str()`), leave JSON-native values untouched, and mutate nothing in
-    place.
+    The envelope contract prefers a string or a list of strings, but checks
+    also emit the paths they inspected (`Path`) and YAML can hand back a
+    `datetime.date`. Coerce every non-JSON-native leaf to `str()`, keep lists
+    and tuples as arrays and dicts as objects (recursively), leave native
+    values and `None` untouched, and mutate nothing in place. Container
+    details therefore keep their JSON shape rather than the text renderer's
+    repr; no current check emits one.
     """
-    if not isinstance(value, list):
+    if value is None or isinstance(value, _DETAIL_NATIVE):
         return value
-    return [
-        v if v is None or isinstance(v, _DETAIL_NATIVE) else str(v)
-        for v in value
-    ]
+    if isinstance(value, (list, tuple)):
+        return [_jsonify_detail(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _jsonify_detail(v) for k, v in value.items()}
+    return str(value)
 
 
-def _build_json_payload(results, scope, fast):
+def _build_json_payload(results: dict, scope: str | None, fast: bool) -> dict:
     """Assemble the `--json` machine contract from check envelopes.
 
     Envelopes pass through unchanged (and in `run_all()` order); the only
-    derived field is the top-level `status`, which is `broken` when any
-    check is `broken` or `unknown`, else `healthy` — the same derivation
-    the text renderer applies for its exit code. `detail` goes through
+    derived field is the top-level `status`:
+
+    - `broken` when any check is `broken`;
+    - `unknown` when no check is `broken` but at least one is `unknown`;
+    - `healthy` otherwise.
+
+    `unknown` means the run could not measure that surface — it is not proof of
+    breakage. The text renderer and exit code still treat it as non-healthy
+    (exit 1), matching the documented CLI contract. `detail` goes through
     `_jsonify_detail` so the document is always serializable.
     """
     checks_payload = {
         label: {**r, "detail": _jsonify_detail(r.get("detail"))}
         for label, r in dict(results).items()
     }
-    status = "broken" if any(
-        r.get("status") in ("broken", "unknown") for r in checks_payload.values()
-    ) else "healthy"
+    statuses = [r.get("status") for r in checks_payload.values()]
+    if any(status == "broken" for status in statuses):
+        status = "broken"
+    elif any(status == "unknown" for status in statuses):
+        status = "unknown"
+    else:
+        status = "healthy"
     return {
-        "schema_version": "1",
+        "schema_version": "2",
         "scope": scope,
         "fast": fast,
         "status": status,
@@ -137,12 +148,32 @@ def _build_json_payload(results, scope, fast):
     }
 
 
-def _run_cli(args):
+def _run_cli(args) -> int:
     """`hermes guide <scope>` handler."""
     scope = getattr(args, "scope", None)
     fast = getattr(args, "fast", False)
     deep = getattr(args, "deep", False)
     json_mode = getattr(args, "json", False)
+    update = getattr(args, "update", False)
+    if update:
+        # On-demand plugin update report (read-only: prints the command,
+        # never executes it). Bypasses the scope machinery so no check
+        # enumeration or generated-doc churn is required.
+        if fast:
+            tok = checks._FAST_MODE.set(True)
+            try:
+                result = checks.check_plugin_update()
+            finally:
+                checks._FAST_MODE.reset(tok)
+        else:
+            result = checks.check_plugin_update()
+        if json_mode:
+            payload = _build_json_payload({"plugin-update": result}, None, fast)
+            print(json.dumps(payload, ensure_ascii=False))
+            sys.exit(0 if payload["status"] == "healthy" else 1)
+        exit_ok, text = _format_result({"plugin-update": result})
+        print(text)
+        sys.exit(0 if exit_ok else 1)
     try:
         call: dict = {"scope": scope}
         if fast:
@@ -157,7 +188,7 @@ def _run_cli(args):
             # only one stdout JSON value.
             print(
                 json.dumps(
-                    {"schema_version": "1", "error": f"unknown scope: {scope}"},
+                    {"schema_version": "2", "error": f"unknown scope: {scope}"},
                     ensure_ascii=False,
                 )
             )
@@ -182,7 +213,7 @@ def _run_cli(args):
     sys.exit(0 if exit_ok else 1)
 
 
-def _setup_cli(subparser):
+def _setup_cli(subparser) -> None:
     subparser.add_argument(
         "scope",
         nargs="?",
@@ -199,6 +230,13 @@ def _setup_cli(subparser):
         action="store_true",
         help="run `hermes hooks doctor` for the hooks scope; it executes each "
         "approved shell hook once. Default hooks inspection is in-process",
+    )
+    subparser.add_argument(
+        "--update",
+        action="store_true",
+        help="report whether a newer hermes-guide release is available and "
+        "print the exact update command for this install type (read-only; "
+        "never runs it)",
     )
     subparser.add_argument(
         "--json",
@@ -230,13 +268,11 @@ def _version_check() -> str | None:
         return None
     _version_check_ran = True
     try:
-        import re
-
         plugin_dir = Path(__file__).resolve().parent
         # Verify this is the root of the plugin's own clone
         top_proc = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],  # nosec B607
-            capture_output=True, text=True, timeout=5, cwd=plugin_dir,
+            capture_output=True, text=True, timeout=5, cwd=plugin_dir, check=False,
         )
         if top_proc.returncode != 0:
             return None
@@ -246,7 +282,7 @@ def _version_check() -> str | None:
         # Read remote tags without writing local refs
         proc = subprocess.run(
             ["git", "ls-remote", "--tags", "--sort=v:refname", "origin"],  # nosec B607
-            capture_output=True, text=True, timeout=10, cwd=plugin_dir,
+            capture_output=True, text=True, timeout=10, cwd=plugin_dir, check=False,
         )
         if proc.returncode != 0:
             return None
@@ -266,12 +302,33 @@ def _version_check() -> str | None:
             return (int(parts[0]), int(parts[1]), int(parts[2]))
 
         if parse_ver(latest) > parse_ver(__version__):
+            # Pinned installs (the common case for `--ref` installs and
+            # catalog pins) cannot move via `hermes plugins update`; tell
+            # them the command that actually works instead of one that
+            # refuses.
+            try:
+                meta_path = plugin_dir.parent / ".install-metadata.json"
+                pinned = False
+                if meta_path.is_file():
+                    _meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    entry = _meta.get("hermes-guide") if isinstance(_meta, dict) else None
+                    pinned = bool(entry.get("pinned")) if isinstance(entry, dict) else False
+            except (OSError, ValueError) as exc:
+                logger.debug("pinned-install metadata unreadable: %s", exc)
+                pinned = False
+            if pinned:
+                cmd = (
+                    "hermes plugins install https://github.com/iap/hermes-guide.git "
+                    "--force --ref <40-character commit SHA>"
+                )
+            else:
+                cmd = "hermes plugins update hermes-guide"
             return (
                 f"hermes-guide update available: {__version__} → {latest}. "
-                "Run: hermes plugins update hermes-guide"
+                f"Run: {cmd}"
             )
-    except Exception:
-        pass  # nosec B110 - version check is best-effort; never fail a session
+    except Exception as exc:  # version check is best-effort; never fail a session
+        logger.debug("version check failed: %s", exc)
     return None
 
 
@@ -317,7 +374,7 @@ def _proactive_check_start(**kwargs):
 _START_SKILL_FILE = Path(__file__).resolve().parent / "plugin-skills" / "start" / "SKILL.md"
 
 
-def _read_frontmatter(path):
+def _read_frontmatter(path: Path) -> dict:
     """Parse the YAML frontmatter of a SKILL.md; ``{}`` when absent or malformed."""
     try:
         # utf-8-sig accepts both plain UTF-8 and a BOM-prefixed file. Without
@@ -341,7 +398,7 @@ def _read_frontmatter(path):
     return data if isinstance(data, dict) else {}
 
 
-def _register_start_skill(ctx, skill_file=None):
+def _register_start_skill(ctx, skill_file: Path | None = None) -> None:
     """Register the plugin-side router skill (``hermes-guide:start``).
 
     The tap installs separately; this router ships inside the plugin so a

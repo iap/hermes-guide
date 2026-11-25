@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -34,9 +33,7 @@ def _minimal_yaml_parse(text: str) -> dict:
     current_key = None
     current_list = None
     current_map = None
-    current_sub_key = None
     current_sub_map = None
-    indent_stack = []
 
     for line in text.splitlines():
         if not line.strip() or line.strip().startswith("#"):
@@ -54,7 +51,6 @@ def _minimal_yaml_parse(text: str) -> dict:
                     current_key = key
                     current_list = None
                     current_map = {}
-                    current_sub_key = None
                     current_sub_map = None
                     result[key] = current_map
                 elif val.startswith("[") and val.endswith("]"):
@@ -63,28 +59,24 @@ def _minimal_yaml_parse(text: str) -> dict:
                     current_key = None
                     current_list = None
                     current_map = None
-                    current_sub_key = None
                     current_sub_map = None
                 elif val.lower() in ("true", "false"):
                     result[key] = val.lower() == "true"
                     current_key = None
                     current_list = None
                     current_map = None
-                    current_sub_key = None
                     current_sub_map = None
                 elif val.isdigit():
                     result[key] = int(val)
                     current_key = None
                     current_list = None
                     current_map = None
-                    current_sub_key = None
                     current_sub_map = None
                 else:
                     result[key] = val.strip('"').strip("'")
                     current_key = None
                     current_list = None
                     current_map = None
-                    current_sub_key = None
                     current_sub_map = None
             continue
 
@@ -100,7 +92,6 @@ def _minimal_yaml_parse(text: str) -> dict:
                     result[current_key] = current_list
                     current_map = None
                 current_list.append(stripped[2:].strip().strip('"').strip("'"))
-                current_sub_key = None
                 current_sub_map = None
                 continue
             if ":" in stripped:
@@ -108,25 +99,20 @@ def _minimal_yaml_parse(text: str) -> dict:
                 k = k.strip()
                 v = v.strip().strip('"').strip("'")
                 if v == "" or v is None:
-                    current_sub_key = k
                     current_sub_map = {}
                     current_map[k] = current_sub_map
                 elif v.lower() in ("true", "false"):
                     current_map[k] = v.lower() == "true"
-                    current_sub_key = None
                     current_sub_map = None
                 elif v.isdigit():
                     current_map[k] = int(v)
-                    current_sub_key = None
                     current_sub_map = None
                 elif v.startswith("[") and v.endswith("]"):
                     items = [x.strip().strip('"').strip("'") for x in v[1:-1].split(",") if x.strip()]
                     current_map[k] = items
-                    current_sub_key = None
                     current_sub_map = None
                 else:
                     current_map[k] = v
-                    current_sub_key = None
                     current_sub_map = None
             continue
 
@@ -170,7 +156,7 @@ def _load_manifest(plugin_dir: Path) -> tuple[dict | None, str]:
     return None, "No manifest found (plugin.yaml/yml/json)"
 
 
-def _check_manifest(data: dict, plugin_dir: Path) -> list[tuple[str, bool, str]]:
+def _check_manifest(data: dict, plugin_dir: Path, dir_name: str | None = None) -> list[tuple[str, bool, str]]:
     """Validate manifest fields. Returns list of (check, passed, detail)."""
     results = []
 
@@ -178,7 +164,8 @@ def _check_manifest(data: dict, plugin_dir: Path) -> list[tuple[str, bool, str]]
     name = data.get("name")
     results.append(("name present", bool(name), f"got {name!r}" if name else "missing"))
     if name:
-        results.append(("name matches dir", name == plugin_dir.name, f"{name} vs {plugin_dir.name}"))
+        expected = dir_name or plugin_dir.name
+        results.append(("name matches dir", name == expected, f"{name} vs {expected}"))
 
     version = data.get("version")
     results.append(("version present (quoted string)", isinstance(version, str) and bool(version), f"got {version!r}"))
@@ -434,7 +421,7 @@ def _check_readonly(plugin_dir: Path) -> list[tuple[str, bool, str]]:
     return results
 
 
-def verify(plugin_dir: Path, hermes_src: Path | None = None) -> int:
+def verify(plugin_dir: Path, hermes_src: Path | None = None, dir_name: str | None = None) -> int:
     """Run all checks. Returns 0 on success, 1 on any failure."""
     print(f"Verifying plugin: {plugin_dir}")
     print("=" * 60)
@@ -448,7 +435,7 @@ def verify(plugin_dir: Path, hermes_src: Path | None = None) -> int:
         print(f"  FAIL: {fmt}")
         return 1
     print(f"  Loaded: {fmt}")
-    manifest_results = _check_manifest(data, plugin_dir)
+    manifest_results = _check_manifest(data, plugin_dir, dir_name)
     for check, passed, detail in manifest_results:
         status = "PASS" if passed else "FAIL"
         print(f"  [{status}] {check}" + (f" — {detail}" if detail else ""))
@@ -492,6 +479,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Verify a Hermes plugin meets official standards.")
     parser.add_argument("plugin_dir", type=Path, nargs="?", default=Path("."), help="Path to the plugin directory (default: current dir)")
     parser.add_argument("--src", type=Path, default=None, help="Path to hermes-agent checkout (for deeper validation)")
+    parser.add_argument(
+        "--dir-name",
+        default=None,
+        help="Expected install directory name (default: the checkout directory name)",
+    )
     args = parser.parse_args()
 
     args.plugin_dir = args.plugin_dir.resolve()
@@ -499,7 +491,7 @@ def main() -> int:
         print(f"Error: {args.plugin_dir} is not a directory", file=sys.stderr)
         return 1
 
-    return verify(args.plugin_dir, args.src)
+    return verify(args.plugin_dir, args.src, args.dir_name)
 
 
 if __name__ == "__main__":

@@ -31,9 +31,9 @@ import io
 import json
 import os
 import pathlib
-import stat
 import re
 import shlex
+import stat
 import subprocess
 import sys
 import time
@@ -110,7 +110,7 @@ def _run(cmd, timeout=20):
     try:
         out = subprocess.run(  # nosec B607
             cmd, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=timeout,
+            errors="replace", timeout=timeout, check=False,
         )
         return out.returncode, out.stdout or "", out.stderr or ""
     except FileNotFoundError:
@@ -359,7 +359,11 @@ def frontmatter(path):
     if len(parts) < 3:
         return {}
     try:
-        fm = yaml.safe_load(parts[1])
+        # PyYAML's SafeLoader is pure Python; the C loader is materially
+        # faster across a large skills tree and is still a safe loader.
+        fm = yaml.load(  # nosec B506 - CSafeLoader/SafeLoader are safe loaders
+            parts[1], Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+        )
     except Exception:
         # Mirror Hermes' parse_frontmatter fallback: recover key:value lines
         # from malformed YAML so a recoverable `name:` is not lost.
@@ -453,8 +457,8 @@ def _skill_index_paths(skills_root):
             from agent.skill_utils import iter_skill_index_files  # type: ignore
 
             return [str(path) for path in iter_skill_index_files(pathlib.Path(skills_root), "SKILL.md")]
-        except Exception:
-            pass  # nosec B110 - fall through to the local mirror
+        except Exception:  # nosec B110 - best-effort fallthrough
+            pass
     found: list[str] = []
     root_real = os.path.realpath(skills_root)
     try:
@@ -846,8 +850,8 @@ def _skill_matches_platform(fm):
         from agent.skill_utils import skill_matches_platform
 
         return bool(skill_matches_platform(fm))
-    except Exception:
-        pass  # nosec B110 - fall through to the local platform mirror
+    except Exception:  # nosec B110 - best-effort fallthrough
+        pass
     platforms = fm.get(constants.SKILL_PLATFORMS_KEY)
     if not platforms:
         return True
@@ -1351,7 +1355,6 @@ def _redact_hook_output(text):
         d = m.groupdict()
         key = d.get("key") or ""
         sep = d.get("sep") or ""
-        val = d.get("val") or ""
         if not key:
             return m.group(0)
         # Keep the separator's shape: `:` and `=` keep theirs, a whitespace
@@ -1710,7 +1713,7 @@ def _upstream_manifests(home):
     standalone plugin.
     """
     try:
-        from hermes_cli.plugins_discovery import collect_directory_manifests  # type: ignore[import-not-found]
+        from hermes_cli.plugins_discovery import collect_directory_manifests  # type: ignore[import-not-found]  # noqa: I001
         from hermes_constants import get_hermes_home
 
         if os.path.realpath(str(get_hermes_home())) != os.path.realpath(home):
@@ -1787,7 +1790,12 @@ def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_
             # A bare sub-category name is not a plugin id — those dirs use
             # their own selection keys. But a *user* manifest may legitimately
             # carry that name (e.g. a plugin called `delegation`), so only skip
-            # when no user manifest defines it.
+            # when no user manifest defines it. Note the correct activation
+            # path instead of letting the entry look healthy.
+            notes.append(
+                f"`{name}` is a sub-category directory; it activates via its "
+                "own selection key, not plugins.enabled"
+            )
             continue
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
@@ -1835,8 +1843,8 @@ def _plugins_from_manifests(manifests, enabled, disabled, plugins_root, bundled_
         names = ", ".join(f"`{n}`" for n in bundled_only)
         verb = "resolves" if len(bundled_only) == 1 else "resolve"
         bundled_note = [
-            f"{names} {verb} via the bundled plugins dir "
-            "(absent from the user plugins dir — expected)"
+            (f"{names} {verb} via the bundled plugins dir "
+            "(absent from the user plugins dir — expected)")
         ]
     else:
         bundled_note = []
@@ -1982,22 +1990,38 @@ def check_plugins(manifests=None):
 
     broken = []
     bundled_only = []
+    notes = []
+    skipped_ids = None  # scanned on first unresolved id, not on every run
     for name in sorted(enabled):
         if name in skip and name not in user_known:
             # A bare sub-category name is not a plugin id. A user manifest with
             # that name is a real plugin and must still be judged.
+            notes.append(
+                f"`{name}` is a sub-category directory; it activates via its "
+                "own selection key, not plugins.enabled"
+            )
             continue
         if name in disabled:
             continue  # Hermes' disabled deny-list wins over enabled
         if name not in known:
-            broken.append(f"`{name}` is enabled but no matching plugin manifest was found")
+            if skipped_ids is None:
+                skipped_ids = _skipped_category_ids(_bundled_plugins_dir())
+            category = skipped_ids.get(name)
+            if category:
+                broken.append(
+                    f"`{name}` is a plugin under `plugins/{category}/`; it activates "
+                    "via that category's selection key, not plugins.enabled"
+                )
+            else:
+                broken.append(
+                    f"`{name}` is enabled but no matching plugin manifest was found"
+                )
         elif name not in user_known:
             # Resolves via the bundled dir only: absent from the user plugins
             # dir by design. Named explicitly so neither users nor models
             # misdiagnose it as missing.
             bundled_only.append(name)
 
-    notes = []
     if os.path.isdir(plugins_root):
         for entry in sorted(os.listdir(plugins_root)):
             if entry.startswith(".") or entry == "__pycache__":
@@ -2026,8 +2050,8 @@ def check_plugins(manifests=None):
         names = ", ".join(f"`{n}`" for n in bundled_only)
         verb = "resolves" if len(bundled_only) == 1 else "resolve"
         bundled_note = [
-            f"{names} {verb} via the bundled plugins dir "
-            "(absent from the user plugins dir — expected)"
+            (f"{names} {verb} via the bundled plugins dir "
+            "(absent from the user plugins dir — expected)")
         ]
     else:
         bundled_note = []
@@ -2750,215 +2774,215 @@ def check_update_lock():
 FINDING_IDS: dict[str, tuple[str, str, str]] = {
     "CONFIG_PATH_UNRESOLVED": (
         "config path unresolved",
-        "Hermes cannot locate `config.yaml`, so custom providers, models, and "
-        "tools may silently fall back to defaults.",
+        ("Hermes cannot locate `config.yaml`, so custom providers, models, and "
+        "tools may silently fall back to defaults."),
         "Run `hermes config path`; if it fails, reinstall the Hermes CLI.",
     ),
     "CONFIG_MISSING": (
         "config file missing",
-        "Hermes runs on built-in defaults; any custom provider, model, or tool "
-        "choice is ignored.",
-        "Run `hermes setup` or restore the file to the reported path, then "
-        "re-run `hermes guide config`.",
+        ("Hermes runs on built-in defaults; any custom provider, model, or tool "
+        "choice is ignored."),
+        ("Run `hermes setup` or restore the file to the reported path, then "
+        "re-run `hermes guide config`."),
     ),
     "CONFIG_UNPARSEABLE": (
         "config.yaml does not parse",
-        "Hermes cannot load its settings, so affected features fall back or "
-        "fail at startup.",
-        "Fix the YAML at the reported path (indentation, quoting, duplicate "
-        "keys), then re-run `hermes guide config`.",
+        ("Hermes cannot load its settings, so affected features fall back or "
+        "fail at startup."),
+        ("Fix the YAML at the reported path (indentation, quoting, duplicate "
+        "keys), then re-run `hermes guide config`."),
     ),
     "CONFIG_UNREADABLE": (
         "config unreadable or unparsable",
-        "The affected surface cannot be inspected because the config could not "
-        "be loaded (unreadable file or invalid YAML).",
-        "Check read permissions on the reported path, and if the file is "
-        "readable fix its YAML, then re-run `hermes guide`.",
+        ("The affected surface cannot be inspected because the config could not "
+        "be loaded (unreadable file or invalid YAML)."),
+        ("Check read permissions on the reported path, and if the file is "
+        "readable fix its YAML, then re-run `hermes guide`."),
     ),
     "HOME_UNRESOLVED": (
         "Hermes home unresolved",
-        "The affected surface cannot be inspected because the Hermes home "
-        "directory could not be resolved.",
-        "Run `hermes config path` to confirm the profile resolves, then re-run "
-        "`hermes guide <scope>`.",
+        ("The affected surface cannot be inspected because the Hermes home "
+        "directory could not be resolved."),
+        ("Run `hermes config path` to confirm the profile resolves, then re-run "
+        "`hermes guide <scope>`."),
     ),
     "MCP_SERVER_MALFORMED": (
         "MCP server entry malformed",
-        "The listed MCP servers will not start, so their tools are unavailable "
-        "to the agent.",
-        "Move foreign keys such as `mcpServers` under the top-level "
+        ("The listed MCP servers will not start, so their tools are unavailable "
+        "to the agent."),
+        ("Move foreign keys such as `mcpServers` under the top-level "
         "`mcp_servers` mapping, make `mcp_servers` a mapping, and fix the "
         "listed entries (`command` for stdio, `url` for HTTP); then re-run "
-        "`hermes guide mcp`.",
+        "`hermes guide mcp`."),
     ),
     "SKILLS_ISSUES": (
         "skill issues",
-        "The listed skills will not load or will be shadowed, so their "
-        "instructions and slash commands are missing.",
-        "Fix the listed frontmatter, name, or path problems, then re-run "
-        "`hermes guide skills`.",
+        ("The listed skills will not load or will be shadowed, so their "
+        "instructions and slash commands are missing."),
+        ("Fix the listed frontmatter, name, or path problems, then re-run "
+        "`hermes guide skills`."),
     ),
     "COMMANDS_BUNDLE_MALFORMED": (
         "command bundle malformed",
         "Commands defined in the listed bundles will not resolve.",
-        "Fix or remove the listed bundle files, then re-run "
-        "`hermes guide commands`.",
+        ("Fix or remove the listed bundle files, then re-run "
+        "`hermes guide commands`."),
     ),
     "HOOKS_ALLOWLIST_INVALID": (
         "shell-hooks allowlist invalid",
-        "The shell-hook consent list cannot be read, so approved hooks may be "
+        ("The shell-hook consent list cannot be read, so approved hooks may be "
         "skipped or re-prompt, and any other hook problems are quoted in the "
-        "detail.",
-        "Repair or delete the reported `shell-hooks-allowlist.json`, then fix "
-        "the hook problems in the detail and re-run `hermes guide hooks`.",
+        "detail."),
+        ("Repair or delete the reported `shell-hooks-allowlist.json`, then fix "
+        "the hook problems in the detail and re-run `hermes guide hooks`."),
     ),
     "HOOKS_DOCTOR_FINDINGS": (
         "hooks doctor findings",
-        "One or more hooks fail or are misconfigured, so the events they guard "
-        "are unhandled.",
-        "Fix each hook reported by `hermes hooks doctor`, then re-run "
-        "`hermes guide hooks`.",
+        ("One or more hooks fail or are misconfigured, so the events they guard "
+        "are unhandled."),
+        ("Fix each hook reported by `hermes hooks doctor`, then re-run "
+        "`hermes guide hooks`."),
     ),
     "HOOKS_DOCTOR_UNAVAILABLE": (
         "hooks doctor unavailable",
-        "Hook health could not be verified, so a broken hook can fail silently "
-        "at runtime.",
+        ("Hook health could not be verified, so a broken hook can fail silently "
+        "at runtime."),
         "Run `hermes hooks doctor` manually and fix the error it reports.",
     ),
     "HOOKS_DOCTOR_OPAQUE": (
         "hooks doctor output unrecognized",
-        "Hook health could not be determined because the doctor output was not "
-        "recognized.",
-        "Run `hermes hooks doctor` manually and compare its output with the "
-        "installed Hermes version.",
+        ("Hook health could not be determined because the doctor output was not "
+        "recognized."),
+        ("Run `hermes hooks doctor` manually and compare its output with the "
+        "installed Hermes version."),
     ),
     "HOOKS_INSPECTION_UNAVAILABLE": (
         "hooks inspection unavailable",
-        "Hooks were skipped in this run, so hook failures surface only during "
-        "a session.",
-        "Hooks are inspected in-process by default and nothing was inspected "
+        ("Hooks were skipped in this run, so hook failures surface only during "
+        "a session."),
+        ("Hooks are inspected in-process by default and nothing was inspected "
         "here — add `--deep` (or run `hermes hooks doctor` directly) for the "
-        "live check that executes each approved hook once.",
+        "live check that executes each approved hook once."),
     ),
     "HOOKS_CONFIG_NOT_FOUND": (
         "hooks config missing",
-        "Hooks cannot be inspected because the profile's config file was not "
-        "found.",
+        ("Hooks cannot be inspected because the profile's config file was not "
+        "found."),
         "Run `hermes config path` and restore the profile's `config.yaml`.",
     ),
     "HOOKS_CONFIG_UNREADABLE": (
         "hooks config unreadable",
-        "Hooks cannot be inspected because the config file could not be "
-        "loaded.",
-        "Check read permissions on the profile's `config.yaml`, and if the "
-        "file is readable fix its YAML, then re-run `hermes guide hooks`.",
+        ("Hooks cannot be inspected because the config file could not be "
+        "loaded."),
+        ("Check read permissions on the profile's `config.yaml`, and if the "
+        "file is readable fix its YAML, then re-run `hermes guide hooks`."),
     ),
     "HOOKS_INSPECTION_FAILED": (
         "hook inspection failed",
-        "Hooks could not be inspected because the hook configuration raised an "
-        "error.",
-        "Re-run `hermes guide hooks`; if it repeats, report the exception type "
-        "shown in the reason.",
+        ("Hooks could not be inspected because the hook configuration raised an "
+        "error."),
+        ("Re-run `hermes guide hooks`; if it repeats, report the exception type "
+        "shown in the reason."),
     ),
     "HOOKS_FINDINGS": (
         "hook findings",
-        "One or more shell hooks are malformed, unreachable, or not "
-        "allowlisted, so the events they guard are unhandled.",
-        "Fix the listed hook entries in `config.yaml`, and approve each valid "
+        ("One or more shell hooks are malformed, unreachable, or not "
+        "allowlisted, so the events they guard are unhandled."),
+        ("Fix the listed hook entries in `config.yaml`, and approve each valid "
         "hook at the interactive prompt when the detail says it is not "
-        "allowlisted; then re-run `hermes guide hooks`.",
+        "allowlisted; then re-run `hermes guide hooks`."),
     ),
     "PLUGINS_CONFIG_SHAPE": (
         "plugins config malformed",
-        "The `plugins` section or its `enabled`/`disabled` keys have the wrong "
-        "shape, so Hermes ignores those settings and plugins may not load.",
-        "Rewrite `plugins` in `config.yaml` as a mapping with `enabled` and "
-        "`disabled` lists, then re-run `hermes guide plugins`.",
+        ("The `plugins` section or its `enabled`/`disabled` keys have the wrong "
+        "shape, so Hermes ignores those settings and plugins may not load."),
+        ("Rewrite `plugins` in `config.yaml` as a mapping with `enabled` and "
+        "`disabled` lists, then re-run `hermes guide plugins`."),
     ),
     "PLUGINS_MISSING_OR_BROKEN": (
         "plugin missing or broken",
-        "The listed enabled plugins are missing or failed to load, so their "
-        "commands, tools, and hooks are absent.",
-        "Run `hermes plugins list`; reinstall a missing plugin, and for an "
+        ("The listed enabled plugins are missing or failed to load, so their "
+        "commands, tools, and hooks are absent."),
+        ("Run `hermes plugins list`; reinstall a missing plugin, and for an "
         "exclusive provider select its category key (for example "
-        "`memory.provider`) instead of `plugins.enabled`.",
+        "`memory.provider`) instead of `plugins.enabled`."),
     ),
     "MEMORIES_ISSUES": (
         "memory issues",
-        "The listed memory files are inconsistent, so stored context may be "
-        "stale or ignored.",
-        "Fix the listed files under `$HERMES_HOME/memories/`, then re-run "
-        "`hermes guide memories`.",
+        ("The listed memory files are inconsistent, so stored context may be "
+        "stale or ignored."),
+        ("Fix the listed files under `$HERMES_HOME/memories/`, then re-run "
+        "`hermes guide memories`."),
     ),
     "SESSIONS_LOG_UNREADABLE": (
         "session log unreadable",
-        "Session activity cannot be analyzed, so runaway sessions stay "
-        "undetected.",
-        "Check read permissions on the reported agent log, then re-run "
-        "`hermes guide sessions`.",
+        ("Session activity cannot be analyzed, so runaway sessions stay "
+        "undetected."),
+        ("Check read permissions on the reported agent log, then re-run "
+        "`hermes guide sessions`."),
     ),
     "SESSIONS_LOG_UNPARSED": (
         "session log unparsed",
-        "Session activity cannot be analyzed because the log format was not "
-        "recognized.",
-        "Re-run `hermes guide sessions`; if it repeats, check the log format "
-        "written by the installed Hermes version.",
+        ("Session activity cannot be analyzed because the log format was not "
+        "recognized."),
+        ("Re-run `hermes guide sessions`; if it repeats, check the log format "
+        "written by the installed Hermes version."),
     ),
     "SESSIONS_RUNAWAY": (
         "runaway session",
-        "The listed sessions are burning API calls and context without "
-        "progress, which inflates cost and degrades answers.",
-        "Start a new session instead of resuming the listed one, and separate "
-        "generation from verification into distinct turns.",
+        ("The listed sessions are burning API calls and context without "
+        "progress, which inflates cost and degrades answers."),
+        ("Start a new session instead of resuming the listed one, and separate "
+        "generation from verification into distinct turns."),
     ),
     "UPDATE_CHECKOUT_UNRESOLVED": (
         "install checkout unresolved",
-        "The install checkout cannot be located, so update health cannot be "
-        "verified.",
-        "Run `hermes doctor` to confirm the install layout, then re-run "
-        "`hermes guide update`.",
+        ("The install checkout cannot be located, so update health cannot be "
+        "verified."),
+        ("Run `hermes doctor` to confirm the install layout, then re-run "
+        "`hermes guide update`."),
     ),
     "UPDATE_LAYOUT_UNRECOGNIZED": (
         "install layout unrecognized",
-        "The install layout was not recognized, so a stuck update lock cannot "
-        "be ruled out.",
-        "Run `hermes doctor` to confirm the install layout, then locate the "
-        "checkout and its update lock by hand.",
+        ("The install layout was not recognized, so a stuck update lock cannot "
+        "be ruled out."),
+        ("Run `hermes doctor` to confirm the install layout, then locate the "
+        "checkout and its update lock by hand."),
     ),
     "UPDATE_LOCK_UNREADABLE": (
         "update lock unreadable",
-        "A stale update lock may be blocking every `hermes` command, and it "
-        "could not be read.",
-        "Check read permissions on the reported lock file, then re-run "
-        "`hermes guide update`.",
+        ("A stale update lock may be blocking every `hermes` command, and it "
+        "could not be read."),
+        ("Check read permissions on the reported lock file, then re-run "
+        "`hermes guide update`."),
     ),
     "UPDATE_LOCK_MALFORMED": (
         "update lock malformed",
-        "The update lock does not name an owner, so update state cannot be "
-        "determined.",
-        "The lock must contain one PID; if no update is running, remove the "
-        "reported file with human confirmation.",
+        ("The update lock does not name an owner, so update state cannot be "
+        "determined."),
+        ("The lock must contain one PID; if no update is running, remove the "
+        "reported file with human confirmation."),
     ),
     "UPDATE_LOCK_HELD": (
         "update lock held",
-        "Every `hermes` invocation can wedge until the process holding the "
-        "checkout exits.",
-        "Wait for the process holding the checkout to exit (owner PID in the "
-        "reason); do not remove the lock while it is held.",
+        ("Every `hermes` invocation can wedge until the process holding the "
+        "checkout exits."),
+        ("Wait for the process holding the checkout to exit (owner PID in the "
+        "reason); do not remove the lock while it is held."),
     ),
     "UPDATE_LOCK_UNPROBEABLE": (
         "update lock unprobeable",
-        "A dead update owner may still be holding the checkout, and that "
-        "could not be verified.",
-        "Check for a running `hermes` or `git` process by hand before touching "
-        "the reported lock file.",
+        ("A dead update owner may still be holding the checkout, and that "
+        "could not be verified."),
+        ("Check for a running `hermes` or `git` process by hand before touching "
+        "the reported lock file."),
     ),
     "UPDATE_LOCK_INDETERMINATE": (
         "update lock indeterminate",
-        "Update ownership cannot be determined, so removing the lock could "
-        "interrupt a live update.",
-        "Check whether the owner PID in the reason is alive by hand before "
-        "touching the reported lock file.",
+        ("Update ownership cannot be determined, so removing the lock could "
+        "interrupt a live update."),
+        ("Check whether the owner PID in the reason is alive by hand before "
+        "touching the reported lock file."),
     ),
     "FAST_MODE_UNRESOLVED": (
         "fast mode skipped a surface",
@@ -2967,98 +2991,103 @@ FINDING_IDS: dict[str, tuple[str, str, str]] = {
     ),
     "CHECK_CRASHED": (
         "check crashed",
-        "The affected check failed to run, so its surface was not inspected "
-        "(a defect in hermes-guide, not in your config).",
-        "Re-run `hermes guide <scope>`; if it repeats, file the exception type "
+        ("The affected check failed to run, so its surface was not inspected "
+        "(a defect in hermes-guide, not in your config)."),
+        ("Re-run `hermes guide <scope>`; if it repeats, file the exception type "
         "and `hermes --version` at "
-        "https://github.com/iap/hermes-guide/issues.",
+        "https://github.com/iap/hermes-guide/issues."),
     ),
     "STORAGE_UNREADABLE": (
         "state.db unreadable",
-        "The session database cannot be stat'd, so its size and health could "
-        "not be audited.",
-        "Check file permissions on the reported `state.db` path and re-run "
-        "`hermes guide storage`.",
+        ("The session database cannot be stat'd, so its size and health could "
+        "not be audited."),
+        ("Check file permissions on the reported `state.db` path and re-run "
+        "`hermes guide storage`."),
     ),
     "STORAGE_NOT_REGULAR": (
         "state.db not a regular file",
-        "The `state.db` path exists but is not a regular file (a directory, "
+        ("The `state.db` path exists but is not a regular file (a directory, "
         "FIFO, or symlink to a non-file), so no session database can be read "
-        "or measured there.",
-        "Inspect the reported `state.db` path; it is not a database. Remove or "
+        "or measured there."),
+        ("Inspect the reported `state.db` path; it is not a database. Remove or "
         "rename the directory/FIFO/symlink, then restart the session so Hermes "
-        "recreates a real `state.db`.",
+        "recreates a real `state.db`."),
     ),
     "STORAGE_LARGE": (
         "state.db large",
-        "A large session database takes longer to back up, uses more disk, and "
-        "makes `optimize-storage` slower to reclaim space.",
-        "Stop the gateway and all sessions, then run `hermes sessions "
+        ("A large session database takes longer to back up, uses more disk, and "
+        "makes `optimize-storage` slower to reclaim space."),
+        ("Stop the gateway and all sessions, then run `hermes sessions "
         "optimize-storage` (see `hermes sessions optimize-storage --help`). "
-        "Do not use `--force` while holders are live.",
+        "Do not use `--force` while holders are live."),
     ),
     "GATEWAY_LOG_UNREADABLE": (
         "gateway log unreadable",
-        "Gateway connection health cannot be audited because the agent log "
-        "could not be read.",
-        "Check read permissions on the reported agent log, then re-run "
-        "`hermes guide gateway`.",
+        ("Gateway connection health cannot be audited because the agent log "
+        "could not be read."),
+        ("Check read permissions on the reported agent log, then re-run "
+        "`hermes guide gateway`."),
     ),
     "GATEWAY_HEALTH_ISSUES": (
         "gateway connection failures",
-        "The listed gateway websocket disconnects mean subagent polling and "
-        "delegation status were lost during the affected sessions.",
-        "See `diagnosing-gateway` (keepalive/timeout section); reduce delegate "
-        "context and retry the deep dive, then re-run `hermes guide gateway`.",
+        ("The listed gateway websocket disconnects mean subagent polling and "
+        "delegation status were lost during the affected sessions."),
+        ("See `diagnosing-gateway` (keepalive/timeout section); reduce delegate "
+        "context and retry the deep dive, then re-run `hermes guide gateway`."),
     ),
     "DASHBOARD_NODE_OUTDATED": (
         "dashboard node outdated",
-        "The PM-managed Node version differs from the lockfile pin, so the "
-        "dashboard Web UI build uses a toolchain the lock does not describe.",
-        "Ask the user to confirm before running `hermes pm install node` (explicit install bypasses the "
-        "lazy-install policy), then verify with `hermes guide dashboard`.",
+        ("The PM-managed Node version differs from the lockfile pin, so the "
+        "dashboard Web UI build uses a toolchain the lock does not describe."),
+        ("Ask the user to confirm before running `hermes pm install node` (explicit install bypasses the "
+        "lazy-install policy), then verify with `hermes guide dashboard`."),
     ),
     "DASHBOARD_NODE_OS_FLOOR_MISMATCH": (
         "dashboard node OS floor mismatch",
-        "The pinned Node requires a newer macOS than this host provides, so "
-        "the staged binary fails dyld verification and the Web UI cannot build.",
-        "Pin Node to a host-compatible version (`hermes pm lock --bump node "
-        "<ver>` then `hermes pm install node`), or upgrade macOS. Workaround: "
-        "`hermes dashboard --skip-build`.",
+        ("The pinned Node requires a newer macOS than this host provides, so "
+        "the staged binary fails dyld verification and the Web UI cannot build."),
+        ("Pin Node to a host-compatible 24.x build: edit pm/lock.json's node "
+        "entry (version + per-target sha256 from nodejs.org SHASUMS256.txt), "
+        "then `hermes pm install node`. Do not use `hermes pm lock --bump` "
+        "(it rehashes every target including Termux and can fail on missing "
+        "archives). Full steps in the diagnosing-path skill. Or upgrade "
+        "macOS. Workaround: `hermes dashboard --skip-build`."),
     ),
     "DASHBOARD_NODE_ENGINES_MISMATCH": (
         "dashboard node engines mismatch",
-        "The installed Node/npm does not satisfy package.json engines, so "
-        "`npm ci --engine-strict` fails during the Web UI build.",
-        "Bump the lock to a Node that satisfies engines (`hermes pm lock "
+        ("The installed Node/npm does not satisfy package.json engines, so "
+        "`npm ci --engine-strict` fails during the Web UI build."),
+        ("Bump the lock to a Node that satisfies engines (`hermes pm lock "
         "--bump node <ver>` then `hermes pm install node`), then re-run "
-        "`hermes guide dashboard`.",
+        "`hermes guide dashboard`."),
     ),
     "DASHBOARD_WEBUI_STALE_BUILD": (
         "dashboard web UI stale",
-        "The built Web UI dist is stale relative to current sources, so the "
-        "dashboard serves an old UI or rebuilds on every launch.",
-        "Run `hermes dashboard` to rebuild the Web UI, or use "
-        "`hermes dashboard --skip-build` to serve the existing dist.",
+        ("The built Web UI dist is stale relative to current sources, so the "
+        "dashboard serves an old UI or rebuilds on every launch."),
+        ("Run `hermes dashboard` to rebuild the Web UI, or use "
+        "`hermes dashboard --skip-build` to serve the existing dist."),
     ),
     "DASHBOARD_LAZY_INSTALL_DISABLED": (
         "dashboard lazy installs disabled",
-        "Lazy installs are disabled while Node is missing or outdated, so the "
-        "dashboard build refuses to fetch the toolchain it needs.",
-        "Run `hermes pm install` explicitly (it bypasses the lazy policy), "
-        "then re-run `hermes guide dashboard`.",
+        ("Lazy installs are disabled while Node is missing or outdated, so the "
+        "dashboard build refuses to fetch the toolchain it needs."),
+        ("Run `hermes pm install` explicitly (it bypasses the lazy policy), "
+        "then re-run `hermes guide dashboard`."),
     ),
     "DASHBOARD_CHECKOUT_UNRESOLVED": (
         "dashboard checkout unresolved",
-        "No `hermes-agent` checkout was found under $HERMES_HOME, so the "
-        "dashboard check could not read the lock pin, the package.json "
-        "engines, or the built Web UI receipt. It reports unknown rather "
-        "than guessing at a different install.",
-        "With explicit user confirmation, place the Hermes source checkout at "
+        ("No unambiguous `hermes-agent` checkout could be selected under "
+        "$HERMES_HOME (either none was found, or several installs had "
+        "checkouts without paired facts), so the dashboard check could not "
+        "read the lock pin, the package.json engines, or the built Web UI "
+        "receipt. It reports unknown rather than guessing at a different "
+        "install."),
+        ("With explicit user confirmation, place the Hermes source checkout at "
         "`hermes-agent` inside the Hermes home (the directory containing the "
         "path printed by `hermes config path`; for example `git clone "
         "https://github.com/NousResearch/hermes-agent <home>/hermes-agent`), "
-        "then re-run `hermes guide dashboard`.",
+        "then re-run `hermes guide dashboard`."),
     ),
 }
 
@@ -3216,7 +3245,7 @@ def _parse_log_timestamp(line: str):
     if not m:
         return None
     try:
-        return datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+        return datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007
     except ValueError:
         return None
 
@@ -3259,7 +3288,7 @@ def check_gateway_health():
     timeout_unparsed = False  # a matched timeout line whose seconds failed to parse
     keepalive_hits = []  # (index, timestamp_or_none) of gateway keepalive lines
     blocking = []  # (index, timestamp_or_none, seconds, kind)
-    now = datetime.datetime.now()
+    now = datetime.datetime.now()  # noqa: DTZ005
 
     for index, line in enumerate(tail):
         ts = _parse_log_timestamp(line)
@@ -3305,7 +3334,7 @@ def check_gateway_health():
         """A disconnect is recent by line position AND (when timestamped) not older than 7 days."""
         if index < recent_from:
             return False
-        if ts is not None and (now - ts).days > 7:
+        if ts is not None and (now - ts).days > 7:  # noqa: SIM103
             return False
         return True
 
@@ -3515,7 +3544,7 @@ def check_dashboard():
                 )
                 if os.path.isfile(node_bin):
                     facts_path = legacy_facts
-        except Exception:  # nosec B110 - legacy facts unreadable is not a verdict; stay on the install dir
+        except Exception:  # nosec B110 - best-effort fallthrough
             pass
     # Resolve checkout: prefer $HERMES_HOME/hermes-agent, but also check
     # the same PM install dir as facts (not a different one).
@@ -3537,16 +3566,22 @@ def check_dashboard():
         # otherwise we would pair a lock pin with the wrong toolchain.
         if len(candidates) == 1:
             checkout = candidates[0]
-        for entry in sorted(os.listdir(installs_dir)):
-            candidate = os.path.join(installs_dir, entry, "hermes-agent")
-            if os.path.isdir(candidate):
-                checkout = candidate
-                break
+        ambiguous_checkouts = len(candidates) > 1
+    else:
+        ambiguous_checkouts = False
     if checkout is None:
+        if ambiguous_checkouts:
+            reason = (
+                "multiple hermes-agent checkouts found under "
+                "$HERMES_HOME/installs; cannot select one without paired "
+                "facts (avoid pairing a lock pin with the wrong toolchain)"
+            )
+        else:
+            reason = "no hermes-agent checkout found under $HERMES_HOME"
         return {
             "id": "DASHBOARD_CHECKOUT_UNRESOLVED",
             "status": "unknown",
-            "reason": "no hermes-agent checkout found under $HERMES_HOME",
+            "reason": reason,
             "detail": home,
         }
     lock_path = os.path.join(checkout, "pm", "lock.json")
@@ -3687,14 +3722,15 @@ def check_dashboard():
         sec = cfg.get("security", {})
         if isinstance(sec, dict) and "allow_lazy_installs" in sec:
             lazy = sec["allow_lazy_installs"] is True
-    if os.environ.get("HERMES_DISABLE_LAZY_INSTALLS"):
+    env_disabled = bool(os.environ.get("HERMES_DISABLE_LAZY_INSTALLS"))
+    if env_disabled:
         lazy = False
     if not lazy and (installed_node is None or lock_node is None or installed_node != lock_node):
         return {
             "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
             "status": "broken",
             "reason": "lazy installs disabled while PM node is missing",
-            "detail": "security.allow_lazy_installs is false",
+            "detail": "HERMES_DISABLE_LAZY_INSTALLS is set" if env_disabled else "security.allow_lazy_installs is false",
         }
     # Web UI freshness: dist present and built with installed node
     dist = os.path.join(checkout, "hermes_cli", "web_dist")
@@ -3754,7 +3790,7 @@ def check_dashboard():
             "id": "DASHBOARD_LAZY_INSTALL_DISABLED",
             "status": "informational",
             "reason": "lazy installs disabled (toolchain OK, web UI present)",
-            "detail": "security.allow_lazy_installs is false",
+            "detail": "HERMES_DISABLE_LAZY_INSTALLS is set" if env_disabled else "security.allow_lazy_installs is false",
         }
     return {
         "status": "healthy",
@@ -3792,6 +3828,242 @@ _CHECKS = [
     # function keeps the longer name for grep-ability.
     ("gateway", check_gateway_health),
 ]
+
+def check_plugin_update():
+    """Report whether a newer hermes-guide release is available and how to
+    apply it (read-only: prints the command, never runs it).
+
+    Complements `_version_check()` in `__init__.py` (the notice shown after
+    every non-fast run) with an explicit, on-demand surface: install type,
+    current vs. latest version, the exact update command for that install type
+    (pinned installs cannot use `hermes plugins update`), and guide-skill
+    adoption. Never mutates config or the filesystem; `--fast` skips the
+    network probe.
+    """
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    plugins_dir = os.path.dirname(plugin_dir)
+
+    # Current version from the shipped manifest (no import of __init__).
+    current = None
+    try:
+        manifest_path = os.path.join(plugin_dir, "plugin.yaml")
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"^version:\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)", line.strip())
+                if m:
+                    current = m.group(1)
+                    break
+    except Exception:
+        current = None
+
+    # Install type from Hermes' install metadata, plus git-clone detection.
+    meta_path = os.path.join(plugins_dir, ".install-metadata.json")
+    pinned = False
+    source = None
+    if os.path.isfile(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            entry = meta.get("hermes-guide") if isinstance(meta, dict) else None
+            if isinstance(entry, dict):
+                pinned = bool(entry.get("pinned"))
+                source = entry.get("source")
+        except Exception:  # nosec B110 - best-effort fallthrough
+            pass
+    is_git = os.path.isdir(os.path.join(plugin_dir, ".git")) or os.path.isfile(
+        os.path.join(plugin_dir, ".git")
+    )
+    # For pinned git installs, the release probe runs against `origin`, so the
+    # reinstall command must target the same repository the SHA came from.
+    origin_url = None
+    if is_git and pinned and not _FAST_MODE.get():
+        try:
+            proc = subprocess.run(
+                ["git", "remote", "get-url", "origin"],  # nosec B607
+                capture_output=True, text=True, timeout=5, cwd=plugin_dir, check=False,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                raw = proc.stdout.strip()
+                # Redact embedded credentials (user:pass@) and resolve
+                # relative paths against plugin_dir so the copied command
+                # works from any working directory.
+                if raw.startswith(("http://", "https://")):
+                    # Strip userinfo from https://user:pass@host/... only;
+                    # SSH URLs (ssh://git@host or git@host:path) keep their
+                    # required username.
+                    import re as _re
+                    raw = _re.sub(r"(://)[^/@]*@", r"\1", raw)
+                elif raw.startswith("git@"):
+                    pass  # SCP-like SSH form carries no inline credentials
+                elif raw.startswith("ssh://"):
+                    pass  # SSH form keeps its required username
+                elif not raw.startswith("/") and not raw.startswith("~"):
+                    # Relative local path: resolve against plugin_dir.
+                    raw = os.path.normpath(os.path.join(plugin_dir, raw))
+                origin_url = raw
+        except Exception:
+            origin_url = None
+
+    if is_git and pinned:
+        install_type = "pinned git"
+    elif is_git:
+        install_type = "git (unpinned)"
+    elif source:
+        install_type = "catalog"
+    else:
+        install_type = "copied"
+
+    # Latest version via git ls-remote (best effort, never raises).
+    # Skipped under --fast: no subprocess/network on the degraded-host path.
+    # For git installs, probe `origin`; otherwise probe the recorded (or
+    # official) source so copied/catalog installs can also detect releases.
+    latest = None
+    latest_sha = None
+    if not _FAST_MODE.get():
+        remote = "origin" if is_git else (source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git")
+        try:
+            proc = subprocess.run(
+                ["git", "ls-remote", "--tags", "--sort=v:refname", remote],  # nosec B607
+                capture_output=True, text=True, timeout=10, cwd=plugin_dir if is_git else None, check=False,
+            )
+            if proc.returncode == 0:
+                import re as _re
+
+                tag_re = _re.compile(r"refs/tags/v(\d+\.\d+\.\d+)(\^\{\})?$")
+                # Collect (version, tag_obj_sha, peeled_sha) per tag. Tags
+                # arrive sorted by ref name, and a peeled ref (^{}) follows
+                # its tag, so we can fold as we go.
+                latest = None
+                latest_sha = None
+                current_tag = None
+                current_obj = None
+                current_peeled = None
+                def _flush():
+                    nonlocal latest, latest_sha, current_tag, current_obj, current_peeled
+                    if current_tag is None:
+                        return
+                    latest = current_tag
+                    latest_sha = current_peeled if current_peeled else current_obj
+                    current_tag = None
+                    current_obj = None
+                    current_peeled = None
+                for line in proc.stdout.splitlines():
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+                    sha, ref = parts[0], parts[1]
+                    m = tag_re.search(ref)
+                    if not m:
+                        continue
+                    ver = m.group(1)
+                    peeled = ref.endswith("^{}")
+                    if ver != current_tag:
+                        _flush()
+                        current_tag = ver
+                    if peeled:
+                        current_peeled = sha
+                    else:
+                        current_obj = sha
+                _flush()
+        except Exception:
+            latest = None
+
+    # Update command tailored to the install type. Prefer the recorded
+    # source (supports forks) and fall back to the official repo. For pinned
+    # git installs, prefer origin's URL since the SHA came from there.
+    if pinned and origin_url:
+        repo = origin_url
+    else:
+        repo = source if isinstance(source, str) and source else "https://github.com/iap/hermes-guide.git"
+    if pinned:
+        # Only offer a concrete SHA when it is actually newer than the
+        # installed version; otherwise a fork whose newest tag is older
+        # would hand the user a downgrade command.
+        newer_available = False
+        if current and latest:
+            try:
+                newer_available = tuple(int(x) for x in latest.split(".")) > tuple(int(x) for x in current.split("."))
+            except Exception:
+                newer_available = False
+        if latest_sha and newer_available:
+            cmd = (
+                f"hermes plugins install '{repo}' "
+                f"--force --yes-deps --ref {latest_sha}"
+            )
+        else:
+            cmd = (
+                f"hermes plugins install '{repo}' "
+                "--force --yes-deps --ref <40-character commit SHA>"
+            )
+    elif is_git:
+        cmd = "hermes plugins update hermes-guide"
+    else:
+        cmd = f"hermes plugins install '{repo}' --force --yes-deps --enable"
+
+    # Version comparison (best effort).
+    update_available = False
+    if current and latest:
+        try:
+            def _pv(v):
+                return tuple(int(x) for x in v.split("."))
+
+            update_available = _pv(latest) > _pv(current)
+        except Exception:
+            update_available = False
+
+    # Guide-skill adoption (reuse the same nudge as check_skills).
+    # Only report missing when Hermes home could actually be inspected;
+    # an unresolved home yields an empty skill list, which would otherwise
+    # masquerade as "every guide skill missing".
+    home = _hermes_home()
+    if home and os.path.isdir(os.path.join(home, "skills")):
+        guide_names = _plugin_skill_names()
+        installed = set()
+        for _dirpath, fm in _iter_skills():
+            fm_name = (fm or {}).get("name")
+            name = fm_name if isinstance(fm_name, str) and fm_name else os.path.basename(_dirpath.rstrip(os.sep))
+            installed.add(name)
+        missing = sorted(guide_names - installed) if guide_names else []
+        adoption_unknown = False
+    else:
+        missing = []
+        adoption_unknown = True
+
+    if update_available:
+        status = "informational"
+        reason = f"hermes-guide update available: {current} -> {latest}"
+    elif current and latest and not update_available:
+        status = "healthy"
+        reason = f"hermes-guide is up to date ({current})"
+    else:
+        status = "healthy"
+        if _FAST_MODE.get():
+            reason = f"hermes-guide {current or 'unknown'} (fast mode: network skipped)"
+        else:
+            reason = f"hermes-guide {current or 'unknown'} (latest unknown)"
+
+    detail = [f"install type: {install_type}"]
+    if latest:
+        detail.append(f"latest: {latest}")
+    if update_available or not latest or not current:
+        detail.append(f"update: {cmd}")
+    else:
+        detail.append("update: no update needed (already at latest)")
+    if missing:
+        detail.append(
+            "guide skills missing: " + ", ".join(missing)
+            + "  (hermes skills install iap/hermes-guide/skills/<name>)"
+        )
+    if adoption_unknown:
+        detail.append("guide skills adoption: unknown (Hermes home not resolvable)")
+    detail.append("skills tap update: hermes skills tap update iap/hermes-guide")
+
+    return {
+        "status": status,
+        "reason": reason,
+        "detail": detail,
+    }
+
 
 
 def labels():

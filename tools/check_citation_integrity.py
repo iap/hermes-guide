@@ -168,7 +168,6 @@ def verify(src: Path, rev: str) -> tuple[list[str], list[str], list[str]]:
         # the installed revision). Drift-suspect is a warning, never a failure.
         idents = [w for w in _IDENT_RE.findall(text) if w.lower() not in _STOP]
         if idents and not any(w in content[num - 1] for w in idents):
-            whole = "\n".join(content)
             moved = [j + 1 for j, l in enumerate(content)
                      if any(w in l for w in idents)]
             warns.append("%s:%d cites %s:%d (now: %r) -- DRIFT SUSPECT%s"
@@ -185,7 +184,6 @@ def selftest() -> int:
         "see `agent/prompt_builder.py::_find_hermes_md` and `hermes_cli/config.py:2574`\n"
         "the impl lives in **`hermes_cli/main_desktop.py`** (`cmd_gui`, line ~1501)\n"
     )
-    got = collect.__doc__  # keep flake honest; real work below
     syms = [(m.group(1), m.group(2)) for m in SYM_RE.finditer(sample)]
     lins = [(m.group(1), m.group(2)) for m in LIN_RE.finditer(sample)]
     prose = [(m.group(1), m.group(2)) for m in PROSE_RE.finditer(sample)]

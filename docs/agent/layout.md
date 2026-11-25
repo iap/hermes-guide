@@ -20,7 +20,7 @@ tracked top-level path and every `.github/` file.
 | `tools/check_eol_contract.py` | Line-ending guard: the `.gitattributes` rules the tracked tree depends on, plus `git ls-files --eol` proving the index is LF and `assets/` is binary |
 | `tools/check_install_scan.py` | Install-scan parity: runs upstream's real `skills_guard.py` at the pinned baseline over every skill, asserting `should_allow_install()` is true at community trust. CI tier — needs a checkout, and executes the pinned upstream scanner |
 | `tools/check_issue_templates.py` | Reporter-surface guard: issue-template schema, and docs that promise a route the chooser does not offer |
-| `tools/check_skill_dogfood.py` | Read-only live-install smoke test: version, config path, skills, plugins, doctor |
+| `tools/check_skill_dogfood.py` | Read-only live-install smoke test, plus `--release` all-scope JSON dogfood gate and report |
 | `tools/test_*.py` | Regression suites for the plugin and for `tools/` itself |
 | `tools/render_docs.py` | Renders the generated blocks in README.md, AGENTS.md, and docs/findings.md |
 | `tools/pr_metadata_labels.py` | PR label/priority parser shared by the labelling workflows |

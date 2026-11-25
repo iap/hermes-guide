@@ -1,7 +1,7 @@
 ---
 name: diagnosing-runtime
 description: "Diagnose Hermes runtime failures — CLI commands that produce no output, exit 0 with no diagnostic text, hang, or return empty (e.g. hermes guide prints nothing, hermes --version is blank). Covers stuck source updates, broken node dependencies, and recovery routes when the runtime itself is the problem."
-version: 1.0.7
+version: 1.0.8
 metadata:
   hermes:
     tags: [hermes, runtime, cli, node, update, recovery, troubleshooting]
@@ -70,7 +70,7 @@ If the wedge persists, the checkout lock or the owed completion tail is
 involved — do not invent lock filenames. The lock lives at `<git common
 dir>/hermes-update.lock` (or `<install root>/.hermes-update.lock` for a ZIP
 install), and an owed tail is recorded as a `source-completion-pending`
-marker. Follow the diagnosing-cli-tui stale-lock note for the liveness
+marker. Follow the diagnosing-cli stale-lock note for the liveness
 verdicts (live owner → wait; dead owner + free lock → human-confirmed
 removal; dead owner + held lock → wait, never delete) — including its
 no-baseline exception, since a fully wedged CLI cannot run any check first.
@@ -226,14 +226,14 @@ Adjust to match the probe: for CLI-wide failure, state the interpreter/venv/runt
 
 ### Recommended Fix
 
-1. **If CLI-wide broken:** Check for stuck updates (`hermes update`, inspect `<git common dir>/hermes-update.lock`, or `<install root>/.hermes-update.lock` for a ZIP install without `.git`). Follow liveness checks per diagnosing-cli-tui. Verify runtime deps with `hermes pm doctor` if needed. Inspect config/logs directly under `$HERMES_HOME` if CLI unusable; escalate to `installing-hermes` as last resort.
+1. **If CLI-wide broken:** Check for stuck updates (`hermes update`, inspect `<git common dir>/hermes-update.lock`, or `<install root>/.hermes-update.lock` for a ZIP install without `.git`). Follow liveness checks per diagnosing-cli. Verify runtime deps with `hermes pm doctor` if needed. Inspect config/logs directly under `$HERMES_HOME` if CLI unusable; escalate to `installing-hermes` as last resort.
 2. **If guide-only broken:** Follow Step 4 (plugin load health) - check `hermes plugins list`, logs for timeouts/import errors. Disable failing plugin if needed (`hermes plugins disable <name>`), restart session. See `diagnosing-plugins`. 
 
 ### References
 
 - `$HERMES_HOME/config.yaml` and logs (`$HERMES_HOME/logs/`)
 - `hermes_cli/update_lock.py`, `hermes_cli/venv_sync.py`
-- `diagnosing-cli-tui` (stale lock handling)
+- `diagnosing-cli` (stale lock handling)
 - `diagnosing-path` (interpreter/venv resolution)
 - `diagnosing-plugins` (plugin load issues)
 

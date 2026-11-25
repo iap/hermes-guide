@@ -5,6 +5,43 @@ is renamed upstream. CI should diff these against live `hermes ...` output.
 Do not scatter these strings across checks.py or __init__.py.
 """
 
+__all__ = [
+    "BUILTIN_MEMORY_STORES",
+    "BUNDLED_SKILLS_MANIFEST",
+    "CLI_CONFIG_PATH_ARGV",
+    "CLI_HOOKS_DOCTOR_ARGV",
+    "CONFIG_FILENAME",
+    "CONFIG_MCP_SERVERS",
+    "CONFIG_MEMORY_SECTION",
+    "CONFIG_PLUGINS_DISABLED",
+    "CONFIG_PLUGINS_ENABLED",
+    "CONFIG_PLUGINS_SECTION",
+    "CREDENTIAL_POOL_CUSTOM_PREFIX",
+    "CREDENTIAL_POOL_SIBLING_START",
+    "FOREIGN_MCP_KEYS",
+    "HOOKS_ALLOWLIST_FILENAME",
+    "HOOKS_DOCTOR_HEALTHY_SUMMARY",
+    "HOOKS_DOCTOR_MARKER_RE",
+    "HOOKS_DOCTOR_NONE_CONFIGURED",
+    "MCP_CONNECT_TIMEOUT_DEFAULT",
+    "MCP_HTTP_KEY",
+    "MCP_STDIO_KEY",
+    "MCP_TIMEOUT_DEFAULT",
+    "MCP_TOOL_NAME_PREFIX",
+    "MEMORY_CHAR_LIMIT_DEFAULT",
+    "MEMORY_ENTRY_DELIMITER",
+    "MEMORY_NEAR_DUP_ENTRY_CAP",
+    "PLUGIN_SUBCATEGORY_DIRS",
+    "PROJECT_VENV_ORDER",
+    "SKILLS_INSTALL_SOURCE",
+    "SKILL_BUNDLES_DIRNAME",
+    "SKILL_EXCLUDED_DIRS",
+    "SKILL_FOR_SCOPE",
+    "SKILL_PLATFORMS_KEY",
+    "SKILL_SUPPORT_DIRS",
+    "USER_CHAR_LIMIT_DEFAULT",
+]
+
 # Top-level config key for MCP servers
 CONFIG_MCP_SERVERS = "mcp_servers"
 
@@ -107,6 +144,13 @@ PLUGIN_SUBCATEGORY_DIRS = (
     # `computer_use/cua` as a discoverable plugin id, so a stale
     # `plugins.enabled: [cua]` resolved as valid instead of being flagged.
     "computer_use",
+    # config_backends: upstream holds the remote config backend under
+    # `plugins/config_backends/remote/`; it is selected by
+    # HERMES_CONFIG_BACKEND and never discovered through the general plugin
+    # loader. (`delegation/` is intentionally not listed here: upstream does
+    # scan it as a backend manifest, so the guide must keep seeing
+    # `delegation/default` in the fallback path.)
+    "config_backends",
 )
 
 # Filesystem names owned by the Hermes layout (rename upstream -> edit here).

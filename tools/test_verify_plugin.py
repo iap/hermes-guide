@@ -172,6 +172,21 @@ def case_register_local_func_with_ctx_passes():
     assert checks.get("register accepts ctx param") is True, "local func with ctx should pass"
 
 
+def case_name_matches_dir_override():
+    import tempfile
+    from pathlib import Path
+
+    pd = Path(tempfile.mkdtemp()) / "review-clone"
+    pd.mkdir()
+    results = mod._check_manifest({"name": "hermes-guide"}, pd, dir_name="hermes-guide")
+    checks = {r[0]: r[1] for r in results}
+    assert checks.get("name matches dir") is True
+
+    results = mod._check_manifest({"name": "hermes-guide"}, pd)
+    checks = {r[0]: r[1] for r in results}
+    assert checks.get("name matches dir") is False
+
+
 CASES = [
     case_register_with_ctx_passes,
     case_register_no_params_fails,
@@ -189,6 +204,7 @@ CASES = [
     case_register_none_rejected,
     case_register_local_func_no_params_fails,
     case_register_local_func_with_ctx_passes,
+    case_name_matches_dir_override,
 ]
 
 

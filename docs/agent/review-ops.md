@@ -3,6 +3,17 @@
 Review and merge lifecycle for pull requests. Maintenance and runtime rules are
 in [deep-ops.md](deep-ops.md).
 
+## Merge stop rule
+
+Before merging, both facts must be true on the current head:
+
+- Qodo has a review verdict on the current head with no open findings.
+- CodeRabbit has a **review record** on the current head with a clean verdict.
+
+`mergeStateStatus: CLEAN` does not satisfy either fact. A CodeRabbit check with
+`conclusion: skipped` is **not a review**; treat it as "no review on this head"
+and run the trigger gate.
+
 ## Review sequence
 
 A bot finding is a claim, not an instruction. Verify it against the live code and
@@ -15,7 +26,7 @@ with file:line evidence, not implemented.
 | 2. Second reviewer | Primary is clean on the current head | Post `@coderabbitai full review` **once** for this PR. Wait for the review record; a trigger comment is not a review. |
 | 3. Second findings | CodeRabbit reports findings | Verify each against the code. Fix real findings; decline false positives/negatives with evidence. After new commits, use `@coderabbitai review` (incremental), never a second full review. |
 | 4. Re-check second reviewer | Any second-review fix created a new head | The primary's resolved findings stand — Qodo auto-reviews each head, and once it has reviewed the PR with no open findings, do not manually re-trigger it per head. Request CodeRabbit's incremental review of the new head and proceed until CodeRabbit's check completes clean on that head. Repeat for each new head with CodeRabbit alone. |
-| 5. Merge gate | CodeRabbit clean on the current head; Qodo has a no-open-findings verdict on the current head | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo's automatic review covers each head — a new head does not merge on an older Qodo review alone, so require Qodo's no-open-findings verdict on the current head (reached by its automatic review, never by a manual trigger; a silent Qodo on the current head is "not heard" and needs explicit authorization) alongside CodeRabbit's clean completion on the current head. |
+| 5. Merge gate | CodeRabbit clean on the current head; Qodo has a no-open-findings verdict on the current head | All required checks pass, 0 unresolved threads, `mergeStateStatus: CLEAN`, and merge is explicitly authorized. Qodo's automatic review covers each head — a new head does not merge on an older Qodo review alone, so require Qodo's no-open-findings verdict on the current head (reached by its automatic review, never by a manual trigger; a silent Qodo on the current head is "not heard" and needs explicit authorization) alongside CodeRabbit's clean completion on the current head . |
 
 - **False positives are first-class.** A bot recommendation can be stale,
   miscited, or wrong for this repo. Cite the guard, test, or source that
@@ -117,6 +128,7 @@ way to decide "should I trigger?". Run it before posting any trigger command.
    | `/agentic_review` | trigger ONLY if the PR-wide history shows Qodo has never reviewed (silent) AND no trigger is already pending | do not trigger | do not trigger — head already reviewed |
    | `@coderabbitai full review` | trigger ONCE, only if the PR-wide history shows no full review yet AND Qodo's findings are resolved | do not trigger | do not trigger |
    | `@coderabbitai review` (incremental) | trigger once if a full review completed on an earlier head and no request for this head is in flight | do not trigger | trigger after fixes land a NEW head; proceed when its check completes clean |
+   | CodeRabbit check `skipped` | **No review** — trigger the full or incremental pass above; `skipped` is never a clean verdict | — | — |
 
 4. Spam rules (the reason PR #429 collected five `/agentic_review` posts on one
    head):
@@ -467,8 +479,8 @@ merge decision time, on the current head:
    audit trail. A follow-up issue is the right home for a defect in already
    merged code, never for unmerged code.
 4. **Verdict.** Report: checks (all pass, none pending), threads
-   (N unresolved, classified), CodeRabbit (clean on this head), Qodo (verdict
-   on this head or not heard), `mergeStateStatus`, and the authorization. If
+   (N unresolved, classified), CodeRabbit (clean on this head
+   exception), Qodo (verdict on this head or not heard), `mergeStateStatus`, and the authorization. If
    any element is missing, the verdict is "blocked" — name the element, do
    not average past it.
 
@@ -565,13 +577,26 @@ CI: <pass | fail>. Threads: <N unresolved>.
 accept/decline decision and the thread state. A plain reply — Fixed or
 Declined — never resolves a thread; only the bot's actions do:
 
-- **Qodo:** a plain decline reply is discussion only and does not dismiss. To
-  dismiss, reply in the thread starting with `@qodo` stating the reason
-  ("this is a false positive — ..."), or use the finding's portal Dismiss link
-  (irreversible; portal access required). A re-review updates each finding's
-  status — Qodo marks Outdated/Resolved only when the code changed enough
-  that the finding no longer applies. Wait for the finding to be marked
-  resolved; a reply alone is not acceptance. (#434)
+- **Qodo — two distinct reply paths (word them correctly):**
+  - **Fixed** (code changed): reply in the thread as plain text **starting with
+    `Fixed in <sha>: ...` and do NOT tag `@qodo`.** Qodo's attribution engine
+    detects the fix from the pushed code and marks the finding *implemented*;
+    tagging `@qodo` on a fixed finding instead routes the reply to the chat
+    agent, which records a dismissal reason (e.g. "Dismissed — rejected") and
+    closes the thread with the wrong audit reason. State what changed and the
+    commit sha. Verified 2026-11-19 from Qodo's chat docs (dismissal reasons) and
+    Qodo skills guidance (fixed-finding attribution): the four dismissal
+    reasons (false positive / rejected / deferred / intentional) are for
+    findings closed *without* a code change.
+  - **Closed without a code change** (false positive / by design / deferred):
+    start the reply with `@qodo` and use canonical wording so the chat agent
+    records the matching reason — `@qodo this is a false positive — ...`,
+    `@qodo this is intentional — ...`, `@qodo deferring — ...`, or
+    `@qodo not fixing this — ...`. The portal Dismiss link is the alternative
+    (irreversible; portal access required).
+  A re-review updates each finding's status — Qodo marks Outdated/Resolved only
+  when the code changed enough that the finding no longer applies. Wait for the
+  finding to be marked resolved; a reply alone is not acceptance. (#434)
 - **CodeRabbit:** on a new head, check the thread state — a finding the
   re-review no longer reports may resolve, but do not assume it. If the
   thread remains open after the bot's re-review of the evidence, post
