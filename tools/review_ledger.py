@@ -9,6 +9,9 @@ Usage:
     python tools/review_ledger.py --pr 448 --write
     python tools/review_ledger.py --pr 448 --json
 
+Live smoke tests (network + gh):
+    HERMES_GUIDE_LIVE_TESTS=1 python tools/test_review_ledger.py
+
 Dependencies:
     - gh CLI (must be on PATH): https://cli.github.com/
     - Python 3.11+
@@ -28,6 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 REPO = os.environ.get("GITHUB_REPOSITORY", "iap/hermes-guide")
+LIVE_TEST_ENV = "HERMES_REVIEW_INTEGRATION"
 LEDGER_DIR = Path(".hermes")
 LEDGER_FILE = "review-rounds.json"
 
@@ -37,22 +41,57 @@ BOT_LOGINS = {
 }
 
 
+def live_tests_enabled():
+    """Live (network/gh) tests are opt-in so the default suite stays hermetic."""
+    return os.environ.get(LIVE_TEST_ENV, "").strip().lower() in {"1", "true", "yes"}
+
+
 def _run_gh_graphql(query):
-    result = subprocess.run(
-        ["gh", "api", "graphql", "-f", "query=" + query],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=60,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["gh", "api", "graphql", "-f", "query=" + query],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"gh GraphQL timed out after {exc.timeout}s") from exc
+    except OSError as exc:
+        raise RuntimeError(f"gh CLI unavailable: {exc}") from exc
     if result.returncode != 0:
         raise RuntimeError("gh GraphQL failed: " + result.stderr.strip())
     try:
         return json.loads(result.stdout)
     except (json.JSONDecodeError, ValueError) as exc:
         raise RuntimeError(f"gh returned invalid JSON: {exc}") from exc
+
+
+def _fetch_reviews(pr_number):
+    reviews = []
+    after = ""
+    owner, name = REPO.split("/", 1)
+    for _ in range(50):
+        query = (
+            f'query {{ repository(owner: "{owner}", name: "{name}") {{ '
+            f"pullRequest(number: {pr_number}) {{ "
+            f'reviews(first: 100, after: "{after}") {{ '
+            f"pageInfo {{ hasNextPage endCursor }} "
+            f"nodes {{ author {{ login }} state submittedAt commit {{ oid }} }} "
+            f"}} }} }} }}"
+        )
+        data = _run_gh_graphql(query)
+        pr = data["data"]["repository"]["pullRequest"]
+        reviews.extend(pr["reviews"]["nodes"])
+        page = pr["reviews"].get("pageInfo") or {}
+        if not page.get("hasNextPage"):
+            break
+        after = page.get("endCursor") or ""
+        if not after:
+            break
+    return reviews
 
 
 def _fetch_pr_threads(pr_number):
@@ -62,21 +101,29 @@ def _fetch_pr_threads(pr_number):
     owner, name = REPO.split("/", 1)
     # Qodo #19: first:100 truncates long histories and false-cleans PRs
     # whose unresolved threads live past page one. Page threads until
-    # exhausted; reviews are fetched once (bots review early on a PR).
+    # exhausted.
     # Qodo #20: no fixed page cap (PRs can exceed 500 threads).
     for _ in range(20):
-        query = f"""query {{ repository(owner: "{owner}", name: "{name}") {{ pullRequest(number: {pr_number}) {{ headRefOid reviewThreads(first: 100, after: "{after}") {{ pageInfo {{ hasNextPage endCursor }} nodes {{ id isResolved isOutdated comments(first: 5) {{ nodes {{ author {{ login }} body path line createdAt }} }} }} }} reviews(first: 100) {{ nodes {{ author {{ login }} state commit {{ oid }} }} }} }} }} }}"""
+        query = (
+            f'query {{ repository(owner: "{owner}", name: "{name}") {{ '
+            f"pullRequest(number: {pr_number}) {{ headRefOid "
+            f'reviewThreads(first: 100, after: "{after}") {{ '
+            f"pageInfo {{ hasNextPage endCursor }} "
+            f"nodes {{ id isResolved isOutdated comments(first: 5) {{ "
+            f"nodes {{ author {{ login }} body path line createdAt }} }} }} "
+            f"}} }} }} }}"
+        )
         data = _run_gh_graphql(query)
         pr = data["data"]["repository"]["pullRequest"]
         head_oid = pr["headRefOid"]
         threads.extend(pr["reviewThreads"]["nodes"])
-        reviews = pr.get("reviews", {}).get("nodes", [])
         t_page = pr["reviewThreads"].get("pageInfo") or {}
         if not t_page.get("hasNextPage"):
             break
         after = t_page.get("endCursor") or ""
         if not after:
             break
+    reviews = _fetch_reviews(pr_number)
     return threads, head_oid, reviews
 
 
@@ -98,7 +145,8 @@ def compute_reviewed(reviews, head_oid=None):
         # CHANGES_REQUESTED on the head blocks even if earlier COMMENTED exists.
         saw_request = False
         saw_ok = False
-        for r in reviews:
+        ordered = sorted(reviews, key=lambda r: r.get("submittedAt") or "")
+        for r in ordered:
             if _login(r) not in logins:
                 continue
             if head_oid:
@@ -180,7 +228,7 @@ def _extract_title(body):
 
 def _parse_threads(threads):
     findings = []
-    human_open_count = 0
+    non_review_open = 0
     for thread in threads:
         comments = (thread.get("comments") or {}).get("nodes") or []
         if not comments:
@@ -192,7 +240,7 @@ def _parse_threads(threads):
         is_outdated = bool(thread.get("isOutdated", False))
         if bot is None:
             if not is_resolved and not is_outdated:
-                human_open_count += 1
+                non_review_open += 1
             continue
         body = first.get("body", "")
         finding = {
@@ -210,14 +258,14 @@ def _parse_threads(threads):
             "created_at": first.get("createdAt"),
         }
         findings.append(finding)
-    return findings, human_open_count
+    return findings, non_review_open
 
 
 def unresolved_findings(findings):
     return [f for f in findings if f["status"] == "open"]
 
 
-def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_reviewed=False, human_open_count=0):
+def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_reviewed=False, non_review_open=0):
     qodo_findings = [f for f in findings if f["bot"] == "qodo"]
     cr_findings = [f for f in findings if f["bot"] == "coderabbit"]
 
@@ -235,7 +283,7 @@ def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_
         and coderabbit_clean
         and same_head
         and len(unresolved_findings(findings)) == 0
-        and human_open_count == 0
+        and non_review_open == 0
     )
 
     round_data = {
@@ -255,7 +303,7 @@ def build_ledger(pr_number, head_oid, findings, qodo_reviewed=False, coderabbit_
             "qodo_open": len(qodo_open),
             "coderabbit_total": len(cr_findings),
             "coderabbit_open": len(cr_open),
-            "human_open": human_open_count,
+            "non_review_open": non_review_open,
         },
     }
 
@@ -272,6 +320,11 @@ def write_ledger(ledger, output_path):
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(ledger, f, indent=2, ensure_ascii=False)
         f.write("\n")
+
+
+def _json_for_stdout(ledger):
+    """ASCII-only JSON so consoles with a non-UTF-8 code page do not crash."""
+    return json.dumps(ledger, indent=2, ensure_ascii=True)
 
 
 def main():
@@ -297,9 +350,9 @@ def main():
         print("error: " + str(exc), file=sys.stderr)
         return 2
 
-    findings, human_open_count = _parse_threads(threads)
+    findings, non_review_open = _parse_threads(threads)
     qodo_reviewed, coderabbit_reviewed = compute_reviewed(reviews, head_oid)
-    ledger = build_ledger(args.pr, head_oid, findings, qodo_reviewed, coderabbit_reviewed, human_open_count)
+    ledger = build_ledger(args.pr, head_oid, findings, qodo_reviewed, coderabbit_reviewed, non_review_open)
 
     if args.write:
         if args.output:
@@ -311,7 +364,7 @@ def main():
             print("Ledger written to " + str(out_path))
 
     if args.json or not args.write:
-        print(json.dumps(ledger, indent=2, ensure_ascii=False))
+        print(_json_for_stdout(ledger))
 
     if ledger["merge_ready"]:
         return 0

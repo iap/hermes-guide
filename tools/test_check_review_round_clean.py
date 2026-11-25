@@ -108,6 +108,27 @@ def test_check_ledger_coderabbit_not_clean():
     assert any("CodeRabbit review not clean" in f for f in failures)
 
 
+def test_check_ledger_non_review_open_blocks():
+    ledger = {
+        "pr": 42,
+        "head_commit": "abc123",
+        "merge_ready": True,
+        "rounds": [
+            {
+                "qodo_clean": True,
+                "coderabbit_clean": True,
+                "summary": {
+                    "qodo_open": 0,
+                    "coderabbit_open": 0,
+                    "non_review_open": 2,
+                },
+            }
+        ],
+    }
+    failures = gate._check_ledger(ledger, 42, "abc123")
+    assert any("non-review thread" in f for f in failures)
+
+
 def test_check_ledger_merge_ready_false():
     ledger = {
         "pr": 42,
@@ -126,6 +147,9 @@ def test_check_ledger_merge_ready_false():
 
 
 def test_fetch_fresh_ledger():
+    if not gate.rl.live_tests_enabled():
+        print("SKIP: set HERMES_REVIEW_INTEGRATION=1 for the live check")
+        return
     try:
         ledger = gate._fetch_fresh_ledger(448)
     except (RuntimeError, KeyError, TypeError):
@@ -142,6 +166,7 @@ def test_cli_live_failure_fails_closed(monkey=None):
 
     orig_parse = argparse.ArgumentParser.parse_args
     orig_get_head = gate._get_pr_head
+    orig_get_author = gate._get_pr_author
     orig_fetch = gate.rl._fetch_pr_threads
 
     def _raise(*a, **k):
@@ -149,6 +174,7 @@ def test_cli_live_failure_fails_closed(monkey=None):
 
     try:
         gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
         gate.rl._fetch_pr_threads = _raise
         # Ledger says merge-ready but live fetch raises -> must be gate failure.
         import json
@@ -185,6 +211,7 @@ def test_cli_live_failure_fails_closed(monkey=None):
             assert gate.main() == 1
     finally:
         gate._get_pr_head = orig_get_head
+        gate._get_pr_author = orig_get_author
         gate.rl._fetch_pr_threads = orig_fetch
         argparse.ArgumentParser.parse_args = orig_parse
 
@@ -194,9 +221,11 @@ def test_cli_pass_returns_zero():
 
     orig_parse = argparse.ArgumentParser.parse_args
     orig_get_head = gate._get_pr_head
+    orig_get_author = gate._get_pr_author
     orig_fetch = gate.rl._fetch_pr_threads
     try:
         gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
         gate.rl._fetch_pr_threads = lambda _pr: ([], "abc123", [])
         import json
         import tempfile
@@ -233,6 +262,7 @@ def test_cli_pass_returns_zero():
             assert gate.main() == 0
     finally:
         gate._get_pr_head = orig_get_head
+        gate._get_pr_author = orig_get_author
         gate.rl._fetch_pr_threads = orig_fetch
         argparse.ArgumentParser.parse_args = orig_parse
 
@@ -296,9 +326,11 @@ def test_cli_live_human_thread_blocks():
 
     orig_parse = argparse.ArgumentParser.parse_args
     orig_get_head = gate._get_pr_head
+    orig_get_author = gate._get_pr_author
     orig_fetch = gate.rl._fetch_pr_threads
     try:
         gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
         gate.rl._fetch_pr_threads = lambda _pr: (
             [
                 {
@@ -333,6 +365,7 @@ def test_cli_live_human_thread_blocks():
             assert gate.main() == 1
     finally:
         gate._get_pr_head = orig_get_head
+        gate._get_pr_author = orig_get_author
         gate.rl._fetch_pr_threads = orig_fetch
         argparse.ArgumentParser.parse_args = orig_parse
 
@@ -342,9 +375,11 @@ def test_cli_live_head_mismatch_blocks():
 
     orig_parse = argparse.ArgumentParser.parse_args
     orig_get_head = gate._get_pr_head
+    orig_get_author = gate._get_pr_author
     orig_fetch = gate.rl._fetch_pr_threads
     try:
         gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
         gate.rl._fetch_pr_threads = lambda _pr: (
             [],
             "def456",
@@ -363,6 +398,7 @@ def test_cli_live_head_mismatch_blocks():
             assert gate.main() == 1
     finally:
         gate._get_pr_head = orig_get_head
+        gate._get_pr_author = orig_get_author
         gate.rl._fetch_pr_threads = orig_fetch
         argparse.ArgumentParser.parse_args = orig_parse
 
@@ -372,9 +408,11 @@ def test_cli_live_clean_passes():
 
     orig_parse = argparse.ArgumentParser.parse_args
     orig_get_head = gate._get_pr_head
+    orig_get_author = gate._get_pr_author
     orig_fetch = gate.rl._fetch_pr_threads
     try:
         gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
         gate.rl._fetch_pr_threads = lambda _pr: (
             [],
             "abc123",
@@ -393,6 +431,7 @@ def test_cli_live_clean_passes():
             assert gate.main() == 0
     finally:
         gate._get_pr_head = orig_get_head
+        gate._get_pr_author = orig_get_author
         gate.rl._fetch_pr_threads = orig_fetch
         argparse.ArgumentParser.parse_args = orig_parse
 
@@ -402,9 +441,11 @@ def test_cli_live_no_reviews_blocks():
 
     orig_parse = argparse.ArgumentParser.parse_args
     orig_get_head = gate._get_pr_head
+    orig_get_author = gate._get_pr_author
     orig_fetch = gate.rl._fetch_pr_threads
     try:
         gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
         gate.rl._fetch_pr_threads = lambda _pr: ([], "abc123", [])
         import tempfile
 
@@ -416,6 +457,7 @@ def test_cli_live_no_reviews_blocks():
             assert gate.main() == 1
     finally:
         gate._get_pr_head = orig_get_head
+        gate._get_pr_author = orig_get_author
         gate.rl._fetch_pr_threads = orig_fetch
         argparse.ArgumentParser.parse_args = orig_parse
 
@@ -425,9 +467,11 @@ def test_cli_live_old_head_blocks():
 
     orig_parse = argparse.ArgumentParser.parse_args
     orig_get_head = gate._get_pr_head
+    orig_get_author = gate._get_pr_author
     orig_fetch = gate.rl._fetch_pr_threads
     try:
         gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
         gate.rl._fetch_pr_threads = lambda _pr: (
             [],
             "abc123",
@@ -446,6 +490,7 @@ def test_cli_live_old_head_blocks():
             assert gate.main() == 1
     finally:
         gate._get_pr_head = orig_get_head
+        gate._get_pr_author = orig_get_author
         gate.rl._fetch_pr_threads = orig_fetch
         argparse.ArgumentParser.parse_args = orig_parse
 

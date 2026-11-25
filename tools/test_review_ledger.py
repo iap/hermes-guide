@@ -136,10 +136,10 @@ def test_parse_threads_outdated_not_open():
             },
         }
     ]
-    findings, human = rl._parse_threads(threads)
+    findings, non_review_open = rl._parse_threads(threads)
     assert findings[0]["status"] == "outdated"
     assert rl.unresolved_findings(findings) == []
-    assert human == 0
+    assert non_review_open == 0
 
 
 def test_parse_threads_outdated_human_not_counted():
@@ -161,8 +161,8 @@ def test_parse_threads_outdated_human_not_counted():
             },
         }
     ]
-    _findings, human = rl._parse_threads(threads)
-    assert human == 0
+    _findings, non_review_open = rl._parse_threads(threads)
+    assert non_review_open == 0
 
 
 def test_parse_threads_skips_non_bot():
@@ -320,9 +320,9 @@ def test_parse_threads_deleted_author():
             },
         }
     ]
-    findings, human_open_count = rl._parse_threads(threads)
+    findings, non_review_open = rl._parse_threads(threads)
     assert findings == []
-    assert human_open_count == 1
+    assert non_review_open == 1
 
 
 def test_classify_bot_exact_only():
@@ -334,7 +334,7 @@ def test_classify_bot_exact_only():
     assert rl._classify_bot("human-user") is None
 
 
-def test_build_ledger_human_open_blocks():
+def test_build_ledger_non_review_open_blocks():
     findings = [
         {
             "thread_id": "T1",
@@ -349,7 +349,14 @@ def test_build_ledger_human_open_blocks():
     ]
     ledger = rl.build_ledger(42, "abc123", findings, True, True, 1)
     assert ledger["merge_ready"] is False
-    assert ledger["rounds"][0]["summary"]["human_open"] == 1
+    assert ledger["rounds"][0]["summary"]["non_review_open"] == 1
+
+
+def test_build_ledger_same_head_requires_both_bots():
+    partial = rl.build_ledger(42, "abc123", [], True, False)
+    assert partial["rounds"][0]["same_head"] is False
+    both = rl.build_ledger(42, "abc123", [], True, True)
+    assert both["rounds"][0]["same_head"] is True
 
 
 def test_compute_reviewed_chronology():
@@ -447,6 +454,211 @@ def test_run_gh_graphql_utf8():
         _sp.run = orig
 
 
+def test_run_gh_graphql_missing_binary():
+    import subprocess as _sp
+
+    orig = _sp.run
+
+    def _raise(*a, **k):
+        raise FileNotFoundError("gh")
+
+    try:
+        _sp.run = _raise
+        try:
+            rl._run_gh_graphql("query {}")
+        except RuntimeError as exc:
+            assert "gh" in str(exc).lower()
+        else:
+            raise AssertionError("expected RuntimeError when gh is missing")
+    finally:
+        _sp.run = orig
+
+
+def test_run_gh_graphql_timeout():
+    import subprocess as _sp
+
+    orig = _sp.run
+
+    def _raise(*a, **k):
+        raise _sp.TimeoutExpired(["gh"], 60)
+
+    try:
+        _sp.run = _raise
+        try:
+            rl._run_gh_graphql("query {}")
+        except RuntimeError as exc:
+            assert "timed out" in str(exc).lower()
+        else:
+            raise AssertionError("expected RuntimeError on gh timeout")
+    finally:
+        _sp.run = orig
+
+
+def test_compute_reviewed_sorts_by_submitted_at():
+    # Input is newest-first; chronological order is COMMENTED then
+    # CHANGES_REQUESTED, so the verdict must be blocked regardless of input order.
+    q, _c = rl.compute_reviewed(
+        [
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-11-09T02:00:00Z",
+                "commit": {"oid": "abc123"},
+            },
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-09T01:00:00Z",
+                "commit": {"oid": "abc123"},
+            },
+        ],
+        "abc123",
+    )
+    assert q is False
+
+
+def test_compute_reviewed_approved_after_changes_scrambled():
+    q, _c = rl.compute_reviewed(
+        [
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "APPROVED",
+                "submittedAt": "2026-11-09T03:00:00Z",
+                "commit": {"oid": "abc123"},
+            },
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-11-09T01:00:00Z",
+                "commit": {"oid": "abc123"},
+            },
+        ],
+        "abc123",
+    )
+    assert q is True
+
+
+def test_fetch_pr_threads_paginates_reviews_and_fetches_submitted_at():
+    calls = []
+
+    def _fake(query):
+        calls.append(query)
+        if "reviewThreads" in query:
+            return {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "headRefOid": "abc123",
+                            "reviewThreads": {
+                                "pageInfo": {"hasNextPage": False},
+                                "nodes": [],
+                            },
+                        }
+                    }
+                }
+            }
+        if 'after: "c1"' in query:
+            return {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviews": {
+                                "pageInfo": {"hasNextPage": False},
+                                "nodes": [
+                                    {
+                                        "author": {"login": "qodo-code-review[bot]"},
+                                        "state": "COMMENTED",
+                                        "submittedAt": "2026-11-09T02:00:00Z",
+                                        "commit": {"oid": "abc123"},
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                }
+            }
+        return {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "reviews": {
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                            "nodes": [
+                                {
+                                    "author": {"login": "coderabbitai[bot]"},
+                                    "state": "COMMENTED",
+                                    "submittedAt": "2026-11-09T01:00:00Z",
+                                    "commit": {"oid": "abc123"},
+                                }
+                            ],
+                        }
+                    }
+                }
+            }
+        }
+
+    orig = rl._run_gh_graphql
+    try:
+        rl._run_gh_graphql = _fake
+        threads, head, reviews = rl._fetch_pr_threads(42)
+    finally:
+        rl._run_gh_graphql = orig
+
+    assert threads == []
+    assert head == "abc123"
+    assert len(reviews) == 2
+    assert any("submittedAt" in c for c in calls)
+    assert any('after: "c1"' in c for c in calls)
+
+
+def test_live_tests_enabled_env_gate():
+    import os as _os
+
+    orig = _os.environ.pop(rl.LIVE_TEST_ENV, None)
+    try:
+        assert rl.live_tests_enabled() is False
+        _os.environ[rl.LIVE_TEST_ENV] = "1"
+        assert rl.live_tests_enabled() is True
+        _os.environ[rl.LIVE_TEST_ENV] = "0"
+        assert rl.live_tests_enabled() is False
+    finally:
+        if orig is None:
+            _os.environ.pop(rl.LIVE_TEST_ENV, None)
+        else:
+            _os.environ[rl.LIVE_TEST_ENV] = orig
+
+
+def test_repo_constant_drives_query():
+    calls = []
+
+    def _fake(query):
+        calls.append(query)
+        return {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "abc123",
+                        "reviewThreads": {
+                            "pageInfo": {"hasNextPage": False},
+                            "nodes": [],
+                        },
+                        "reviews": {"pageInfo": {"hasNextPage": False}, "nodes": []},
+                    }
+                }
+            }
+        }
+
+    orig = rl._run_gh_graphql
+    try:
+        rl._run_gh_graphql = _fake
+        rl._fetch_pr_threads(7)
+    finally:
+        rl._run_gh_graphql = orig
+
+    owner, name = rl.REPO.split("/", 1)
+    assert any(f'owner: "{owner}"' in c and f'name: "{name}"' in c for c in calls)
+
+
 def test_compute_reviewed():
     q, c = rl.compute_reviewed(
         [
@@ -489,6 +701,12 @@ def test_write_ledger():
         assert data["pr"] == 1
 
 
+def test_stdout_json_is_ascii_safe():
+    rendered = rl._json_for_stdout({"title": "📎 emoji"})
+    assert rendered.isascii()
+    assert json.loads(rendered)["title"] == "📎 emoji"
+
+
 def test_extract_title_bold():
     body = "**Fix the bug**\nDetails here"
     title = rl._extract_title(body)
@@ -507,10 +725,10 @@ def test_extract_title_fallback():
 
 
 def test_integration_pr_448():
-    if not os.environ.get("HERMES_REVIEW_INTEGRATION"):
+    """Fetch real PR 448 threads and verify structure."""
+    if not rl.live_tests_enabled():
         print("SKIP: set HERMES_REVIEW_INTEGRATION=1 for the live PR-448 check")
         return
-    """Fetch real PR 448 threads and verify structure."""
     try:
         threads, head_oid, _reviews = rl._fetch_pr_threads(448)
     except (RuntimeError, KeyError, TypeError, ValueError) as exc:

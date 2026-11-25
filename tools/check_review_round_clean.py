@@ -100,6 +100,12 @@ def _check_ledger(ledger: dict, pr_number: int, live_head: str) -> list[str]:
     if open_count > 0:
         failures.append(f"{open_count} unresolved finding(s) remain")
 
+    non_review_open = latest.get("summary", {}).get("non_review_open", 0)
+    if non_review_open > 0:
+        failures.append(
+            f"{non_review_open} unresolved non-review thread(s) remain"
+        )
+
     if not ledger.get("merge_ready"):
         failures.append("Ledger merge_ready is False")
 
@@ -109,9 +115,9 @@ def _check_ledger(ledger: dict, pr_number: int, live_head: str) -> list[str]:
 def _fetch_fresh_ledger(pr_number: int) -> dict:
     """Fetch fresh threads and build a ledger (no disk write)."""
     threads, head_oid, reviews = rl._fetch_pr_threads(pr_number)
-    findings, human_open_count = rl._parse_threads(threads)
+    findings, non_review_open = rl._parse_threads(threads)
     qodo_reviewed, coderabbit_reviewed = rl.compute_reviewed(reviews, head_oid)
-    return rl.build_ledger(pr_number, head_oid, findings, qodo_reviewed, coderabbit_reviewed, human_open_count)
+    return rl.build_ledger(pr_number, head_oid, findings, qodo_reviewed, coderabbit_reviewed, non_review_open)
 
 
 def main() -> int:
@@ -171,16 +177,17 @@ def main() -> int:
     if not args.no_live_check and not failures:
         try:
             threads, live_head2, live_reviews = rl._fetch_pr_threads(pr_number)
-            findings, _human_live = rl._parse_threads(threads)
+            findings, non_review_live = rl._parse_threads(threads)
             _lq, _lc = rl.compute_reviewed(live_reviews, live_head2)
             if not _lq or not _lc:
                 failures.append(
                     "Live check: a bot has no review record for the live head"
                 )
             open_findings = rl.unresolved_findings(findings)
-            if _human_live:
+            if non_review_live:
                 failures.append(
-                    f"Live check: { _human_live } unresolved human thread(s) found"
+                    f"Live check: {non_review_live} unresolved thread(s) "
+                    "from non-review authors found"
                 )
             if open_findings:
                 failures.append(

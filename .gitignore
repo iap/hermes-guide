@@ -38,6 +38,7 @@ venv/
 
 # Local tool state
 .mimosa/
+.hermes/
 
 # Local agent / verification scratch (not part of the published plugin + tap)
 .cluster/
