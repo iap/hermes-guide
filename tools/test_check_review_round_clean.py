@@ -146,18 +146,60 @@ def test_check_ledger_merge_ready_false():
     assert any("merge_ready is False" in f for f in failures)
 
 
-def test_fetch_fresh_ledger():
-    if not gate.rl.live_tests_enabled():
-        print("SKIP: set HERMES_REVIEW_INTEGRATION=1 for the live check")
-        return
+def test_fetch_fresh_ledger_parses_stub_response():
+    calls = []
+
+    def _fake(query):
+        calls.append(query)
+        if "reviewThreads" in query:
+            return {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "headRefOid": "abc123",
+                            "reviewThreads": {
+                                "pageInfo": {"hasNextPage": False},
+                                "nodes": [],
+                            },
+                        }
+                    }
+                }
+            }
+        return {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "reviews": {
+                            "pageInfo": {"hasNextPage": False},
+                            "nodes": [
+                                {
+                                    "author": {"login": "qodo-code-review[bot]"},
+                                    "state": "COMMENTED",
+                                    "commit": {"oid": "abc123"},
+                                },
+                                {
+                                    "author": {"login": "coderabbitai[bot]"},
+                                    "state": "COMMENTED",
+                                    "commit": {"oid": "abc123"},
+                                },
+                            ],
+                        }
+                    }
+                }
+            }
+        }
+
+    orig = gate.rl._run_gh_graphql
     try:
+        gate.rl._run_gh_graphql = _fake
         ledger = gate._fetch_fresh_ledger(448)
-    except (RuntimeError, KeyError, TypeError):
-        print("SKIP: gh not available")
-        return
+    finally:
+        gate.rl._run_gh_graphql = orig
+
     assert ledger["pr"] == 448
-    assert "rounds" in ledger
+    assert ledger["head_commit"] == "abc123"
     assert len(ledger["rounds"]) == 1
+    assert ledger["merge_ready"] is True
 
 
 def test_cli_live_failure_fails_closed(monkey=None):
@@ -188,6 +230,7 @@ def test_cli_live_failure_fails_closed(monkey=None):
                     {
                         "pr": 42,
                         "head_commit": "abc123",
+                        "merge_ready": True,
                         "rounds": [
                             {
                                 "round": 1,
@@ -514,8 +557,120 @@ def test_cli_bot_author_skips():
         argparse.ArgumentParser.parse_args = orig_parse
 
 
-def test_main_callable():
-    assert callable(gate.main)
+def test_cli_ledger_failure_returns_one():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_head = gate._get_pr_head
+    orig_author = gate._get_pr_author
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "ledger.json"
+            p.write_text(
+                json.dumps(
+                    {
+                        "pr": 42,
+                        "head_commit": "abc123",
+                        "merge_ready": False,
+                        "rounds": [
+                            {
+                                "qodo_clean": False,
+                                "coderabbit_clean": True,
+                                "summary": {"qodo_open": 1, "coderabbit_open": 0},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=str(p), no_live_check=True
+            )
+            assert gate.main() == 1
+    finally:
+        gate._get_pr_head = orig_head
+        gate._get_pr_author = orig_author
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
+def test_cli_invalid_ledger_returns_two():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_head = gate._get_pr_head
+    orig_author = gate._get_pr_author
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        for bad in ([], {"rounds": [None]}):
+            with tempfile.TemporaryDirectory() as td:
+                p = Path(td) / "ledger.json"
+                p.write_text(json.dumps(bad), encoding="utf-8")
+                argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                    pr=42, ledger=str(p), no_live_check=True
+                )
+                assert gate.main() == 2
+    finally:
+        gate._get_pr_head = orig_head
+        gate._get_pr_author = orig_author
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
+def test_cli_failure_goes_to_stderr():
+    import argparse
+    import contextlib
+    import io
+    import json
+    import tempfile
+    from pathlib import Path
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_head = gate._get_pr_head
+    orig_author = gate._get_pr_author
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "ledger.json"
+            p.write_text(
+                json.dumps(
+                    {
+                        "pr": 42,
+                        "head_commit": "oldhead",
+                        "merge_ready": True,
+                        "rounds": [
+                            {
+                                "qodo_clean": True,
+                                "coderabbit_clean": True,
+                                "summary": {"qodo_open": 0, "coderabbit_open": 0},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=str(p), no_live_check=True
+            )
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                assert gate.main() == 1
+            assert "REVIEW ROUND GATE: FAIL" in err.getvalue()
+            assert "REVIEW ROUND GATE: FAIL" not in out.getvalue()
+    finally:
+        gate._get_pr_head = orig_head
+        gate._get_pr_author = orig_author
+        argparse.ArgumentParser.parse_args = orig_parse
 
 
 if __name__ == "__main__":

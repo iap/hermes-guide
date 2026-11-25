@@ -74,10 +74,11 @@ def _fetch_reviews(pr_number):
     after = ""
     owner, name = REPO.split("/", 1)
     for _ in range(50):
+        after_arg = f', after: "{after}"' if after else ""
         query = (
             f'query {{ repository(owner: "{owner}", name: "{name}") {{ '
             f"pullRequest(number: {pr_number}) {{ "
-            f'reviews(first: 100, after: "{after}") {{ '
+            f"reviews(first: 100{after_arg}) {{ "
             f"pageInfo {{ hasNextPage endCursor }} "
             f"nodes {{ author {{ login }} state submittedAt commit {{ oid }} }} "
             f"}} }} }} }}"
@@ -104,10 +105,11 @@ def _fetch_pr_threads(pr_number):
     # exhausted.
     # Qodo #20: no fixed page cap (PRs can exceed 500 threads).
     for _ in range(20):
+        after_arg = f', after: "{after}"' if after else ""
         query = (
             f'query {{ repository(owner: "{owner}", name: "{name}") {{ '
             f"pullRequest(number: {pr_number}) {{ headRefOid "
-            f'reviewThreads(first: 100, after: "{after}") {{ '
+            f"reviewThreads(first: 100{after_arg}) {{ "
             f"pageInfo {{ hasNextPage endCursor }} "
             f"nodes {{ id isResolved isOutdated comments(first: 5) {{ "
             f"nodes {{ author {{ login }} body path line createdAt }} }} }} "
@@ -183,26 +185,28 @@ def _classify_bot(author_login):
 
 
 def _extract_severity(body):
-    body_lower = body.lower()
-    first_line = body_lower.split(chr(10))[0] if body_lower else ""
+    # Look only at the header region: severity words elsewhere in the body
+    # are prose, not the finding's severity.
+    header = "\n".join((body or "").splitlines()[:6]).lower()
     # Qodo uses emoji markers: red=high, orange=medium, yellow=low, green=minor
-    if "🔴" in first_line or "red" in first_line:
+    if "🔴" in header:
         return "high"
-    if "🟠" in first_line or "orange" in first_line:
+    if "🟠" in header:
         return "medium"
-    if "🟡" in first_line or "yellow" in first_line:
+    if "🟡" in header:
         return "low"
-    if "🟢" in first_line or "green" in first_line:
+    if "🟢" in header:
         return "minor"
-    # Text-based fallback
-    if "high" in first_line:
+    # CodeRabbit puts the severity first (e.g. **Minor** ... **Low value**),
+    # so prefer the severity word over the separate value label.
+    if re.search(r"\b(critical|high|major)\b", header):
         return "high"
-    if "medium" in first_line:
+    if re.search(r"\bmedium\b", header):
         return "medium"
-    if "low" in first_line:
-        return "low"
-    if "trivial" in body_lower or "minor" in body_lower:
+    if re.search(r"\b(minor|trivial)\b", header):
         return "minor"
+    if re.search(r"\blow\b", header):
+        return "low"
     return "unknown"
 
 

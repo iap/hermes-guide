@@ -60,6 +60,23 @@ def test_extract_severity_unknown():
     assert rl._extract_severity(body) == "unknown"
 
 
+def test_extract_severity_does_not_match_substrings():
+    assert rl._extract_severity("Use shared state safely") == "unknown"
+
+
+def test_extract_severity_qodo_emoji():
+    assert rl._extract_severity("🔴 **High** 5. Old reviews") == "high"
+
+
+def test_extract_severity_coderabbit_minor_beats_low_value():
+    body = (
+        "<!-- coderabbit-ai-generated:v1 -->\n\n"
+        '**<picture><img alt=""></picture> Minor** · '
+        "**Functional Correctness** · **Low value**"
+    )
+    assert rl._extract_severity(body) == "minor"
+
+
 def test_parse_threads_empty():
     findings, _ = rl._parse_threads([])
     assert findings == []
@@ -445,9 +462,13 @@ def test_run_gh_graphql_utf8():
         stdout = _json.dumps({"data": {"x": "caf\u00e9 \U0001f600"}}, ensure_ascii=False)
         stderr = ""
 
+    def fake_run(*a, **k):
+        assert k.get("encoding") == "utf-8"
+        return Fake()
+
     orig = _sp.run
     try:
-        _sp.run = lambda *a, **k: Fake()
+        _sp.run = fake_run
         data = rl._run_gh_graphql("query {}")
         assert data["data"]["x"] == "caf\u00e9 \U0001f600"
     finally:
@@ -609,6 +630,49 @@ def test_fetch_pr_threads_paginates_reviews_and_fetches_submitted_at():
     assert len(reviews) == 2
     assert any("submittedAt" in c for c in calls)
     assert any('after: "c1"' in c for c in calls)
+
+
+def test_fetch_pr_threads_omits_empty_cursor():
+    calls = []
+
+    def _fake(query):
+        calls.append(query)
+        if "reviewThreads" in query:
+            return {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "headRefOid": "abc123",
+                            "reviewThreads": {
+                                "pageInfo": {"hasNextPage": False},
+                                "nodes": [],
+                            },
+                        }
+                    }
+                }
+            }
+        return {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "reviews": {
+                            "pageInfo": {"hasNextPage": False},
+                            "nodes": [],
+                        }
+                    }
+                }
+            }
+        }
+
+    orig = rl._run_gh_graphql
+    try:
+        rl._run_gh_graphql = _fake
+        rl._fetch_pr_threads(42)
+    finally:
+        rl._run_gh_graphql = orig
+
+    assert calls
+    assert "after:" not in calls[0]
 
 
 def test_live_tests_enabled_env_gate():

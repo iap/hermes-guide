@@ -112,6 +112,25 @@ def _check_ledger(ledger: dict, pr_number: int, live_head: str) -> list[str]:
     return failures
 
 
+def _validate_ledger(ledger) -> str | None:
+    """Return a structural error for malformed ledgers, else None."""
+    if not isinstance(ledger, dict):
+        return "ledger root must be a JSON object"
+    head = ledger.get("head_commit")
+    if head is not None and not isinstance(head, str):
+        return "ledger 'head_commit' must be a string"
+    rounds = ledger.get("rounds")
+    if not isinstance(rounds, list):
+        return "ledger 'rounds' must be a list"
+    if any(not isinstance(round, dict) for round in rounds):
+        return "every ledger round must be a JSON object"
+    if rounds:
+        summary = rounds[-1].get("summary")
+        if summary is not None and not isinstance(summary, dict):
+            return "ledger 'summary' must be a JSON object"
+    return None
+
+
 def _fetch_fresh_ledger(pr_number: int) -> dict:
     """Fetch fresh threads and build a ledger (no disk write)."""
     threads, head_oid, reviews = rl._fetch_pr_threads(pr_number)
@@ -172,6 +191,11 @@ def main() -> int:
             print(f"error: failed to fetch review threads: {exc}", file=sys.stderr)
             return 2
 
+    structure_error = _validate_ledger(ledger)
+    if structure_error:
+        print(f"error: invalid ledger: {structure_error}", file=sys.stderr)
+        return 2
+
     failures = _check_ledger(ledger, pr_number, live_head)
 
     if not args.no_live_check and not failures:
@@ -209,9 +233,9 @@ def main() -> int:
             failures.append(f"Live check failed closed: {exc}")
 
     if failures:
-        print("REVIEW ROUND GATE: FAIL")
+        print("REVIEW ROUND GATE: FAIL", file=sys.stderr)
         for msg in failures:
-            print(f"  - {msg}")
+            print(f"  - {msg}", file=sys.stderr)
         return 1
 
     print("REVIEW ROUND GATE: PASS")
