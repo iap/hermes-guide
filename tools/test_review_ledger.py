@@ -466,6 +466,31 @@ def test_compute_reviewed_missing_commit_does_not_count():
     assert q is False
 
 
+def test_compute_reviewed_accepts_clean_coderabbit_check():
+    check_runs = [
+        {
+            "app": {"slug": "coderabbitai"},
+            "status": "completed",
+            "conclusion": "SUCCESS",
+        }
+    ]
+    q, c = rl.compute_reviewed([], "abc123", check_runs)
+    assert q is False
+    assert c is True
+
+
+def test_compute_reviewed_rejects_failed_coderabbit_check():
+    check_runs = [
+        {
+            "app": {"slug": "coderabbitai"},
+            "status": "completed",
+            "conclusion": "FAILURE",
+        }
+    ]
+    _q, c = rl.compute_reviewed([], "abc123", check_runs)
+    assert c is False
+
+
 def test_run_gh_graphql_utf8():
     import json as _json
     import subprocess as _sp

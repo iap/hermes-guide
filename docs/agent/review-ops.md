@@ -8,11 +8,14 @@ in [deep-ops.md](deep-ops.md).
 Before merging, both facts must be true on the current head:
 
 - Qodo has a review verdict on the current head with no open findings.
-- CodeRabbit has a **review record** on the current head with a clean verdict.
+- CodeRabbit has a **review record** on the current head with a clean verdict,
+  or a completed clean check run on that head when its incremental review
+  posted no review record (zero findings).
 
 `mergeStateStatus: CLEAN` does not satisfy either fact. A CodeRabbit check with
-`conclusion: skipped` is **not a review**; treat it as "no review on this head"
-and run the trigger gate.
+`conclusion: skipped` is **not review evidence**; treat it as "no review on this
+head" and run the trigger gate. A completed `SUCCESS` check run is evidence,
+but `FAILURE`/`skipped` is not.
 
 ## Review sequence
 

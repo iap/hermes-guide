@@ -69,6 +69,48 @@ def _run_gh_graphql(query):
         raise RuntimeError(f"gh returned invalid JSON: {exc}") from exc
 
 
+def _run_gh_rest(path):
+    try:
+        result = subprocess.run(
+            ["gh", "api", path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"gh REST timed out after {exc.timeout}s") from exc
+    except OSError as exc:
+        raise RuntimeError(f"gh CLI unavailable: {exc}") from exc
+    if result.returncode != 0:
+        raise RuntimeError("gh REST failed: " + result.stderr.strip())
+    try:
+        return json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeError(f"gh returned invalid JSON: {exc}") from exc
+
+
+def _fetch_check_runs(head_oid):
+    """Clean CodeRabbit check runs for a head, when no review record is posted."""
+    if not head_oid:
+        return []
+    owner, name = REPO.split("/", 1)
+    path = f"repos/{owner}/{name}/commits/{head_oid}/check-runs?per_page=100"
+    try:
+        data = _run_gh_rest(path)
+    except RuntimeError:
+        return []
+    return [
+        run
+        for run in (data.get("check_runs") or [])
+        if (run.get("app") or {}).get("slug") in {"coderabbitai", "coderabbitai[bot]"}
+        and run.get("status") == "completed"
+        and str(run.get("conclusion") or "").upper() == "SUCCESS"
+    ]
+
+
 def _fetch_reviews(pr_number):
     reviews = []
     after = ""
@@ -133,7 +175,7 @@ def _fetch_pr_threads(pr_number):
     return threads, head_oid, reviews
 
 
-def compute_reviewed(reviews, head_oid=None):
+def compute_reviewed(reviews, head_oid=None, check_runs=None):
     """Whether Qodo / CodeRabbit completed a review (independent of findings).
 
     Qodo #12: a bot that reviews with zero inline findings must count as
@@ -175,7 +217,18 @@ def compute_reviewed(reviews, head_oid=None):
                     saw_ok = True
         return saw_ok and not saw_request
 
-    return _reviewed("qodo"), _reviewed("coderabbit")
+    qodo_reviewed = _reviewed("qodo")
+    coderabbit_reviewed = _reviewed("coderabbit")
+    if not coderabbit_reviewed and check_runs:
+        # CodeRabbit posts no review record when an incremental review has
+        # zero findings; its clean check run on this head is the evidence.
+        coderabbit_reviewed = any(
+            (run.get("app") or {}).get("slug") in {"coderabbitai", "coderabbitai[bot]"}
+            and run.get("status") == "completed"
+            and str(run.get("conclusion") or "").upper() == "SUCCESS"
+            for run in check_runs
+        )
+    return qodo_reviewed, coderabbit_reviewed
 
 
 def _classify_bot(author_login):

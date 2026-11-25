@@ -351,10 +351,13 @@ verified on one host is not verified on the others. Name the platform in the PR.
 The `check_review_gate` job (in `reusable-ci.yml`, `needs: plugin`, Linux
 full-tier PRs only) runs `tools/check_review_round_clean.py --pr <N>` and
 fails the merge when Qodo or CodeRabbit has unresolved findings, an unresolved
-thread from a non-review author, a `CHANGES_REQUESTED` review, or no review on
-the current head. Local check: the same command (needs `gh` + network; without
-a ledger it fetches fresh threads). Ledger path when written:
-`.hermes/review-rounds.json`. Detailed steps: [docs/agent/review-ops.md](docs/agent/review-ops.md).
+thread from a non-review author, a `CHANGES_REQUESTED` review, or no evidence of
+review on the current head. CodeRabbit posts no review record when an
+incremental review has zero findings, so its clean `SUCCESS` check run on the
+head also counts as review evidence. Local check: the same command (needs `gh`
++ network; without a ledger it fetches fresh threads). Ledger path when
+written: `.hermes/review-rounds.json`. Detailed steps:
+[docs/agent/review-ops.md](docs/agent/review-ops.md).
 
 ### Stacked PRs
 

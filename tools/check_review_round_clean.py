@@ -141,8 +141,11 @@ def _validate_ledger(ledger) -> str | None:
 def _fetch_fresh_ledger(pr_number: int) -> dict:
     """Fetch fresh threads and build a ledger (no disk write)."""
     threads, head_oid, reviews = rl._fetch_pr_threads(pr_number)
+    check_runs = rl._fetch_check_runs(head_oid)
     findings, non_review_open = rl._parse_threads(threads)
-    qodo_reviewed, coderabbit_reviewed = rl.compute_reviewed(reviews, head_oid)
+    qodo_reviewed, coderabbit_reviewed = rl.compute_reviewed(
+        reviews, head_oid, check_runs
+    )
     return rl.build_ledger(pr_number, head_oid, findings, qodo_reviewed, coderabbit_reviewed, non_review_open)
 
 
@@ -208,8 +211,9 @@ def main() -> int:
     if not args.no_live_check and not failures:
         try:
             threads, live_head2, live_reviews = rl._fetch_pr_threads(pr_number)
+            live_check_runs = rl._fetch_check_runs(live_head2)
             findings, non_review_live = rl._parse_threads(threads)
-            _lq, _lc = rl.compute_reviewed(live_reviews, live_head2)
+            _lq, _lc = rl.compute_reviewed(live_reviews, live_head2, live_check_runs)
             if not _lq or not _lc:
                 failures.append(
                     "Live check: a bot has no review record for the live head"

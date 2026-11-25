@@ -9,6 +9,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_review_round_clean as gate
 
+gate.rl._fetch_check_runs = lambda _sha: []
+
 
 def test_is_bot_author():
     assert gate._is_bot_author("dependabot[bot]")
@@ -568,6 +570,51 @@ def test_cli_live_old_head_blocks():
         gate._get_pr_head = orig_get_head
         gate._get_pr_author = orig_get_author
         gate.rl._fetch_pr_threads = orig_fetch
+        argparse.ArgumentParser.parse_args = orig_parse
+
+
+def test_cli_live_coderabbit_check_accepts():
+    import argparse
+
+    orig_parse = argparse.ArgumentParser.parse_args
+    orig_head = gate._get_pr_head
+    orig_author = gate._get_pr_author
+    orig_fetch = gate.rl._fetch_pr_threads
+    orig_runs = gate.rl._fetch_check_runs
+    try:
+        gate._get_pr_head = lambda _pr: "abc123"
+        gate._get_pr_author = lambda _pr: ""
+        gate.rl._fetch_pr_threads = lambda _pr: (
+            [],
+            "abc123",
+            [
+                {
+                    "author": {"login": "qodo-code-review[bot]"},
+                    "state": "COMMENTED",
+                    "commit": {"oid": "abc123"},
+                }
+            ],
+        )
+        gate.rl._fetch_check_runs = lambda _sha: [
+            {
+                "app": {"slug": "coderabbitai"},
+                "status": "completed",
+                "conclusion": "SUCCESS",
+            }
+        ]
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            p = _live_ledger(td)
+            argparse.ArgumentParser.parse_args = lambda self: argparse.Namespace(
+                pr=42, ledger=p, no_live_check=False
+            )
+            assert gate.main() == 0
+    finally:
+        gate._get_pr_head = orig_head
+        gate._get_pr_author = orig_author
+        gate.rl._fetch_pr_threads = orig_fetch
+        gate.rl._fetch_check_runs = orig_runs
         argparse.ArgumentParser.parse_args = orig_parse
 
 
