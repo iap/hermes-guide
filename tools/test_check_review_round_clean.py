@@ -16,6 +16,43 @@ def test_is_bot_author():
     assert not gate._is_bot_author("bot")
 
 
+def test_get_pr_author_bot_typename_without_suffix():
+    orig = gate.rl._run_gh_graphql
+    try:
+        gate.rl._run_gh_graphql = lambda _q: {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "author": {"login": "dependabot", "__typename": "Bot"}
+                    }
+                }
+            }
+        }
+        login = gate._get_pr_author(42)
+    finally:
+        gate.rl._run_gh_graphql = orig
+    assert login == "dependabot[bot]"
+    assert gate._is_bot_author(login)
+
+
+def test_get_pr_author_bot_typename_keeps_existing_suffix():
+    orig = gate.rl._run_gh_graphql
+    try:
+        gate.rl._run_gh_graphql = lambda _q: {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "author": {"login": "dependabot[bot]", "__typename": "Bot"}
+                    }
+                }
+            }
+        }
+        login = gate._get_pr_author(42)
+    finally:
+        gate.rl._run_gh_graphql = orig
+    assert login == "dependabot[bot]"
+
+
 def test_check_ledger_pass():
     ledger = {
         "pr": 42,
@@ -202,7 +239,7 @@ def test_fetch_fresh_ledger_parses_stub_response():
     assert ledger["merge_ready"] is True
 
 
-def test_cli_live_failure_fails_closed(monkey=None):
+def test_cli_live_failure_fails_closed():
     # Qodo #2: live fetch raising must fail the gate, never PASS on a ledger.
     import argparse
 
@@ -357,10 +394,6 @@ def _live_ledger(tmpdir, head="abc123"):
         ),
         encoding="utf-8",
     )
-    return spath(p)
-
-
-def spath(p):
     return str(p)
 
 
@@ -612,7 +645,12 @@ def test_cli_invalid_ledger_returns_two():
         import tempfile
         from pathlib import Path
 
-        for bad in ([], {"rounds": [None]}):
+        for bad in (
+            [],
+            {"rounds": [None]},
+            {"rounds": [{"summary": None}]},
+            {"rounds": [{"summary": {"qodo_open": "1"}}]},
+        ):
             with tempfile.TemporaryDirectory() as td:
                 p = Path(td) / "ledger.json"
                 p.write_text(json.dumps(bad), encoding="utf-8")

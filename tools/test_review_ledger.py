@@ -453,6 +453,19 @@ def test_compute_reviewed_stale_head():
     assert q is False
 
 
+def test_compute_reviewed_missing_commit_does_not_count():
+    q, _c = rl.compute_reviewed(
+        [
+            {
+                "author": {"login": "qodo-code-review[bot]"},
+                "state": "COMMENTED",
+            }
+        ],
+        "abc123",
+    )
+    assert q is False
+
+
 def test_run_gh_graphql_utf8():
     import json as _json
     import subprocess as _sp
@@ -673,6 +686,63 @@ def test_fetch_pr_threads_omits_empty_cursor():
 
     assert calls
     assert "after:" not in calls[0]
+
+
+def test_fetch_reviews_page_limit_fails_closed():
+    def _fake(_query):
+        return {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "reviews": {
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                            "nodes": [],
+                        }
+                    }
+                }
+            }
+        }
+
+    orig = rl._run_gh_graphql
+    try:
+        rl._run_gh_graphql = _fake
+        try:
+            rl._fetch_reviews(42)
+        except RuntimeError as exc:
+            assert "pagination" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+    finally:
+        rl._run_gh_graphql = orig
+
+
+def test_fetch_pr_threads_page_limit_fails_closed():
+    def _fake(_query):
+        return {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "headRefOid": "abc123",
+                        "reviewThreads": {
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                            "nodes": [],
+                        },
+                    }
+                }
+            }
+        }
+
+    orig = rl._run_gh_graphql
+    try:
+        rl._run_gh_graphql = _fake
+        try:
+            rl._fetch_pr_threads(42)
+        except RuntimeError as exc:
+            assert "pagination" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+    finally:
+        rl._run_gh_graphql = orig
 
 
 def test_live_tests_enabled_env_gate():

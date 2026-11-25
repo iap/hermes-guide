@@ -88,11 +88,11 @@ def _fetch_reviews(pr_number):
         reviews.extend(pr["reviews"]["nodes"])
         page = pr["reviews"].get("pageInfo") or {}
         if not page.get("hasNextPage"):
-            break
+            return reviews
         after = page.get("endCursor") or ""
         if not after:
-            break
-    return reviews
+            raise RuntimeError("review pagination returned hasNextPage without endCursor")
+    raise RuntimeError("review pagination exceeded 50 pages")
 
 
 def _fetch_pr_threads(pr_number):
@@ -124,7 +124,11 @@ def _fetch_pr_threads(pr_number):
             break
         after = t_page.get("endCursor") or ""
         if not after:
-            break
+            raise RuntimeError(
+                "review-thread pagination returned hasNextPage without endCursor"
+            )
+    else:
+        raise RuntimeError("review-thread pagination exceeded 20 pages")
     reviews = _fetch_reviews(pr_number)
     return threads, head_oid, reviews
 
@@ -153,7 +157,7 @@ def compute_reviewed(reviews, head_oid=None):
                 continue
             if head_oid:
                 commit = (r.get("commit") or {}).get("oid")
-                if commit and commit != head_oid:
+                if commit != head_oid:
                     continue
             state = r.get("state")
             if state in ("PENDING", "DISMISSED"):

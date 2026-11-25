@@ -41,12 +41,16 @@ def _get_pr_author(pr_number: int) -> str:
     owner, name = rl.REPO.split("/", 1)
     query = (
         f'query {{ repository(owner: "{owner}", name: "{name}") {{ '
-        f"pullRequest(number: {pr_number}) {{ author {{ login }} }} }} }}"
+        f"pullRequest(number: {pr_number}) {{ author {{ login __typename }} }} }} }}"
     )
     try:
         data = rl._run_gh_graphql(query)
         pr = data["data"]["repository"]["pullRequest"]
-        return ((pr.get("author") or {}).get("login") or "")
+        author = pr.get("author") or {}
+        login = author.get("login") or ""
+        if author.get("__typename") == "Bot" and not login.lower().endswith("[bot]"):
+            login = f"{login}[bot]"
+        return login
     except (RuntimeError, KeyError, TypeError, ValueError):
         return ""
 
@@ -124,10 +128,13 @@ def _validate_ledger(ledger) -> str | None:
         return "ledger 'rounds' must be a list"
     if any(not isinstance(round, dict) for round in rounds):
         return "every ledger round must be a JSON object"
-    if rounds:
-        summary = rounds[-1].get("summary")
-        if summary is not None and not isinstance(summary, dict):
-            return "ledger 'summary' must be a JSON object"
+    for round_data in rounds:
+        summary = round_data.get("summary")
+        if not isinstance(summary, dict):
+            return "each ledger round 'summary' must be a JSON object"
+        for key in ("qodo_open", "coderabbit_open", "non_review_open"):
+            if key in summary and not isinstance(summary[key], int):
+                return f"ledger 'summary.{key}' must be an integer"
     return None
 
 

@@ -66,8 +66,9 @@ a merged PR claiming pending work misleads the next reader. -->
 - [ ] Anything I could NOT verify is listed above, not omitted
 
 ## Review gate
-<!-- Machine-checked by tools/check_review_round_clean.py in CI.
-     Fill in after Qodo and CodeRabbit reviews are complete. -->
+<!-- Machine-checked by tools/check_review_round_clean.py in CI: it verifies
+     bot review state and open threads, not these checkboxes. Fill in after
+     Qodo and CodeRabbit reviews are complete; CI and signature items are manual. -->
 - [ ] Qodo reviewed the current head; no open findings.
 - [ ] CodeRabbit reviewed the current head; no open findings.
 - [ ] Green CI on this head
