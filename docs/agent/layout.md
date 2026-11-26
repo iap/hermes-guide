@@ -36,6 +36,7 @@ tracked top-level path and every `.github/` file.
 | `.github/workflows/validate-claim.yml` | Re-runs the hermetic gates and machine-checks the PR's validation table |
 | `.github/workflows/label-prs.yml`, `label-pr-metadata.yml`, `labels-bootstrap.yml` | Auto-labelling (paths, then PR body); bootstrap creates the `assist:*` palette |
 | `.github/workflows/release.yml` | Release on tag; compares the tag against `plugin.yaml` |
+| `.github/workflows/dogfood.yml` | Manual off-host release dogfood: installs Hermes at a pinned tag, installs the candidate plugin, runs every guide scope, and writes the report to the job summary |
 | `.github/upstream-drift.baseline` | The pinned upstream revision that file/symbol citations resolve against |
 | `.github/install-scan.pin` | The pinned upstream revision used only by `check_install_scan.py`; independent of the citation baseline because scanner entry points move |
 | `.github/allowed_signers` | Authorized release-tag SSH keys for release.yml signature verification |

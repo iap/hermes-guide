@@ -1,0 +1,148 @@
+name: dogfood
+
+# Release dogfood on a clean GitHub runner, independent of the maintainer's
+# host. The local `--release` mode is still available, but a broken local
+# Hermes CLI must not block a release: dispatch this workflow and attach the
+# run URL to the release PR.
+#
+# Manual only: it installs Hermes Agent and runs thirteen `hermes guide`
+# invocations, which is too heavy for per-PR CI.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dogfood
+  cancel-in-progress: false
+
+jobs:
+  dogfood:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Deterministic release gate: always the default branch, never a
+          # caller-selected ref (CodeQL: untrusted-ref execution).
+          ref: master
+          fetch-depth: 1
+          # Do not persist the token in the copied plugin's .git; `plugins
+          # adopt` only needs the public origin URL.
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          # Match the upstream tag's .python-version; its core deps are
+          # gated to >=3.14, so an older interpreter installs an empty CLI.
+          python-version: "3.14"
+
+      - name: Set up isolated home
+        shell: bash
+        run: |
+          home="$RUNNER_TEMP/hermes-home"
+          echo "HERMES_HOME=$home" >> "$GITHUB_ENV"
+          echo "HERMES_DISABLE_LAZY_INSTALLS=1" >> "$GITHUB_ENV"
+          mkdir -p "$home"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # 8.2.0
+        with:
+          version: "0.12.13"
+          # No cache on purpose: this job checks out a caller-selected ref, and
+          # caching artifacts keyed on that ref's manifests is a cache-poisoning
+          # vector (CodeQL flags it). A manual release job can pay the cost.
+
+      - name: Install Hermes Agent
+        shell: bash
+        run: |
+          # `uv sync --locked` is the upstream-supported install path: the
+          # lockfile resolves exact pins that plain pip rejects (e.g. the
+          # Pillow 13 vs browser-harness Pillow 12.3 conflict on 3.14).
+          # Install under HERMES_HOME/hermes-agent: the dashboard and update
+          # checks resolve their checkout there, so an outside path would make
+          # both scopes report `unknown` instead of being measured.
+          git clone --depth 1 --branch "v0.23.4" \
+            https://github.com/NousResearch/hermes-agent.git "$HERMES_HOME/hermes-agent"
+          cd "$HERMES_HOME/hermes-agent"
+          uv sync --locked --python 3.14
+          echo "$HERMES_HOME/hermes-agent/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install the candidate plugin
+        shell: bash
+        run: |
+          timeout 60s hermes --version
+          timeout 120s hermes config path
+          mkdir -p "$HERMES_HOME/plugins"
+          # Keep .git: `plugins adopt` reads the origin URL and HEAD revision.
+          cp -R "$GITHUB_WORKSPACE" "$HERMES_HOME/plugins/hermes-guide"
+          timeout 120s hermes plugins adopt hermes-guide
+          timeout 120s hermes plugins enable hermes-guide
+          timeout 120s hermes plugins list | grep -F hermes-guide
+
+      - name: Run release dogfood
+        shell: bash
+        run: |
+          # `--fast` is the dogfood script's contract: no subprocesses. The
+          # dashboard check is skipped in fast mode by design, so the report
+          # marks it `unknown`; the other eleven scopes are measured.
+          version="$(grep '^version:' plugin.yaml | awk '{print $2}')"
+          report="reports/dogfood-${version}.md"
+          python tools/check_skill_dogfood.py --release --require-live \
+            --hermes-home "$HERMES_HOME" --timeout 180 --report "$report"
+
+      - name: Publish dogfood report
+        # `bash -e` stops the step that failed, so publication must be separate
+        # and always run; a failed dogfood is exactly when the report matters.
+        if: always()
+        shell: bash
+        run: |
+          version="$(grep '^version:' plugin.yaml | awk '{print $2}')"
+          report="reports/dogfood-${version}.md"
+          {
+            echo "## Dogfood report — ${version}"
+            echo
+            if [ -f "$report" ]; then
+              echo '```'
+              cat "$report"
+              echo '```'
+            else
+              echo "No report was written; the dogfood step failed before publication."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize non-healthy scopes
+        # `unknown` is honest but not self-explanatory. Print the reason for
+        # every non-healthy scope so the run explains its own coverage.
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          timeout 180s hermes guide --fast --json > "$RUNNER_TEMP/guide.json"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 124 ]; then
+            echo "Summary command timed out after 180s; see the dogfood report." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "Summary command failed with exit $rc; see the dogfood report." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python - "$RUNNER_TEMP/guide.json" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json, sys
+          print("")
+          print("### Non-healthy scopes")
+          try:
+              doc = json.load(open(sys.argv[1], encoding="utf-8"))
+          except (OSError, ValueError) as exc:
+              print(f"Could not read the guide document: {exc}")
+              raise SystemExit(0)
+          rows = [(name, check) for name, check in doc.get("checks", {}).items()
+                  if check.get("status") != "healthy"]
+          if not rows:
+              print("None — every scope measured healthy.")
+          for name, check in rows:
+              print(f"- **{name}**: `{check.get('status')}` — {check.get('reason', '')}")
+          PY
