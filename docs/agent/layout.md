@@ -16,6 +16,7 @@ tracked top-level path and every `.github/` file.
 | `skills/<name>/SKILL.md` | The skills tap surface (one directory per skill) |
 | `plugin-skills/<name>/SKILL.md` | Skills the plugin registers itself via `ctx.register_skill` — currently the `start` router. Outside `skills/` on purpose: the tap inventory, generated counts, and install loop stay exact |
 | `tools/check_*.py` | Guard linters — every one is a machine gate with an exit code |
+| `tools/sync_version.py` | Writes `plugin.yaml`'s version into `__init__.py`, `pyproject.toml`, and `SECURITY.md`; dry-run by default, fails closed on an unrecognized layout |
 | `tools/check_doc_style.py` | Tone guard: emoji outside Python string literals, filler phrases in Markdown prose |
 | `tools/check_eol_contract.py` | Line-ending guard: the `.gitattributes` rules the tracked tree depends on, plus `git ls-files --eol` proving the index is LF and `assets/` is binary |
 | `tools/check_install_scan.py` | Install-scan parity: runs upstream's real `skills_guard.py` at the revision in `.github/install-scan.pin` over every skill, asserting `should_allow_install()` is true at community trust. CI tier — needs a checkout, and executes the pinned upstream scanner |
