@@ -23,7 +23,7 @@ on:
       hermes_ref:
         description: "Hermes Agent git tag to install"
         required: false
-        default: v2026.9.24
+        default: v0.23.4
         type: string
 
 permissions:
@@ -48,14 +48,16 @@ jobs:
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.13"
+          # Match the upstream tag's .python-version; its core deps are
+          # gated to >=3.14, so an older interpreter installs an empty CLI.
+          python-version: "3.14"
 
       - name: Install Hermes Agent
         shell: bash
         run: |
           # Same route as the full CI tier: editable install from the upstream
           # git tag (PyPI is stale and wheel builds are blocked outside Nix).
-          git clone --depth 1 --branch "${{ inputs.hermes_ref || 'v2026.9.24' }}" \
+          git clone --depth 1 --branch "${{ inputs.hermes_ref || 'v0.23.4' }}" \
             https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
           python -m pip install --upgrade pip
           pip install -e "$RUNNER_TEMP/hermes-agent"
