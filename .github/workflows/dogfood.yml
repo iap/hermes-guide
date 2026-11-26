@@ -9,23 +9,12 @@ name: dogfood
 # invocations, which is too heavy for per-PR CI.
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: "hermes-guide ref to dogfood (branch, tag, or SHA)"
-        required: false
-        default: master
-        type: string
-      hermes_ref:
-        description: "Hermes Agent git tag to install"
-        required: false
-        default: v0.23.4
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: dogfood-${{ inputs.ref || github.ref_name }}
+  group: dogfood
   cancel-in-progress: false
 
 jobs:
@@ -35,7 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
+          # Deterministic release gate: always the default branch, never a
+          # caller-selected ref (CodeQL: untrusted-ref execution).
+          ref: master
           fetch-depth: 1
           # Do not persist the token in the copied plugin's .git; `plugins
           # adopt` only needs the public origin URL.
@@ -72,7 +63,7 @@ jobs:
           # Install under HERMES_HOME/hermes-agent: the dashboard and update
           # checks resolve their checkout there, so an outside path would make
           # both scopes report `unknown` instead of being measured.
-          git clone --depth 1 --branch "${{ inputs.hermes_ref || 'v0.23.4' }}" \
+          git clone --depth 1 --branch "v0.23.4" \
             https://github.com/NousResearch/hermes-agent.git "$HERMES_HOME/hermes-agent"
           cd "$HERMES_HOME/hermes-agent"
           uv sync --locked --python 3.14
