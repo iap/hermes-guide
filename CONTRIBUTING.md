@@ -390,7 +390,10 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    as an unscoped `release:` line under Chores. If you ran it after committing,
    `git checkout -- CHANGELOG.md` and regenerate.
 3. Merge the PR. Then check readiness on the merged master:
-   `python tools/check_release_readiness.py`. It verdicts `READY` /
+   `python tools/check_release_readiness.py`. If the checkout's upstream is not
+   `origin` (a fork or a temporary clone), pass
+   `--base-ref <remote>/<branch>` so the tree, CI and history items compare
+   against the right tip. It verdicts `READY` /
    `READY WITH ADVISORIES` / `NOT READY` from tree state, version consistency,
    changelog coverage, master CI, open `P1` issues, the upstream catalog pin,
    and commits since the last tag. It must run here — after the new version and
