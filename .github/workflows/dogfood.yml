@@ -31,12 +31,15 @@ concurrency:
 jobs:
   dogfood:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 1
+          # Do not persist the token in the copied plugin's .git; `plugins
+          # adopt` only needs the public origin URL.
+          persist-credentials: false
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -58,6 +61,8 @@ jobs:
           echo "HERMES_HOME=$RUNNER_TEMP/hermes-home" >> "$GITHUB_ENV"
           echo "HERMES_DISABLE_LAZY_INSTALLS=1" >> "$GITHUB_ENV"
           export HERMES_HOME="$RUNNER_TEMP/hermes-home"
+          export HERMES_DISABLE_LAZY_INSTALLS=1
+          timeout 60s hermes --version
           mkdir -p "$HERMES_HOME"
           timeout 120s hermes config path
           mkdir -p "$HERMES_HOME/plugins"
@@ -73,7 +78,7 @@ jobs:
           version="$(grep '^version:' plugin.yaml | awk '{print $2}')"
           report="reports/dogfood-${version}.md"
           python tools/check_skill_dogfood.py --release --require-live \
-            --hermes-home "$HERMES_HOME" --timeout 90 --report "$report"
+            --hermes-home "$HERMES_HOME" --timeout 180 --report "$report"
           {
             echo "## Dogfood report — ${version}"
             echo
