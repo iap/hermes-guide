@@ -63,6 +63,12 @@ def _run_main(mod, stubs: dict, argv: list | None = None) -> tuple[int, str]:
     return code, buf.getvalue(), calls
 
 
+def _runs(sha: str, *, status: str = "completed", conclusion: str = "success",
+          url: str = "https://example.test/run") -> str:
+    return json.dumps([{"status": status, "conclusion": conclusion,
+                        "headSha": sha, "url": url}])
+
+
 def _healthy(stash_extra: dict | None = None) -> dict:
     base = {
         ("git", "status", "--porcelain"): (0, ""),
@@ -72,8 +78,9 @@ def _healthy(stash_extra: dict | None = None) -> dict:
         ("git", "rev-parse", "origin/master"): (0, "a" * 40),
         (sys.executable, "tools/check_version_consistency.py"): (0, "OK: version"),
         (sys.executable, "tools/gen_changelog.py", "--check"): (0, "OK: changelog"),
-        ("gh", "run", "list"): (0, '[{"status": "completed", "conclusion": "success", '
-                              '"headSha": "' + "a" * 40 + '"}]'),
+        ("gh", "run", "list", "--workflow", "CI"): (0, _runs("a" * 40)),
+        ("gh", "run", "list", "--workflow", "dogfood"): (
+            0, _runs("a" * 40, url="https://example.test/dogfood")),
         ("gh", "issue", "list"): (0, ""),
         ("gh", "api"): (0, _entry("0.8.7", "a" * 40)),
         ("git", "rev-parse", "--verify", "--quiet"): (0, "a" * 40),
@@ -150,8 +157,8 @@ def test_blockers_use_p1_label():
 
 def test_stale_ci_sha_fails():
     mod = _load()
-    stubs = _healthy({("gh", "run", "list"): (0, '[{"status": "completed", "conclusion": "success", '
-                                               '"headSha": "' + "b" * 40 + '"}]')})
+    stubs = _healthy({("gh", "run", "list", "--workflow", "CI"): (
+        0, _runs("b" * 40))})
     code, out, _ = _run_main(mod, stubs)
     assert code == 1, out
     assert "[FAIL] master-ci" in out and "tip is" in out, out
@@ -159,7 +166,7 @@ def test_stale_ci_sha_fails():
 
 def test_malformed_ci_output_is_unknown():
     mod = _load()
-    stubs = _healthy({("gh", "run", "list"): (0, "not json at all")})
+    stubs = _healthy({("gh", "run", "list", "--workflow", "CI"): (0, "not json at all")})
     code, out, _ = _run_main(mod, stubs)
     assert code == 0, out
     assert "[??] master-ci" in out and "READY WITH ADVISORIES" in out, out
@@ -169,7 +176,7 @@ def test_run_missing_fields_is_unknown():
     mod = _load()
     for bad in ('[{}]', '[{"status": "completed", "conclusion": "success"}]',
                   '{"status": "completed"}', '[null]'):
-        stubs = _healthy({("gh", "run", "list"): (0, bad)})
+        stubs = _healthy({("gh", "run", "list", "--workflow", "CI"): (0, bad)})
         code, out, _ = _run_main(mod, stubs)
         assert code == 0, (bad, out)
         assert "[??] master-ci" in out, (bad, out)
@@ -345,6 +352,54 @@ def test_base_ref_offline_does_not_fetch():
     assert not [c for c in calls if c[:2] == ("git", "fetch")], calls
 
 
+def test_dogfood_green_on_tip():
+    mod = _load()
+    code, out, _ = _run_main(mod, _healthy())
+    assert code == 0, out
+    assert "[ok] dogfood-report" in out, out
+
+
+def test_dogfood_missing_on_tip_fails():
+    mod = _load()
+    stubs = _healthy({("gh", "run", "list", "--workflow", "dogfood"): (0, "[]")})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 1, out
+    assert "[FAIL] dogfood-report" in out and "dispatch" in out, out
+
+
+def test_dogfood_failed_on_tip_fails():
+    mod = _load()
+    stubs = _healthy({("gh", "run", "list", "--workflow", "dogfood"): (
+        0, _runs("a" * 40, conclusion="failure", url="https://example.test/failed"))})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 1, out
+    assert "[FAIL] dogfood-report" in out and "failure" in out, out
+
+
+def test_dogfood_other_sha_fails():
+    mod = _load()
+    stubs = _healthy({("gh", "run", "list", "--workflow", "dogfood"): (0, _runs("b" * 40))})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 1, out
+    assert "[FAIL] dogfood-report" in out and "no dogfood run on" in out, out
+
+
+def test_dogfood_gh_failure_is_unknown():
+    mod = _load()
+    stubs = _healthy({("gh", "run", "list", "--workflow", "dogfood"): (127, "no gh")})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 0, out
+    assert "[??] dogfood-report" in out and "READY WITH ADVISORIES" in out, out
+
+
+def test_dogfood_malformed_is_unknown():
+    mod = _load()
+    stubs = _healthy({("gh", "run", "list", "--workflow", "dogfood"): (0, "not json")})
+    code, out, _ = _run_main(mod, stubs)
+    assert code == 0, out
+    assert "[??] dogfood-report" in out, out
+
+
 def main() -> int:
     cases = [
         test_ready_when_all_pass,
@@ -375,6 +430,12 @@ def main() -> int:
         test_base_ref_override,
         test_base_ref_requires_remote_and_branch,
         test_base_ref_offline_does_not_fetch,
+        test_dogfood_green_on_tip,
+        test_dogfood_missing_on_tip_fails,
+        test_dogfood_failed_on_tip_fails,
+        test_dogfood_other_sha_fails,
+        test_dogfood_gh_failure_is_unknown,
+        test_dogfood_malformed_is_unknown,
     ]
     failed = 0
     for case in cases:
