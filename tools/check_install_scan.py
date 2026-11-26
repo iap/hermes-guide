@@ -14,8 +14,8 @@ on `skills-guard-v10`:
     verdict, 2 findings). Use --force to override.
 
 A mirror cannot catch that, because a mirror only knows what someone copied into
-it. So this runs the real thing: upstream's scanners, at the revision this repo
-already pins in `.github/upstream-drift.baseline`.
+it. So this runs the real thing: upstream's scanners, at the revision pinned in
+`.github/install-scan.pin`.
 
 Two surfaces, because users install both and they are scanned by different
 upstream entry points:
@@ -37,9 +37,13 @@ siblings, so the module set is assembled in dependency order inside a synthetic
 Supply chain, stated plainly: this **executes** upstream code. The pin is what
 bounds it - a specific revision from a checkout CI already clones, never `main`.
 
-Baseline resolution and the `git show` plumbing are reused from
-`check_citation_integrity.py` so the two checks cannot disagree about which
-upstream revision they judge.
+The scanner pin is deliberately separate from the citation baseline
+(`.github/upstream-drift.baseline`). Citations must follow the newest upstream
+revision, while the scanner must stay at a revision where `SCANNER_SOURCES`
+still exists: upstream moved `tools/plugin_guard_context.py` into a rewritten
+install-scan module, and coupling the two pins froze all drift detection while
+this guard kept the old revision alive (#494). The `git show` plumbing is still
+shared with `check_citation_integrity.py`; only the revision is independent.
 
 Needs a Hermes checkout (`--src`, or `HERMES_AGENT_SRC`), so it is a CI-tier
 check like `check_citation_integrity.py`, not part of the hermetic gate tier.
@@ -62,6 +66,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO / "skills"
 PLUGIN_SOURCE = "iap/hermes-guide"
+INSTALL_SCAN_PIN = REPO / ".github" / "install-scan.pin"
 
 # Upstream modules to load, in dependency order. All stdlib-only.
 SCANNER_SOURCES = (
@@ -72,6 +77,18 @@ SCANNER_SOURCES = (
 
 # The trust level a skills-tap install actually resolves to.
 INSTALL_SOURCE = "community"
+
+
+def read_install_scan_pin() -> str:
+    """Return the commit this check pins the upstream scanners to.
+
+    Kept separate from `.github/upstream-drift.baseline` on purpose; see the
+    module docstring for why the two revisions must be allowed to diverge.
+    """
+    try:
+        return INSTALL_SCAN_PIN.read_text(encoding="utf-8-sig").strip()
+    except OSError:
+        return ""
 
 
 def load_modules(sources: dict[str, list[str]]) -> dict[str, object]:
@@ -291,11 +308,11 @@ def main(argv: list[str]) -> int:
     # Imported here so the module docstring stays first and the import cost is
     # only paid when the check actually runs.
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from check_citation_integrity import _show, read_baseline  # noqa: PLC0415
+    from check_citation_integrity import _show  # noqa: PLC0415
 
-    rev = read_baseline()
+    rev = read_install_scan_pin()
     if not valid_pin(rev):
-        print(f"error: upstream-drift.baseline does not name a commit: {rev!r}",
+        print(f"error: .github/install-scan.pin does not name a commit: {rev!r}",
               file=sys.stderr)
         return 2
 

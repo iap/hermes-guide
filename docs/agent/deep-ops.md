@@ -108,8 +108,13 @@ sub-categories — so audit the list by hand before each release (CONTRIBUTING.m
   a line number) must resolve against the revision in
   `.github/upstream-drift.baseline`
   (`check_citation_integrity.py --src <checkout>`).
-- Every skill must still be *installable* under the upstream scanner at the same
-  pinned revision, at community trust (`check_install_scan.py --src <checkout>`).
+- Every skill must still be *installable* under the upstream scanner at the
+  revision pinned in `.github/install-scan.pin`, at community trust
+  (`check_install_scan.py --src <checkout>`). That pin is deliberately separate
+  from the citation baseline: citations follow the newest upstream revision,
+  while the scanner must stay at a revision where its entry points still exist.
+  Coupling them froze drift detection when upstream moved
+  `plugin_guard_context.py` (#494).
   A mirror of the rules cannot enforce this — the mirror in
   `tests/check_scanner_hygiene.py` is exactly why `diagnosing-host-pressure` sat
   un-installable for months with every gate green (#204). Prefer a signal that

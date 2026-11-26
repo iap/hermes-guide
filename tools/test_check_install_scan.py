@@ -376,6 +376,11 @@ def main() -> int:
         expect("a branch name is not a pin", mod.valid_pin("main"), False)
         expect("a short sha is not a pin", mod.valid_pin("d97007c"), False)
 
+        # 6b. The scanner pin is its own file, independent of the baseline --
+        expect("install-scan pin exists", mod.INSTALL_SCAN_PIN.is_file(), True)
+        expect("install-scan pin names a commit",
+               mod.valid_pin(mod.read_install_scan_pin()), True)
+
         # 7. Live run when a checkout is available ---------------------------
         src = os.environ.get("HERMES_AGENT_SRC")
         if src and Path(src).joinpath(".git").exists():
@@ -386,7 +391,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         print(f"FAIL: {len(failures)} install-scan case(s) failed", file=sys.stderr)
         return 1
-    print("OK: install-scan logic (skills, plugin, drift, loader, pin, live)")
+    print("OK: install-scan logic (skills, plugin, drift, loader, pin, scan-pin, live)")
     return 0
 
 
