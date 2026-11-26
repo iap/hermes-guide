@@ -59,10 +59,9 @@ jobs:
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # 8.2.0
         with:
           version: "0.12.13"
-          enable-cache: true
-          cache-dependency-glob: |
-            pyproject.toml
-            uv.lock
+          # No cache on purpose: this job checks out a caller-selected ref, and
+          # caching artifacts keyed on that ref's manifests is a cache-poisoning
+          # vector (CodeQL flags it). A manual release job can pay the cost.
 
       - name: Install Hermes Agent
         shell: bash
@@ -101,12 +100,25 @@ jobs:
           report="reports/dogfood-${version}.md"
           python tools/check_skill_dogfood.py --release --require-live \
             --hermes-home "$HERMES_HOME" --timeout 180 --report "$report"
+
+      - name: Publish dogfood report
+        # `bash -e` stops the step that failed, so publication must be separate
+        # and always run; a failed dogfood is exactly when the report matters.
+        if: always()
+        shell: bash
+        run: |
+          version="$(grep '^version:' plugin.yaml | awk '{print $2}')"
+          report="reports/dogfood-${version}.md"
           {
             echo "## Dogfood report — ${version}"
             echo
-            echo '```'
-            cat "$report"
-            echo '```'
+            if [ -f "$report" ]; then
+              echo '```'
+              cat "$report"
+              echo '```'
+            else
+              echo "No report was written; the dogfood step failed before publication."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summarize non-healthy scopes
@@ -115,14 +127,29 @@ jobs:
         if: always()
         shell: bash
         run: |
-          hermes guide --fast --json > "$RUNNER_TEMP/guide.json" || true
+          set +e
+          timeout 180s hermes guide --fast --json > "$RUNNER_TEMP/guide.json"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 124 ]; then
+            echo "Summary command timed out after 180s; see the dogfood report." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "Summary command failed with exit $rc; see the dogfood report." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           python - "$RUNNER_TEMP/guide.json" >> "$GITHUB_STEP_SUMMARY" <<'PY'
           import json, sys
-          doc = json.load(open(sys.argv[1], encoding="utf-8"))
-          rows = [(name, check) for name, check in doc.get("checks", {}).items()
-                  if check.get("status") != "healthy"]
           print("")
           print("### Non-healthy scopes")
+          try:
+              doc = json.load(open(sys.argv[1], encoding="utf-8"))
+          except (OSError, ValueError) as exc:
+              print(f"Could not read the guide document: {exc}")
+              raise SystemExit(0)
+          rows = [(name, check) for name, check in doc.get("checks", {}).items()
+                  if check.get("status") != "healthy"]
           if not rows:
               print("None — every scope measured healthy.")
           for name, check in rows:
