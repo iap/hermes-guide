@@ -8,6 +8,11 @@ name: dogfood
 # Manual only: it installs Hermes Agent and runs thirteen `hermes guide`
 # invocations, which is too heavy for per-PR CI.
 on:
+  # TEMPORARY: validate this job on its own PR before the workflow exists on
+  # the default branch. Removed before merge.
+  pull_request:
+    paths:
+      - ".github/workflows/dogfood.yml"
   workflow_dispatch:
     inputs:
       ref:
