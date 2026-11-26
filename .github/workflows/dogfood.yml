@@ -8,11 +8,6 @@ name: dogfood
 # Manual only: it installs Hermes Agent and runs thirteen `hermes guide`
 # invocations, which is too heavy for per-PR CI.
 on:
-  # TEMPORARY: validate this job on its own PR before the workflow exists on
-  # the default branch. Removed before merge.
-  pull_request:
-    paths:
-      - ".github/workflows/dogfood.yml"
   workflow_dispatch:
     inputs:
       ref:
@@ -99,6 +94,9 @@ jobs:
       - name: Run release dogfood
         shell: bash
         run: |
+          # `--fast` is the dogfood script's contract: no subprocesses. The
+          # dashboard check is skipped in fast mode by design, so the report
+          # marks it `unknown`; the other eleven scopes are measured.
           version="$(grep '^version:' plugin.yaml | awk '{print $2}')"
           report="reports/dogfood-${version}.md"
           python tools/check_skill_dogfood.py --release --require-live \
