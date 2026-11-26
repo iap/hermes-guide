@@ -395,15 +395,22 @@ The changelog section ships **inside the version-bump PR**, not on the tag.
    `--base-ref <remote>/<branch>` so the tree, CI and history items compare
    against the right tip. It verdicts `READY` /
    `READY WITH ADVISORIES` / `NOT READY` from tree state, version consistency,
-   changelog coverage, master CI, open `P1` issues, the upstream catalog pin,
-   and commits since the last tag. It must run here — after the new version and
+   changelog coverage, master CI, the off-host dogfood run, open `P1` issues,
+   the upstream catalog pin, and commits since the last tag. It must run here — after the new version and
    section exist — not before the bump, where it would only re-verify the
    previous release.
-   Before tagging, run the release dogfood gate against a candidate install:
+   Before tagging, dispatch the off-host dogfood workflow on master:
+   `gh workflow run dogfood.yml --ref master`, then wait for the run to finish.
+   Readiness requires a successful dogfood run on the current tip
+   (`dogfood-report`); a missing, failed, or older-tip run blocks the tag. The
+   run installs Hermes at the workflow's pinned tag and the candidate plugin in
+   an isolated home, runs every scope through `hermes guide --fast --json`, and
+   publishes the report to the job summary.
+
+   The local fallback for contributors with a healthy install is:
    `python tools/check_skill_dogfood.py --release --require-live --report
-   reports/dogfood-<version>.md`. It checks that the installed candidate matches
-   the repo version, runs every scope through `hermes guide --fast --json`, and
-   writes the report. A failing report blocks the tag.
+   reports/dogfood-<version>.md`. A broken local CLI is not a release blocker;
+   the dispatched run is the gate.
 
    Advisory only — the tag stays a human decision. Before tagging, audit the one
    drift direction the guard cannot see: compare

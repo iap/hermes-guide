@@ -150,6 +150,55 @@ def _master_ci(base_ref: str = DEFAULT_BASE_REF) -> tuple[str, str, str]:
     return ("pass", f"CI green on {base_ref} {tip.strip()[:8]}", "")
 
 
+def _dogfood_report(base_ref: str = DEFAULT_BASE_REF) -> tuple[str, str, str]:
+    """Require a successful off-host dogfood run on the current tip.
+
+    The dogfood workflow is manual (workflow_dispatch), so a green run for an
+    older commit is not evidence for this release candidate. The newest run on
+    the exact tip decides: a later failure must not be masked by an earlier
+    success.
+    """
+    code, out, err = _run_split("gh", "run", "list", "--workflow", "dogfood",
+                               "--limit", "30",
+                               "--json", "status,conclusion,headSha,url")
+    if code != 0:
+        return ("unknown", f"gh failed: {(out + ' ' + err).strip()[:80] or 'no output'}",
+                "dispatch the dogfood workflow, then re-run with network")
+    try:
+        runs = json.loads(out) if out else []
+    except json.JSONDecodeError:
+        return ("unknown", f"unparseable gh output: {out[:80]}", "re-run with network")
+    if not isinstance(runs, list):
+        return ("unknown", f"unexpected gh shape: {str(runs)[:80]}", "re-run with network")
+    code, tip = _run("git", "rev-parse", base_ref)
+    if code != 0:
+        return ("unknown", f"{base_ref} unresolvable — cannot bind dogfood to tip",
+                "git fetch the base ref, then re-check")
+    tip = tip.strip()
+    on_tip: list[tuple[str, str, str]] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        status = run.get("status")
+        conclusion = run.get("conclusion")
+        sha = run.get("headSha")
+        url = run.get("url")
+        if not all(isinstance(v, str) for v in (status, conclusion, sha, url)):
+            continue
+        if sha == tip:
+            on_tip.append((status, conclusion, url))
+    if not on_tip:
+        latest = runs[0] if runs and isinstance(runs[0], dict) else {}
+        where = str(latest.get("headSha", "unknown"))
+        return ("fail", f"no dogfood run on {tip[:8]} (latest run is {where[:8]})",
+                "dispatch: gh workflow run dogfood.yml --ref master")
+    status, conclusion, url = on_tip[0]
+    if status == "completed" and conclusion == "success":
+        return ("pass", f"dogfood green on {tip[:8]}: {url}", "")
+    return ("fail", f"latest dogfood on {tip[:8]} is {status}/{conclusion}: {url}",
+            "fix the dogfood failure, then re-dispatch")
+
+
 def _open_blockers() -> tuple[str, str, str]:
     # Release-blocking priority is the P1 label (repo vocabulary); there is no
     # `priority:high` label, so querying it would always pass.
@@ -311,6 +360,7 @@ def main(argv: list[str]) -> int:
     if not offline:
         items += [
             ("master-ci", _master_ci(base_ref)),
+            ("dogfood-report", _dogfood_report(base_ref)),
             ("blockers", _open_blockers()),
             ("catalog-pin", _catalog_pin()),
             ("commits-since-tag", _commits_since_tag(base_ref)),
