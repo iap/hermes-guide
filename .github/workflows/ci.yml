@@ -32,9 +32,8 @@ concurrency:
 jobs:
   plugin:
     # Called workflow, not `run:` steps. `uses` takes no `runs-on`/`steps` here.
-    # Bound the caller too: a wedged reusable job must not hold the required
-    # `gate` context open indefinitely.
-    timeout-minutes: 35
+    # No `timeout-minutes`: GitHub rejects it on a reusable-workflow call job.
+    # The called workflow bounds its own 30-minute jobs.
     uses: ./.github/workflows/reusable-ci.yml
     with:
       event-name: ${{ github.event_name }}
