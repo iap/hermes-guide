@@ -334,6 +334,8 @@ version, your platform (native Windows or POSIX), and the output of
    full list and what CI adds on top. Which interpreter and dependency setup the
    suite needs is in
    [docs/agent/deep-ops.md](docs/agent/deep-ops.md#local-interpreter).
+   Workflow YAML is linted with `actionlint` in CI; run
+   `actionlint -shellcheck=` locally before changing a workflow.
    Review order, bot-thread handling, and the merge gate are in
    [docs/agent/review-ops.md](docs/agent/review-ops.md).
 4. Fill in the PR template — **Environment** and **Validation Results** are read

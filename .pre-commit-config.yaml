@@ -8,7 +8,7 @@
 # Install once per clone:  pre-commit install
 # Then:                   pre-commit run --all-files
 #
-# Requires `pre-commit` on PATH. Not vendored, not a Python dependency of the
+# Requires `pre-commit` and `actionlint` on PATH. Not vendored, not a Python dependency of the
 # plugin — the plugin ships with a single PyYAML dependency on purpose, and
 # this must not change that.
 
@@ -30,6 +30,12 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [commit-msg, pre-commit, pre-push]
+      - id: actionlint
+        name: actionlint (workflow structure)
+        entry: actionlint -shellcheck=
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+        pass_filenames: false
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.4
     hooks:

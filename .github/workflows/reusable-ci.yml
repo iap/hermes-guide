@@ -32,10 +32,6 @@ on:
         type: boolean
         required: false
         default: true
-    outputs:
-      plugin-result:
-        description: "Concatenated matrix result for the plugin job"
-        value: ${{ jobs.plugin.result }}
   # Manual entry point: `gh workflow run reusable-ci.yml` is not available for a
   # workflow_call-only file, so keep workflow_dispatch for reproducing a leg.
   workflow_dispatch:
@@ -94,6 +90,55 @@ jobs:
           # carries no file hash (every run re-downloads anyway); and several
           # tests assert on a freshly resolved interpreter, so a cached
           # site-packages would mask a real resolution bug.
+
+      - name: Workflow lint (actionlint)
+        # Structure-only, one leg: every workflow file is linted on PRs and on
+        # direct pushes to master. The release and checksum pin matter because
+        # this runs on master, where a mutable tag would be a supply-chain hole.
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
+        shell: bash
+        run: |
+          version="1.7.12"
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/$archive" \
+            | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+          # No shellcheck integration: this gate is workflow structure, not a
+          # second shell linter, and the runners' shellcheck version would make
+          # the result environment-dependent.
+          "$RUNNER_TEMP/actionlint" -shellcheck=
+
+      - name: Actionlint negative self-test
+        # A linter that silently accepts everything is worse than no linter.
+        # This proves the exact reusable-workflow timeout class is rejected.
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
+        shell: bash
+        run: |
+          fixture="$RUNNER_TEMP/actionlint-fixture"
+          mkdir -p "$fixture/.github/workflows"
+          cat > "$fixture/.github/workflows/invalid.yml" <<'YAML'
+          on: push
+          jobs:
+            call:
+              uses: ./.github/workflows/other.yml
+              timeout-minutes: 5
+          YAML
+          set +e
+          out=$("$RUNNER_TEMP/actionlint" -shellcheck= "$fixture/.github/workflows/invalid.yml" 2>&1)
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "actionlint accepted timeout-minutes on a reusable-workflow call"
+            exit 1
+          fi
+          if ! grep -q 'timeout-minutes' <<< "$out"; then
+            echo "actionlint failed for an unexpected reason:"
+            echo "$out"
+            exit 1
+          fi
+          echo "OK: actionlint rejects timeout-minutes on a reusable-workflow call"
 
       - name: Install Hermes
         if: inputs.run-full-gate
