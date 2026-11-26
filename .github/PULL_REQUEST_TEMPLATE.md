@@ -67,7 +67,7 @@ a merged PR claiming pending work misleads the next reader. -->
 
 ## Review gate
 - [ ] Qodo reviewed the current head; no open findings.
-- [ ] CodeRabbit reviewed the current head; clean — or this is a release-only PR.
+- [ ] CodeRabbit reviewed the current head; clean.
 
 ## Notes for reviewers
 <!-- Anything a reviewer should check by hand: judgement calls, facts that depend
