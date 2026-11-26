@@ -2,6 +2,34 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.10.0 (2026-11-26)
+
+### Breaking Changes
+
+- **json**: the `--json` document schema is now `2`. The top-level `status` can be `unknown` when a check could not be measured, instead of collapsing into `broken`. Key order and exit codes are unchanged ([#493](https://github.com/iap/hermes-guide/pull/493))
+
+### Bug Fixes
+
+- correct OS floor mismatch fix guidance (hand-edit pm/lock.json) ([#506](https://github.com/iap/hermes-guide/pull/506))
+- omit reinstall command when already up to date in --update ([#502](https://github.com/iap/hermes-guide/pull/502))
+- resolve commit SHA and address Qodo findings in --update ([#500](https://github.com/iap/hermes-guide/pull/500))
+
+### Documentation
+
+- clarify cua-driver opt-out wording ([#509](https://github.com/iap/hermes-guide/pull/509))
+- correct Qodo fixed-vs-dismissed reply wording ([#510](https://github.com/iap/hermes-guide/pull/510))
+- remove release-only CodeRabbit review exemption (option 3 of #491) ([#505](https://github.com/iap/hermes-guide/pull/505))
+
+### Chores
+
+- refine Qodo repo-specific review guidance ([#508](https://github.com/iap/hermes-guide/pull/508))
+- enforce ruff in CI and add pytest case bridges ([#507](https://github.com/iap/hermes-guide/pull/507))
+- remove dead code flagged by ruff (unused imports/vars) ([#501](https://github.com/iap/hermes-guide/pull/501))
+
+### Tests
+
+- add --fast performance budget for large skill trees (#490) ([#504](https://github.com/iap/hermes-guide/pull/504))
+
 ## v0.9.8 (2026-11-16)
 
 ### Features
