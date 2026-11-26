@@ -52,6 +52,14 @@ jobs:
           # gated to >=3.14, so an older interpreter installs an empty CLI.
           python-version: "3.14"
 
+      - name: Set up isolated home
+        shell: bash
+        run: |
+          home="$RUNNER_TEMP/hermes-home"
+          echo "HERMES_HOME=$home" >> "$GITHUB_ENV"
+          echo "HERMES_DISABLE_LAZY_INSTALLS=1" >> "$GITHUB_ENV"
+          mkdir -p "$home"
+
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # 8.2.0
         with:
@@ -67,21 +75,19 @@ jobs:
           # `uv sync --locked` is the upstream-supported install path: the
           # lockfile resolves exact pins that plain pip rejects (e.g. the
           # Pillow 13 vs browser-harness Pillow 12.3 conflict on 3.14).
+          # Install under HERMES_HOME/hermes-agent: the dashboard and update
+          # checks resolve their checkout there, so an outside path would make
+          # both scopes report `unknown` instead of being measured.
           git clone --depth 1 --branch "${{ inputs.hermes_ref || 'v0.23.4' }}" \
-            https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
-          cd "$RUNNER_TEMP/hermes-agent"
+            https://github.com/NousResearch/hermes-agent.git "$HERMES_HOME/hermes-agent"
+          cd "$HERMES_HOME/hermes-agent"
           uv sync --locked --python 3.14
-          echo "$RUNNER_TEMP/hermes-agent/.venv/bin" >> "$GITHUB_PATH"
+          echo "$HERMES_HOME/hermes-agent/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install the candidate plugin
         shell: bash
         run: |
-          echo "HERMES_HOME=$RUNNER_TEMP/hermes-home" >> "$GITHUB_ENV"
-          echo "HERMES_DISABLE_LAZY_INSTALLS=1" >> "$GITHUB_ENV"
-          export HERMES_HOME="$RUNNER_TEMP/hermes-home"
-          export HERMES_DISABLE_LAZY_INSTALLS=1
           timeout 60s hermes --version
-          mkdir -p "$HERMES_HOME"
           timeout 120s hermes config path
           mkdir -p "$HERMES_HOME/plugins"
           # Keep .git: `plugins adopt` reads the origin URL and HEAD revision.
