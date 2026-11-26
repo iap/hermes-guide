@@ -18,7 +18,7 @@ tracked top-level path and every `.github/` file.
 | `tools/check_*.py` | Guard linters — every one is a machine gate with an exit code |
 | `tools/check_doc_style.py` | Tone guard: emoji outside Python string literals, filler phrases in Markdown prose |
 | `tools/check_eol_contract.py` | Line-ending guard: the `.gitattributes` rules the tracked tree depends on, plus `git ls-files --eol` proving the index is LF and `assets/` is binary |
-| `tools/check_install_scan.py` | Install-scan parity: runs upstream's real `skills_guard.py` at the pinned baseline over every skill, asserting `should_allow_install()` is true at community trust. CI tier — needs a checkout, and executes the pinned upstream scanner |
+| `tools/check_install_scan.py` | Install-scan parity: runs upstream's real `skills_guard.py` at the revision in `.github/install-scan.pin` over every skill, asserting `should_allow_install()` is true at community trust. CI tier — needs a checkout, and executes the pinned upstream scanner |
 | `tools/check_issue_templates.py` | Reporter-surface guard: issue-template schema, and docs that promise a route the chooser does not offer |
 | `tools/check_skill_dogfood.py` | Read-only live-install smoke test, plus `--release` all-scope JSON dogfood gate and report |
 | `tools/test_*.py` | Regression suites for the plugin and for `tools/` itself |
@@ -37,6 +37,7 @@ tracked top-level path and every `.github/` file.
 | `.github/workflows/label-prs.yml`, `label-pr-metadata.yml`, `labels-bootstrap.yml` | Auto-labelling (paths, then PR body); bootstrap creates the `assist:*` palette |
 | `.github/workflows/release.yml` | Release on tag; compares the tag against `plugin.yaml` |
 | `.github/upstream-drift.baseline` | The pinned upstream revision that file/symbol citations resolve against |
+| `.github/install-scan.pin` | The pinned upstream revision used only by `check_install_scan.py`; independent of the citation baseline because scanner entry points move |
 | `.github/allowed_signers` | Authorized release-tag SSH keys for release.yml signature verification |
 | `.github/ISSUE_TEMPLATE/` | Bug report, config, and per-skill drift templates |
 | `.github/PULL_REQUEST_TEMPLATE.md` | The validation table `validate-claim.yml` checks |

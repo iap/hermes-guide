@@ -376,6 +376,49 @@ def main() -> int:
         expect("a branch name is not a pin", mod.valid_pin("main"), False)
         expect("a short sha is not a pin", mod.valid_pin("d97007c"), False)
 
+        # 6b. The scanner pin is its own file, independent of the baseline --
+        expect("install-scan pin exists", mod.INSTALL_SCAN_PIN.is_file(), True)
+        expect("install-scan pin names a commit",
+               mod.valid_pin(mod.read_install_scan_pin()), True)
+
+        # 6c. `main()` must read the scanner pin, not the citation baseline --
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "src"
+            (src / ".git").mkdir(parents=True)
+            pin = Path(td) / "install-scan.pin"
+            pin.write_text("a" * 40 + "\n", encoding="utf-8")
+            baseline = Path(td) / "upstream-drift.baseline"
+            baseline.write_text("b" * 40 + "\n", encoding="utf-8")
+            seen: list[str] = []
+            fake = types.ModuleType("check_citation_integrity")
+
+            def _show(_source_dir, rev, _path):
+                seen.append(rev)
+                return ["# fake"]
+
+            fake._show = _show
+            saved_module = sys.modules.get("check_citation_integrity")
+            saved = (mod.INSTALL_SCAN_PIN, mod.load_modules, mod.assess_skills,
+                     mod.assess_plugin, mod.SCANNER_SOURCES)
+            sys.modules["check_citation_integrity"] = fake
+            mod.INSTALL_SCAN_PIN = pin
+            mod.load_modules = lambda _sources: {
+                "tools.skills_guard": object(), "tools.plugin_guard": object()}
+            mod.assess_skills = lambda _skills, _scanner: (0, [])
+            mod.assess_plugin = lambda _repo, _guard: (0, [])
+            try:
+                rc = mod.main(["check_install_scan.py", "--src", str(src)])
+            finally:
+                (mod.INSTALL_SCAN_PIN, mod.load_modules, mod.assess_skills,
+                 mod.assess_plugin, mod.SCANNER_SOURCES) = saved
+                if saved_module is None:
+                    sys.modules.pop("check_citation_integrity", None)
+                else:
+                    sys.modules["check_citation_integrity"] = saved_module
+            expect("main uses the scanner pin", set(seen), {"a" * 40})
+            expect("main ignores the citation baseline", "b" * 40 in seen, False)
+            expect("main exits 0 with fake scanners", rc, 0)
+
         # 7. Live run when a checkout is available ---------------------------
         src = os.environ.get("HERMES_AGENT_SRC")
         if src and Path(src).joinpath(".git").exists():
@@ -386,7 +429,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         print(f"FAIL: {len(failures)} install-scan case(s) failed", file=sys.stderr)
         return 1
-    print("OK: install-scan logic (skills, plugin, drift, loader, pin, live)")
+    print("OK: install-scan logic (skills, plugin, drift, loader, pin, scan-pin, live)")
     return 0
 
 
