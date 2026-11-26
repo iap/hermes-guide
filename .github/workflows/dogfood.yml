@@ -52,15 +52,26 @@ jobs:
           # gated to >=3.14, so an older interpreter installs an empty CLI.
           python-version: "3.14"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # 8.2.0
+        with:
+          version: "0.12.13"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
       - name: Install Hermes Agent
         shell: bash
         run: |
-          # Same route as the full CI tier: editable install from the upstream
-          # git tag (PyPI is stale and wheel builds are blocked outside Nix).
+          # `uv sync --locked` is the upstream-supported install path: the
+          # lockfile resolves exact pins that plain pip rejects (e.g. the
+          # Pillow 13 vs browser-harness Pillow 12.3 conflict on 3.14).
           git clone --depth 1 --branch "${{ inputs.hermes_ref || 'v0.23.4' }}" \
             https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
-          python -m pip install --upgrade pip
-          pip install -e "$RUNNER_TEMP/hermes-agent"
+          cd "$RUNNER_TEMP/hermes-agent"
+          uv sync --locked --python 3.14
+          echo "$RUNNER_TEMP/hermes-agent/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install the candidate plugin
         shell: bash
