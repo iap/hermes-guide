@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dogfood-${{ inputs.ref }}
+  group: dogfood-${{ inputs.ref || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.ref_name }}
           fetch-depth: 1
           # Do not persist the token in the copied plugin's .git; `plugins
           # adopt` only needs the public origin URL.
@@ -55,7 +55,7 @@ jobs:
         run: |
           # Same route as the full CI tier: editable install from the upstream
           # git tag (PyPI is stale and wheel builds are blocked outside Nix).
-          git clone --depth 1 --branch "${{ inputs.hermes_ref }}" \
+          git clone --depth 1 --branch "${{ inputs.hermes_ref || 'v2026.9.24' }}" \
             https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
           python -m pip install --upgrade pip
           pip install -e "$RUNNER_TEMP/hermes-agent"
