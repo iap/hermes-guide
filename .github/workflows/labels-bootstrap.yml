@@ -39,6 +39,7 @@ jobs:
             gh label create "$name" --color "$color" --description "$desc" --force >/dev/null
             echo "ensured: $name"
           }
+          ensure "plugin" "5319E7" "Plugin runtime: checks.py, __init__.py, constants.py, plugin.yaml"
           ensure "assist:windows-confirm" "93C5FD" "Request Windows-agent confirmation on another Windows device"
           ensure "assist:linux-confirm"   "FDBA74" "Request Linux-agent confirmation on another Linux device"
           ensure "assist:macos-confirm"   "C4B5FD" "Request macOS-agent confirmation on another macOS device"

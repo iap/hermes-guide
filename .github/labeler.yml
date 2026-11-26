@@ -1,10 +1,26 @@
 skills:
   - changed-files:
-      - any-glob-to-any-file: "skills/**"
+      - any-glob-to-any-file:
+          - "skills/**"
+          - "plugin-skills/**"
+
+plugin:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "plugin.yaml"
+          - "checks.py"
+          - "__init__.py"
+          - "constants.py"
+
+testing:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+          - "tools/test_*.py"
 
 ci:
   - changed-files:
-      - any-glob-to-any-file: ".github/workflows/**"
+      - any-glob-to-any-file: ".github/**"
 
 drift:
   - changed-files:
