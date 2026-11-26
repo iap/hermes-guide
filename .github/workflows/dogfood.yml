@@ -110,3 +110,23 @@ jobs:
             cat "$report"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize non-healthy scopes
+        # `unknown` is honest but not self-explanatory. Print the reason for
+        # every non-healthy scope so the run explains its own coverage.
+        if: always()
+        shell: bash
+        run: |
+          hermes guide --fast --json > "$RUNNER_TEMP/guide.json" || true
+          python - "$RUNNER_TEMP/guide.json" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json, sys
+          doc = json.load(open(sys.argv[1], encoding="utf-8"))
+          rows = [(name, check) for name, check in doc.get("checks", {}).items()
+                  if check.get("status") != "healthy"]
+          print("")
+          print("### Non-healthy scopes")
+          if not rows:
+              print("None — every scope measured healthy.")
+          for name, check in rows:
+              print(f"- **{name}**: `{check.get('status')}` — {check.get('reason', '')}")
+          PY
