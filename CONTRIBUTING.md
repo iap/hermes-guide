@@ -367,10 +367,10 @@ See https://docs.github.com/en/pull-requests/get-started/about-stacked-prs
 The changelog section ships **inside the version-bump PR**, not on the tag.
 `release.yml` only *checks* for it and fails closed when it is missing.
 
-1. Bump the version in all five sites in one commit (the
-   `check_version_consistency.py` guard lists them: `plugin.yaml`,
-   `__init__.py`, `SECURITY.md` policy sentence + supported table,
-   `pyproject.toml`).
+1. Bump `plugin.yaml` and run `python tools/sync_version.py --write` to update
+   the four derived sites in one commit (`__init__.py`, the `SECURITY.md`
+   policy sentence + supported table, and `pyproject.toml`). The
+   `check_version_consistency.py` guard verifies all five.
    The bump PR also runs the release guard
    (`tools/check_no_active_release.py`): it **refuses the bump** while a
    release is active or when the proposed version is already a git tag — the
