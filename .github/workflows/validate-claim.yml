@@ -314,8 +314,6 @@ jobs:
               print("reason=PR claims the gate passed, but re-running it failed")
           print("actual_summary=" + summary.replace("\n", " ")[:200])
           PY
-          echo "verdict=${{ steps.judge.outputs.verdict }}"
-          echo "reason=${{ steps.judge.outputs.reason }}"
 
       # Fail ONLY on a genuine contradiction. A missing or unparseable claim
       # passes silently: this workflow is an honesty check, not a new gate that
