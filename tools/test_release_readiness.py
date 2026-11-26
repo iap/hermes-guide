@@ -4,7 +4,8 @@
 Pins: READY only when every item passes; indeterminate items yield
 ``READY WITH ADVISORIES`` (never a bare READY); any ``fail`` yields
 NOT READY exit 1; a failed history inspection is ``unknown``, not a
-zero-commit pass; the master-CI query is scoped to the CI workflow; the
+zero-commit pass; the master-CI query is scoped to the CI workflow; a
+non-origin upstream can be supplied with ``--base-ref <remote>/<branch>``; the
 blocker query uses the P1 label; the catalog-pin item fails only when the
 upstream entry's sha is not its own tag's commit, reads ``unknown`` when gh or
 the tag is unavailable, and is skipped offline; ``--offline`` never fetches
@@ -315,6 +316,35 @@ def test_offline_skips_catalog_pin():
     assert not [c for c in calls if c[:2] == ("gh", "api")], "offline queried the catalog"
 
 
+def test_base_ref_override():
+    mod = _load()
+    stubs = _healthy({
+        ("git", "fetch", "github", "master"): (0, ""),
+        ("git", "rev-parse", "github/master"): (0, "a" * 40),
+    })
+    code, out, calls = _run_main(mod, stubs, ["--base-ref", "github/master"])
+    assert code == 0, out
+    assert "OK: release READY\n" in out, out
+    assert ("git", "fetch", "github", "master") in calls, calls
+    assert ("git", "rev-parse", "github/master") in calls, calls
+    assert "synced at aaaaaaaa" in out, out
+
+
+def test_base_ref_requires_remote_and_branch():
+    mod = _load()
+    code, _, calls = _run_main(mod, _healthy(), ["--base-ref", "master"])
+    assert code == 2, code
+    assert not calls, calls
+    assert mod._split_base_ref("origin/release/v0.10.0") == ("origin", "release/v0.10.0")
+
+
+def test_base_ref_offline_does_not_fetch():
+    mod = _load()
+    _, out, calls = _run_main(mod, _healthy(), ["--offline", "--base-ref", "github/master"])
+    assert "offline — sync with github/master" in out, out
+    assert not [c for c in calls if c[:2] == ("git", "fetch")], calls
+
+
 def main() -> int:
     cases = [
         test_ready_when_all_pass,
@@ -342,6 +372,9 @@ def main() -> int:
         test_catalog_pin_enforces_dotted_ordering,
         test_catalog_pin_null_content_is_unknown,
         test_offline_skips_catalog_pin,
+        test_base_ref_override,
+        test_base_ref_requires_remote_and_branch,
+        test_base_ref_offline_does_not_fetch,
     ]
     failed = 0
     for case in cases:

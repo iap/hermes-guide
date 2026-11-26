@@ -5,6 +5,7 @@ decisions). Run from a clean checkout before pushing a ``v*`` tag::
 
     python tools/check_release_readiness.py          # full verdict (needs gh + network for the CI, blocker, catalog-pin and history items)
     python tools/check_release_readiness.py --offline  # tree/version/changelog only
+    python tools/check_release_readiness.py --base-ref github/master  # non-origin upstream
     python tools/check_release_readiness.py --selftest # CI wiring probe, no network
 
 Verdict contract: ``READY`` (exit 0, harness ``OK:``) when every check passes;
@@ -27,6 +28,21 @@ from pathlib import Path
 CATALOG_ENTRY = "repos/NousResearch/hermes-agent/contents/plugin-catalog/hermes-guide.yaml"
 
 REPO = Path(__file__).resolve().parent.parent
+
+DEFAULT_BASE_REF = "origin/master"
+
+
+def _split_base_ref(ref: str) -> tuple[str, str] | None:
+    """Split ``<remote>/<branch>`` into its fetch pair.
+
+    The branch may itself contain slashes (``origin/release/v0.10.0``), so only
+    the first slash separates the remote. Returns ``None`` for a bare branch
+    name: ``git fetch master`` would be a different operation, not this one.
+    """
+    remote, sep, branch = ref.partition("/")
+    if not sep or not remote or not branch:
+        return None
+    return remote, branch
 
 
 def _run(*args: str) -> tuple[int, str]:
@@ -58,7 +74,7 @@ def _check(cmd: list[str], label: str, fix: str) -> tuple[str, str, str]:
     return (status, evidence, "" if status == "pass" else fix)
 
 
-def _git_tree(*, offline: bool = False) -> tuple[str, str, str]:
+def _git_tree(*, offline: bool = False, base_ref: str = DEFAULT_BASE_REF) -> tuple[str, str, str]:
     code, out = _run("git", "status", "--porcelain")
     if code != 0:
         return ("fail", "git status unavailable", "run from inside the repo")
@@ -70,34 +86,36 @@ def _git_tree(*, offline: bool = False) -> tuple[str, str, str]:
     branch = branch.strip()
     if branch != "master":
         return ("fail", f"on branch {branch!r}", "tags cut from master")
+    remote, branch = _split_base_ref(base_ref) or ("origin", "master")
     if offline:
-        # No fetch without network: the local origin/master ref may be
-        # stale, so sync is indeterminate rather than claimed.
-        return ("unknown", "offline — sync with origin/master unverifiable without fetch",
+        # No fetch without network: the local base ref may be stale, so sync
+        # is indeterminate rather than claimed.
+        return ("unknown", f"offline — sync with {base_ref} unverifiable without fetch",
                 "re-run with network")
-    code, _ = _run("git", "fetch", "origin", "master")
+    code, _ = _run("git", "fetch", remote, branch)
     if code != 0:
-        return ("unknown", "fetch of origin/master failed — sync state indeterminate",
+        return ("unknown", f"fetch of {base_ref} failed — sync state indeterminate",
                 "re-run with network")
     code2, head = _run("git", "rev-parse", "HEAD")
-    code3, upstream = _run("git", "rev-parse", "origin/master")
+    code3, upstream = _run("git", "rev-parse", base_ref)
     if code2 != 0 or code3 != 0:
-        return ("fail", "HEAD or origin/master unresolvable",
-                "git fetch origin, then re-check")
+        return ("fail", f"HEAD or {base_ref} unresolvable",
+                f"git fetch {remote} {branch}, then re-check")
     if head.strip() != upstream.strip():
-        return ("fail", f"HEAD {head[:8]} != origin/master {upstream[:8]}",
+        return ("fail", f"HEAD {head[:8]} != {base_ref} {upstream[:8]}",
                 "pull / push before tagging")
     return ("pass", f"clean, on master, synced at {head[:8]} (fetched)", "")
 
 
-def _master_ci() -> tuple[str, str, str]:
+def _master_ci(base_ref: str = DEFAULT_BASE_REF) -> tuple[str, str, str]:
     # Scope to the CI workflow by name: an unscoped branch listing lets a green
     # scheduled upstream-drift run mask a red CI run. Request JSON (the
     # human-readable table is not a machine interface) and bind the run to the
     # current origin/master SHA — a green run for an older commit is not
     # evidence for this release candidate.
+    _, branch = _split_base_ref(base_ref) or ("origin", "master")
     code, out, err = _run_split("gh", "run", "list", "--workflow", "CI",
-                               "--branch", "master", "--limit", "1",
+                               "--branch", branch, "--limit", "1",
                                "--json", "status,conclusion,headSha")
     if code != 0:
         return ("unknown", f"gh failed: {(out + ' ' + err).strip()[:80] or 'no output'}",
@@ -121,15 +139,15 @@ def _master_ci() -> tuple[str, str, str]:
     if status != "completed" or conclusion != "success":
         return ("fail", f"latest CI run: {status}/{conclusion}",
                 "fix master CI before tagging")
-    code, tip = _run("git", "rev-parse", "origin/master")
+    code, tip = _run("git", "rev-parse", base_ref)
     if code != 0:
-        return ("unknown", "origin/master unresolvable — cannot bind run to tip",
-                "git fetch origin, then re-check")
+        return ("unknown", f"{base_ref} unresolvable — cannot bind run to tip",
+                "git fetch the base ref, then re-check")
     if head_sha != tip.strip():
         return ("fail",
                 f"latest green CI is for {head_sha[:8]}, tip is {tip.strip()[:8]}",
                 "wait for CI on the current tip before tagging")
-    return ("pass", f"CI green on origin/master {tip.strip()[:8]}", "")
+    return ("pass", f"CI green on {base_ref} {tip.strip()[:8]}", "")
 
 
 def _open_blockers() -> tuple[str, str, str]:
@@ -242,20 +260,20 @@ def _catalog_pin() -> tuple[str, str, str]:
     return ("pass", f"upstream entry pins {pinned_version} at {pinned_sha[:8]} ({tag} resolves to it)", "")
 
 
-def _commits_since_tag() -> tuple[str, str, str]:
+def _commits_since_tag(base_ref: str = DEFAULT_BASE_REF) -> tuple[str, str, str]:
     # Advisory "is there anything worth shipping" signal. This intentionally
     # reports local commits since the last tag; the upstream catalog pin is
     # `_catalog_pin` above, and its lag is stated rather than failed.
-    code, tag = _run("git", "describe", "--tags", "--abbrev=0", "origin/master")
+    code, tag = _run("git", "describe", "--tags", "--abbrev=0", base_ref)
     if code != 0:
         return ("unknown", "no release tag reachable", "tag history unavailable")
     tag = tag.strip()
-    code, out = _run("git", "log", "--oneline", f"{tag}..origin/master", "--")
+    code, out = _run("git", "log", "--oneline", f"{tag}..{base_ref}", "--")
     if code != 0:
-        return ("unknown", f"history inspection {tag}..origin/master failed",
+        return ("unknown", f"history inspection {tag}..{base_ref} failed",
                 "fetch full history and re-run")
     n = len(out.splitlines()) if out else 0
-    return ("pass", f"{n} commit(s) on origin/master since {tag} (advisory)", "")
+    return ("pass", f"{n} commit(s) on {base_ref} since {tag} (advisory)", "")
 
 
 def main(argv: list[str]) -> int:
@@ -270,8 +288,19 @@ def main(argv: list[str]) -> int:
         return 0 if not bad else 1
 
     offline = "--offline" in argv
+    base_ref = DEFAULT_BASE_REF
+    if "--base-ref" in argv:
+        idx = argv.index("--base-ref")
+        if idx + 1 >= len(argv):
+            print("error: --base-ref needs <remote>/<branch>", file=sys.stderr)
+            return 2
+        base_ref = argv[idx + 1]
+        if _split_base_ref(base_ref) is None:
+            print(f"error: --base-ref must be <remote>/<branch>, got {base_ref!r}",
+                  file=sys.stderr)
+            return 2
     items: list[tuple[str, tuple[str, str, str]]] = [
-        ("tree", _git_tree(offline=offline)),
+        ("tree", _git_tree(offline=offline, base_ref=base_ref)),
         ("version-consistency",
          _check(["tools/check_version_consistency.py"], "version",
                 "align the five version sites")),
@@ -281,10 +310,10 @@ def main(argv: list[str]) -> int:
     ]
     if not offline:
         items += [
-            ("master-ci", _master_ci()),
+            ("master-ci", _master_ci(base_ref)),
             ("blockers", _open_blockers()),
             ("catalog-pin", _catalog_pin()),
-            ("commits-since-tag", _commits_since_tag()),
+            ("commits-since-tag", _commits_since_tag(base_ref)),
         ]
 
     hard_fail = [name for name, (st, _, _) in items if st == "fail"]
