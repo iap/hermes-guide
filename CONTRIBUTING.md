@@ -346,6 +346,18 @@ version, your platform (native Windows or POSIX), and the output of
 Because this repo is maintained from several platforms in parallel, a claim
 verified on one host is not verified on the others. Name the platform in the PR.
 
+### Priority labels
+
+Priority is release impact, not area or effort:
+
+- `P1` — blocks a release or breaks a user install. A CI or tooling change is
+  not P1 unless it fixes one of those.
+- `P2` — a real defect, not release-blocking.
+- `P3` — polish or a non-urgent improvement.
+
+The `Priority:` line in the PR template drives `label-pr-metadata.yml`; keep it
+consistent with the labels the same work would get as an issue.
+
 ### Stacked PRs
 
 When a follow-up naturally splits off an in-flight change, open it as a **new

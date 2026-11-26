@@ -39,6 +39,7 @@ tracked top-level path and every `.github/` file.
 | `.github/workflows/release.yml` | Release on tag; compares the tag against `plugin.yaml` |
 | `.github/workflows/dogfood.yml` | Manual off-host release dogfood: installs Hermes at a pinned tag, installs the candidate plugin, runs every guide scope, and writes the report to the job summary |
 | `.github/upstream-drift.baseline` | The pinned upstream revision that file/symbol citations resolve against |
+| `.github/labeler.yml` | Path-based area labels (skills, plugin, testing, ci, drift, tooling, documentation) |
 | `.github/install-scan.pin` | The pinned upstream revision used only by `check_install_scan.py`; independent of the citation baseline because scanner entry points move |
 | `.github/allowed_signers` | Authorized release-tag SSH keys for release.yml signature verification |
 | `.github/ISSUE_TEMPLATE/` | Bug report, config, and per-skill drift templates |
