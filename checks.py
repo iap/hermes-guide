@@ -2247,10 +2247,17 @@ def check_memory_hygiene():
         if store == "USER.md":
             env_entries = [e for e in entries if _MEM_ENV_LEAD.match(e)]
             if env_entries:
-                notes.append(
-                    f"{store}: an entry reads like environment/project context — "
-                    "it belongs in MEMORY.md (target=memory), dated [YYYY-MM-DD]"
-                )
+                n = len(env_entries)
+                if n == 1:
+                    notes.append(
+                        f"{store}: an entry reads like environment/project context — "
+                        "it belongs in MEMORY.md (target=memory), dated [YYYY-MM-DD]"
+                    )
+                else:
+                    notes.append(
+                        f"{store}: {n} entries read like environment/project context — "
+                        "they belong in MEMORY.md (target=memory), dated [YYYY-MM-DD]"
+                    )
             if len(env_entries) > 3:
                 notes.append(f"{store}: {len(env_entries)} environment/project entry(ies) total")
 

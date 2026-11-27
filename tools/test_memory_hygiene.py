@@ -155,7 +155,7 @@ def case_env_in_user(td: Path) -> None:
     ])
     r = _run(checks)
     detail = r["detail"] or []
-    assert sum("belongs in MEMORY.md" in d for d in detail) == 2, r
+    assert any("2 entries read" in d and "MEMORY.md" in d for d in detail), r
 
 
 def case_project_hyphen_not_flagged(td: Path) -> None:
