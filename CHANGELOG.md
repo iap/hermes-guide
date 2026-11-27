@@ -2,6 +2,33 @@
 
 All notable changes to hermes-guide are documented here.
 
+## v0.10.1 (2026-11-27)
+
+### Features
+
+- **skills**: separate static and dynamic memory in diagnosing-memory ([#522](https://github.com/iap/hermes-guide/pull/522))
+- **release**: generate version sites from plugin.yaml ([#518](https://github.com/iap/hermes-guide/pull/518))
+- **release**: require an off-host dogfood run before tagging ([#516](https://github.com/iap/hermes-guide/pull/516))
+
+### Bug Fixes
+
+- **release**: accept an explicit base ref in readiness ([#514](https://github.com/iap/hermes-guide/pull/514))
+- **tools**: decouple install-scan pin from drift baseline ([#512](https://github.com/iap/hermes-guide/pull/512))
+
+### Documentation
+
+- align the PR template with the two-review policy ([#517](https://github.com/iap/hermes-guide/pull/517))
+
+### CI
+
+- add pinned actionlint workflow lint ([#521](https://github.com/iap/hermes-guide/pull/521))
+- add an off-host release dogfood workflow ([#515](https://github.com/iap/hermes-guide/pull/515))
+
+### Chores
+
+- **labels**: close area-label gaps and bound the CI caller ([#520](https://github.com/iap/hermes-guide/pull/520))
+- **drift**: re-baseline upstream to c8f866c ([#513](https://github.com/iap/hermes-guide/pull/513))
+
 ## v0.10.0 (2026-11-26)
 
 ### Breaking Changes
