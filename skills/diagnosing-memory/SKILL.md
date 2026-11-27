@@ -1,7 +1,7 @@
 ---
 name: diagnosing-memory
-description: "Diagnose Hermes memory problems — the agent forgot something, an external memory provider configured but silently unavailable, missing provider plugins or API keys, and built-in MEMORY.md/USER.md errors from config or char limits."
-version: 1.2.13
+description: "Diagnose Hermes memory problems — static identity (USER.md) vs dynamic environment/project memory (MEMORY.md), frozen session snapshots, external providers silently unavailable, and built-in store errors from config or char limits."
+version: 1.2.14
 metadata:
   hermes:
     tags: [hermes, memory, providers, troubleshooting, diagnosing]
@@ -15,14 +15,15 @@ Goal: reduce any "it forgot what I told it" / "my memories are gone" / memory-pr
 > **Disambiguation**: if a model provider is configured but silently unavailable (not a memory issue), see `diagnosing-providers`.
 
 > [!WARNING]
-> **Hermes memory has two independent layers, and the external one fails silently.** Built-in memory (`MEMORY.md` / `USER.md`) is always active. At most one external provider can be active; if it is unavailable, **external memory is disabled for that session and built-in memory answers instead** — the agent does not announce this. "My mem0 memories are gone" usually means "mem0 was unavailable; built-in answered."
+> **Hermes memory has two independent axes: storage layer and lifetime.** The storage axis is built-in (`USER.md` / `MEMORY.md`) vs one optional external provider. The lifetime axis is static identity vs dynamic environment/project vs session state. The external layer fails silently. Built-in memory is always active. At most one external provider can be active; if it is unavailable, **external memory is disabled for that session and built-in memory answers instead** — the agent does not announce this. "My mem0 memories are gone" usually means "mem0 was unavailable; built-in answered."
 
 ## 1. How memory resolves
 
-| Layer | Files / source | Controlled by |
-|---|---|---|
-| **Built-in** (always available) | `$HERMES_HOME/memories/MEMORY.md` (agent notes) + `USER.md` (user profile) | `memory.memory_enabled`, `memory.user_profile_enabled` in `config.yaml` |
-| **External provider** (opt-in, one at a time) | plugin at `$HERMES_HOME/plugins/memory/<name>/` + pip deps in the install's dependency environment (PM-era: `$HERMES_HOME/installs`; older checkouts: the in-tree venv) + secrets in `$HERMES_HOME/.env` | `memory.provider:` in `config.yaml` (empty string = built-in only) |
+| Layer | Store | Semantic role | Controlled by |
+|---|---|---|---|
+| **Built-in** (always available) | `$HERMES_HOME/memories/USER.md` | **Static identity** — who the user is; long-term, undated, terse | `memory.user_profile_enabled` in `config.yaml` |
+| **Built-in** (always available) | `$HERMES_HOME/memories/MEMORY.md` | **Dynamic environment** — project/config facts; long-term, curated, dated | `memory.memory_enabled` in `config.yaml` |
+| **External provider** (opt-in, one at a time) | plugin at `$HERMES_HOME/plugins/memory/<name>/` + pip deps in the install's dependency environment (PM-era: `$HERMES_HOME/installs`; older checkouts: the in-tree venv) + secrets in `$HERMES_HOME/.env` | Optional semantic recall the built-in stores cannot hold | `memory.provider:` in `config.yaml` (empty string = built-in only) |
 
 The `provider:` comment in `config.yaml` lists the one-at-a-time set — but since 2026-10 only **`retaindb`** and **`byterover`** still ship bundled; `openviking`, `mem0`, `holographic`, `honcho`, and `supermemory` all moved to catalog plugins (install first: `hermes plugins install <name>`, e.g. `hindsight` made the same bundled → catalog move in 2026-09) — and that list is **not exhaustive**. Providers also arrive as catalog plugins or optional skills (e.g. `honcho`: catalog entry `honcho`, Plastic Labs, pip `honcho-ai` — upstream dropped the optional skill that shipped it on 2026-11-03); they install the same way (`hermes plugins install honcho`) and show up in the installed-plugins list of `hermes memory status`. Trust that list over any comment.
 
@@ -31,7 +32,28 @@ A provider is *available* only when all four hold: plugin installed, its pip dep
 > [!IMPORTANT]
 > **Built-in memory is a frozen snapshot.** `MEMORY.md`/`USER.md` are injected into the system prompt once at session start. Mid-session saves hit disk immediately but do **not** update the current session's prompt — this is by design (it keeps the prompt cache stable). "It forgot what I just told it" is usually this, not a bug: the write landed and appears next session. Verify with a file read before diagnosing further.
 
-## 2. How to inspect
+## 2. Static vs dynamic: where a fact belongs
+
+The built-in stores have different jobs. The split is **lifetime and subject**, not file size:
+
+| Class | Store | Lifetime | Put here | Never put here |
+|---|---|---|---|---|
+| **Static identity** | `USER.md` | Long-term; changes rarely | Who the user is: name, role, timezone, language, communication/work style, durable preferences, git identity (`user.name` / `user.email`) | Project state, paths, configs, one-off requests, secrets |
+| **Dynamic environment** | `MEMORY.md` | Long-term but curated; dated | Facts about the environment: project conventions, repo paths, build/CI commands, config gotchas, endpoints, decisions | Identity/profile facts, transient task state, secrets |
+| **Session state** | `state.db` + context window | Short-term; ends with the session | Current task, PR number, recent errors, one-off commands, compaction handoff | Anything the next session must know |
+| **External provider** | provider store | Provider-defined | Semantic recall the built-in stores cannot hold | Secrets; do not duplicate built-in facts |
+
+Rules that prevent the common failures:
+
+- **One fact, one store.** Writing the same fact to both bloats both budgets and makes the next session read it twice.
+- **Date dynamic entries, not identity entries.** `MEMORY.md` entries start `[YYYY-MM-DD] …` so staleness is checkable. `USER.md` identity facts are not dated; a date there spends the smaller 1375-char budget on metadata.
+- **Ground every fact.** Save only what a user message or tool result supports. Never infer role, skill level, mood, or preferences from tone or topic, and never promote a one-off request to a standing preference unless the user marks it general ("always", "from now on", "remember").
+- **Secrets never go in memory.** API keys, passwords, and tokens belong in `$HERMES_HOME/.env` or the service environment.
+- **Git example:** `user.name` / `user.email` are identity → `USER.md`; the repo's remote, branch, and build command are environment → `MEMORY.md`, dated.
+
+`hermes guide memories` checks both mis-target directions: profile facts in `MEMORY.md` and environment/project facts in `USER.md`. Both are notes, not hard failures — move the entry instead of deleting context.
+
+## 3. How to inspect
 
 Probe in this order — the first two are built-in helpers and answer most cases:
 
@@ -51,7 +73,7 @@ Probe in this order — the first two are built-in helpers and answer most cases
        ✗ HONCHO_API_KEY  → https://app.honcho.dev
    ```
 
-   A trailing `Note:` line (quoted verbatim in the tool's output) explains that systemd/gateway services do not inherit the profile `.env` secrets file — set any listed variables in the service environment itself (see the gateway/systemd row in §3).
+   A trailing `Note:` line (quoted verbatim in the tool's output) explains that systemd/gateway services do not inherit the profile `.env` secrets file — set any listed variables in the service environment itself (see the gateway/systemd row in §4).
 
    Read it line by line: the three built-in lines confirm the stores and the `memory` tool are on; `Provider:` shows what `memory.provider` is set to; `Plugin:` / `Status:` / `Missing:` are the three failure points in order (plugin file → pip deps → env vars). The installed-plugins list at the bottom is the ground truth for provider names — the `hermes memory --help` string is not kept in sync with it.
 
@@ -61,13 +83,17 @@ Probe in this order — the first two are built-in helpers and answer most cases
 
 4. **Session log** — a provider selected but unavailable logs a one-shot warning at agent start (wording varies by version; look for a line naming the provider and saying external memory is disabled for the session): `hermes logs --follow` while starting a session. The gate that produces it is the external-provider block in `agent/system_prompt.py`.
 
-5. **`hermes guide memories`** (or `/hermes-doctor memories` in-session) — this plugin's read-only hygiene audit of the built-in stores: over-limit files, exact/near-duplicate entries, user-profile facts mis-targeted into `MEMORY.md`, and undated dynamic entries. It reports content-level findings that `hermes memory status` does not look at.
+5. **`hermes guide memories`** (or `/hermes-doctor memories` in-session) — this plugin's read-only hygiene audit of the built-in stores: over-limit files, exact/near-duplicate entries, profile facts mis-targeted into `MEMORY.md`, environment/project facts mis-targeted into `USER.md`, and undated dynamic entries. It reports content-level findings that `hermes memory status` does not look at.
 
-## 3. Pitfalls (symptom → cause → fix)
+## 4. Pitfalls (symptom → cause → fix)
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | Agent forgot something said mid-session | Frozen snapshot by design (see §1) | **Temporary:** start a new session (it picks the write up). **Permanent:** none — this is intended. Verify the write landed in `$HERMES_HOME/memories/MEMORY.md` first |
+| Identity fact sits in `MEMORY.md` | Profile fact written to the environment store; `hermes guide memories` says it "belongs in USER.md" | Move it to `USER.md` (`memory` tool `target=user`); no date prefix. Keep one copy |
+| Project/config fact sits in `USER.md` | Environment note written to the identity store; the audit says it "belongs in MEMORY.md" | Move it to `MEMORY.md` (`target=memory`) and date it `[YYYY-MM-DD] …` |
+| Same fact in both stores | Duplicated write; both budgets shrink and the next session reads it twice | Keep one copy: identity → `USER.md`, environment → `MEMORY.md`; delete the other |
+| One-off task detail saved as memory | Session state promoted to long-term; it will be stale next week | Remove it from both stores; the session log already holds it. Save only durable facts |
 | External provider "not available ✗", missing env var listed | Secret absent from `$HERMES_HOME/.env` | **Temporary:** none needed — built-in memory is already carrying the running session (the fallback happened at session start). **Permanent:** add the var to `.env` (and to the service environment for gateway/systemd) via `hermes memory setup <provider>`; alternatively `hermes memory off` to stop future external-provider attempts — it takes effect for **subsequently started** sessions, not the current one. Keep secrets out of `config.yaml` |
 | Provider works in terminal, not in gateway/systemd | Services do not inherit `$HERMES_HOME/.env` | Set the provider's env vars in the service environment itself |
 | `hermes memory status`: "Plugin: NOT installed ✗" | `memory.provider` names a provider with no plugin under `$HERMES_HOME/plugins/memory/` | Install the provider plugin (hub: `hermes plugins install …`), or `hermes memory off` to go built-in-only |
@@ -76,7 +102,8 @@ Probe in this order — the first two are built-in helpers and answer most cases
 | Memory tool missing from the tool schema | Both stores disabled: `memory.memory_enabled: false` **and** `memory.user_profile_enabled: false` | Re-enable one in `config.yaml`; both off removes the tool entirely |
 | Writes rejected: "…would exceed the limit. Consolidate now…" | Char limits are hard caps (defaults 2200 / 1375 chars) — there is no auto-compaction | **Temporary:** consolidate/dedupe in the same turn. **Permanent:** raise `memory.memory_char_limit` deliberately, or keep entries dated (`[YYYY-MM-DD] …`) so consolidation stays cheap |
 | Writes silently staged, never saved | `memory.write_approval: true` stages writes for review | Approve via `/memory approve` in-session, or set `write_approval: false` |
-| Hygiene check flags "no entry has a [YYYY-MM-DD] date prefix" | Entries carry no dates, so staleness is uncheckable — the `memories` scope of `hermes guide` reports undated entries as notes | Date new entries `[YYYY-MM-DD] …` where staleness matters; undated entries are a note, not an error |
+| Hygiene check flags undated `MEMORY.md` entries | Dynamic entries carry no dates, so staleness is uncheckable — `hermes guide` reports them as notes | Date dynamic entries `[YYYY-MM-DD] …`; `USER.md` identity entries do not need dates |
+| Hygiene check flags a "belongs in MEMORY.md/USER.md" note | A fact is in the wrong store for its lifetime/subject | Move it across stores; the note is advisory, not a failure. See §2 |
 | Provider config edits ignored | Active-provider name mismatch, or edits made to the wrong profile's home | `hermes config path` to confirm the active home/profile; one provider at a time — `memory.provider` is a single string |
 | Memory "disappeared" after profile work | `HERMES_HOME` unset while a non-default profile is active → files written to the wrong home | Set `HERMES_HOME` explicitly for profile work; watch for the `[HERMES_HOME fallback]` stderr warning |
 
@@ -85,28 +112,30 @@ Two name traps that are **not** this surface:
 - `context.memory_trim` is **process-heap release** for long-lived gateway processes (Linux/glibc only) — nothing to do with `MEMORY.md`.
 - `hermes memory-graph` is an alias of `hermes journey` (learned-skills/memory timeline viewer), not a memory provider.
 
-## 4. The `memory:` config block
+## 5. The `memory:` config block
 
 | Key | Default | Meaning |
 |---|---|---|
 | `provider` | `""` | Active external provider; empty = built-in only; `hermes memory off` sets this |
-| `memory_enabled` | `true` | Agent-notes store (`MEMORY.md`) |
-| `user_profile_enabled` | `true` | User-profile store (`USER.md`) |
+| `memory_enabled` | `true` | Dynamic environment store (`MEMORY.md`); dated project/config notes |
+| `user_profile_enabled` | `true` | Static identity store (`USER.md`); who the user is |
 | `memory_char_limit` | `2200` | Hard cap in characters of the decoded file (`len(text)`) — not bytes, not tokens |
 | `user_char_limit` | `1375` | Hard cap in characters of the decoded file (`len(text)`) — not bytes, not tokens |
 | `nudge_interval` | `10` | Memory-save nudge every N user turns; `0` = off |
 | `write_approval` | `false` | Stage writes for `/memory approve` instead of saving |
 
+The budgets are asymmetric: 1375 chars of identity stays terse, while the larger 2200-char store holds dated environment notes. Moving project detail into `USER.md` consumes the scarce identity budget.
+
 Hermes configuration is **YAML** — edit `config.yaml`, never JSON syntax.
 
-## Apply and verify
+## 6. Apply and verify
 
 There is no `/reload-memory`: built-in memory is snapshotted at session start, so **restart the session** after any config/`.env`/plugin fix. Then confirm with `hermes memory status` (all lines ✓, or provider lines as intended) and, for built-in, ask the agent to remember something and check the file changed on disk.
 
 > [!CAUTION]
 > `hermes memory reset` **erases** `$HERMES_HOME/memories/MEMORY.md` and/or `USER.md` irreversibly (`--target all|memory|user`, confirmation prompt, `--yes` skips it). It resets built-in memory only — it does not touch external providers.
 
-## 6. The session database (`state.db`) — size and compaction
+## 7. The session database (`state.db`) — size and compaction
 
 The session *log* (`$HERMES_HOME/state.db`, SQLite) grows independently of both
 memory stores — a 900+ MB database or a large WAL is not a memory problem. Full
@@ -119,7 +148,7 @@ optimize sequence): `references/state_db.md`.
 hermes memory status
 ```
 Pass: all built-in lines show ✓; if an external provider is configured, `Status: available ✓` with no `Missing:` entries.
-Fail: `Status: not available ✗` or missing env var listed — follow §3 for the matching symptom row.
+Fail: `Status: not available ✗` or missing env var listed — follow §4 for the matching symptom row.
 
 ```
 hermes doctor
@@ -131,7 +160,7 @@ Fail: `ImportError` or API key error — run `hermes memory setup <provider>` to
 hermes guide memories
 ```
 Pass: check exits with no `~` or `✗` markers (notes/warnings with `~` are acceptable only if they describe non-critical items like approaching limits).
-Fail: `~` or `✗` markers present — address the flagged over-limit, duplicate, or unreadable entries per §3; for unreadable files, check file permissions (POSIX: `chmod 600 $HERMES_HOME/memories/*.md`; Windows: `icacls $HERMES_HOME\memories\*.md /grant:r %USERNAME%:F`) and verify the file is valid UTF-8 — permission fixes do not resolve encoding errors.
+Fail: `~` or `✗` markers present — address the flagged over-limit, duplicate, or unreadable entries per §4; for unreadable files, check file permissions (POSIX: `chmod 600 $HERMES_HOME/memories/*.md`; Windows: `icacls $HERMES_HOME\memories\*.md /grant:r %USERNAME%:F`) and verify the file is valid UTF-8 — permission fixes do not resolve encoding errors.
 
 ## Report
 
@@ -140,14 +169,17 @@ This skill diagnoses memory problems — the agent forgot something, an external
 ### Summary
 Your external memory provider (honcho) is not available because the API key is missing from `.env`. The provider is selected in config but silently falls back to built-in memory, so your honcho memories appear "gone."
 
+`Class` is one of **Static** (`USER.md`), **Dynamic** (`MEMORY.md`), **Session** (`state.db`/context), or **Provider** (external).
+
 ### Findings
-| Severity | What | Evidence |
-|---|---|---|
-| HIGH | HONCHO_API_KEY missing from `.env` | `hermes memory status` shows `Status: not available ✗` with `Missing: ✗ HONCHO_API_KEY → https://app.honcho.dev` |
-| MEDIUM | External memory disabled for session | Log at session start: `honcho unavailable; external memory disabled for this session` |
+| Severity | Class | What | Evidence |
+|---|---|---|---|
+| HIGH | Provider | HONCHO_API_KEY missing from `.env` | `hermes memory status` shows `Status: not available ✗` with `Missing: ✗ HONCHO_API_KEY → https://app.honcho.dev` |
+| MEDIUM | Provider | External memory disabled for session | Log at session start: `honcho unavailable; external memory disabled for this session` |
+| MEDIUM | Dynamic | Project build command stored in `USER.md` | `hermes guide memories`: entry reads like environment/project context — belongs in `MEMORY.md` |
 
 ### Recommended Fix
-Add `HONCHO_API_KEY=<your-key>` to `$HERMES_HOME/.env`, then restart the session. Verify with `hermes memory status` — the provider should show `Status: available ✓`. If the provider plugin is also missing, install it first (`hermes plugins install honcho`), then run `hermes memory setup honcho` to install its dependencies and record the key — `memory setup` prints the catalog install command but cannot install the plugin itself.
+Add the provider's key as `HONCHO_API_KEY` in `$HERMES_HOME/.env`, then restart the session. Verify with `hermes memory status` — the provider should show `Status: available ✓`. If the provider plugin is also missing, install it first (`hermes plugins install honcho`), then run `hermes memory setup honcho` to install its dependencies and record the key — `memory setup` prints the catalog install command but cannot install the plugin itself.
 
 ### References
 - `$HERMES_HOME/.env` — the missing API key
@@ -157,4 +189,4 @@ Add `HONCHO_API_KEY=<your-key>` to `$HERMES_HOME/.env`, then restart the session
 
 ---
 
-*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/memory_tool_store.py` (limits + rejection text), `hermes_cli/config_defaults.py` (the `memory:` block and its provider comment), `agent/memory_provider.py` (plugin path), `agent/system_prompt.py` (the external-provider gate), `hermes_cli/mem_trim.py` (`context.memory_trim`), `hermes_cli/subcommands/journey.py` (`memory-graph` alias), plus `optional-skills/autonomous-ai-agents/honcho/` for the provider-list note; provider comment re-verified 2026-09-29 at `5000e2993` (`hindsight` is now catalog-installed). Re-checked 2026-10-12 against upstream main (`53bc70c5`): only `retaindb` + `byterover` remain bundled under `plugins/memory/` — `openviking`, `mem0`, `holographic`, `honcho`, `supermemory` are catalog plugins. Re-verified 2026-11-04 against upstream main `07274ac65438a0b62bb9fd64bf284e58b2fd8fc6` (drift re-baseline): `plugins/memory/` still holds only `retaindb` + `byterover`, and `honcho` now arrives solely as the catalog entry `honcho` (`plugin-catalog/honcho.yaml`, Plastic Labs, `hermes-plugin-honcho` subdir) — upstream dropped `optional-skills/autonomous-ai-agents/honcho/` on 2026-11-03, so the 2026-09-14 citation for the provider-list note no longer resolves. Re-verify before reuse.*
+*Facts re-verified 2026-09-14 against upstream source at commit `46a0daee58abbc1b07f84f505a5ba90f1958295c`: `tools/memory_tool_store.py` (limits + rejection text), `hermes_cli/config_defaults.py` (the `memory:` block and its provider comment), `agent/memory_provider.py` (plugin path), `agent/system_prompt.py` (the external-provider gate), `hermes_cli/mem_trim.py` (`context.memory_trim`), `hermes_cli/subcommands/journey.py` (`memory-graph` alias), plus `optional-skills/autonomous-ai-agents/honcho/` for the provider-list note; provider comment re-verified 2026-09-29 at `5000e2993` (`hindsight` is now catalog-installed). Re-checked 2026-10-12 against upstream main (`53bc70c5`): only `retaindb` + `byterover` remain bundled under `plugins/memory/` — `openviking`, `mem0`, `holographic`, `honcho`, `supermemory` are catalog plugins. Re-verified 2026-11-04 against upstream main `07274ac65438a0b62bb9fd64bf284e58b2fd8fc6` (drift re-baseline): `plugins/memory/` still holds only `retaindb` + `byterover`, and `honcho` now arrives solely as the catalog entry `honcho` (`plugin-catalog/honcho.yaml`, Plastic Labs, `hermes-plugin-honcho` subdir) — upstream dropped `optional-skills/autonomous-ai-agents/honcho/` on 2026-11-03, so the 2026-09-14 citation for the provider-list note no longer resolves. Re-verified 2026-11-27 against upstream main `c8f866c48f44`: `agent/background_review.py` (`_MEMORY_ROUTING_BLOCK`) defines the two-store split — `USER.md` is who the user is, `MEMORY.md` is environment/project facts, one fact to one store; `tools/memory_tool.py` confirms both load as a frozen session-start snapshot; `tools/memory_tool_store.py` holds the 2200/1375 caps. Re-verify before reuse.*

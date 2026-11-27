@@ -144,6 +144,41 @@ def case_mis_target(td: Path) -> None:
     assert any("belongs in USER.md" in d for d in (r["detail"] or [])), r
 
 
+def case_env_in_user(td: Path) -> None:
+    """Environment/project facts in USER.md -> retarget note, not a failure."""
+    home, checks = _make_env(td, "memory: {}\n")
+    _store(home, "MEMORY.md", ["[2026-11-27] Checkout lives at ~/project/hermes-guide."])
+    _store(home, "USER.md", [
+        "The project builds with uv.",
+        "/Users/iap/project/hermes-guide is the checkout.",
+        "User prefers concise responses.",
+    ])
+    r = _run(checks)
+    detail = r["detail"] or []
+    assert sum("belongs in MEMORY.md" in d for d in detail) == 2, r
+
+
+def case_project_hyphen_not_flagged(td: Path) -> None:
+    """A hyphenated 'project-based' phrase is not an environment lead."""
+    home, checks = _make_env(td, "memory: {}\n")
+    _store(home, "MEMORY.md", ["[2026-11-27] Dated environment note."])
+    _store(home, "USER.md", [
+        "Project-based learning notes are kept in the wiki.",
+        "User prefers concise responses.",
+    ])
+    r = _run(checks)
+    assert not any("belongs in MEMORY.md" in d for d in (r["detail"] or [])), r
+
+
+def case_user_auth_env_flagged(td: Path) -> None:
+    """'User authentication …' is environment context, not a profile preference."""
+    home, checks = _make_env(td, "memory: {}\n")
+    _store(home, "MEMORY.md", ["[2026-11-27] Dated environment note."])
+    _store(home, "USER.md", ["User authentication uses OAuth."])
+    r = _run(checks)
+    assert any("belongs in MEMORY.md" in d for d in (r["detail"] or [])), r
+
+
 def case_one_store_missing(td: Path) -> None:
     """One store present, one missing -> informational with the missing note."""
     home, checks = _make_env(td, "memory: {}\n")
@@ -163,6 +198,9 @@ def main() -> int:
         case_all_dated_clean,
         case_user_prefix_not_profile,
         case_mis_target,
+        case_env_in_user,
+        case_project_hyphen_not_flagged,
+        case_user_auth_env_flagged,
         case_one_store_missing,
     ]
     failed = 0
