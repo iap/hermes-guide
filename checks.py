@@ -2082,6 +2082,25 @@ _MEM_USER_LEAD = re.compile(
     re.IGNORECASE,
 )
 _MEM_DATE_LEAD = re.compile(r"^\s*\[\d{4}-\d{2}-\d{2}\]")
+
+# Reverse mis-target: environment/project context parked in USER.md. The lead
+# must be an environment noun (or an absolute path/URL) — a profile line may
+# legitimately mention a project by name ("User maintains project atlas"), so
+# a bare "project" anywhere is not enough. The lookahead keeps hyphenated
+# compounds ("project-based learning") from matching.
+_MEM_ENV_LEAD = re.compile(
+    r"^\s*(?:\[\d{4}-\d{2}-\d{2}\]\s*)?"
+    r"(?:"
+    r"(?:the\s+)?(?:project|repo|repository|workspace|codebase|environment|"
+    r"build|ci|deploy(?:ment)?|branch|remote|endpoint|config(?:uration)?|"
+    r"path|directory|folder|tool|command|pipeline|service|gateway)"
+    r"(?=\s*:|\s+(?:builds?|runs?|uses?|lives?|is|are|has|requires?|needs?|"
+    r"deploys?|targets?|fails?|passes?|breaks?)\b)"
+    r"|user\s+(?:auth(?:entication)?|session|accounts?|database|api|cli|config)\b"
+    r"|(?:/Users/|/home/|~/|[A-Za-z]:\\|https?://)"
+    r")",
+    re.IGNORECASE,
+)
 _WS_NORM = re.compile(r"[\s\W_]+", re.UNICODE)
 
 
@@ -2108,7 +2127,8 @@ def check_memory_hygiene():
     Complements `hermes memory status` (which reports provider/store health)
     with content-level findings: over-limit stores, exact/near-duplicate
     entries, user-preference entries mis-targeted into the agent-notes store,
-    and an undated dynamic store. Never mutates anything.
+    environment/project entries mis-targeted into the profile store, and an
+    undated dynamic store. Never mutates anything.
 
     Complexity note: near-duplicate detection is O(n^2) over entries, capped
     at MEMORY_NEAR_DUP_ENTRY_CAP tokenized entries; exact duplicates use a
@@ -2220,6 +2240,26 @@ def check_memory_hygiene():
                 )
             if len(mis_targets) > 3:
                 notes.append(f"{store}: {len(mis_targets)} user-profile entry(ies) total")
+
+        # Reverse mis-target: environment/project facts in the profile store.
+        # A note, not broken: the profile budget (1375 chars) is the scarce one,
+        # so project context parked here crowds out the identity facts.
+        if store == "USER.md":
+            env_entries = [e for e in entries if _MEM_ENV_LEAD.match(e)]
+            if env_entries:
+                n = len(env_entries)
+                if n == 1:
+                    notes.append(
+                        f"{store}: an entry reads like environment/project context — "
+                        "it belongs in MEMORY.md (target=memory), dated [YYYY-MM-DD]"
+                    )
+                else:
+                    notes.append(
+                        f"{store}: {n} entries read like environment/project context — "
+                        "they belong in MEMORY.md (target=memory), dated [YYYY-MM-DD]"
+                    )
+            if len(env_entries) > 3:
+                notes.append(f"{store}: {len(env_entries)} environment/project entry(ies) total")
 
         # Dynamic store benefits from entry dates (staleness tracking): report
         # every undated entry, not just an all-undated store.
