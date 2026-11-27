@@ -51,7 +51,7 @@ Rules that prevent the common failures:
 - **Secrets never go in memory.** API keys, passwords, and tokens belong in `$HERMES_HOME/.env` or the service environment.
 - **Git example:** `user.name` / `user.email` are identity → `USER.md`; the repo's remote, branch, and build command are environment → `MEMORY.md`, dated.
 
-`hermes guide memories` checks both mis-target directions: profile facts in `MEMORY.md` and environment/project facts in `USER.md`. Both are notes, not hard failures — move the entry instead of deleting context.
+`hermes guide memories` is a **heuristic** audit: it catches profile-verb leads ("User prefers…") in `MEMORY.md` and environment-noun/path leads in `USER.md`. A dated profile fact or a command buried mid-entry may not match, so treat a note as a prompt to review, not proof. Notes are advisory; move the entry instead of deleting context.
 
 ## 3. How to inspect
 
@@ -90,8 +90,8 @@ Probe in this order — the first two are built-in helpers and answer most cases
 | Symptom | Cause | Fix |
 |---|---|---|
 | Agent forgot something said mid-session | Frozen snapshot by design (see §1) | **Temporary:** start a new session (it picks the write up). **Permanent:** none — this is intended. Verify the write landed in `$HERMES_HOME/memories/MEMORY.md` first |
-| Identity fact sits in `MEMORY.md` | Profile fact written to the environment store; `hermes guide memories` says it "belongs in USER.md" | Move it to `USER.md` (`memory` tool `target=user`); no date prefix. Keep one copy |
-| Project/config fact sits in `USER.md` | Environment note written to the identity store; the audit says it "belongs in MEMORY.md" | Move it to `MEMORY.md` (`target=memory`) and date it `[YYYY-MM-DD] …` |
+| Identity fact sits in `MEMORY.md` | Profile fact written to the environment store; `hermes guide memories` says it "belongs in USER.md" | Move it to `USER.md` (`memory` tool `target=user`); no date prefix. Restart the session — the current prompt keeps the old snapshot |
+| Project/config fact sits in `USER.md` | Environment note written to the identity store; the audit says it "belongs in MEMORY.md" | Move it to `MEMORY.md` (`target=memory`), date it `[YYYY-MM-DD] …`, then restart the session |
 | Same fact in both stores | Duplicated write; both budgets shrink and the next session reads it twice | Keep one copy: identity → `USER.md`, environment → `MEMORY.md`; delete the other |
 | One-off task detail saved as memory | Session state promoted to long-term; it will be stale next week | Remove it from both stores; the session log already holds it. Save only durable facts |
 | External provider "not available ✗", missing env var listed | Secret absent from `$HERMES_HOME/.env` | **Temporary:** none needed — built-in memory is already carrying the running session (the fallback happened at session start). **Permanent:** add the var to `.env` (and to the service environment for gateway/systemd) via `hermes memory setup <provider>`; alternatively `hermes memory off` to stop future external-provider attempts — it takes effect for **subsequently started** sessions, not the current one. Keep secrets out of `config.yaml` |

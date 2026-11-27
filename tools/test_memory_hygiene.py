@@ -170,6 +170,15 @@ def case_project_hyphen_not_flagged(td: Path) -> None:
     assert not any("belongs in MEMORY.md" in d for d in (r["detail"] or [])), r
 
 
+def case_project_manager_not_flagged(td: Path) -> None:
+    """A job title is identity, not environment context."""
+    home, checks = _make_env(td, "memory: {}\n")
+    _store(home, "MEMORY.md", ["[2026-11-27] Dated environment note."])
+    _store(home, "USER.md", ["Project manager at Acme.", "User prefers concise responses."])
+    r = _run(checks)
+    assert not any("belongs in MEMORY.md" in d for d in (r["detail"] or [])), r
+
+
 def case_user_auth_env_flagged(td: Path) -> None:
     """'User authentication …' is environment context, not a profile preference."""
     home, checks = _make_env(td, "memory: {}\n")
@@ -200,6 +209,7 @@ def main() -> int:
         case_mis_target,
         case_env_in_user,
         case_project_hyphen_not_flagged,
+        case_project_manager_not_flagged,
         case_user_auth_env_flagged,
         case_one_store_missing,
     ]

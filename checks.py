@@ -2093,7 +2093,9 @@ _MEM_ENV_LEAD = re.compile(
     r"(?:"
     r"(?:the\s+)?(?:project|repo|repository|workspace|codebase|environment|"
     r"build|ci|deploy(?:ment)?|branch|remote|endpoint|config(?:uration)?|"
-    r"path|directory|folder|tool|command|pipeline|service|gateway)(?=\s|:)"
+    r"path|directory|folder|tool|command|pipeline|service|gateway)"
+    r"(?=\s*:|\s+(?:builds?|runs?|uses?|lives?|is|are|has|requires?|needs?|"
+    r"deploys?|targets?|fails?|passes?|breaks?)\b)"
     r"|user\s+(?:auth(?:entication)?|session|accounts?|database|api|cli|config)\b"
     r"|(?:/Users/|/home/|~/|[A-Za-z]:\\|https?://)"
     r")",
@@ -2244,9 +2246,9 @@ def check_memory_hygiene():
         # so project context parked here crowds out the identity facts.
         if store == "USER.md":
             env_entries = [e for e in entries if _MEM_ENV_LEAD.match(e)]
-            for e in env_entries[:3]:
+            if env_entries:
                 notes.append(
-                    f"{store}: entry reads like environment/project context ({e[:50]}…) — "
+                    f"{store}: an entry reads like environment/project context — "
                     "it belongs in MEMORY.md (target=memory), dated [YYYY-MM-DD]"
                 )
             if len(env_entries) > 3:
