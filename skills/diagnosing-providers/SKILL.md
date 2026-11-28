@@ -141,7 +141,7 @@ When a provider is configured with a credential pool (`hermes auth list` shows m
 **Which models are affected?** For a Claude subscription response with `anthropic-ratelimit-unified-status: rejected`, read `anthropic-ratelimit-unified-representative-claim`:
 
 - `five_hour` or `seven_day`: the limit applies to the whole account. Switching models on the same credential will not help; wait until `anthropic-ratelimit-unified-reset` or use a credential with capacity.
-- `seven_day_opus`: the provider limits the whole Opus family. At `30bff5e`, Hermes records a local cooldown only for the requested model on that credential, so another Opus model may still be offered and return 429. Use a model outside the limited family or wait for the reported reset. Neither kind of window requires signing in again.
+- `seven_day_opus`: the provider limits the whole Opus family. At `30bff5e`, Hermes records a local cooldown only for the requested model on that credential, so another Opus model may still be offered and return 429. Use `hermes model` to set a model outside the Opus family as the default, then `/model` in the active session (or start a new session) to apply it now, or wait for the reported reset. Neither kind of window requires signing in again.
 
 For hub-install auth (GitHub tokens, `Could not fetch from any source`), see `diagnosing-auth`.
 
